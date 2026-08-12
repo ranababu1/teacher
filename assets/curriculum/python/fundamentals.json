@@ -1,0 +1,232 @@
+{
+  "learningPathId": "python",
+  "moduleId": "fundamentals",
+  "title": "Fundamentals",
+  "order": 1,
+  "concepts": [
+    {
+      "id": "python-variables-objects",
+      "title": "Variables and Objects",
+      "description": "Python variables are names bound to objects in memory, not boxes that hold values directly — understanding this reference model explains identity, mutability, and aliasing.",
+      "moduleId": "fundamentals",
+      "topicId": "fundamentals",
+      "difficulty": "beginner",
+      "estimatedMinutes": 25,
+      "prerequisites": [],
+      "learningObjectives": [
+        "Explain the difference between a name binding and a value stored in a box.",
+        "Use `is` and `==` correctly and explain the difference between them.",
+        "Predict when mutating an object affects other variables that reference it.",
+        "Use `id()` to inspect object identity.",
+        "Identify aliasing bugs caused by shared references to mutable objects."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "Names Are Labels, Not Boxes",
+            "body": "In many languages you learn first — C, Java with its primitives — it's natural to picture a variable as a box: `x = 5` puts the value `5` inside a box labeled `x`. That mental model actively misleads you in Python.\n\nIn Python, every value is an *object* that lives somewhere in memory, and a variable name is nothing more than a label attached to that object — think of it like a sticky note, not a box. The statement `x = 5` doesn't create a box called `x` and pour `5` into it. It creates (or reuses) an integer object `5` somewhere in memory, and attaches the label `x` to it. This is called a **name binding**.\n\nThis distinction seems academic until you write `y = x`. Under the box model, you'd expect Python to copy the value `5` into a new box called `y`. Under the label model, what actually happens is: `y` becomes a *second sticky note* on the *same* object. There is still only one `5` in memory; now two names point at it.\n\nFor immutable things like small integers this difference is invisible — you can't tell the difference between \"two independent 5s\" and \"one 5 with two labels\" because integers never change in place. But the moment you work with *mutable* objects — lists, dicts, sets, and most custom classes — the difference becomes very visible, and not knowing about it is one of the most common sources of confusing bugs for people newer to Python.\n\n```python\nx = [1, 2, 3]\ny = x          # y is a second label on the SAME list object\ny.append(4)\nprint(x)       # [1, 2, 3, 4]  -- x sees the change too!\n```\n\nNothing about `y.append(4)` touched `x`. But because `x` and `y` are two names for one object, and that object was mutated, looking at it through either name shows the update."
+          },
+          {
+            "heading": "Identity vs Equality: `is` vs `==`",
+            "body": "Because names are references to objects, Python needs two different questions you can ask about two names:\n\n- **\"Do they refer to the exact same object?\"** — that's identity, checked with the `is` operator (and under the hood, `is` compares the results of `id()`, which returns a unique integer identifying an object's memory address for the duration of its life).\n- **\"Do the objects they refer to have equal *value*?\"** — that's equality, checked with `==`, which calls the object's `__eq__` method (for lists, that means comparing element by element).\n\nTwo different objects can be equal in value without being the same object:\n\n```python\na = [1, 2, 3]\nb = [1, 2, 3]\nprint(a == b)   # True  -- same contents\nprint(a is b)   # False -- two distinct list objects\nprint(id(a) == id(b))  # False, same reason\n```\n\nA frequent point of confusion: small integers and short strings can sometimes make `is` *look* like it's checking equality, because CPython caches and reuses some small immutable objects internally (small ints from -5 to 256, and some string literals, are commonly interned). So `x = 5; y = 5; x is y` often prints `True` — but this is a CPython implementation detail, not a language guarantee, and it does not hold for larger numbers, for lists, or in general. Relying on it is a bug waiting to surface on a different input or a different Python implementation. The rule to actually internalize is: use `==` when you care about value, and reserve `is` for the cases where identity is the actual question — most commonly comparing against the singletons `None`, `True`, and `False` (`if x is None:` rather than `if x == None:`)."
+          },
+          {
+            "heading": "Mutable vs Immutable Objects",
+            "body": "Some object types can be changed in place after creation — these are **mutable**: `list`, `dict`, `set`, and most user-defined classes by default. Others can never be changed once created — these are **immutable**: `int`, `float`, `str`, `bool`, `tuple`, and `frozenset`. When you \"modify\" an immutable object, you're not actually changing it; you're creating a brand new object and (usually) rebinding a name to point at it.\n\n```python\ns = \"hello\"\ns += \" world\"   # this does NOT mutate the original string\n                # it creates a new string \"hello world\" and rebinds s to it\n```\n\nCompare that with a mutable list:\n\n```python\nnums = [1, 2, 3]\nnums.append(4)  # this DOES mutate the original list object in place\n                # nums still refers to the same object, now with 4 items\n```\n\nThis distinction matters enormously once an object has more than one name pointing at it (aliasing, covered next), because mutating a shared mutable object is visible through every name that references it, while rebinding a name only affects that one name."
+          },
+          {
+            "heading": "Aliasing: When Two Names Share One Object",
+            "body": "When two or more names refer to the same mutable object, that's called **aliasing**. It happens constantly and mostly invisibly in normal Python code — every time you assign `b = a`, pass a list into a function, or store an object in another container, you are creating another reference to the *same* object rather than a copy of it. Python's argument-passing model is often described as \"pass by object reference\" (or \"pass by assignment\"): calling a function binds the parameter names to the very same objects the caller passed in, exactly like a plain `=` assignment would.\n\nThis leads to two different things that both feel like \"changing a list inside a function,\" with very different outcomes:\n\n- **Mutating** the object (`lst.append(...)`, `lst[0] = ...`, `lst.sort()`) changes the shared object, so the caller sees the change too.\n- **Rebinding** the parameter name (`lst = lst + [x]`, `lst = []`) only points the *local* name at a new object; the caller's variable still points at the original, untouched object.\n\nIf you want an independent copy so mutations don't leak back to the caller, you have to ask for one explicitly — `list(original)`, `original.copy()`, or `original[:]` for a shallow copy, and `copy.deepcopy(original)` if the list itself contains other mutable objects you also want copied recursively. Nothing in Python copies data for you implicitly; copying is always something you opt into."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Identity, Equality, and Aliasing",
+          "language": "python",
+          "code": "a = [1, 2, 3]\nb = a               # b is an alias for a -- not a copy\nc = [1, 2, 3]        # c is a separate object with equal contents\n\nb.append(4)\n\nprint(a)             # [1, 2, 3, 4]  -- changed, because b IS a\nprint(a is b)        # True  -- same object\nprint(a == c)        # False -- a is now [1, 2, 3, 4], c is [1, 2, 3]\nprint(id(a), id(b))  # identical numbers\nprint(id(c))         # a different number",
+          "explanation": "`b = a` does not copy the list; it makes `b` a second name for the same list object as `a`. So `b.append(4)` mutates the one and only object both names point to, and printing `a` afterward shows the appended item even though we never wrote `a.append(4)`. `a is b` is `True` because `id(a)` and `id(b)` are the same number — they're the same object in memory. `c`, on the other hand, was built from a separate list literal, so even though it currently holds equal contents to the original `a`, it's a different object with a different id — and after `a` changes, its contents aren't even equal anymore."
+        },
+        {
+          "title": "Function Arguments Share References",
+          "language": "python",
+          "code": "def add_item_by_mutation(cart):\n    cart.append(\"batteries\")   # mutates the caller's list\n\ndef add_item_by_rebinding(cart):\n    cart = cart + [\"batteries\"]  # creates a NEW list, rebinds local name only\n\nmy_cart = [\"phone\"]\n\nadd_item_by_mutation(my_cart)\nprint(my_cart)   # ['phone', 'batteries']  -- caller's list changed\n\nadd_item_by_rebinding(my_cart)\nprint(my_cart)   # ['phone', 'batteries']  -- unchanged! rebinding didn't leak out",
+          "explanation": "Both functions receive `cart` bound to the same list object `my_cart` refers to — that's just how Python passes arguments. `add_item_by_mutation` calls `.append()`, which mutates that shared object in place, so the caller sees the new item. `add_item_by_rebinding` instead computes a brand-new list with `cart + [...]` and rebinds its *local* `cart` name to point at that new list — but rebinding a local name never affects what the caller's name points to. The caller's `my_cart` still points at the original object, which this second function never touched. This distinction — mutate the shared object vs. rebind your local name — is one of the most important things to internalize about how Python functions interact with the arguments they're given."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "A variable is a box that stores a value; assigning `b = a` copies the value into a new box called `b`.",
+          "clarification": "A variable is a name bound to an object, not a container holding a value. `b = a` makes `b` a second name for whatever object `a` already refers to — no copying happens. For immutable values like small ints this is invisible, but for mutable objects like lists, mutating through one name is visible through the other, because there is really only one object with two labels on it. If you want a true independent copy, you must ask for one explicitly, e.g. `b = a.copy()` or `b = list(a)`."
+        },
+        {
+          "description": "`is` and `==` are basically the same thing — just two ways to check equality.",
+          "clarification": "`==` asks \"do these objects have equal value?\" (it calls `__eq__`). `is` asks \"are these literally the same object in memory?\" (it compares `id()`). Two distinct list objects with identical contents are `==` but not `is`. Because CPython sometimes reuses small integers and short strings internally, `is` can *appear* to work for value comparisons on tiny examples like `x = 5; y = 5; x is y` — but that's an implementation detail you should never rely on. Use `==` for value comparisons, and reserve `is` for identity questions, most commonly `is None`, `is True`, and `is False`."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "python-variables-objects-ex1",
+          "type": "predictOutput",
+          "prompt": "What does this code print, and why?",
+          "code": "original = [\"a\", \"b\"]\ncopy_ref = original\ncopy_val = original.copy()\n\ncopy_ref.append(\"c\")\ncopy_val.append(\"z\")\n\nprint(original)\nprint(copy_ref)\nprint(copy_val)",
+          "hints": [
+            "Which of `copy_ref` and `copy_val` is an alias for `original`, and which one is an independent object?",
+            "`.copy()` creates a new list with the same contents at the time it's called — does mutating that new list affect the original?",
+            "Track which names point at the SAME object versus a DIFFERENT object before working out what each `.append()` actually mutates."
+          ],
+          "expectedAnswer": "original -> ['a', 'b', 'c'], copy_ref -> ['a', 'b', 'c'], copy_val -> ['a', 'b', 'z']. `copy_ref` is just another name for the same object as `original`, so appending 'c' through `copy_ref` is visible through `original` too. `copy_val` was created with `.copy()`, a genuinely separate list object, so appending 'z' to it never touches `original`.",
+          "solutionExplanation": "`copy_ref = original` binds `copy_ref` to the exact same list object `original` refers to -- no new list is created. So `copy_ref.append(\"c\")` mutates that one shared object, and both `original` and `copy_ref` show `['a', 'b', 'c']` afterward. `copy_val = original.copy()`, by contrast, explicitly builds a brand-new list containing a shallow copy of `original`'s elements at that moment (`['a', 'b', 'c']`, since it runs after the first append). Appending `'z'` to `copy_val` only affects that independent object, so it becomes `['a', 'b', 'c', 'z']`... wait -- order matters: copy_val was created before copy_ref.append ran, so copy_val started as ['a','b'], then had 'z' appended, giving ['a', 'b', 'z']. Meanwhile original/copy_ref ended up as ['a', 'b', 'c']. Reading the code in execution order is the key skill this exercise practices: `copy_val` is created before the two appends run, so it only ever sees ['a', 'b'] plus whatever is appended to it directly."
+        },
+        {
+          "id": "python-variables-objects-ex2",
+          "type": "debugging",
+          "prompt": "This function is supposed to remove all negative numbers from the caller's list in place (so the caller's own variable reflects the change), but after calling it, the caller's list is completely unchanged. Find and fix the bug.",
+          "code": "def remove_negatives(numbers):\n    numbers = [n for n in numbers if n >= 0]\n\ndata = [3, -1, 4, -5, 9]\nremove_negatives(data)\nprint(data)   # expected: [3, 4, 9], actual: [3, -1, 4, -5, 9]",
+          "hints": [
+            "Inside the function, is `numbers = [...]` mutating the object the caller passed in, or rebinding the local name `numbers` to a brand new object?",
+            "Rebinding a parameter inside a function never affects what the caller's variable points to -- only mutating the shared object does.",
+            "Look for a way to change the *contents* of the existing list object in place, rather than replacing what `numbers` points to. Slice assignment (`numbers[:] = ...`) mutates in place; a plain `=` does not."
+          ],
+          "solutionCode": "def remove_negatives(numbers):\n    numbers[:] = [n for n in numbers if n >= 0]\n\ndata = [3, -1, 4, -5, 9]\nremove_negatives(data)\nprint(data)   # [3, 4, 9]",
+          "solutionExplanation": "The original code computes the right new list but then does `numbers = [...]`, which only rebinds the *local* name `numbers` to point at that new list object -- it never touches the original list object that `data` refers to. Once the function returns, that local rebinding is discarded entirely, and `data` still points at the untouched original list. The fix, `numbers[:] = [...]`, uses slice assignment, which calls `__setitem__` on the *existing* list object to replace its entire contents in place. Because `numbers` and `data` are two names for the same object, mutating that object through `numbers` is visible through `data` too. This is the same mutate-vs-rebind distinction that shows up constantly with Python function arguments."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "python-variables-objects-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "```python\nx = 300\ny = 300\nprint(x == y)\nprint(x is y)\n```\nWhat does this print, and why?",
+          "options": [
+            "True then True, because 300 == 300 and Python always reuses identical integer objects.",
+            "True then False, because == compares values while is checks whether they're the same object -- CPython does not guarantee reusing an object for a number this large.",
+            "False then False, because 300 and 300 are always different objects with different values.",
+            "True then True, but only because both variables happen to be named x and y."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "`==` compares values, and 300 equals 300, so the first line is True. `is` compares object identity. CPython only guarantees caching/reusing small integers in the range -5 to 256; 300 falls outside that range, so `x = 300` and `y = 300` typically create two separate integer objects with equal value but different identity, making `x is y` False. (Even within the cached range, relying on `is` for value comparison is a mistake -- it's an implementation detail, not a language guarantee.) Option A and D wrongly assume identity follows from equality; option C wrongly assumes equal values can never share an object."
+        },
+        {
+          "id": "python-variables-objects-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain to another developer why `b = a` for two lists means modifying one can affect the other, and how you'd avoid that if you actually wanted two independent lists.",
+          "modelAnswer": "In Python, a variable is a name bound to an object, not a box holding a value. `b = a` doesn't copy the list `a` refers to -- it just makes `b` a second name pointing at that exact same list object. At that point there's only one list in memory with two labels on it. So if you mutate the list through one name -- `b.append(x)`, `a.sort()`, `a[0] = 'x'` -- you're mutating the single shared object, and looking at it through the other name shows the same change, because both names were always pointing at the same thing. This is different from *reassigning* a name (`a = []`), which only points that one name at a new object and leaves the other name's target untouched. If you actually want two independent lists that happen to start out equal, you have to create a real copy explicitly: `b = a.copy()`, `b = list(a)`, or `b = a[:]` all make a new list object with the same initial contents, so future mutations to one don't affect the other. If the list contains other mutable objects (e.g. a list of lists) and you need those nested objects independent too, a shallow copy isn't enough -- you'd need `copy.deepcopy(a)`."
+        }
+      ]
+    },
+    {
+      "id": "python-data-types",
+      "title": "Data Types",
+      "description": "Python has a small set of core built-in types with dynamic-but-strong typing, and understanding truthiness, type checks, and conversions helps you avoid subtle bugs.",
+      "moduleId": "fundamentals",
+      "topicId": "fundamentals",
+      "difficulty": "beginner",
+      "estimatedMinutes": 25,
+      "prerequisites": ["python-variables-objects"],
+      "learningObjectives": [
+        "List Python's core built-in types (int, float, str, bool, None) and describe what each represents.",
+        "Explain the difference between dynamic typing and strong typing.",
+        "Use `type()` and `isinstance()` to check an object's type correctly.",
+        "Distinguish implicit vs explicit type conversion and predict when Python raises TypeError.",
+        "Determine the truthiness of a value without running it."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "The Core Built-in Types",
+            "body": "Python ships with a handful of built-in types you'll use constantly: `int` for whole numbers of arbitrary size, `float` for decimal/floating-point numbers, `str` for text, `bool` for `True`/`False`, and `NoneType` for the single value `None`, which represents the deliberate absence of a value.\n\nA quirk worth knowing early: `bool` is actually a *subclass* of `int` in Python. `True` behaves as `1` and `False` behaves as `0` in numeric contexts -- `True + True` really does evaluate to `2`, and `sum([True, False, True])` is `2`. This isn't just trivia; it explains why `isinstance(True, int)` returns `True`, and it's occasionally exploited deliberately (e.g. summing a list of booleans to count how many are `True`), but it can also silently mask bugs if you're not expecting a boolean to slip into arithmetic."
+          },
+          {
+            "heading": "Dynamic Typing vs Strong Typing",
+            "body": "These two terms get conflated constantly, but they answer different questions.\n\n**Dynamic typing** is about *when* types are checked: Python checks types at runtime, not at compile time. A variable name has no fixed type -- `x = 5` followed by `x = \"hello\"` is perfectly legal; `x` simply points at a different kind of object now. This is different from statically typed languages (like Java or C++) where a variable's declared type is fixed and checked before the program even runs.\n\n**Strong typing** is about *whether* the language performs implicit conversions between unrelated types. Python is strongly typed: it will not silently convert a string into a number to make an operation work. `\"2\" + 2` raises `TypeError: can only concatenate str (not \"int\") to str` -- Python refuses to guess whether you meant string concatenation or numeric addition, and makes you be explicit. This is a common surprise for people coming from JavaScript, which is dynamically *and* weakly typed, where `\"2\" + 2` silently produces the string `\"22\"` (you'll see this contrast again in the ReactJS path). Python's strictness here trades a little convenience for catching real bugs early instead of letting them silently produce wrong-but-plausible values."
+          },
+          {
+            "heading": "Checking Types: `type()` vs `isinstance()`",
+            "body": "`type(x)` returns the exact class of an object. `isinstance(x, SomeClass)` asks a more useful question: \"is `x` an instance of `SomeClass`, *or of any subclass of it*?\" Because `bool` is a subclass of `int`, `isinstance(True, int)` is `True`, but `type(True) == int` is `False` (since `type(True)` is exactly `bool`, not `int`). Using `type(x) == SomeClass` for a check silently breaks the moment someone passes a subclass instance, which is exactly the kind of thing that's supposed to work seamlessly in an object-oriented language. For this reason, `isinstance()` is almost always the right tool when you truly need to check a type.\n\nThat said, idiomatic Python often prefers not checking types explicitly at all. This philosophy is sometimes called \"duck typing\" -- if an object supports the operations you need (it \"quacks like a duck\"), use it, regardless of its exact type. Combined with the EAFP style (\"Easier to Ask Forgiveness than Permission\"), many experienced Python developers prefer wrapping an operation in a `try/except` over checking types up front with `isinstance()`, reserving explicit type checks for cases where you genuinely need to branch behavior based on type."
+          },
+          {
+            "heading": "Implicit and Explicit Conversion",
+            "body": "Python does perform *some* implicit conversions, but only between numeric types that have an obvious, lossless-in-spirit relationship: `1 + 2.5` implicitly converts the `int` to a `float` before adding, producing `3.5`, because there's no ambiguity about what that should mean. It will not implicitly convert between unrelated types like `str` and `int`.\n\nFor everything else, you convert explicitly using constructor-like functions: `int(\"42\")` gives `42`, `str(42)` gives `\"42\"`, `float(\"3.14\")` gives `3.14`. These conversions can fail at runtime if the value doesn't make sense for the target type -- `int(\"3.5\")` raises `ValueError` (note: not `TypeError` -- the string is well-formed, just not a valid *integer* literal), while `float(\"3.5\")` succeeds fine. Always expect and handle these possible failures when converting data that came from outside your program, like user input or a file."
+          },
+          {
+            "heading": "Truthiness: What Counts as False",
+            "body": "Every object in Python has a truth value when used in a boolean context (`if`, `while`, `and`, `or`, `not`, or passing to `bool()`). A specific, memorizable set of values are considered **falsy**: `False`, `None`, the integer `0`, the float `0.0`, and any *empty* container -- `\"\"`, `[]`, `{}`, `()`, `set()`. Every other value is **truthy**, including things a newcomer might expect to be false, like the string `\"False\"` (a non-empty string -- truthy!) or the number `-1` (nonzero -- truthy!).\n\nThis matters because `if not value:` is a very common Python idiom for \"is this missing or empty,\" but it conflates several different situations that often need to be told apart: a genuinely absent value (`None`), a numeric zero (`0`), and an empty string or collection all trigger the same branch. If your code needs to distinguish \"the user didn't provide a quantity\" from \"the user provided a quantity of zero,\" `if not quantity:` is the wrong tool -- you want `if quantity is None:`."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Type Checks and the bool/int Quirk",
+          "language": "python",
+          "code": "values = [True, False, 1, 0, \"1\"]\n\nfor v in values:\n    print(v, \"-> type:\", type(v).__name__, \"| isinstance int:\", isinstance(v, int))\n\nprint(sum([True, True, False, True]))   # 3 -- True counts as 1, False as 0",
+          "explanation": "`type(True).__name__` prints `'bool'`, not `'int'` -- `type()` reports the exact class. But `isinstance(True, int)` is `True`, because `bool` is a subclass of `int`, so every `bool` value genuinely 'is an' `int` for the purposes of `isinstance`. `\"1\"` is a string that merely looks like a number; `isinstance(\"1\", int)` is `False` -- Python never blurs the line between a numeral-looking string and an actual number. The final line shows the practical upshot of the bool/int relationship: summing a list of booleans gives you a count of how many were `True`, a common and legitimate idiom."
+        },
+        {
+          "title": "Truthiness Can Hide a Zero",
+          "language": "python",
+          "code": "def describe_stock(quantity=None):\n    if not quantity:\n        return \"no quantity information\"\n    return f\"{quantity} units in stock\"\n\nprint(describe_stock(5))     # '5 units in stock'\nprint(describe_stock())      # 'no quantity information'  -- correct, quantity really is missing\nprint(describe_stock(0))     # 'no quantity information'  -- WRONG! 0 is a valid quantity (out of stock)",
+          "explanation": "`if not quantity:` treats `None` (missing) and `0` (a legitimate, meaningful value meaning 'out of stock') identically, because both are falsy. The function can't tell the difference between 'nobody told me the quantity' and 'the quantity is exactly zero.' The fix is to check specifically for the sentinel value that means 'missing': `if quantity is None:`. That correctly lets `0` flow through to the real branch, since `0 is None` is `False`."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "Python is a 'loosely typed' language where you can add or combine any two types and Python will figure out what you meant, similar to JavaScript.",
+          "clarification": "Python is dynamically typed (a variable's type isn't fixed or checked before runtime) but strongly typed (it refuses implicit conversions between unrelated types). `\"2\" + 2` raises `TypeError: can only concatenate str (not \"int\") to str` -- Python will not guess whether you wanted `\"22\"` or `4`. Contrast with JavaScript, which would silently evaluate `\"2\" + 2` as `\"22\"`. If you actually want to combine a string and a number in Python, you must convert explicitly: `\"2\" + str(2)` or `int(\"2\") + 2`."
+        },
+        {
+          "description": "`type(x) == SomeClass` is the correct way to check what type an object is.",
+          "clarification": "`type(x) == SomeClass` only matches objects whose type is *exactly* `SomeClass`, and fails for subclass instances -- notably, `type(True) == int` is `False` even though a bool is conceptually 'an int that's also constrained to two values.' `isinstance(x, SomeClass)` correctly returns `True` for subclass instances too, which is almost always what you actually want in object-oriented code. Even more idiomatic in many cases is to avoid the type check altogether and just try the operation you need (duck typing / EAFP), catching the exception if the object doesn't support it."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "python-data-types-ex1",
+          "type": "predictOutput",
+          "prompt": "What does this print, and why?",
+          "code": "values = [True, False, 1, 0, \"1\", 3.0]\ncount = sum(1 for v in values if isinstance(v, int))\nprint(count)",
+          "hints": [
+            "Go through each value in the list and ask: is `isinstance(v, int)` True or False for it?",
+            "Remember that `bool` is a subclass of `int`, but `str` and `float` are not.",
+            "`3.0` is a float, not an int, even though it has no fractional part -- isinstance() cares about the actual type, not the mathematical value."
+          ],
+          "expectedAnswer": "4 -- True, False, 1, and 0 all satisfy isinstance(v, int) (bool is a subclass of int), but \"1\" (a str) and 3.0 (a float) do not.",
+          "solutionExplanation": "`isinstance(v, int)` is True for `True`, `False`, `1`, and `0` because bool is a subclass of int -- every bool value passes an isinstance check against int. It's False for `\"1\"` because a string is never an int no matter what it looks like, and False for `3.0` because float and int are separate, unrelated types in Python even though `3.0 == 3`. That gives 4 matching values out of the 6 in the list, so `count` is 4."
+        },
+        {
+          "id": "python-data-types-ex2",
+          "type": "debugging",
+          "prompt": "This function is supposed to print a formatted quantity, but treat 'not specified' differently from 'explicitly zero'. Calling `format_quantity(0)` should print 'Quantity: 0', but it currently prints 'quantity not specified'. Find and fix the bug.",
+          "code": "def format_quantity(quantity=None):\n    if not quantity:\n        return \"quantity not specified\"\n    return f\"Quantity: {quantity}\"\n\nprint(format_quantity(5))     # 'Quantity: 5'\nprint(format_quantity())      # 'quantity not specified'\nprint(format_quantity(0))     # currently: 'quantity not specified' -- should be 'Quantity: 0'",
+          "hints": [
+            "What truthiness value does the integer `0` have in Python, compared to `None`?",
+            "`if not quantity:` can't distinguish 'quantity is missing' from 'quantity is exactly zero' -- both are falsy.",
+            "Check specifically for the sentinel that means 'missing' using `is None`, instead of checking general truthiness."
+          ],
+          "solutionCode": "def format_quantity(quantity=None):\n    if quantity is None:\n        return \"quantity not specified\"\n    return f\"Quantity: {quantity}\"\n\nprint(format_quantity(5))     # 'Quantity: 5'\nprint(format_quantity())      # 'quantity not specified'\nprint(format_quantity(0))     # 'Quantity: 0'",
+          "solutionExplanation": "The bug is using `if not quantity:` to detect a missing argument. Since `0` is falsy, that condition is also True when the caller explicitly passes `0`, incorrectly treating a real, meaningful value as if it were missing. The fix checks identity against the specific sentinel used for 'missing' -- `None` -- with `quantity is None`. Since `0 is None` evaluates to `False`, a quantity of `0` now correctly falls through to the real formatting branch. This is the general pattern for optional arguments: use a `None` default and check `is None`, rather than checking truthiness, whenever a falsy-but-valid value (like `0`, `\"\"`, or `[]`) needs to be treated differently from 'not provided'."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "python-data-types-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "Which of the following expressions raises a `TypeError` in Python?",
+          "options": [
+            "1 + 2.5",
+            "int(\"42\") + 1",
+            "\"score: \" + str(42)",
+            "\"score: \" + 42"
+          ],
+          "correctOptionIndex": 3,
+          "explanation": "Python implicitly converts between related numeric types (int and float mix fine, as in option A), and the other options explicitly convert values to compatible types before combining them (B converts a numeral string to int, C converts a number to str before concatenating). Option D tries to concatenate a str and an int directly with `+` -- Python refuses this implicit conversion between unrelated types and raises `TypeError: can only concatenate str (not \"int\") to str`, since strong typing means you must be explicit about the conversion you want."
+        },
+        {
+          "id": "python-data-types-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain why Python is often described as 'dynamically typed but strongly typed' to a developer who is used to thinking those two ideas are the same thing.",
+          "modelAnswer": "Dynamic vs static typing is about *when* type checking happens. Python is dynamically typed: a variable name has no fixed type declared ahead of time, and types are only checked as the program actually runs -- `x = 5` and then later `x = \"hello\"` is completely legal, because `x` is just a name that can be rebound to any object. Strong vs weak typing is a separate axis: it's about whether the language performs implicit conversions between unrelated types to make an operation 'work' anyway. Python is strongly typed -- it refuses to silently convert, say, a string into a number just because you used `+` on them. `\"2\" + 2` raises a `TypeError` rather than guessing you meant `\"22\"` or `4`. So the two properties are independent: a language could in principle be statically-and-weakly typed, or dynamically-and-strongly typed like Python actually is. The practical benefit of Python's strong typing is that mismatched types fail loudly and immediately with a clear error, rather than silently producing a plausible-looking but wrong value that surfaces as a confusing bug much later."
+        }
+      ]
+    }
+  ]
+}

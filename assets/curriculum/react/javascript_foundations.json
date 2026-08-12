@@ -1,0 +1,122 @@
+{
+  "learningPathId": "react",
+  "moduleId": "javascript-foundations",
+  "title": "JavaScript Foundations",
+  "order": 1,
+  "concepts": [
+    {
+      "id": "js-closures-scope",
+      "title": "Variables, Scope, and Closures in JavaScript",
+      "description": "var/let/const, function scope vs block scope, hoisting, and closures form the JavaScript foundation you need before React -- and they parallel the scope and closure rules you may already know from Python.",
+      "moduleId": "javascript-foundations",
+      "topicId": "javascript-foundations",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 40,
+      "prerequisites": [],
+      "learningObjectives": [
+        "Explain the difference between var, let, and const, including scope and reassignment rules.",
+        "Explain the difference between function scope and block scope.",
+        "Explain what hoisting is and predict its effect on var vs let/const declarations.",
+        "Explain how JavaScript closures work, using the same lexical-scope model as Python.",
+        "Predict and fix the classic var-in-a-loop closure bug, and explain why switching to let fixes it."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "var vs let vs const",
+            "body": "JavaScript has three ways to declare a variable, and they differ in scope and reassignment rules, not just style.\n\n`var` is the original declaration keyword: it's **function-scoped** (it belongs to the nearest enclosing function, or the global scope if there is none -- never to a block like an `if` or `for`), it can be redeclared and reassigned freely, and it's hoisted with an initial value of `undefined` (more on hoisting below).\n\n`let` is **block-scoped** -- it belongs to the nearest enclosing `{ }`, whether that's a function, an `if` block, or a bare loop body. It can be reassigned but not redeclared with `let` again in the same scope.\n\n`const` is block-scoped like `let`, but it cannot be reassigned after its initial assignment -- attempting `count = count + 1` on a `const count` throws `TypeError: Assignment to constant variable.` Crucially, though, **`const` only prevents reassigning the binding itself, not mutating the object it points to**: `const arr = []; arr.push(1);` works completely fine, because `.push()` mutates the existing array object rather than pointing `arr` at a new one. This is exactly the same distinction as Python's mutable vs immutable objects and rebinding vs mutating a name -- `const` is about the name, not about whether the underlying object can change.\n\nModern JavaScript style strongly favors `const` by default, `let` when you know you'll need to reassign, and avoiding `var` entirely in new code -- almost everything `var` does, `let`/`const` do more predictably, for reasons covered next."
+          },
+          {
+            "heading": "Function Scope vs Block Scope",
+            "body": "Before `let` and `const` existed (pre-2015), JavaScript only had function scope and global scope -- there was no such thing as a variable scoped to just an `if` block or a `for` loop's body. A `var` declared inside an `if` block is visible and usable for the *entire enclosing function*, not just inside that block:\n\n```javascript\nfunction checkAccess(role) {\n  if (role === \"admin\") {\n    var message = \"Welcome, admin!\";\n  }\n  console.log(message);   // still accessible here, even outside the if block\n}\n\ncheckAccess(\"admin\");   // 'Welcome, admin!'\ncheckAccess(\"guest\");   // undefined -- NOT a ReferenceError, because var 'leaked' out of the if\n```\n\n`let` and `const` fix this by introducing genuine **block scope**: a `let` or `const` declared inside `{ }` is only visible inside that specific block, matching what most other modern languages -- including Python's more nuanced approach, and languages with real block scoping -- lead you to expect. Rewriting the example with `let message` inside the `if` block would make `console.log(message)` throw `ReferenceError: message is not defined` when called with `\"guest\"`, since `message` is never created in that path and never leaks out of the block at all."
+          },
+          {
+            "heading": "Hoisting",
+            "body": "**Hoisting** refers to the way JavaScript processes declarations before running any code in a scope, effectively 'lifting' them to the top of that scope during a preparation phase. All three declaration kinds are hoisted, but they behave very differently once hoisted:\n\n- **`var`** declarations are hoisted *and initialized* to `undefined` immediately. Reading a `var` before its assignment line runs doesn't error -- it just gives you `undefined`, which can silently mask bugs (you get a value, just not the one you meant).\n- **Function declarations** (`function foo() { ... }`) are hoisted *completely*, including their body -- you can call a function declared this way from code that appears above its definition in the file.\n- **`let`** and **`const`** are hoisted too, but they are not initialized -- they sit in what's called the **temporal dead zone (TDZ)** from the start of their scope until the line where they're actually declared. Accessing them during that window throws `ReferenceError: Cannot access 'x' before initialization` -- a real, loud error, rather than `var`'s silent `undefined`.\n\nThis makes `let`/`const` meaningfully safer than `var`: a typo or a genuinely misordered reference fails immediately and clearly with `let`/`const`, whereas with `var` it might silently produce `undefined` and only cause a confusing bug several lines later."
+          },
+          {
+            "heading": "How JavaScript Closures Work",
+            "body": "JavaScript uses the same **lexical scoping** model as Python: the scope a function 'sees' is determined by where that function is written in the source code, not by where or how it's later called. As a direct consequence, JavaScript closures work the same way Python closures do -- a nested function that references a variable from its enclosing function's scope keeps a live connection to that variable even after the enclosing function has returned:\n\n```javascript\nfunction makeCounter() {\n  let count = 0;\n  return function increment() {\n    count += 1;\n    return count;\n  };\n}\n\nconst counterA = makeCounter();\nconst counterB = makeCounter();\n\nconsole.log(counterA());   // 1\nconsole.log(counterA());   // 2\nconsole.log(counterB());   // 1 -- independent from counterA\n```\n\nNotice there's no equivalent of Python's `nonlocal` keyword needed here -- JavaScript doesn't have the same 'assigning makes a name local by default' rule that Python does inside nested functions, so `count += 1` inside `increment` just directly updates the enclosing `count` with no extra declaration required. Each call to `makeCounter()` still creates its own independent `count` variable and its own `increment` closure over it, exactly mirroring the Python `make_counter()` closure you may already have built."
+          },
+          {
+            "heading": "The Classic var-in-a-Loop Bug (and the let Fix)",
+            "body": "This is JavaScript's version of the exact same bug you'd meet in Python: creating several closures inside a loop that all reference the loop's counter variable. Historically, with `var`, this went wrong for essentially the same reason it does in Python -- because `var` is function-scoped (or global-scoped), a `for (var i = 0; ...)` loop has exactly **one** `i` for the entire loop, shared by every closure created inside it:\n\n```javascript\nconst varFns = [];\nfor (var i = 0; i < 3; i++) {\n  varFns.push(() => i);\n}\nconsole.log(varFns.map(f => f()));   // [3, 3, 3]  -- not [0, 1, 2]!\n```\n\nEvery arrow function closes over the same shared `i`. By the time any of them is called, the loop has already finished, leaving `i` at `3` (the value that made the loop's condition `i < 3` finally false), so every callback reports `3`.\n\nJavaScript's fix is more elegant than Python's, and it's built directly into the language: switching to `let` makes the `for` loop create a **fresh binding of the loop variable for every single iteration** -- this specific behavior was added to the language spec precisely to solve this pattern:\n\n```javascript\nconst letFns = [];\nfor (let j = 0; j < 3; j++) {\n  letFns.push(() => j);\n}\nconsole.log(letFns.map(f => f()));   // [0, 1, 2]  -- fixed, automatically\n```\n\nNo default-argument trick or extra wrapping function is required -- `let` in a `for` loop header automatically gives each iteration its own independent `j`, so each closure captures a genuinely separate variable. This is worth comparing directly to Python's fix: Python never changed how its `for` loops work (there's still only one shared loop variable per loop, always), so Python code needs an explicit workaround -- like the `lambda i=i: i` default-argument trick -- to get the same independent-per-iteration behavior that JavaScript's `let` gives you for free."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "var Leaking Out of a Block",
+          "language": "javascript",
+          "code": "function checkAccess(role) {\n  if (role === \"admin\") {\n    var message = \"Welcome, admin!\";\n  }\n  console.log(message);\n}\n\ncheckAccess(\"admin\");   // \"Welcome, admin!\"\ncheckAccess(\"guest\");   // undefined -- but NOT a ReferenceError",
+          "explanation": "var is function-scoped, not block-scoped, so `message` declared inside the `if` block is actually hoisted to the top of the entire `checkAccess` function and remains accessible after the block ends, whether or not the `if` condition was even true. When role is \"guest\", the if body never runs, so message is never assigned -- but it still exists as a hoisted var, initialized to undefined, so console.log(message) prints undefined rather than throwing an error. This silent 'it exists, but as undefined' behavior is exactly the kind of surprise block scoping (via let or const) is designed to eliminate."
+        },
+        {
+          "title": "var vs let in a Loop of Closures",
+          "language": "javascript",
+          "code": "// BROKEN with var: all callbacks share one `i`\nconst varFns = [];\nfor (var i = 0; i < 3; i++) {\n  varFns.push(() => i);\n}\nconsole.log(varFns.map(f => f()));   // [3, 3, 3]\n\n// FIXED with let: each iteration gets its own `j`\nconst letFns = [];\nfor (let j = 0; j < 3; j++) {\n  letFns.push(() => j);\n}\nconsole.log(letFns.map(f => f()));   // [0, 1, 2]",
+          "explanation": "With var, there is exactly one `i` for the whole loop (var is function/global scoped, never scoped to the loop body), so all three arrow functions close over that single shared variable, which ends up at 3 once the loop condition finally fails. With let, the JavaScript specification gives each iteration of the for loop its own fresh binding of `j` -- so the three arrow functions close over three genuinely separate variables, each frozen at the value it had during its own iteration, with no extra trick required. This is the direct JavaScript parallel to Python's loop-variable-capture bug -- same root cause (one shared variable, many closures), but a different, language-level fix."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "const means the variable's value can never change.",
+          "clarification": "const only prevents *reassigning the binding* -- pointing the name at a different value or object. It says nothing about whether the object that binding points to can be mutated. `const arr = []; arr.push(1);` works fine, because push mutates the existing array in place; only `arr = []` (pointing arr at a brand new array) would throw `TypeError: Assignment to constant variable.` This is the same distinction as Python's mutable objects and rebinding vs. mutating a name -- const freezes the label, not necessarily the object underneath it."
+        },
+        {
+          "description": "Hoisting means you can use a let or const variable before its declaration line runs, just like you can with var.",
+          "clarification": "var, let, and const are all hoisted, but only var is also initialized (to undefined) during that hoisting phase, so reading it early silently gives undefined. let and const are hoisted into the temporal dead zone -- they exist in scope, but accessing them before their declaration line actually executes throws `ReferenceError: Cannot access 'x' before initialization`. So let/const hoisting is real, but it does not mean 'usable early' -- it means 'known about, but off-limits, until its line runs.'"
+        }
+      ],
+      "exercises": [
+        {
+          "id": "js-closures-scope-ex1",
+          "type": "predictOutput",
+          "prompt": "What does this code do when run, line by line?",
+          "code": "console.log(a);\nvar a = 5;\n\nconsole.log(b);\nlet b = 10;",
+          "hints": [
+            "var and let are both hoisted, but they aren't initialized the same way during hoisting.",
+            "What value does a hoisted var have before its assignment line actually executes? Does let get that same treatment?",
+            "Look up 'temporal dead zone' -- what specifically happens if you access a let variable before its declaration line has run?"
+          ],
+          "expectedAnswer": "It prints `undefined` for a, then throws `ReferenceError: Cannot access 'b' before initialization` on the next line, so 'b' and the value 10 are never actually printed. var is hoisted and pre-initialized to undefined, so reading it early just gives undefined silently. let is hoisted into the temporal dead zone, so reading it before its declaration line runs throws immediately.",
+          "solutionExplanation": "`console.log(a)` runs after `a` has been hoisted (as a var) to the top of its scope and pre-initialized to undefined, so it prints `undefined` without error -- the assignment `a = 5` hasn't executed yet, but that's fine for var. `console.log(b)`, however, tries to read `b` while it's still hoisted into the temporal dead zone (let declarations are hoisted but not initialized), so this line throws `ReferenceError: Cannot access 'b' before initialization` and execution stops there -- the program never reaches `let b = 10;` or logs 10 at all. This contrast is exactly why let/const are considered safer than var: the let case fails loudly and immediately at the real mistake, while the var case would have silently produced undefined if it had been misused the same way."
+        },
+        {
+          "id": "js-closures-scope-ex2",
+          "type": "debugging",
+          "prompt": "This code is supposed to create a handler for each button that logs its own index (0, 1, 2) when called, but every handler logs 3. Find and fix the bug.",
+          "code": "function attachHandlers(buttons) {\n  const handlers = [];\n  for (var i = 0; i < buttons.length; i++) {\n    handlers.push(function () {\n      console.log(\"Button \" + i + \" clicked\");\n    });\n  }\n  return handlers;\n}\n\nconst handlers = attachHandlers([\"Save\", \"Cancel\", \"Delete\"]);\nhandlers[0]();\nhandlers[1]();\nhandlers[2]();",
+          "hints": [
+            "Is `i` scoped to each individual loop iteration, or shared across the entire loop, given that it's declared with var?",
+            "By the time any handler actually runs (after attachHandlers has already returned), the loop has fully finished. What is `i` at that point?",
+            "One single-word change gives each iteration its own independent `i` automatically -- which declaration keyword introduces block scoping in a for loop header?"
+          ],
+          "solutionCode": "function attachHandlers(buttons) {\n  const handlers = [];\n  for (let i = 0; i < buttons.length; i++) {\n    handlers.push(function () {\n      console.log(\"Button \" + i + \" clicked\");\n    });\n  }\n  return handlers;\n}\n\nconst handlers = attachHandlers([\"Save\", \"Cancel\", \"Delete\"]);\nhandlers[0]();   // 'Button 0 clicked'\nhandlers[1]();   // 'Button 1 clicked'\nhandlers[2]();   // 'Button 2 clicked'",
+          "solutionExplanation": "With var, there is exactly one `i` for the whole loop, since var is function-scoped rather than scoped to the loop body -- every handler function closes over that one shared variable. None of the handlers are called until after attachHandlers has fully returned and the loop has completely finished, at which point i is 3 (the value that made i < buttons.length finally false), so every handler reports 3. Changing `var i` to `let i` fixes it because the JavaScript specification gives a let-declared for-loop variable a brand new binding for every iteration -- each handler function now closes over its own independent i, frozen at the value it had during its own iteration, with no other code changes needed."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "js-closures-scope-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "```javascript\nfunction demo() {\n  if (true) {\n    let x = 1;\n    var y = 2;\n  }\n  console.log(y);\n  console.log(x);\n}\ndemo();\n```\nWhat happens when this runs?",
+          "options": [
+            "It prints 2, then 1.",
+            "It prints 2, then throws a ReferenceError because x is not defined outside the if block.",
+            "It throws a ReferenceError immediately on the first console.log, before printing anything.",
+            "It prints undefined, then 1."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "y is declared with var, which is function-scoped, so it 'leaks' out of the if block and is still accessible (and equal to 2) in the rest of demo(). x is declared with let, which is block-scoped -- it only exists inside the if block's { }, so referencing x outside that block, in console.log(x), throws ReferenceError: x is not defined. The first console.log(y) succeeds and prints 2 before the second line throws, ruling out option C. Option A wrongly assumes let leaks out of the block like var does; option D wrongly assumes x would be hoisted with an undefined value the way a var would be, but let does not leak past its block at all, hoisted or not."
+        },
+        {
+          "id": "js-closures-scope-assess-explain1",
+          "type": "explanation",
+          "prompt": "A developer familiar with Python asks you to explain JavaScript closures and how the classic loop-variable bug in JavaScript compares to the equivalent bug in Python. Write an explanation connecting the two languages.",
+          "modelAnswer": "JavaScript closures work on the same underlying principle as Python closures: both languages use lexical scoping, meaning a function's enclosing scope is fixed by where it's written in the source code, not by when or how it's later called. So in both languages, a nested function that reads a variable from its enclosing function keeps a live connection to that variable even after the enclosing function has already returned -- that live connection is the closure. One small difference in mechanics: Python requires you to declare `nonlocal x` inside a nested function before you can reassign (not just read) an enclosing variable, because Python treats any name assigned inside a function as local to that function by default; JavaScript has no equivalent rule for regular assignment (`count += 1` inside a nested function just directly updates the enclosing count), so no extra keyword is needed there. The classic loop bug is identical in root cause across both languages: if you create several closures inside a loop that all reference the loop's counter variable, they don't each get 'their own' value from their own iteration -- there is only one counter variable for the entire loop, shared by every closure created inside it, and since those closures are usually called only after the loop has fully finished, they all see whatever final value the loop left behind. In JavaScript, this specifically happens with `var` (function-scoped, one variable for the whole loop); switching to `let` fixes it because the language specification gives every iteration of a let-declared for loop a fresh, independent binding automatically. Python has no equivalent language-level fix -- its for loops never create a new scope per iteration -- so Python code needs an explicit workaround, most commonly giving the closure its own parameter defaulted to the loop variable's current value (`lambda i=i: i`), since default argument values are evaluated once, immediately, at definition time. Same disease, same underlying mechanism, but JavaScript patched it at the language level for one common case while Python still requires a manual fix."
+        }
+      ]
+    }
+  ]
+}

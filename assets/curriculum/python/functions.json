@@ -1,0 +1,352 @@
+{
+  "learningPathId": "python",
+  "moduleId": "functions",
+  "title": "Functions",
+  "order": 3,
+  "concepts": [
+    {
+      "id": "python-functions-basics",
+      "title": "Defining Functions",
+      "description": "Functions bundle reusable behavior behind a name; understanding parameters vs arguments, default values, and return semantics avoids many common bugs.",
+      "moduleId": "functions",
+      "topicId": "functions",
+      "difficulty": "beginner",
+      "estimatedMinutes": 30,
+      "prerequisites": ["python-control-flow"],
+      "learningObjectives": [
+        "Define a function with def and explain the difference between parameters and arguments.",
+        "Use positional, keyword, and default arguments correctly.",
+        "Explain what a function returns when there is no explicit return statement.",
+        "Explain why functions are first-class objects in Python.",
+        "Predict bugs caused by mutable default arguments."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "def, Parameters, and Arguments",
+            "body": "A function is defined with `def`, a name, a parenthesized list of parameters, and an indented body:\n\n```python\ndef greet(name):\n    return f\"Hello, {name}!\"\n```\n\nThese two words -- parameter and argument -- get used interchangeably in casual conversation, but it's worth keeping them distinct: a **parameter** is the name that appears in the function's own definition (`name`, above); an **argument** is the actual value supplied at a particular call site (`greet(\"Amy\")` passes the argument `\"Amy\"`). The parameter is a slot; the argument is what fills it for one specific call. This distinction becomes genuinely useful once you start reading error messages like `TypeError: greet() missing 1 required positional argument: 'name'` -- that's Python telling you a parameter was left with no argument to fill it."
+          },
+          {
+            "heading": "Positional, Keyword, and Default Arguments",
+            "body": "Arguments can be passed two ways: **positionally**, matched to parameters by order (`greet(\"Amy\")`), or **by keyword**, matched by name regardless of order (`greet(name=\"Amy\")`). Keyword arguments make call sites more self-documenting, especially once a function has several parameters -- `create_user(\"Amy\", 30, True)` tells you far less at a glance than `create_user(\"Amy\", age=30, is_admin=True)`.\n\n**Default arguments** let a parameter be optional by giving it a fallback value in the definition: `def greet(name, greeting=\"Hello\"):`. Callers can omit `greeting` entirely and get the default, or override it. There are two rules worth internalizing early: (1) parameters with defaults must come after parameters without defaults in the definition, and (2) **default values are evaluated exactly once, at the moment the function is defined** -- not once per call. That second rule seems like a minor implementation detail until you use a mutable object as a default (covered in the example below), at which point it becomes a genuine, very common bug.\n\nPython also supports `*args` (collect extra positional arguments into a tuple) and `**kwargs` (collect extra keyword arguments into a dict) for functions that need to accept a variable, open-ended number of arguments -- you'll see these used heavily once you get to decorators."
+          },
+          {
+            "heading": "Return Values -- Including the Implicit None",
+            "body": "A `return` statement immediately exits the function and hands a value back to the caller. But what if a function has no `return` at all, or a bare `return` with nothing after it? Unlike some languages where 'falling off the end' of a function is a compile error, or others where the last evaluated expression is automatically returned, Python functions **always return something** -- if execution reaches the end of the function body (or hits a bare `return`) without an explicit `return <value>`, the function returns `None`.\n\n```python\ndef log_message(msg):\n    print(msg)\n    # no return statement here\n\nresult = log_message(\"hi\")\nprint(result)   # None -- NOT the printed string, and NOT nothing\n```\n\nThis trips people up in a specific, recurring way: writing a function that clearly *does* something useful (prints, mutates a list, writes a file) and assuming that because it 'did the job,' calling it must have produced a meaningful value too. It's worth explicitly asking, for every function you write, 'does this need to hand a value back to its caller, or is it only used for its side effect?' -- and if the former, make sure every code path actually has a `return <value>`."
+          },
+          {
+            "heading": "Functions Are First-Class Objects",
+            "body": "In Python, a function defined with `def` is not a special, second-class kind of thing -- it's an ordinary object, just like an int or a list, that happens to be callable. Concretely, this means you can:\n\n- Assign a function to a variable: `say_hi = greet` (note: no parentheses -- that would *call* it; without them, you're referring to the function object itself).\n- Store functions in data structures: a dict mapping command names to handler functions.\n- Pass a function as an argument to another function: `sorted(names, key=len)` passes the built-in `len` function itself as the `key` argument.\n- Return a function from another function.\n\nThis last capability -- a function returning another function -- is the foundation for closures, which you'll explore in depth in the next two concepts. Being 'first-class' is what makes patterns like callbacks, strategy dispatch, and decorators possible without needing any special syntax beyond what you already know."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Default Arguments and the Mutable Default Trap",
+          "language": "python",
+          "code": "def add_item(item, cart=[]):\n    cart.append(item)\n    return cart\n\nprint(add_item(\"apple\"))    # ['apple']\nprint(add_item(\"banana\"))   # ['apple', 'banana']  -- surprise! not just ['banana']",
+          "explanation": "It looks like every call to `add_item` with no `cart` argument should start from a fresh empty list. It doesn't. The default value `[]` is created exactly once, when the `def` statement runs (at import/definition time), and that same single list object is reused as the default for every future call that doesn't supply its own `cart`. The first call appends `\"apple\"` to that one shared list; the second call, also using the default, appends `\"banana\"` to the very same object -- so it already contains `\"apple\"` from before. The fix is the standard idiom: use `None` as the default sentinel, and create a fresh list inside the function body when it's actually needed: `def add_item(item, cart=None): cart = [] if cart is None else cart; ...`. Because the body runs fresh on every call, `[]` there really does create a new list each time -- the trap is specifically about default *argument values*, which live in the function's definition, not its body."
+        },
+        {
+          "title": "Functions as First-Class Values",
+          "language": "python",
+          "code": "def add(a, b):\n    return a + b\n\ndef multiply(a, b):\n    return a * b\n\noperations = {\n    \"+\": add,\n    \"*\": multiply,\n}\n\ndef calculate(a, op, b):\n    return operations[op](a, b)\n\nprint(calculate(3, \"+\", 4))   # 7\nprint(calculate(3, \"*\", 4))   # 12\n\nwords = [\"banana\", \"kiwi\", \"fig\"]\nprint(sorted(words, key=len))   # ['fig', 'kiwi', 'banana'] -- sorted by length, shortest first",
+          "explanation": "`operations` stores actual function objects (`add`, `multiply` -- no parentheses, so they're not being called here) as dictionary values. `calculate` looks up the right function by the operator string and then calls it with `(a, b)`, dispatching to different behavior without a single `if/elif` chain. Separately, `sorted(words, key=len)` passes the built-in `len` function itself as an argument -- `sorted` calls `len(word)` internally for each word to decide the sort order. Neither of these would be possible if functions weren't ordinary, passable, storable objects like everything else in Python."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "If a function doesn't have a return statement, calling it doesn't produce any value at all -- it's like calling a function returns 'nothing', full stop.",
+          "clarification": "Every function call in Python evaluates to *some* value -- if there's no explicit `return <value>` on the path that executes, that value is specifically the object `None`, not an absence of a value. `result = some_function_with_no_return()` always succeeds and leaves `result` bound to `None`; it's not an error, and `result` is a perfectly usable name, just pointing at `None` rather than whatever the function's side effect might have been."
+        },
+        {
+          "description": "A default argument like `def f(x, items=[])` creates a fresh, empty list every time the function is called without an argument for items.",
+          "clarification": "Default argument values are evaluated exactly once, at the moment the `def` statement itself runs (function definition time) -- not once per call. That single list object then gets reused as the default on every call that doesn't override it, so mutations made during one call (like `.append()`) are still there the next time the default is used. The safe idiom for a mutable default is `def f(x, items=None): items = [] if items is None else items`, which genuinely creates a new list inside the function body on every call."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "python-functions-basics-ex1",
+          "type": "predictOutput",
+          "prompt": "What does this print, and why?",
+          "code": "def describe(name, age=30, city=\"Unknown\"):\n    return f\"{name}, {age}, {city}\"\n\nprint(describe(\"Amy\", city=\"Boston\"))\nprint(describe(\"Ben\", 25))",
+          "hints": [
+            "In the first call, `\"Amy\"` fills the first parameter positionally. What fills `age` -- was it ever given explicitly?",
+            "Keyword arguments can be supplied out of order and skip over parameters that should just use their default.",
+            "In the second call, both arguments are positional -- match them to parameters strictly in definition order."
+          ],
+          "expectedAnswer": "'Amy, 30, Boston' then 'Ben, 25, Unknown'. In the first call, name='Amy' (positional), age keeps its default of 30 (never supplied), city='Boston' (by keyword). In the second call, both arguments are positional: name='Ben', age=25, and city keeps its default 'Unknown'.",
+          "solutionExplanation": "describe(\"Amy\", city=\"Boston\") passes \"Amy\" positionally for `name`, and explicitly names `city=\"Boston\"` -- `age` is never supplied at all, so it falls back to its default value of 30, giving 'Amy, 30, Boston'. describe(\"Ben\", 25) supplies two positional arguments, which fill parameters strictly in the order they're declared: `name=\"Ben\"`, `age=25`. `city` is not supplied, so it uses its default 'Unknown', giving 'Ben, 25, Unknown'."
+        },
+        {
+          "id": "python-functions-basics-ex2",
+          "type": "debugging",
+          "prompt": "This function is meant to log a message into an independent list of logs for each logger, but messages from different loggers are unexpectedly ending up mixed together in the same list. Find and fix the bug.",
+          "code": "def make_logger_entry(message, log=[]):\n    log.append(message)\n    return log\n\nlogger_a_entries = make_logger_entry(\"start\")\nlogger_b_entries = make_logger_entry(\"other process start\")\n\nprint(logger_a_entries)  # expected: ['start'], actual: ['start', 'other process start']\nprint(logger_b_entries)  # expected: ['other process start']",
+          "hints": [
+            "How many times is the default value `[]` actually created across all these calls -- once per call, or once total?",
+            "Both calls omit the `log` argument, so both use the default. Are they using the SAME list object, or two separate ones?",
+            "Change the default to a harmless sentinel (like None) and build the real empty list fresh, inside the function body, only when needed."
+          ],
+          "solutionCode": "def make_logger_entry(message, log=None):\n    if log is None:\n        log = []\n    log.append(message)\n    return log\n\nlogger_a_entries = make_logger_entry(\"start\")\nlogger_b_entries = make_logger_entry(\"other process start\")\n\nprint(logger_a_entries)  # ['start']\nprint(logger_b_entries)  # ['other process start']",
+          "solutionExplanation": "The original default, `log=[]`, is a single list object created once when the function is defined, and every call that omits `log` reuses that exact same object -- so appends from unrelated calls all pile into one shared list, which is why both 'loggers' actually ended up sharing state. The fix uses `log=None` as a default sentinel, then explicitly creates `log = []` inside the function body when no list was supplied. Because that line runs fresh every time the function is called (it's in the body, not the default), each call that doesn't pass its own list now gets a genuinely new, independent one."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "python-functions-basics-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "When is the default value in `def f(x, items=[]):` actually created?",
+          "options": [
+            "A new empty list is created every time f() is called without an items argument.",
+            "The empty list is created once, when the def statement runs (function definition time), and reused across calls.",
+            "The empty list is created the first time f() is called, then reused after that.",
+            "Python raises a SyntaxError for using a mutable literal as a default value."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Default argument expressions are evaluated exactly once, when the enclosing `def` statement executes (typically when the module is first imported/run), not on each call. That single object becomes the default for every future call that doesn't override it -- which is exactly why mutating it (e.g. via .append()) persists across otherwise-unrelated calls. Option A describes the intuitive-but-wrong behavior; option C is a plausible-sounding but incorrect middle ground; option D is wrong because Python permits mutable default values syntactically -- it's a footgun, not an error."
+        },
+        {
+          "id": "python-functions-basics-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain why using a mutable object (like a list or dict) as a default argument value is considered a classic Python pitfall, and how to avoid it.",
+          "modelAnswer": "Python evaluates a default argument's value exactly once -- when the function is defined -- and reuses that same object as the default on every subsequent call that doesn't supply its own value for that parameter. That's harmless for immutable defaults like `0` or `\"\"`, because there's no way to mutate them in place; the next call just gets the same unchanged value. But if the default is a mutable object like `[]` or `{}`, and the function body mutates it (`.append()`, `[key] = value`), those mutations stick around on that one shared object between calls. So two calls that both rely on the default can end up silently sharing and accumulating state, even though nothing about the call sites suggests they're related -- a serious, hard-to-spot bug, especially since the function often works perfectly fine in quick manual testing where you only call it once. The standard fix is the 'sentinel default' pattern: default the parameter to `None`, then inside the function body write something like `value = [] if value is None else value`. Because that line lives in the function body, it runs fresh on every single call, genuinely creating a new empty list each time the caller didn't provide one."
+        }
+      ]
+    },
+    {
+      "id": "python-scope",
+      "title": "Scope",
+      "description": "Every name lookup in Python follows the LEGB rule -- Local, Enclosing, Global, Built-in -- and the global/nonlocal keywords let a function reach outside its local scope on purpose.",
+      "moduleId": "functions",
+      "topicId": "functions",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 30,
+      "prerequisites": ["python-functions-basics"],
+      "learningObjectives": [
+        "Explain the LEGB rule and use it to determine where a name resolves.",
+        "Explain why assigning to a name inside a function makes it local for that entire function by default.",
+        "Use the global keyword to modify a module-level variable from inside a function.",
+        "Use the nonlocal keyword to modify an enclosing function's variable from inside a nested function.",
+        "Debug a bug caused by accidental shadowing of an outer-scope name."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "The LEGB Rule",
+            "body": "Whenever Python needs to resolve a name (a variable reference), it searches through a fixed sequence of scopes, stopping at the first one where the name is found:\n\n1. **L -- Local**: names assigned inside the current function.\n2. **E -- Enclosing**: names in any enclosing function's local scope, if this function is nested inside another one (relevant for closures, covered next).\n3. **G -- Global**: names assigned at the top level of the current module (the .py file).\n4. **B -- Built-in**: names Python provides automatically, like `len`, `print`, `range`, `Exception`.\n\n```python\nx = \"global\"\n\ndef outer():\n    x = \"enclosing\"\n    def inner():\n        x = \"local\"\n        print(x)     # finds x in Local scope first -- prints 'local'\n    inner()\n    print(x)         # Local scope of outer() has its own x -- prints 'enclosing'\n\nouter()\nprint(x)             # prints 'global'\n```\n\nEach `x` above lives in its own scope; LEGB just describes the *search order* Python uses when a name is referenced without being assigned in the current scope first. If `inner()` didn't define its own `x`, printing `x` inside it would have found `outer()`'s `x` (Enclosing) instead, and so on up the chain."
+          },
+          {
+            "heading": "Why Assignment Makes a Name Local by Default",
+            "body": "Here's the detail that causes real confusion: Python decides, when it *compiles* a function's body (before that function ever actually runs), whether each name used inside it is local to that function. The rule is simple but has a sharp edge: **if a name is assigned to anywhere in a function's body, that name is treated as local for the *entire* function body** -- not just from the point of assignment onward.\n\nThis means merely *reading* a global variable inside a function works fine with no special syntax. But if you *also* try to assign to a same-named variable anywhere else in that same function, Python decides the name is local everywhere in that function, including on lines before the assignment:\n\n```python\ncounter = 0\n\ndef increment():\n    counter = counter + 1   # UnboundLocalError!\n    return counter\n\nincrement()\n```\n\nThis raises `UnboundLocalError: local variable 'counter' referenced before assignment`. It feels like it should just read the global `counter` (which is 0) and add 1. Instead, because there's an assignment to `counter` later on that same line, Python has already decided `counter` is local to `increment()` for the whole function -- so the read on the right-hand side of `=` tries to look up a *local* `counter` that doesn't have a value yet, and fails."
+          },
+          {
+            "heading": "global: Reaching Out to Module Scope",
+            "body": "The `global` keyword tells Python, explicitly, 'treat assignments to this name inside this function as assignments to the module-level variable, not a new local one.' Adding it fixes the example above:\n\n```python\ncounter = 0\n\ndef increment():\n    global counter\n    counter = counter + 1\n    return counter\n\nprint(increment())   # 1\nprint(increment())   # 2\n```\n\nNow the right-hand side read finds the actual global `counter`, and the assignment writes back to that same global name instead of creating a shadow. Worth a note of caution: functions that reach out and mutate global state via `global` are harder to reason about and test in isolation than functions that only depend on their own parameters and return values -- use it when you genuinely need shared mutable state (a running total, a cache, a registry), not as a default habit."
+          },
+          {
+            "heading": "nonlocal: Reaching Into an Enclosing Function",
+            "body": "`nonlocal` solves the exact same problem as `global`, but one level removed: it's for a *nested* function that needs to assign to a variable from its immediately enclosing function's scope (not the module-level global scope). Without it, the same local-by-default rule applies, and assigning to that name inside the nested function would just create a new local variable that shadows the enclosing one, rather than actually updating it:\n\n```python\ndef make_adder(step):\n    total = 0\n    def add():\n        nonlocal total\n        total += step\n        return total\n    return add\n\nadd_five = make_adder(5)\nprint(add_five())   # 5\nprint(add_five())   # 10\n```\n\nWithout `nonlocal` here, `total += step` inside `add()` would raise `UnboundLocalError` for the same reason as the global example -- `total` is assigned inside `add()`, so Python treats it as local to `add()`, and the read on the right-hand side of `+=` fails before that local `total` has ever been given a value. `nonlocal` tells Python to skip creating a new local and instead reuse (and allow rebinding of) the `total` that belongs to the nearest enclosing function -- exactly the mechanism that makes stateful closures possible, which is the whole subject of the next concept."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "UnboundLocalError From Shadowing",
+          "language": "python",
+          "code": "counter = 0\n\ndef increment():\n    counter = counter + 1   # counter is treated as local because of this assignment\n    return counter\n\nincrement()   # UnboundLocalError: local variable 'counter' referenced before assignment",
+          "explanation": "Because `counter` is assigned somewhere inside `increment()`, Python's compiler marks `counter` as a local variable for the *entire* function body -- including the right-hand side of that very assignment, which runs first. At that point, the local `counter` doesn't have a value yet (assignment hasn't completed), so trying to read it raises `UnboundLocalError`. Note this is a completely different error from `NameError`, which you'd get for a name that doesn't exist anywhere in any reachable scope -- `UnboundLocalError` specifically means 'this name IS local here, but you're reading it before it's been given a value.'"
+        },
+        {
+          "title": "Fixing It with global, and nonlocal in a Nested Function",
+          "language": "python",
+          "code": "counter = 0\n\ndef increment():\n    global counter\n    counter += 1\n    return counter\n\nprint(increment())  # 1\nprint(increment())  # 2\n\ndef make_adder(step):\n    total = 0\n    def add():\n        nonlocal total\n        total += step\n        return total\n    return add\n\nadd_five = make_adder(5)\nprint(add_five())   # 5\nprint(add_five())   # 10",
+          "explanation": "`global counter` tells Python that assignments to `counter` inside `increment()` should target the module-level variable, not create a local shadow -- so `counter += 1` now correctly reads and updates the real global value across repeated calls. `nonlocal total` does the analogous thing one scope level in: it tells Python that `total` inside `add()` refers to the `total` that belongs to the enclosing `make_adder()` call, not a new local variable. Each call to `make_adder(step)` creates its own independent `total` (starting at 0) that the returned `add` function can keep mutating across repeated calls -- this is your first real look at a stateful closure, explored fully in the next concept."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "Any variable defined outside a function is automatically writable (reassignable) from inside that function too, since the function can already 'see' and read it.",
+          "clarification": "Reading and writing are governed by different rules. Reading an outer-scope name from inside a function works automatically via LEGB, with no special syntax needed. But *assigning* to a same-named variable inside a function creates a new local variable by default, due to the compile-time locality rule -- it does not write through to the outer one. To actually reassign (not just read) a name from an enclosing function scope or the module's global scope, you need `nonlocal` or `global` respectively, declared before the assignment."
+        },
+        {
+          "description": "global and nonlocal do the same thing -- they're just two different keywords for 'reach outside this function.'",
+          "clarification": "They target different scopes. `global` always reaches all the way to the module's top-level (global) scope, no matter how deeply nested the function is. `nonlocal` reaches to the *nearest enclosing function's* local scope, skipping straight past the global scope entirely -- it specifically requires there to be an enclosing function with that variable in its local scope, which is why `nonlocal` only makes sense inside a nested function, and raises a `SyntaxError` if there's no matching enclosing local variable to bind to (it deliberately does not fall back to global)."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "python-scope-ex1",
+          "type": "predictOutput",
+          "prompt": "What does this print, and why?",
+          "code": "x = \"global\"\n\ndef outer():\n    x = \"enclosing\"\n    def inner():\n        x = \"local\"\n        print(x)\n    inner()\n    print(x)\n\nouter()\nprint(x)",
+          "hints": [
+            "There are three separate variables here, all named `x`, each living in its own scope -- they don't overwrite each other.",
+            "LEGB describes a search order for names that AREN'T assigned in the current scope. Here, every scope defines its own x, so no searching up the chain is needed at all.",
+            "Match each print() call to the scope it's textually inside of, and print whatever x means in exactly that scope."
+          ],
+          "expectedAnswer": "local, then enclosing, then global -- each print() statement is inside a scope that has its own independently-assigned x, so LEGB search never needs to look further up the chain; each x shadows the ones outside it within its own scope only.",
+          "solutionExplanation": "inner() assigns its own local x = \"local\", so its print(x) finds that immediately in Local scope and prints 'local'. That assignment has no effect on outer()'s x -- they're different variables that happen to share a name. Back in outer(), after inner() returns, print(x) refers to outer()'s own local x = \"enclosing\", printing 'enclosing'. Finally, the module-level print(x) refers to the global x = \"global\", which was never touched by either function, since neither used `global` to reach out to it. Three scopes, three independent x's, each shadowing the outer ones only within its own boundaries."
+        },
+        {
+          "id": "python-scope-ex2",
+          "type": "debugging",
+          "prompt": "This function is supposed to add an amount to a running total and print the new total, but calling it raises UnboundLocalError. Find and fix the bug.",
+          "code": "total = 0\n\ndef add_to_total(amount):\n    total = total + amount\n    print(f\"Total is now {total}\")\n\nadd_to_total(10)\nadd_to_total(5)",
+          "hints": [
+            "Look at the assignment `total = total + amount` -- what does the presence of an assignment to `total` inside this function do to how Python treats that name for the WHOLE function body?",
+            "The read on the right-hand side (`total + amount`) is trying to look up a local `total` -- does that local have a value yet at that point?",
+            "You need a keyword that tells Python 'this assignment should target the existing module-level total, not create a new local one'."
+          ],
+          "solutionCode": "total = 0\n\ndef add_to_total(amount):\n    global total\n    total = total + amount\n    print(f\"Total is now {total}\")\n\nadd_to_total(10)\nadd_to_total(5)",
+          "solutionExplanation": "Because `add_to_total` assigns to `total` (`total = total + amount`), Python treats `total` as local to that function for its entire body -- including the read of `total` on the right-hand side of that very assignment, which executes before the local has ever been given a value, causing UnboundLocalError. Adding `global total` at the top of the function tells Python that assignments to `total` here should target the existing module-level variable instead of creating a shadowing local one. With that declared, the right-hand side read now correctly finds the real global total (starting at 0), and the assignment writes the updated value back to that same global, so successive calls correctly accumulate: 10, then 15."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "python-scope-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "A junior developer's function raises `UnboundLocalError: local variable 'x' referenced before assignment`, even though `x` is clearly defined at the module level before the function is called. What is the most likely cause?",
+          "options": [
+            "The module-level x was defined after the function's def statement in the file.",
+            "The function assigns to x somewhere in its body, which makes Python treat x as local for the whole function -- including any read of x that happens before that assignment actually runs.",
+            "UnboundLocalError only happens when x was never defined anywhere at all.",
+            "The function is missing a return statement."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "UnboundLocalError specifically means Python has already classified the name as local to the function (because it's assigned somewhere in that function's body), but the code tried to read that local variable's value before any assignment to it had actually executed. It has nothing to do with return statements (option D) or whether the name exists elsewhere (option C describes NameError, a different error for names that don't exist in any reachable scope). Definition order at the module level (option A) isn't the mechanism either -- the issue is entirely about the function's own body containing an assignment to that name."
+        },
+        {
+          "id": "python-scope-assess-explain1",
+          "type": "explanation",
+          "prompt": "A junior developer asks why their function raises UnboundLocalError when they thought they were just reading and updating a global variable. Explain what's actually happening and how to fix it.",
+          "modelAnswer": "Python decides, when it compiles a function's body (before the function ever runs), whether each name used inside is local to that function -- and the rule is: if a name is assigned to *anywhere* in the function's body, it's treated as local for the *entire* body, not just from that line onward. So a function like `def f(): x = x + 1` isn't 'reading the global x and then updating it' the way it looks -- because there's an assignment to x in this function, Python has already decided x is local here, and the read of x on the right-hand side is trying to look up that not-yet-assigned local, which raises UnboundLocalError. Merely reading a global (with no assignment to that name anywhere in the function) would have worked fine with zero special syntax -- the problem only appears once you also try to assign to the same name. The fix is to explicitly declare the name with `global x` at the top of the function, which tells Python 'assignments to x in here should modify the existing module-level variable, not create a new local shadow.' With that declared, both the read and the write correctly refer to the same module-level x. It's worth adding, as a design note, that leaning on `global` heavily makes functions harder to test and reason about in isolation, since their behavior now depends on -- and can change -- state outside their own parameters; it's a tool for genuine shared state, not a default habit."
+        }
+      ]
+    },
+    {
+      "id": "python-closures",
+      "title": "Closures",
+      "description": "A closure is a function that remembers the variables from its enclosing scope even after that scope has finished executing, and it's the mechanism behind stateful counters, memoization, and decorators.",
+      "moduleId": "functions",
+      "topicId": "functions",
+      "difficulty": "advanced",
+      "estimatedMinutes": 45,
+      "prerequisites": ["python-scope", "python-functions-basics"],
+      "learningObjectives": [
+        "Explain what a closure is and why a nested function forms one over its enclosing scope.",
+        "Explain the relationship between closures, nonlocal, and the LEGB rule.",
+        "Predict and explain the classic loop-variable-capture bug in closures created inside a loop.",
+        "Fix the loop-variable-capture bug using a default-argument trick or an extra enclosing scope.",
+        "Implement a closure-based counter and a closure-based memoizer, and connect closures to how decorators work."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "What Is a Closure?",
+            "body": "A **closure** is formed when a nested (inner) function references a name from its enclosing (outer) function's scope, and that inner function is returned -- or otherwise escapes -- so that it can still be called after the outer function has already finished running. The inner function keeps working, and it still has access to those specific enclosing variables, even though the outer function's call is long over.\n\n```python\ndef make_greeter(greeting):\n    def greet(name):\n        return f\"{greeting}, {name}!\"\n    return greet\n\nhello_greeter = make_greeter(\"Hello\")\nprint(hello_greeter(\"Amy\"))   # 'Hello, Amy!'\n```\n\nBy the time `hello_greeter(\"Amy\")` runs, `make_greeter(\"Hello\")` has already returned -- its call is finished, its local variables would normally be discarded entirely once nothing needs the stack frame anymore. And yet `greet` still knows `greeting` is `\"Hello\"`. A helpful mental image: when `greet` is created inside `make_greeter`, it doesn't just get a plain function body -- it also carries a small 'backpack' containing exactly the outer variables it actually references (`greeting`, here, and nothing else from `make_greeter` that `greet` didn't use). That backpack is the closure. Technically, *every* nested function that references an enclosing variable forms a closure over it, whether or not the inner function ever outlives the call to the outer one -- but the interesting, useful case, and the one worth focusing on, is exactly this one: an inner function that escapes and keeps its backpack long after its birthplace is gone."
+          },
+          {
+            "heading": "Why It Works: Cells, Free Variables, and Lexical Scope",
+            "body": "This all works because Python uses **lexical scoping**: the scope a name resolves in is determined by *where the function is defined in the source code*, not by where or how it happens to be called later. `greet` was defined textually inside `make_greeter`, so its enclosing scope is fixed at that point, forever -- no matter who calls `greet` or from where.\n\nUnder the hood, when a nested function references a variable that belongs to an enclosing function (Python calls this a **free variable** from the inner function's point of view), CPython doesn't store a plain value for it -- it allocates a small object called a **cell**, which acts as a shared, mutable box that both the outer function's local scope and the inner function's closure point to. You can actually inspect this: `greet.__closure__` is a tuple of cell objects, and each one's `.cell_contents` holds the current value. This detail matters for one crucial reason: **the closure holds a reference to the cell, not a frozen copy of the value inside it.** If the enclosing variable is mutated *after* the inner function is created, the closure sees the *updated* value the next time it's called -- it is not a snapshot taken at creation time. Keep that specific fact in mind; it's the entire root cause of the classic loop bug covered further down."
+          },
+          {
+            "heading": "nonlocal Revisited: Reading vs Rebinding in a Closure",
+            "body": "As covered in the Scope concept, *reading* a free variable from an enclosing scope works with no special syntax at all -- `greet` above reads `greeting` freely. But *rebinding* (assigning to) that variable from inside the nested function runs into the same local-by-default rule as before: an assignment to a name anywhere in a function's body makes that name local to that function, which would silently create a brand new local variable shadowing the enclosing one, rather than updating it. `nonlocal` is what lets a closure actually mutate its captured state:\n\n```python\ndef make_counter():\n    count = 0\n    def increment():\n        nonlocal count      # without this, count += 1 below would raise UnboundLocalError\n        count += 1\n        return count\n    return increment\n\ncounter = make_counter()\nprint(counter())   # 1\nprint(counter())   # 2\nprint(counter())   # 3\n```\n\nEach call to `make_counter()` creates a brand new `count` cell and a brand new `increment` function closed over it -- so two counters created from two separate calls are fully independent of each other, even though they're built from identical code."
+          },
+          {
+            "heading": "The Classic Bug: Closures Created in a Loop",
+            "body": "This is, without exaggeration, one of the single most common closure bugs in real Python code, and it follows directly from the 'reference to a cell, not a snapshot' fact above. When you create several closures inside a loop, and each one references the loop variable, people almost universally expect each closure to remember 'its own' value of that variable from the iteration where it was created -- as if each one took a photo. That is **not** what happens. A `for` loop does not create a new scope per iteration in Python (loops are not scope boundaries at all) -- there is exactly **one** loop variable, living in exactly **one** cell, for the entire loop, and every closure created inside that loop that references it is looking at that same shared cell.\n\n```python\nfuncs = []\nfor i in range(3):\n    funcs.append(lambda: i)\n\nprint([f() for f in funcs])   # [2, 2, 2]  -- NOT [0, 1, 2]!\n```\n\nAll three lambdas close over the exact same `i`. By the time any of them is actually *called* -- which happens in the list comprehension on the last line, well after the loop has already finished entirely -- `i` holds whatever value it was left at when the loop ended, which is `2` (the last value `range(3)` produced). Every single closure reads that same final value, because they were never looking at three separate things to begin with."
+          },
+          {
+            "heading": "Fixing It: the Default-Argument Trick (and Alternatives)",
+            "body": "The standard, idiomatic fix reuses a fact from the Defining Functions concept: **default argument values are evaluated once, immediately, at the moment the function is defined** -- not looked up later when the function is called. So if you give each closure its own parameter, defaulted to the loop variable's *current* value at that specific point in the loop, you freeze that value into that one function's own default, completely independent of whatever the shared loop variable does afterward:\n\n```python\nfuncs = []\nfor i in range(3):\n    funcs.append(lambda i=i: i)   # i=i default captures the CURRENT i, right now\n\nprint([f() for f in funcs])   # [0, 1, 2]  -- fixed!\n```\n\nThe left `i` (the parameter name) and right `i` (the loop variable being read) look identical, which is exactly the point of the idiom, but they become two different things the moment the lambda is defined: the parameter's default value is computed *now*, during this exact iteration, and stored with that specific function object -- it no longer depends on the shared loop cell at all once the lambda is calling by default.\n\nA more general alternative -- and arguably a cleaner one, because it doesn't rely on a slightly cryptic-looking `x=x` idiom -- is to introduce an actual extra function call, and therefore an actual new enclosing scope, per iteration:\n\n```python\ndef make_returner(value):\n    return lambda: value   # value is THIS call's own parameter -- genuinely independent per call\n\nfuncs = [make_returner(i) for i in range(3)]\nprint([f() for f in funcs])   # [0, 1, 2]\n```\n\nHere, each call to `make_returner(i)` gets its own private `value` parameter and its own cell -- there's no shared loop variable involved in the returned lambda at all, because the lambda inside `make_returner` doesn't close over the loop's `i`; it closes over `make_returner`'s own `value`, which is a fresh, separate variable created by every call. This 'wrap it in another function call' pattern is exactly the mechanism behind the counter factory in the next section, and it's worth recognizing as the general-purpose fix whenever the default-argument trick feels too cryptic for a given piece of code."
+          },
+          {
+            "heading": "A Practical Use Case: Counter Factories and a Simple Memoizing Cache",
+            "body": "Closures aren't just a source of a famous bug -- they're a genuinely useful tool for building small pieces of stateful behavior without writing a full class. `make_counter()` from earlier is one example: a factory function that returns a new, independent stateful function each time it's called.\n\nA more practically useful example is a **memoizing cache** -- a wrapper that remembers results it's already computed, so repeat calls with the same arguments skip the expensive work:\n\n```python\ndef memoize(fn):\n    cache = {}\n    def wrapper(*args):\n        if args not in cache:\n            cache[args] = fn(*args)\n        return cache[args]\n    return wrapper\n\ndef slow_square(n):\n    print(f\"computing square of {n}...\")\n    return n * n\n\nslow_square = memoize(slow_square)\n\nprint(slow_square(4))   # prints 'computing square of 4...', then 16\nprint(slow_square(4))   # prints nothing extra, just 16 -- cache hit, fn was not called again\nprint(slow_square(5))   # prints 'computing square of 5...', then 25\n```\n\n`wrapper` is a closure over two things from its enclosing scope: `cache` (the dict it reads and mutates across calls, via ordinary mutation -- no `nonlocal` needed here, since we mutate the dict's contents rather than rebind the name `cache` itself) and `fn` (the original function being wrapped). Look closely at the line `slow_square = memoize(slow_square)`: it takes the original function, wraps it in a closure that adds caching behavior, and reassigns the name `slow_square` to point at that wrapped version instead. This is precisely, mechanically, what Python's `@decorator` syntax does for you automatically -- `@memoize` placed above a function definition is defined to be exactly equivalent to writing `fn = memoize(fn)` right after defining `fn`. Closures are the underlying mechanism; decorators are simply syntax sugar for 'pass my function into a closure-returning function, and use whatever that returns instead.' You'll explore decorators properly in a later module, but the core idea -- a closure wrapping a function to add behavior around it -- is exactly what you've just built by hand."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "A Simple Counter Closure",
+          "language": "python",
+          "code": "def make_counter():\n    count = 0\n    def increment():\n        nonlocal count\n        count += 1\n        return count\n    return increment\n\ncounter_a = make_counter()\ncounter_b = make_counter()\n\nprint(counter_a())   # 1\nprint(counter_a())   # 2\nprint(counter_b())   # 1  -- independent from counter_a, even though it's the same code",
+          "explanation": "Each call to make_counter() runs the function body fresh, creating a brand-new `count` variable (and cell) and a brand-new `increment` function closed over that specific cell. `counter_a` and `counter_b` are two separate closures built from two separate calls -- they do not share state, even though they were created by identical code and have identical structure. `nonlocal count` inside `increment` is what allows `count += 1` to actually rebind the enclosing `count` rather than raising UnboundLocalError or silently creating an unrelated local variable. Calling counter_a() twice advances only counter_a's own cell to 2; counter_b's cell, created independently, is untouched and starts its own sequence from 1."
+        },
+        {
+          "title": "The Loop-Variable-Capture Bug, Broken and Fixed",
+          "language": "python",
+          "code": "# BROKEN: all three lambdas share the exact same `i`\nfuncs = []\nfor i in range(3):\n    funcs.append(lambda: i)\n\nprint([f() for f in funcs])   # [2, 2, 2]  -- not [0, 1, 2]!\n\n# FIXED: a default argument captures the CURRENT value of i\n# at the exact moment each lambda is defined, not when it's later called\nfixed_funcs = []\nfor i in range(3):\n    fixed_funcs.append(lambda i=i: i)\n\nprint([f() for f in fixed_funcs])   # [0, 1, 2]",
+          "explanation": "In the broken version, there is only one `i` for the whole loop -- a `for` loop does not create a new scope per iteration in Python. Every `lambda: i` reads that same shared cell, and by the time any of them is actually called (in the list comprehension, after the loop has fully finished), `i` holds its final value of 2, so all three report 2. In the fixed version, `lambda i=i: i` gives each lambda its own parameter named `i`, whose default value is computed immediately, once, at the exact moment that particular lambda object is created during that specific loop iteration -- default values are evaluated at definition time, not call time. So the first lambda's default freezes in 0, the second's freezes in 1, the third's freezes in 2, each independently, regardless of what the shared loop variable does afterward. The parameter `i` inside the lambda body then refers to that lambda's own frozen default, not the outer loop variable at all."
+        },
+        {
+          "title": "From Closures to Decorators: A Memoizing Cache",
+          "language": "python",
+          "code": "def memoize(fn):\n    cache = {}\n    def wrapper(*args):\n        if args not in cache:\n            cache[args] = fn(*args)\n        return cache[args]\n    return wrapper\n\ndef slow_square(n):\n    print(f\"computing square of {n}...\")\n    return n * n\n\nslow_square = memoize(slow_square)\n\nprint(slow_square(4))   # 'computing square of 4...' then 16\nprint(slow_square(4))   # just 16 -- cache hit, no recomputation\nprint(slow_square(5))   # 'computing square of 5...' then 25",
+          "explanation": "`wrapper` closes over two enclosing variables: `cache`, a dict it mutates (via `cache[args] = ...`, which is a mutation of the dict object, not a rebinding of the name `cache`, so no `nonlocal` is required), and `fn`, the original function it wraps and calls when there's no cached result yet. `memoize(slow_square)` returns this closure, and reassigning `slow_square = memoize(slow_square)` swaps in the wrapped version everywhere the name `slow_square` is used from that point on. Calling it twice with `4` only actually invokes the original, slow `slow_square` body once -- the second call finds `(4,)` already in `cache` and returns the stored result immediately, skipping the print entirely. This exact pattern -- reassigning a function's name to a closure that wraps it -- is precisely what the `@decorator` syntax automates; `@memoize` above a `def slow_square(n):` would be equivalent to what this example does manually."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "A closure copies the value of the variable it uses at the moment the inner function is created, like taking a snapshot.",
+          "clarification": "A closure holds a reference to the enclosing variable's actual cell, not a copied value frozen at creation time. If the enclosing variable is reassigned after the closure is created, the closure sees the new value the next time it's called -- there is no snapshot involved. This is precisely why the loop-variable-capture bug happens: `lambda: i` created inside a loop doesn't remember 'the i at that point in the loop' -- it remembers 'whatever the shared i cell holds, whenever I'm eventually called,' and by call time the loop has already moved i to its final value. Contrast this with the default-argument fix (`lambda i=i: i`), which genuinely does capture a value at that moment, precisely because default argument values -- unlike closure lookups -- really are evaluated once, immediately, at function-definition time."
+        },
+        {
+          "description": "Since `for i in range(3): funcs.append(lambda: i)` creates three visually distinct lambda objects, each one must remember its own separate copy of i from its own iteration.",
+          "clarification": "A `for` loop in Python does not introduce a new scope per iteration -- there is exactly one `i`, belonging to the scope the loop itself is written in (the enclosing function, or the module, whichever contains the loop), reused and reassigned on every pass. All three lambdas are genuinely separate function objects, but they all close over that one shared `i`, not three independent ones. Getting each lambda a truly separate variable requires actually creating a new scope per iteration on purpose -- either via the default-argument trick (which stashes a value into each lambda's own default at definition time) or by wrapping the lambda in another function call per iteration (each call gets its own fresh local scope and cell)."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "python-closures-ex1",
+          "type": "predictOutput",
+          "prompt": "What will this print, and why?",
+          "code": "def make_multiplier(factor):\n    def multiply(x):\n        return x * factor\n    return multiply\n\ndouble = make_multiplier(2)\ntriple = make_multiplier(3)\n\nprint(double(5))\nprint(triple(5))\nprint(double(10))",
+          "hints": [
+            "make_multiplier is called twice, with two different arguments -- does each call create its own separate `factor`, or is there only one `factor` shared between double and triple?",
+            "double and triple are built from two entirely separate calls to make_multiplier. Think about whether they could possibly be closing over the same cell.",
+            "This is different from the loop bug: there's no shared loop variable here at all -- each closure's `factor` came from its own distinct function call, so nothing later can change it out from under the other."
+          ],
+          "expectedAnswer": "10, then 15, then 20. double and triple each close over their own independent `factor` (2 and 3 respectively), created by two separate calls to make_multiplier -- calling double(10) later still uses factor=2, completely unaffected by triple's factor=3.",
+          "solutionExplanation": "make_multiplier(2) and make_multiplier(3) are two separate calls, each creating its own local `factor` variable (and cell) and its own `multiply` function closed over that specific cell. `double` and `triple` are therefore fully independent closures -- there is no shared variable between them at all, unlike the loop-variable bug where multiple closures are created inside a single call/iteration and end up sharing one cell. So double(5) computes 5 * 2 = 10, triple(5) computes 5 * 3 = 15, and calling double(10) afterward still uses double's own factor of 2, giving 10 * 2 = 20 -- triple's existence and calls never touch double's factor in any way."
+        },
+        {
+          "id": "python-closures-ex2",
+          "type": "debugging",
+          "prompt": "This code is supposed to create 3 functions where calling the first prints 0, the second prints 1, and the third prints 2. Instead, all three print 2. Find and fix the bug.",
+          "code": "def make_printers():\n    printers = []\n    for i in range(3):\n        def printer():\n            print(i)\n        printers.append(printer)\n    return printers\n\np0, p1, p2 = make_printers()\np0()\np1()\np2()",
+          "hints": [
+            "How many separate `i` variables actually exist across the whole loop -- one per iteration, or exactly one shared by all iterations?",
+            "By the time you actually call p0(), p1(), and p2(), the for loop inside make_printers() has already fully finished running. What value does `i` hold at that point?",
+            "Give `printer` its own parameter with a default value equal to `i`, so that value gets frozen in at the moment each printer is defined -- rather than letting `printer` look up the shared loop variable `i` only when it's later called."
+          ],
+          "solutionCode": "def make_printers():\n    printers = []\n    for i in range(3):\n        def printer(i=i):\n            print(i)\n        printers.append(printer)\n    return printers\n\np0, p1, p2 = make_printers()\np0()   # 0\np1()   # 1\np2()   # 2",
+          "solutionExplanation": "In the original code, all three `printer` functions are nested inside the same `for` loop and all reference the same enclosing `i` -- there is exactly one `i` cell for the whole loop, since a for loop does not create a new scope per iteration. By the time any printer is actually called (after make_printers() has returned and the loop has fully finished), `i` holds its final value, 2, so every single printer reports 2. The fix, `def printer(i=i):`, gives each printer function its own parameter also named `i`, whose default value is computed immediately -- during that specific loop iteration, at the moment that particular `printer` is defined -- rather than being looked up later from the shared loop variable when the function is eventually called. Because default values are evaluated once at definition time, this freezes 0 into p0's own default, 1 into p1's, and 2 into p2's, completely decoupling each one from whatever the shared loop variable does afterward."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "python-closures-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "```python\ndef make_adders():\n    adders = []\n    for n in [1, 2, 3]:\n        adders.append(lambda x: x + n)\n    return adders\n\nresult = [f(10) for f in make_adders()]\nprint(result)\n```\nWhat does this print?",
+          "options": [
+            "[11, 12, 13]",
+            "[13, 13, 13]",
+            "[10, 10, 10]",
+            "It raises an error, because you cannot close over a loop variable in a lambda."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "All three lambdas close over the exact same enclosing `n` -- a for loop does not create a new scope per iteration, so there's only one `n` cell for the whole loop, reassigned on each pass (1, then 2, then 3). None of the lambdas are actually called until the list comprehension on the last line runs, which happens after make_adders() has already returned and the loop inside it has completely finished with n left at its final value, 3. So every lambda computes x + 3 when called with x=10, giving 13 each time, hence [13, 13, 13]. Option A wrongly assumes each lambda captured 'its own' n value from its iteration (that would require the default-argument trick, which isn't used here); option C ignores the '+ n' entirely; option D is wrong because closing over a loop variable is completely legal Python -- it's just a common source of surprising, buggy behavior, not a language error."
+        },
+        {
+          "id": "python-closures-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain closures as if you were teaching another developer who understands functions and scope but has never heard the term 'closure' before. Be sure to mention why closures created inside a loop are a common source of bugs.",
+          "modelAnswer": "A closure is what you get when a nested function references a variable from the scope of the function it's defined inside, and that nested function is then returned (or otherwise escapes) so it can be called later, even after the outer function's call has already finished. Python uses lexical scoping -- a function's enclosing scope is fixed by where it's written in the source code, not by how or when it's later called -- so the inner function keeps a working connection back to those specific outer variables no matter when or from where it's eventually invoked. Concretely, Python implements this using 'cell' objects: a variable that's shared between an enclosing scope and a nested function that reads or writes it lives in a cell, and the nested function's closure holds a reference to that same cell -- not a copy of whatever value happened to be in it at some earlier moment. That last point is the key thing to internalize, because it's exactly what causes the most famous closure bug: creating several closures inside a loop that all reference the loop variable. People often expect each one to remember 'its own' value from the iteration when it was created, as if it took a snapshot -- but a for loop doesn't create a new scope per iteration, so there is really only one loop variable, in one cell, shared by every closure created inside that loop. Since none of those closures are typically called until after the loop has completely finished, they all end up seeing whatever value the loop variable was left at when it stopped, not the value from their 'own' iteration. The standard fix is to force a value to be captured at the right moment instead of looked up later -- either by giving the closure its own parameter with a default equal to the loop variable's current value (defaults are evaluated once, immediately, at definition time, unlike closure variable lookups, which happen at call time), or by wrapping the closure-creation in an extra function call, so each iteration gets a genuinely separate local scope and cell instead of sharing the loop's."
+        }
+      ]
+    }
+  ]
+}

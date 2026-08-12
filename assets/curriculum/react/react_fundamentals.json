@@ -1,0 +1,124 @@
+{
+  "learningPathId": "react",
+  "moduleId": "react-fundamentals",
+  "title": "React Fundamentals",
+  "order": 2,
+  "concepts": [
+    {
+      "id": "react-components-jsx",
+      "title": "Components and JSX",
+      "description": "React lets you describe UI declaratively as a tree of components -- plain functions that return JSX, which is syntactic sugar for calling React.createElement -- instead of manually mutating the DOM.",
+      "moduleId": "react-fundamentals",
+      "topicId": "react-fundamentals",
+      "difficulty": "beginner",
+      "estimatedMinutes": 30,
+      "prerequisites": ["js-closures-scope"],
+      "learningObjectives": [
+        "Explain why React favors declarative UI over manual DOM manipulation.",
+        "Define what a React component is.",
+        "Explain that JSX is not HTML, but syntactic sugar for React.createElement calls.",
+        "Explain why props are read-only and what that means for how components communicate.",
+        "Write a simple functional component that accepts and renders props."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "Why React Exists: Declarative vs Imperative UI",
+            "body": "Before frameworks like React, building an interactive UI with plain JavaScript meant writing **imperative** code: you manually call `document.createElement`, set `.textContent` or `.className`, call `.appendChild`, and later, whenever the underlying data changes, you have to remember every single place in the DOM that now needs to be found again and updated to match. This works for small examples, but it scales badly -- as an app grows, you end up with update logic scattered everywhere, and it becomes very easy for the actual DOM to drift out of sync with what your data says it should be, because keeping them in sync is entirely your responsibility, by hand, every time.\n\nReact's core idea is **declarative** UI: instead of writing the steps to mutate the DOM, you write a function that describes *what the UI should look like right now, given the current data* -- and you re-describe that same thing again on every change, rather than patching the previous result. React takes your description (a tree of elements) and, using an internal 'diffing' process (reconciliation), figures out the minimal set of real DOM changes needed to match it. You stop thinking about 'how do I mutate the DOM from state A to state B' and start thinking about 'what does the UI look like for this state,' which is a dramatically easier thing to reason about and to test as an application grows in complexity."
+          },
+          {
+            "heading": "What Is a Component?",
+            "body": "In modern React, a **component** is, at its simplest, just a JavaScript function that accepts a single argument -- an object of **props** -- and returns a description of what should appear on screen (a React element, typically written using JSX). That's the entire mental model: a component is a function; calling it (which React does for you) produces a description of UI, not a direct DOM mutation.\n\n```jsx\nfunction Greeting(props) {\n  return <h1>Hello, {props.name}!</h1>;\n}\n```\n\nComponents compose the same way regular functions do -- a component can render other components inside its own returned JSX, and a whole application ends up being a tree of components calling other components, mirroring a call tree. One firm naming convention matters here: component names must start with a capital letter (`Greeting`, not `greeting`) -- this is how JSX itself tells apart `<Greeting />` (treated as a reference to your component function) from `<div>` or `<span>` (treated as a literal, built-in HTML tag)."
+          },
+          {
+            "heading": "JSX Is Not HTML",
+            "body": "JSX looks deliberately similar to HTML, which is exactly what makes it easy to misread as HTML that somehow got embedded inside JavaScript. It is not that. JSX is a syntax extension that a build tool (typically Babel) compiles down to ordinary JavaScript **before** it ever reaches the browser -- specifically, into nested calls to `React.createElement(type, props, ...children)`.\n\n```jsx\nconst element = <h1 className=\"title\">Hello, {name}!</h1>;\n\n// The line above compiles to something equivalent to:\nconst element = React.createElement(\n  \"h1\",\n  { className: \"title\" },\n  \"Hello, \",\n  name,\n  \"!\"\n);\n```\n\nBecause JSX is really just JavaScript function calls in disguise, several of its rules follow directly from that fact rather than being arbitrary syntax choices: attributes use `{ }` to embed any JavaScript *expression* (`className={isActive ? \"active\" : \"\"}`), not just plain string literals; attribute names are camelCase (`className`, `onClick`) because they're really just JavaScript object property names being passed to `createElement`, and `class` and standard DOM event names cannot be reused verbatim (`class` is a reserved word in JavaScript); tags without children must be self-closed (`<img />`, not `<img>`), since JSX has no separate 'this tag never has children' notion the way HTML does; and a component's `return` can only produce a single root element (or a `Fragment`, `<>...</>`), because a JavaScript function can only return one value, and `React.createElement` calls nest the same way any other function call would. Because none of this is understood natively by browsers, JSX always requires a compile/build step -- it never runs as-is."
+          },
+          {
+            "heading": "Props: Read-Only Inputs to a Component",
+            "body": "**Props** (short for 'properties') are how a parent component passes data down into a child component -- directly analogous to arguments passed into a function. `<Greeting name=\"Amara\" />` calls `Greeting({ name: \"Amara\" })` under the hood; inside `Greeting`, `props.name` (or, more commonly, a destructured parameter, `function Greeting({ name }) { ... }`) gives you that value.\n\nThe rule to internalize early: **a component must never mutate its own props.** Props are meant to be treated as read-only from the receiving component's point of view -- the same discipline as treating a function's parameters as inputs you read, not values you reassign and expect the caller to notice. Writing `props.count = props.count + 1` inside a component doesn't do what it looks like it should do: React has no way of knowing you changed something, so nothing about the screen updates, and you've also broken the component's contract with its parent, since the parent (who actually owns that data) never authorized the child to change it. If a component needs to display something that changes over time in response to user interaction, it needs its own internal **state** (covered in a later concept) -- state is what a component owns and can update itself; props are what a parent hands down and the child only reads. This unidirectional flow of data -- parent to child, one way -- is a deliberate design choice that keeps large React applications easier to trace and debug, because a value's origin is always traceable upward through the component tree rather than being mutated from arbitrary places.\n\nOne more connection worth making explicit: since a component is just a function, any nested function you define inside it -- like an event handler -- follows exactly the same closure rules you already learned in the JavaScript Foundations module. A handler defined inside a component closes over that particular call's props (and, later, state), which is part of why understanding closures before React is so useful."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Imperative DOM Update vs a Declarative Component",
+          "language": "jsx",
+          "code": "// IMPERATIVE: you manage every DOM update by hand\nfunction renderImperativeCounter(container, count) {\n  container.innerHTML = \"\";\n  const button = document.createElement(\"button\");\n  button.textContent = `Clicked ${count} times`;\n  button.onclick = () => renderImperativeCounter(container, count + 1);\n  container.appendChild(button);\n}\n\n// DECLARATIVE: describe what the button should look like for a given count\n// React handles finding and updating the real DOM node for you\nfunction Counter({ count, onIncrement }) {\n  return (\n    <button onClick={onIncrement}>\n      Clicked {count} times\n    </button>\n  );\n}",
+          "explanation": "The imperative version has to manually clear out old content, create a new button element, set its text, wire up a click handler, and re-insert it -- and it has to get every one of those steps right, every single time count changes, or the UI silently falls out of sync with the real count. The declarative Counter component does none of that DOM bookkeeping: it just describes 'a button that shows this count and calls onIncrement when clicked' for whatever count currently is. React is responsible for figuring out, behind the scenes, how to update the real DOM to match that description each time it's called again with new props -- you never call document.createElement or .appendChild yourself."
+        },
+        {
+          "title": "JSX Compiles to React.createElement",
+          "language": "jsx",
+          "code": "const name = \"Amara\";\nconst element = <h1 className=\"title\">Hello, {name}!</h1>;\n\n// The JSX above is syntactic sugar for this ordinary JavaScript call:\nconst sameElement = React.createElement(\n  \"h1\",\n  { className: \"title\" },\n  \"Hello, \",\n  name,\n  \"!\"\n);",
+          "explanation": "Both `element` and `sameElement` describe the exact same thing: an h1 element with a className attribute and some text content built from a literal string plus the value of the `name` variable. The `{name}` inside the JSX is not a string -- it's a JavaScript expression slot, which is why plugging in a variable, a function call, or a ternary all work identically there. This is the concrete proof that JSX is not HTML being parsed by the browser -- it's a nicer way to write calls to a regular JavaScript function, resolved entirely by the build tool before any browser ever sees this code."
+        },
+        {
+          "title": "A Simple Component That Accepts Props",
+          "language": "jsx",
+          "code": "function Greeting({ name, isNewUser }) {\n  return (\n    <div>\n      <h2>Hello, {name}!</h2>\n      {isNewUser && <p>Welcome -- thanks for joining.</p>}\n    </div>\n  );\n}\n\n// Usage from a parent component:\n<Greeting name=\"Amara\" isNewUser={true} />\n<Greeting name=\"Ben\" isNewUser={false} />",
+          "explanation": "Greeting takes props (destructured directly in the parameter list into `name` and `isNewUser`, instead of writing `props.name` everywhere) and returns a description of a div containing a heading and a conditional paragraph. `{isNewUser && <p>...</p>}` is a common JSX idiom for conditional rendering: if isNewUser is false, the && short-circuits to false, and React simply renders nothing for a false/null/undefined child; if it's true, the && evaluates to the JSX on the right, which gets rendered. Note that the parent decides the values of name and isNewUser entirely -- Greeting only ever reads them; it has no way to change what the parent passed in, which is exactly the read-only contract props are meant to enforce."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "JSX is basically HTML that you're allowed to write directly inside your JavaScript files.",
+          "clarification": "JSX only looks like HTML. It compiles (via a build tool like Babel) into nested React.createElement(type, props, children) function calls before it ever reaches a browser -- browsers never execute JSX directly. This is why JSX has rules HTML doesn't: attribute names are camelCase (className, onClick) rather than HTML's class and onclick; any value inside { } is evaluated as a JavaScript expression, not treated as text; tags without children must self-close (<img />); and a build/compile step is always required, since there is no such thing as a browser that natively understands JSX syntax."
+        },
+        {
+          "description": "You can update what's displayed by directly changing a prop inside the component, e.g. props.count = props.count + 1.",
+          "clarification": "Props are meant to be read-only from the receiving component's perspective -- they're owned and controlled by the parent that passed them down. Mutating props.count directly doesn't trigger React to re-render anything (React only reacts to state changes or new props arriving from a parent), and it also breaks the component's contract with its parent, since the parent has no idea its data was changed out from under it. If a component needs to display a value that changes over time, it needs its own local state (introduced in a later concept, via the useState hook) -- state is what a component owns and can update itself; props are strictly an input the component only reads."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "react-components-jsx-ex1",
+          "type": "predictOutput",
+          "prompt": "Given this component, what does each of the two calls below actually return when called directly as plain JavaScript functions (not rendered by React)?",
+          "code": "function Badge({ label, count }) {\n  return count > 0 ? <span>{label}: {count}</span> : null;\n}\n\nconsole.log(Badge({ label: \"Inbox\", count: 0 }));\nconsole.log(Badge({ label: \"Inbox\", count: 3 }));",
+          "hints": [
+            "Badge is just a JavaScript function -- calling it directly (outside of JSX/React) gives you back whatever value its return statement evaluates to, nothing more.",
+            "What does the ternary `count > 0 ? ... : null` evaluate to when count is 0, versus when count is 3?",
+            "Remember: JSX compiles to React.createElement(...) calls, which return plain JavaScript objects describing an element -- not strings, and not anything drawn on a screen just from calling the function."
+          ],
+          "expectedAnswer": "The first call returns null, since count > 0 is false when count is 0. The second call returns a React element object describing a <span> containing 'Inbox: 3' -- not a string, and calling Badge() directly like this doesn't render anything to any screen; it just produces that description.",
+          "solutionExplanation": "Badge is an ordinary JavaScript function, and calling it directly the way this code does simply evaluates its body and returns whatever the return statement produces -- React is not involved in any special way here. With count: 0, `count > 0` is false, so the ternary evaluates to `null`, and that's exactly what gets logged. With count: 3, `count > 0` is true, so the ternary evaluates the JSX `<span>{label}: {count}</span>`, which -- because JSX is sugar for React.createElement -- produces a plain JavaScript object describing a span element with that content, not a string and not something visibly rendered anywhere. Only when a React element like this is actually handed to React (e.g. via ReactDOM's render/createRoot APIs, or returned from a component that's part of a mounted tree) does it get turned into real DOM nodes on screen."
+        },
+        {
+          "id": "react-components-jsx-ex2",
+          "type": "debugging",
+          "prompt": "This component is supposed to let the user increment a displayed count by clicking the button, but clicking it never changes what's shown on screen (assume it's rendered by React, and React only re-renders a component when its state or props change). Find the bug and describe the fix.",
+          "code": "function ClickCounter({ count }) {\n  function handleClick() {\n    count = count + 1;\n    console.log(count);\n  }\n\n  return <button onClick={handleClick}>Count: {count}</button>;\n}",
+          "hints": [
+            "count is a prop here, not a variable this component is allowed to reassign and expect anything to react to.",
+            "Even if `count = count + 1` runs without crashing and console.log shows an increasing number, does React have any way of knowing this component's inputs changed, so that it would re-render?",
+            "A component that needs to own a value which changes over time in response to user interaction needs its own state (e.g. via useState), not a mutated prop."
+          ],
+          "solutionCode": "import { useState } from \"react\";\n\nfunction ClickCounter({ initialCount }) {\n  const [count, setCount] = useState(initialCount);\n\n  function handleClick() {\n    setCount(count + 1);\n  }\n\n  return <button onClick={handleClick}>Count: {count}</button>;\n}",
+          "solutionExplanation": "The bug is that `count` is a prop -- an input owned by the parent -- and the component tries to mutate it directly with `count = count + 1`. That reassignment only changes a local copy of the reference inside handleClick's scope for that one call; it doesn't notify React that anything changed, so React never re-renders the button, and it also violates the rule that a component must never mutate its own props. console.log(count) can still show the value climbing inside that one function call, which is what makes the bug sneaky -- something IS happening, just nothing that affects what's on screen. The real fix requires giving the component its own state, using the useState hook (covered fully in the next part of the course): `useState(initialCount)` gives the component a `count` value it owns plus a `setCount` function to update it, and calling `setCount(...)` is what actually tells React 'something changed, please re-render this component with the new value.' The prop is renamed to `initialCount` to make clear it only seeds the component's own state once, rather than being something the component keeps reading or mutating directly."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "react-components-jsx-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "Which of the following best describes what JSX actually is?",
+          "options": [
+            "A special dialect of HTML that browsers can parse and render natively, once inside a .jsx file.",
+            "A syntax extension that a build tool compiles into nested React.createElement(type, props, children) calls -- browsers never receive or execute JSX directly.",
+            "A templating language, similar to Handlebars or Mustache, that generates an HTML string at runtime.",
+            "A CSS-in-JS system for styling React components."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "JSX is a syntax extension to JavaScript, compiled ahead of time (typically by Babel) into ordinary JavaScript function calls -- specifically nested calls to React.createElement -- before the code ever reaches a browser. Option A is wrong because no browser understands JSX natively, regardless of file extension; a compile step is always required. Option C is wrong because JSX doesn't produce an HTML string -- it produces JavaScript objects describing elements, which is a meaningfully different, more structured representation that React's reconciliation process operates on directly. Option D confuses JSX with an unrelated category of styling tools."
+        },
+        {
+          "id": "react-components-jsx-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain to someone who has only built websites with plain HTML, CSS, and JavaScript why React describes UI 'declaratively,' and what problem that solves compared to manually updating the DOM.",
+          "modelAnswer": "When you build UI with plain JavaScript, you write imperative code: explicit, ordered instructions like document.createElement, element.textContent = ..., element.appendChild(...), that mutate the DOM step by step. The catch is that your code becomes responsible for keeping the DOM in sync with your data at every single point where that data can change -- and as an app grows, that means more and more places where you have to remember to go update the right DOM nodes by hand, in the right order, without missing one. It's very easy for the actual screen to quietly drift out of sync with what your data says it should look like, simply because keeping them matched is a manual, error-prone bookkeeping task spread across your whole codebase. React's declarative approach flips this: instead of writing the steps to mutate the DOM from its old state to its new state, you write a function (a component) that just describes what the UI should look like right now, for the current data -- and you describe that same thing again, fresh, every time the data changes, rather than trying to patch the previous result. React takes that description (built as a tree of elements, usually written with JSX) and compares it to the previous one internally, then applies only the minimal real DOM changes needed to match -- a process called reconciliation. As the developer, you stop having to track 'what DOM mutations do I need to perform to get from the old screen to the new one' and instead only have to answer 'what does the UI look like for this data,' which is a much simpler, more predictable question to answer correctly as an application grows large and its state changes in many different ways."
+        }
+      ]
+    }
+  ]
+}
