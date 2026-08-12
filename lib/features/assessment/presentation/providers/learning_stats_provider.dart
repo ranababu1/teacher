@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/services/data_revision_provider.dart';
 import '../../../progress/domain/models/concept_mastery.dart';
 import '../../../progress/presentation/providers/progress_providers.dart';
 import '../../domain/models/attempt.dart';
@@ -30,6 +31,7 @@ double? _averageDimension(
 }
 
 final learningStatsProvider = FutureProvider<LearningStats>((ref) async {
+  ref.watch(dataRevisionProvider);
   final attempts = await ref
       .watch(attemptsRepositoryProvider)
       .getRecentAttempts(limit: 50);

@@ -85,7 +85,7 @@ class _PathProgressCard extends StatelessWidget {
                   color: theme.colorScheme.primary,
                 ),
                 _StatChip(
-                  label: 'Learning',
+                  label: 'In Progress',
                   value: summary.inProgressCount,
                   color: theme.colorScheme.tertiary,
                 ),

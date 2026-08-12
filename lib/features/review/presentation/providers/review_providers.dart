@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/database_provider.dart';
+import '../../../../core/services/data_revision_provider.dart';
 import '../../../curriculum/domain/models/concept.dart';
 import '../../../curriculum/presentation/curriculum_providers.dart';
 import '../../data/review_schedule_repository_impl.dart';
@@ -14,6 +15,7 @@ final reviewScheduleRepositoryProvider = Provider<ReviewScheduleRepository>((
 });
 
 final dueSchedulesProvider = FutureProvider<List<ReviewSchedule>>((ref) {
+  ref.watch(dataRevisionProvider);
   return ref.watch(reviewScheduleRepositoryProvider).getDueSchedules();
 });
 

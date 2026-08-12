@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/database_provider.dart';
+import '../../../../core/services/data_revision_provider.dart';
 import '../../../curriculum/presentation/curriculum_providers.dart';
 import '../../data/concept_mastery_repository_impl.dart';
 import '../../data/student_progress_repository_impl.dart';
@@ -24,16 +25,19 @@ final studentProgressRepositoryProvider = Provider<StudentProgressRepository>((
 });
 
 final allMasteryProvider = FutureProvider<List<ConceptMastery>>((ref) {
+  ref.watch(dataRevisionProvider);
   return ref.watch(conceptMasteryRepositoryProvider).getAllMastery();
 });
 
 final masteryForConceptProvider = FutureProvider.family<ConceptMastery, String>(
   (ref, conceptId) {
+    ref.watch(dataRevisionProvider);
     return ref.watch(conceptMasteryRepositoryProvider).getMastery(conceptId);
   },
 );
 
 final allStudentProgressProvider = FutureProvider<List<StudentProgress>>((ref) {
+  ref.watch(dataRevisionProvider);
   return ref.watch(studentProgressRepositoryProvider).getAllProgress();
 });
 

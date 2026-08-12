@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../shared/widgets/code_block.dart';
+import '../../../../shared/widgets/markdown_text.dart';
 import '../../domain/models/attempt_outcome.dart';
 import '../../domain/models/practice_item.dart';
 import '../providers/assessment_providers.dart';
@@ -67,7 +68,7 @@ class _ExercisePlayerState extends ConsumerState<ExercisePlayer> {
     });
 
     await ref
-        .read(recordAttemptUseCaseProvider)
+        .read(attemptRecorderProvider)
         .call(
           conceptId: widget.conceptId,
           itemId: widget.item.id,
@@ -92,7 +93,7 @@ class _ExercisePlayerState extends ConsumerState<ExercisePlayer> {
     setState(() => _submitted = true);
 
     await ref
-        .read(recordAttemptUseCaseProvider)
+        .read(attemptRecorderProvider)
         .call(
           conceptId: widget.conceptId,
           itemId: widget.item.id,
@@ -134,7 +135,7 @@ class _ExercisePlayerState extends ConsumerState<ExercisePlayer> {
               ],
             ),
             const SizedBox(height: 10),
-            Text(item.prompt, style: theme.textTheme.bodyLarge),
+            MarkdownText(data: item.prompt),
             if (item.code != null) ...[
               const SizedBox(height: 12),
               CodeBlock(
@@ -278,14 +279,15 @@ class _ExercisePlayerState extends ConsumerState<ExercisePlayer> {
         children: [
           Text('Model Answer', style: theme.textTheme.labelLarge),
           const SizedBox(height: 8),
-          if (item.expectedAnswer != null) Text(item.expectedAnswer!),
+          if (item.expectedAnswer != null)
+            MarkdownText(data: item.expectedAnswer!),
           if (item.solutionCode != null) ...[
             const SizedBox(height: 8),
             CodeBlock(code: item.solutionCode!, language: widget.language),
           ],
           if (item.revealExplanation != null) ...[
             const SizedBox(height: 8),
-            Text(item.revealExplanation!),
+            MarkdownText(data: item.revealExplanation!),
           ],
         ],
       ),
@@ -351,7 +353,7 @@ class _FeedbackBanner extends StatelessWidget {
           ),
           if (explanation != null) ...[
             const SizedBox(height: 8),
-            Text(explanation!),
+            MarkdownText(data: explanation!),
           ],
         ],
       ),

@@ -67,19 +67,25 @@ class ModuleDetailScreen extends ConsumerWidget {
                         size: 22,
                       ),
                       title: Text(concept.title),
-                      subtitle: Text(concept.description),
-                      trailing: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.end,
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          DifficultyChip(difficulty: concept.difficulty),
-                          const SizedBox(height: 4),
-                          Text(
-                            '${concept.estimatedMinutes} min',
-                            style: Theme.of(context).textTheme.labelSmall,
+                          Text(concept.description),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              DifficultyChip(difficulty: concept.difficulty),
+                              const SizedBox(width: 8),
+                              Text(
+                                '${concept.estimatedMinutes} min',
+                                style: Theme.of(context).textTheme.labelSmall,
+                              ),
+                            ],
                           ),
                         ],
                       ),
+                      trailing: const Icon(Icons.chevron_right),
                     ),
                   ),
                   const SizedBox(height: 8),
