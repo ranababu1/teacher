@@ -21,7 +21,9 @@ class LearningPathDetailScreen extends ConsumerWidget {
     final masteryValue = ref.watch(allMasteryProvider);
 
     return Scaffold(
-      appBar: AppBar(title: Text(pathId[0].toUpperCase() + pathId.substring(1))),
+      appBar: AppBar(
+        title: Text(pathId[0].toUpperCase() + pathId.substring(1)),
+      ),
       body: SafeArea(
         child: AsyncValueView(
           value: pathValue,
@@ -31,21 +33,30 @@ class LearningPathDetailScreen extends ConsumerWidget {
               return const Center(child: Text('Learning path not found.'));
             }
             final masteryByConceptId = {
-              for (final m in masteryValue.valueOrNull ?? const []) m.conceptId: m,
+              for (final m in masteryValue.valueOrNull ?? const [])
+                m.conceptId: m,
             };
 
             return ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                Text(path.title, style: Theme.of(context).textTheme.headlineSmall),
+                Text(
+                  path.title,
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
                 const SizedBox(height: 6),
-                Text(path.description, style: Theme.of(context).textTheme.bodyMedium),
+                Text(
+                  path.description,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
                 const SizedBox(height: 8),
                 Row(
                   children: [
                     DifficultyChip(difficulty: path.difficulty),
                     const SizedBox(width: 8),
-                    Text('${path.conceptCount} concepts · ~${path.estimatedHours}h'),
+                    Text(
+                      '${path.conceptCount} concepts · ~${path.estimatedHours}h',
+                    ),
                   ],
                 ),
                 const SizedBox(height: 20),
@@ -53,7 +64,8 @@ class LearningPathDetailScreen extends ConsumerWidget {
                   Card(
                     child: InkWell(
                       borderRadius: BorderRadius.circular(16),
-                      onTap: () => context.go(Routes.module(path.id, module.id)),
+                      onTap: () =>
+                          context.go(Routes.module(path.id, module.id)),
                       child: Padding(
                         padding: const EdgeInsets.all(16),
                         child: Column(
@@ -64,7 +76,9 @@ class LearningPathDetailScreen extends ConsumerWidget {
                                 Expanded(
                                   child: Text(
                                     module.title,
-                                    style: Theme.of(context).textTheme.titleMedium,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium,
                                   ),
                                 ),
                                 const Icon(Icons.chevron_right),
@@ -75,17 +89,21 @@ class LearningPathDetailScreen extends ConsumerWidget {
                               spacing: 12,
                               runSpacing: 4,
                               children: module.concepts
-                                  .map((c) => Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          MasteryStatusIcon(
-                                            status: masteryByConceptId[c.id]?.status ??
-                                                MasteryStatus.notStarted,
-                                          ),
-                                          const SizedBox(width: 6),
-                                          Text(c.title),
-                                        ],
-                                      ))
+                                  .map(
+                                    (c) => Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        MasteryStatusIcon(
+                                          status:
+                                              masteryByConceptId[c.id]
+                                                  ?.status ??
+                                              MasteryStatus.notStarted,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(c.title),
+                                      ],
+                                    ),
+                                  )
                                   .toList(),
                             ),
                           ],

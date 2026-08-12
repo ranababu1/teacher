@@ -41,33 +41,47 @@ class PracticeItem extends Equatable {
 
   /// The reveal-worthy explanation, regardless of which field it lives in
   /// on the source content.
-  String? get revealExplanation => solutionExplanation ?? mcqExplanation ?? modelAnswer;
+  String? get revealExplanation =>
+      solutionExplanation ?? mcqExplanation ?? modelAnswer;
 
   factory PracticeItem.fromExercise(Exercise exercise) => PracticeItem(
-        id: exercise.id,
-        kind: ItemKind.exercise,
-        type: exercise.type,
-        prompt: exercise.prompt,
-        hints: exercise.hints,
-        code: exercise.code,
-        expectedAnswer: exercise.expectedAnswer,
-        solutionCode: exercise.solutionCode,
-        solutionExplanation: exercise.solutionExplanation,
-      );
+    id: exercise.id,
+    kind: ItemKind.exercise,
+    type: exercise.type,
+    prompt: exercise.prompt,
+    hints: exercise.hints,
+    code: exercise.code,
+    expectedAnswer: exercise.expectedAnswer,
+    solutionCode: exercise.solutionCode,
+    solutionExplanation: exercise.solutionExplanation,
+  );
 
   factory PracticeItem.fromAssessment(Assessment assessment) => PracticeItem(
-        id: assessment.id,
-        kind: ItemKind.assessment,
-        type: assessment.type,
-        prompt: assessment.prompt,
-        hints: const [],
-        options: assessment.options,
-        correctOptionIndex: assessment.correctOptionIndex,
-        mcqExplanation: assessment.explanation,
-        modelAnswer: assessment.modelAnswer,
-      );
+    id: assessment.id,
+    kind: ItemKind.assessment,
+    type: assessment.type,
+    prompt: assessment.prompt,
+    hints: const [],
+    options: assessment.options,
+    correctOptionIndex: assessment.correctOptionIndex,
+    mcqExplanation: assessment.explanation,
+    modelAnswer: assessment.modelAnswer,
+  );
 
   @override
-  List<Object?> get props => [id, kind, type, prompt, hints, code, expectedAnswer, solutionCode,
-      solutionExplanation, options, correctOptionIndex, mcqExplanation, modelAnswer];
+  List<Object?> get props => [
+    id,
+    kind,
+    type,
+    prompt,
+    hints,
+    code,
+    expectedAnswer,
+    solutionCode,
+    solutionExplanation,
+    options,
+    correctOptionIndex,
+    mcqExplanation,
+    modelAnswer,
+  ];
 }

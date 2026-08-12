@@ -14,11 +14,11 @@ enum MasteryStatus {
   }
 
   String get label => switch (this) {
-        MasteryStatus.notStarted => 'Not Started',
-        MasteryStatus.learning => 'Learning',
-        MasteryStatus.developing => 'Developing',
-        MasteryStatus.proficient => 'Proficient',
-        MasteryStatus.mastered => 'Mastered',
-        MasteryStatus.needsReview => 'Needs Review',
-      };
+    MasteryStatus.notStarted => 'Not Started',
+    MasteryStatus.learning => 'Learning',
+    MasteryStatus.developing => 'Developing',
+    MasteryStatus.proficient => 'Proficient',
+    MasteryStatus.mastered => 'Mastered',
+    MasteryStatus.needsReview => 'Needs Review',
+  };
 }

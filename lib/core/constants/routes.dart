@@ -10,7 +10,8 @@ class Routes {
   static const settings = '/settings';
 
   static String learningPath(String pathId) => '/learn/$pathId';
-  static String module(String pathId, String moduleId) => '/learn/$pathId/$moduleId';
+  static String module(String pathId, String moduleId) =>
+      '/learn/$pathId/$moduleId';
   static String lesson(String pathId, String moduleId, String conceptId) =>
       '/learn/$pathId/$moduleId/$conceptId';
 }

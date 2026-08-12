@@ -12,9 +12,9 @@ class StudentProgressRepositoryImpl implements StudentProgressRepository {
 
   @override
   Future<StudentProgress?> getProgress(String conceptId) async {
-    final row = await (_db.select(_db.studentProgressTable)
-          ..where((t) => t.conceptId.equals(conceptId)))
-        .getSingleOrNull();
+    final row = await (_db.select(
+      _db.studentProgressTable,
+    )..where((t) => t.conceptId.equals(conceptId))).getSingleOrNull();
     return row == null ? null : _toDomain(row);
   }
 
@@ -34,7 +34,9 @@ class StudentProgressRepositoryImpl implements StudentProgressRepository {
       final now = DateTime.now();
       final existing = await getProgress(conceptId);
 
-      await _db.into(_db.studentProgressTable).insertOnConflictUpdate(
+      await _db
+          .into(_db.studentProgressTable)
+          .insertOnConflictUpdate(
             StudentProgressTableCompanion.insert(
               conceptId: conceptId,
               learningPathId: learningPathId,
@@ -54,8 +56,11 @@ class StudentProgressRepositoryImpl implements StudentProgressRepository {
     if (existing == null || existing.isCompleted) return;
 
     try {
-      await (_db.update(_db.studentProgressTable)..where((t) => t.conceptId.equals(conceptId)))
-          .write(StudentProgressTableCompanion(completedAt: Value(DateTime.now())));
+      await (_db.update(
+        _db.studentProgressTable,
+      )..where((t) => t.conceptId.equals(conceptId))).write(
+        StudentProgressTableCompanion(completedAt: Value(DateTime.now())),
+      );
     } on Exception catch (e) {
       throw LocalDatabaseException('Failed to mark $conceptId completed: $e');
     }

@@ -41,22 +41,22 @@ class ConceptMastery extends Equatable {
   final MasteryStatus status;
 
   static ConceptMastery empty(String conceptId) => ConceptMastery(
-        conceptId: conceptId,
-        recallScore: 0,
-        understandingScore: 0,
-        applicationScore: 0,
-        explanationScore: 0,
-        codingScore: 0,
-        debuggingScore: 0,
-        overallMastery: 0,
-        attemptCount: 0,
-        successCount: 0,
-        failureCount: 0,
-        confidence: 0,
-        lastReviewedAt: null,
-        nextReviewAt: null,
-        status: MasteryStatus.notStarted,
-      );
+    conceptId: conceptId,
+    recallScore: 0,
+    understandingScore: 0,
+    applicationScore: 0,
+    explanationScore: 0,
+    codingScore: 0,
+    debuggingScore: 0,
+    overallMastery: 0,
+    attemptCount: 0,
+    successCount: 0,
+    failureCount: 0,
+    confidence: 0,
+    lastReviewedAt: null,
+    nextReviewAt: null,
+    status: MasteryStatus.notStarted,
+  );
 
   ConceptMastery copyWith({
     double? recallScore,
@@ -94,7 +94,21 @@ class ConceptMastery extends Equatable {
   }
 
   @override
-  List<Object?> get props => [conceptId, recallScore, understandingScore, applicationScore,
-      explanationScore, codingScore, debuggingScore, overallMastery, attemptCount, successCount,
-      failureCount, confidence, lastReviewedAt, nextReviewAt, status];
+  List<Object?> get props => [
+    conceptId,
+    recallScore,
+    understandingScore,
+    applicationScore,
+    explanationScore,
+    codingScore,
+    debuggingScore,
+    overallMastery,
+    attemptCount,
+    successCount,
+    failureCount,
+    confidence,
+    lastReviewedAt,
+    nextReviewAt,
+    status,
+  ];
 }

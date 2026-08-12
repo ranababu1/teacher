@@ -7,7 +7,9 @@ import '../../data/review_schedule_repository_impl.dart';
 import '../../domain/models/review_schedule.dart';
 import '../../domain/review_schedule_repository.dart';
 
-final reviewScheduleRepositoryProvider = Provider<ReviewScheduleRepository>((ref) {
+final reviewScheduleRepositoryProvider = Provider<ReviewScheduleRepository>((
+  ref,
+) {
   return ReviewScheduleRepositoryImpl(ref.watch(appDatabaseProvider));
 });
 

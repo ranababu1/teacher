@@ -21,7 +21,9 @@ class AttemptsRepositoryImpl implements AttemptsRepository {
     required AttemptOutcome outcome,
   }) async {
     try {
-      final id = await _db.into(_db.attemptsTable).insert(
+      final id = await _db
+          .into(_db.attemptsTable)
+          .insert(
             AttemptsTableCompanion.insert(
               conceptId: conceptId,
               itemId: itemId,
@@ -35,8 +37,9 @@ class AttemptsRepositoryImpl implements AttemptsRepository {
             ),
           );
 
-      final row = await (_db.select(_db.attemptsTable)..where((t) => t.id.equals(id)))
-          .getSingle();
+      final row = await (_db.select(
+        _db.attemptsTable,
+      )..where((t) => t.id.equals(id))).getSingle();
       return _toDomain(row);
     } on Exception catch (e) {
       throw LocalDatabaseException('Failed to save attempt: $e');
@@ -45,19 +48,21 @@ class AttemptsRepositoryImpl implements AttemptsRepository {
 
   @override
   Future<List<Attempt>> getAttemptsForConcept(String conceptId) async {
-    final rows = await (_db.select(_db.attemptsTable)
-          ..where((t) => t.conceptId.equals(conceptId))
-          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
-        .get();
+    final rows =
+        await (_db.select(_db.attemptsTable)
+              ..where((t) => t.conceptId.equals(conceptId))
+              ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+            .get();
     return rows.map(_toDomain).toList();
   }
 
   @override
   Future<List<Attempt>> getRecentAttempts({int limit = 20}) async {
-    final rows = await (_db.select(_db.attemptsTable)
-          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
-          ..limit(limit))
-        .get();
+    final rows =
+        await (_db.select(_db.attemptsTable)
+              ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
+              ..limit(limit))
+            .get();
     return rows.map(_toDomain).toList();
   }
 

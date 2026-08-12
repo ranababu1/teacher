@@ -134,10 +134,14 @@ class Concept extends Equatable {
       topicId: json['topicId'] as String? ?? json['moduleId'] as String,
       difficulty: Difficulty.fromJson(json['difficulty'] as String),
       estimatedMinutes: json['estimatedMinutes'] as int,
-      prerequisites: (json['prerequisites'] as List<dynamic>? ?? const []).cast<String>(),
+      prerequisites: (json['prerequisites'] as List<dynamic>? ?? const [])
+          .cast<String>(),
       learningObjectives:
-          (json['learningObjectives'] as List<dynamic>? ?? const []).cast<String>(),
-      explanation: ConceptExplanation.fromJson(json['explanation'] as Map<String, dynamic>),
+          (json['learningObjectives'] as List<dynamic>? ?? const [])
+              .cast<String>(),
+      explanation: ConceptExplanation.fromJson(
+        json['explanation'] as Map<String, dynamic>,
+      ),
       examples: (json['examples'] as List<dynamic>? ?? const [])
           .map((e) => ConceptExample.fromJson(e as Map<String, dynamic>))
           .toList(),
@@ -154,7 +158,21 @@ class Concept extends Equatable {
   }
 
   @override
-  List<Object?> get props => [id, title, description, learningPathId, moduleId, topicId,
-      difficulty, estimatedMinutes, prerequisites, learningObjectives, explanation, examples,
-      misconceptions, exercises, assessments];
+  List<Object?> get props => [
+    id,
+    title,
+    description,
+    learningPathId,
+    moduleId,
+    topicId,
+    difficulty,
+    estimatedMinutes,
+    prerequisites,
+    learningObjectives,
+    explanation,
+    examples,
+    misconceptions,
+    exercises,
+    assessments,
+  ];
 }

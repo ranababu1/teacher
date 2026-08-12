@@ -33,7 +33,9 @@ class CodeBlock extends StatelessWidget {
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E1F22) : const Color(0xFFF6F7F9),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+        ),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -88,9 +90,9 @@ class _Header extends StatelessWidget {
           Text(
             language,
             style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                  letterSpacing: 0.3,
-                ),
+              color: colorScheme.onSurfaceVariant,
+              letterSpacing: 0.3,
+            ),
           ),
           const Spacer(),
           _CopyButton(code: code),

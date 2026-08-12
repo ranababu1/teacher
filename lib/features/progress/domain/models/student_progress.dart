@@ -38,6 +38,12 @@ class StudentProgress extends Equatable {
   }
 
   @override
-  List<Object?> get props =>
-      [conceptId, learningPathId, moduleId, startedAt, completedAt, lastAccessedAt];
+  List<Object?> get props => [
+    conceptId,
+    learningPathId,
+    moduleId,
+    startedAt,
+    completedAt,
+    lastAccessedAt,
+  ];
 }

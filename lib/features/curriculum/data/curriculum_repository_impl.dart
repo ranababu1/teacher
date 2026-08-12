@@ -62,7 +62,9 @@ class CurriculumRepositoryImpl implements CurriculumRepository {
   Future<List<LearningPath>> _load() async {
     final manifestJson = await _readJson(_manifestPath);
     final entries = (manifestJson['learningPaths'] as List<dynamic>)
-        .map((e) => LearningPathManifestEntry.fromJson(e as Map<String, dynamic>))
+        .map(
+          (e) => LearningPathManifestEntry.fromJson(e as Map<String, dynamic>),
+        )
         .toList();
 
     final paths = <LearningPath>[];
@@ -74,15 +76,17 @@ class CurriculumRepositoryImpl implements CurriculumRepository {
       }
       modules.sort((a, b) => a.order.compareTo(b.order));
 
-      paths.add(LearningPath(
-        id: entry.id,
-        title: entry.title,
-        description: entry.description,
-        difficulty: entry.difficulty,
-        iconName: entry.iconName,
-        estimatedHours: entry.estimatedHours,
-        modules: modules,
-      ));
+      paths.add(
+        LearningPath(
+          id: entry.id,
+          title: entry.title,
+          description: entry.description,
+          difficulty: entry.difficulty,
+          iconName: entry.iconName,
+          estimatedHours: entry.estimatedHours,
+          modules: modules,
+        ),
+      );
     }
     return paths;
   }

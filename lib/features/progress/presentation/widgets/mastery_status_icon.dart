@@ -12,12 +12,24 @@ class MasteryStatusIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final (icon, color) = switch (status) {
-      MasteryStatus.notStarted => (Icons.circle_outlined, colorScheme.onSurfaceVariant),
+      MasteryStatus.notStarted => (
+        Icons.circle_outlined,
+        colorScheme.onSurfaceVariant,
+      ),
       MasteryStatus.learning => (Icons.donut_small, colorScheme.tertiary),
-      MasteryStatus.developing => (Icons.incomplete_circle, colorScheme.tertiary),
-      MasteryStatus.proficient => (Icons.check_circle_outline, colorScheme.primary),
+      MasteryStatus.developing => (
+        Icons.incomplete_circle,
+        colorScheme.tertiary,
+      ),
+      MasteryStatus.proficient => (
+        Icons.check_circle_outline,
+        colorScheme.primary,
+      ),
       MasteryStatus.mastered => (Icons.check_circle, colorScheme.primary),
-      MasteryStatus.needsReview => (Icons.replay_circle_filled_outlined, colorScheme.error),
+      MasteryStatus.needsReview => (
+        Icons.replay_circle_filled_outlined,
+        colorScheme.error,
+      ),
     };
     return Tooltip(
       message: status.label,

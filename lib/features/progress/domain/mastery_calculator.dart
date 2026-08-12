@@ -21,7 +21,8 @@ class MasteryCalculator {
   }) {
     final quality = outcome.qualityScore;
 
-    double ema(double previous) => _emaAlpha * quality + (1 - _emaAlpha) * previous;
+    double ema(double previous) =>
+        _emaAlpha * quality + (1 - _emaAlpha) * previous;
 
     var recall = current.recallScore;
     var understanding = current.understandingScore;
@@ -46,9 +47,14 @@ class MasteryCalculator {
         debugging = ema(debugging);
     }
 
-    final touchedScores = [recall, understanding, application, explanation, coding, debugging]
-        .where((s) => s > 0)
-        .toList();
+    final touchedScores = [
+      recall,
+      understanding,
+      application,
+      explanation,
+      coding,
+      debugging,
+    ].where((s) => s > 0).toList();
     final overall = touchedScores.isEmpty
         ? 0.0
         : touchedScores.reduce((a, b) => a + b) / touchedScores.length;

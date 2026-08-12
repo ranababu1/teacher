@@ -14,14 +14,23 @@ final learningPathsProvider = FutureProvider<List<LearningPath>>((ref) {
   return ref.watch(curriculumRepositoryProvider).getLearningPaths();
 });
 
-final learningPathProvider = FutureProvider.family<LearningPath?, String>((ref, pathId) {
+final learningPathProvider = FutureProvider.family<LearningPath?, String>((
+  ref,
+  pathId,
+) {
   return ref.watch(curriculumRepositoryProvider).getLearningPath(pathId);
 });
 
-final conceptProvider = FutureProvider.family<Concept?, String>((ref, conceptId) {
+final conceptProvider = FutureProvider.family<Concept?, String>((
+  ref,
+  conceptId,
+) {
   return ref.watch(curriculumRepositoryProvider).getConcept(conceptId);
 });
 
-final prerequisiteConceptsProvider = FutureProvider.family<List<Concept>, String>((ref, conceptId) {
-  return ref.watch(curriculumRepositoryProvider).getPrerequisiteConcepts(conceptId);
-});
+final prerequisiteConceptsProvider =
+    FutureProvider.family<List<Concept>, String>((ref, conceptId) {
+      return ref
+          .watch(curriculumRepositoryProvider)
+          .getPrerequisiteConcepts(conceptId);
+    });

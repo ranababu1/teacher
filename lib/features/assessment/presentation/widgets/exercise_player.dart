@@ -66,12 +66,18 @@ class _ExercisePlayerState extends ConsumerState<ExercisePlayer> {
       _submitted = true;
     });
 
-    await ref.read(recordAttemptUseCaseProvider).call(
+    await ref
+        .read(recordAttemptUseCaseProvider)
+        .call(
           conceptId: widget.conceptId,
           itemId: widget.item.id,
           itemKind: widget.item.kind,
           itemType: widget.item.type,
-          outcome: AttemptOutcome(isCorrect: isCorrect, selfRating: null, hintsUsed: 0),
+          outcome: AttemptOutcome(
+            isCorrect: isCorrect,
+            selfRating: null,
+            hintsUsed: 0,
+          ),
         );
 
     widget.onCompleted?.call();
@@ -85,7 +91,9 @@ class _ExercisePlayerState extends ConsumerState<ExercisePlayer> {
     if (_submitted) return;
     setState(() => _submitted = true);
 
-    await ref.read(recordAttemptUseCaseProvider).call(
+    await ref
+        .read(recordAttemptUseCaseProvider)
+        .call(
           conceptId: widget.conceptId,
           itemId: widget.item.id,
           itemKind: widget.item.kind,
@@ -116,7 +124,11 @@ class _ExercisePlayerState extends ConsumerState<ExercisePlayer> {
           children: [
             Row(
               children: [
-                Icon(_iconFor(item), size: 18, color: theme.colorScheme.primary),
+                Icon(
+                  _iconFor(item),
+                  size: 18,
+                  color: theme.colorScheme.primary,
+                ),
                 const SizedBox(width: 8),
                 Text(item.type.label, style: theme.textTheme.labelLarge),
               ],
@@ -125,10 +137,17 @@ class _ExercisePlayerState extends ConsumerState<ExercisePlayer> {
             Text(item.prompt, style: theme.textTheme.bodyLarge),
             if (item.code != null) ...[
               const SizedBox(height: 12),
-              CodeBlock(code: item.code!, language: widget.language, showLineNumbers: true),
+              CodeBlock(
+                code: item.code!,
+                language: widget.language,
+                showLineNumbers: true,
+              ),
             ],
             const SizedBox(height: 16),
-            if (_isMultipleChoice) _buildMultipleChoice(theme) else _buildSelfAssessed(theme),
+            if (_isMultipleChoice)
+              _buildMultipleChoice(theme)
+            else
+              _buildSelfAssessed(theme),
           ],
         ),
       ),
@@ -146,17 +165,26 @@ class _ExercisePlayerState extends ConsumerState<ExercisePlayer> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (var i = 0; i < options.length; i++)
-          RadioListTile<int>(
-            value: i,
-            groupValue: _selectedOptionIndex,
-            onChanged: _submitted ? null : (value) => setState(() => _selectedOptionIndex = value),
-            title: Text(options[i]),
-            contentPadding: EdgeInsets.zero,
-            dense: true,
-            activeColor: theme.colorScheme.primary,
-            tileColor: _submitted ? _mcqOptionColor(i, theme) : null,
+        RadioGroup<int>(
+          groupValue: _selectedOptionIndex,
+          onChanged: _submitted
+              ? (_) {}
+              : (value) => setState(() => _selectedOptionIndex = value),
+          child: Column(
+            children: [
+              for (var i = 0; i < options.length; i++)
+                RadioListTile<int>(
+                  value: i,
+                  enabled: !_submitted,
+                  title: Text(options[i]),
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  activeColor: theme.colorScheme.primary,
+                  tileColor: _submitted ? _mcqOptionColor(i, theme) : null,
+                ),
+            ],
           ),
+        ),
         const SizedBox(height: 12),
         if (!_submitted)
           FilledButton(
@@ -199,7 +227,10 @@ class _ExercisePlayerState extends ConsumerState<ExercisePlayer> {
           const SizedBox(height: 12),
           if (item.hints.isNotEmpty) _buildHints(theme),
           const SizedBox(height: 12),
-          OutlinedButton(onPressed: _revealAnswer, child: const Text('Reveal Answer')),
+          OutlinedButton(
+            onPressed: _revealAnswer,
+            child: const Text('Reveal Answer'),
+          ),
         ] else ...[
           _buildSolution(theme),
           const SizedBox(height: 16),
@@ -217,13 +248,18 @@ class _ExercisePlayerState extends ConsumerState<ExercisePlayer> {
         for (var i = 0; i < _revealedHints; i++)
           Padding(
             padding: const EdgeInsets.only(bottom: 6),
-            child: Text('Hint ${i + 1}: ${item.hints[i]}', style: theme.textTheme.bodyMedium),
+            child: Text(
+              'Hint ${i + 1}: ${item.hints[i]}',
+              style: theme.textTheme.bodyMedium,
+            ),
           ),
         if (_revealedHints < item.hints.length)
           TextButton.icon(
             onPressed: () => setState(() => _revealedHints++),
             icon: const Icon(Icons.lightbulb_outline, size: 18),
-            label: Text(_revealedHints == 0 ? 'Show a hint' : 'Show another hint'),
+            label: Text(
+              _revealedHints == 0 ? 'Show a hint' : 'Show another hint',
+            ),
           ),
       ],
     );
@@ -265,10 +301,12 @@ class _ExercisePlayerState extends ConsumerState<ExercisePlayer> {
         Wrap(
           spacing: 8,
           children: SelfRating.values
-              .map((rating) => OutlinedButton(
-                    onPressed: () => _submitSelfRating(rating),
-                    child: Text(rating.label),
-                  ))
+              .map(
+                (rating) => OutlinedButton(
+                  onPressed: () => _submitSelfRating(rating),
+                  child: Text(rating.label),
+                ),
+              )
               .toList(),
         ),
       ],
@@ -285,7 +323,9 @@ class _FeedbackBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final color = isCorrect ? theme.colorScheme.primary : theme.colorScheme.error;
+    final color = isCorrect
+        ? theme.colorScheme.primary
+        : theme.colorScheme.error;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -297,7 +337,11 @@ class _FeedbackBanner extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(isCorrect ? Icons.check_circle : Icons.cancel, color: color, size: 20),
+              Icon(
+                isCorrect ? Icons.check_circle : Icons.cancel,
+                color: color,
+                size: 20,
+              ),
               const SizedBox(width: 8),
               Text(
                 isCorrect ? 'Correct' : 'Not quite',
@@ -321,7 +365,11 @@ class _RecordedBanner extends StatelessWidget {
     final theme = Theme.of(context);
     return Row(
       children: [
-        Icon(Icons.check_circle_outline, size: 18, color: theme.colorScheme.primary),
+        Icon(
+          Icons.check_circle_outline,
+          size: 18,
+          color: theme.colorScheme.primary,
+        ),
         const SizedBox(width: 8),
         Text('Recorded', style: theme.textTheme.bodyMedium),
       ],

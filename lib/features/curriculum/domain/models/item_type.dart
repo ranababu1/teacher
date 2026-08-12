@@ -23,12 +23,12 @@ enum ItemType {
       this == ItemType.multipleChoice || this == ItemType.predictOutput;
 
   String get label => switch (this) {
-        ItemType.multipleChoice => 'Multiple Choice',
-        ItemType.shortAnswer => 'Short Answer',
-        ItemType.predictOutput => 'Predict the Output',
-        ItemType.debugging => 'Debugging',
-        ItemType.coding => 'Coding',
-        ItemType.explanation => 'Explain in Your Own Words',
-        ItemType.scenario => 'Scenario',
-      };
+    ItemType.multipleChoice => 'Multiple Choice',
+    ItemType.shortAnswer => 'Short Answer',
+    ItemType.predictOutput => 'Predict the Output',
+    ItemType.debugging => 'Debugging',
+    ItemType.coding => 'Coding',
+    ItemType.explanation => 'Explain in Your Own Words',
+    ItemType.scenario => 'Scenario',
+  };
 }

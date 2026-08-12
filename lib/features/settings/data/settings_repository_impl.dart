@@ -17,15 +17,17 @@ class SettingsRepositoryImpl implements SettingsRepository {
   static const _keyAiRequestLogging = 'ai_request_logging';
 
   Future<String?> _read(String key) async {
-    final row = await (_db.select(_db.settingsTable)
-          ..where((t) => t.key.equals(key)))
-        .getSingleOrNull();
+    final row = await (_db.select(
+      _db.settingsTable,
+    )..where((t) => t.key.equals(key))).getSingleOrNull();
     return row?.value;
   }
 
   Future<void> _write(String key, String value) async {
     try {
-      await _db.into(_db.settingsTable).insertOnConflictUpdate(
+      await _db
+          .into(_db.settingsTable)
+          .insertOnConflictUpdate(
             SettingsTableCompanion.insert(key: key, value: value),
           );
     } on Exception catch (e) {
@@ -51,7 +53,8 @@ class SettingsRepositoryImpl implements SettingsRepository {
         (e) => e.name == explanationDepthRaw,
         orElse: () => defaults.explanationDepth,
       ),
-      dailyTargetMinutes: int.tryParse(dailyTargetRaw ?? '') ?? defaults.dailyTargetMinutes,
+      dailyTargetMinutes:
+          int.tryParse(dailyTargetRaw ?? '') ?? defaults.dailyTargetMinutes,
       difficultyPreference: DifficultyPreference.values.firstWhere(
         (e) => e.name == difficultyRaw,
         orElse: () => defaults.difficultyPreference,
@@ -60,13 +63,15 @@ class SettingsRepositoryImpl implements SettingsRepository {
           ? defaults.weeklyFlashcardsEnabled
           : flashcardsRaw == 'true',
       debugMode: debugRaw == null ? defaults.debugMode : debugRaw == 'true',
-      aiRequestLogging:
-          aiLoggingRaw == null ? defaults.aiRequestLogging : aiLoggingRaw == 'true',
+      aiRequestLogging: aiLoggingRaw == null
+          ? defaults.aiRequestLogging
+          : aiLoggingRaw == 'true',
     );
   }
 
   @override
-  Future<void> setThemeModeKey(String themeModeKey) => _write(_keyThemeMode, themeModeKey);
+  Future<void> setThemeModeKey(String themeModeKey) =>
+      _write(_keyThemeMode, themeModeKey);
 
   @override
   Future<void> setExplanationDepth(ExplanationDepth depth) =>
@@ -85,7 +90,8 @@ class SettingsRepositoryImpl implements SettingsRepository {
       _write(_keyWeeklyFlashcards, enabled.toString());
 
   @override
-  Future<void> setDebugMode(bool enabled) => _write(_keyDebugMode, enabled.toString());
+  Future<void> setDebugMode(bool enabled) =>
+      _write(_keyDebugMode, enabled.toString());
 
   @override
   Future<void> setAiRequestLogging(bool enabled) =>

@@ -31,7 +31,16 @@ class Attempt extends Equatable {
   final DateTime createdAt;
 
   @override
-  List<Object?> get props =>
-      [id, conceptId, itemId, itemKind, itemType, isCorrect, selfRating, hintsUsed,
-          userResponse, createdAt];
+  List<Object?> get props => [
+    id,
+    conceptId,
+    itemId,
+    itemKind,
+    itemType,
+    isCorrect,
+    selfRating,
+    hintsUsed,
+    userResponse,
+    createdAt,
+  ];
 }

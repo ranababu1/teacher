@@ -26,12 +26,13 @@ class RecordAttemptUseCase {
     required StudentProgressRepository studentProgressRepository,
     MasteryCalculator? masteryCalculator,
     ReviewSchedulingService? reviewSchedulingService,
-  })  : _attemptsRepository = attemptsRepository,
-        _masteryRepository = masteryRepository,
-        _reviewScheduleRepository = reviewScheduleRepository,
-        _studentProgressRepository = studentProgressRepository,
-        _masteryCalculator = masteryCalculator ?? MasteryCalculator(),
-        _reviewSchedulingService = reviewSchedulingService ?? const ReviewSchedulingService();
+  }) : _attemptsRepository = attemptsRepository,
+       _masteryRepository = masteryRepository,
+       _reviewScheduleRepository = reviewScheduleRepository,
+       _studentProgressRepository = studentProgressRepository,
+       _masteryCalculator = masteryCalculator ?? MasteryCalculator(),
+       _reviewSchedulingService =
+           reviewSchedulingService ?? const ReviewSchedulingService();
 
   final AttemptsRepository _attemptsRepository;
   final ConceptMasteryRepository _masteryRepository;
@@ -55,7 +56,9 @@ class RecordAttemptUseCase {
       outcome: outcome,
     );
 
-    final previousSchedule = await _reviewScheduleRepository.getSchedule(conceptId);
+    final previousSchedule = await _reviewScheduleRepository.getSchedule(
+      conceptId,
+    );
     final nextSchedule = _reviewSchedulingService.scheduleNext(
       current: previousSchedule,
       performance: outcome.performanceBucket,
@@ -70,7 +73,10 @@ class RecordAttemptUseCase {
       isOverdueForReview: nextSchedule.dueAt.isBefore(DateTime.now()),
     );
     await _masteryRepository.saveMastery(
-      nextMastery.copyWith(lastReviewedAt: nextSchedule.lastReviewedAt, nextReviewAt: nextSchedule.dueAt),
+      nextMastery.copyWith(
+        lastReviewedAt: nextSchedule.lastReviewedAt,
+        nextReviewAt: nextSchedule.dueAt,
+      ),
     );
 
     if (itemKind == ItemKind.assessment) {

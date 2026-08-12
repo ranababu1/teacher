@@ -28,7 +28,12 @@ class CurriculumModule extends Equatable {
       title: json['title'] as String,
       order: json['order'] as int,
       concepts: (json['concepts'] as List<dynamic>)
-          .map((c) => Concept.fromJson(c as Map<String, dynamic>, learningPathId: learningPathId))
+          .map(
+            (c) => Concept.fromJson(
+              c as Map<String, dynamic>,
+              learningPathId: learningPathId,
+            ),
+          )
           .toList(),
     );
   }

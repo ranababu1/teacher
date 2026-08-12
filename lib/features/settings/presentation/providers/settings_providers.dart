@@ -32,12 +32,16 @@ class SettingsController extends AsyncNotifier<AppSettings> {
   }
 
   Future<void> setDifficultyPreference(DifficultyPreference preference) async {
-    await ref.read(settingsRepositoryProvider).setDifficultyPreference(preference);
+    await ref
+        .read(settingsRepositoryProvider)
+        .setDifficultyPreference(preference);
     _update((s) => s.copyWith(difficultyPreference: preference));
   }
 
   Future<void> setWeeklyFlashcardsEnabled(bool enabled) async {
-    await ref.read(settingsRepositoryProvider).setWeeklyFlashcardsEnabled(enabled);
+    await ref
+        .read(settingsRepositoryProvider)
+        .setWeeklyFlashcardsEnabled(enabled);
     _update((s) => s.copyWith(weeklyFlashcardsEnabled: enabled));
   }
 
@@ -59,9 +63,10 @@ class SettingsController extends AsyncNotifier<AppSettings> {
   }
 }
 
-final settingsControllerProvider = AsyncNotifierProvider<SettingsController, AppSettings>(
-  SettingsController.new,
-);
+final settingsControllerProvider =
+    AsyncNotifierProvider<SettingsController, AppSettings>(
+      SettingsController.new,
+    );
 
 /// Derived theme mode for [MaterialApp.themeMode], defaulting to system
 /// while settings are still loading.

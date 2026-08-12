@@ -12,26 +12,29 @@ class ReviewScheduleRepositoryImpl implements ReviewScheduleRepository {
 
   @override
   Future<ReviewSchedule> getSchedule(String conceptId) async {
-    final row = await (_db.select(_db.reviewScheduleTable)
-          ..where((t) => t.conceptId.equals(conceptId)))
-        .getSingleOrNull();
+    final row = await (_db.select(
+      _db.reviewScheduleTable,
+    )..where((t) => t.conceptId.equals(conceptId))).getSingleOrNull();
     return row == null ? ReviewSchedule.initial(conceptId) : _toDomain(row);
   }
 
   @override
   Future<List<ReviewSchedule>> getDueSchedules() async {
     final now = DateTime.now();
-    final rows = await (_db.select(_db.reviewScheduleTable)
-          ..where((t) => t.dueAt.isSmallerOrEqualValue(now))
-          ..orderBy([(t) => OrderingTerm.asc(t.dueAt)]))
-        .get();
+    final rows =
+        await (_db.select(_db.reviewScheduleTable)
+              ..where((t) => t.dueAt.isSmallerOrEqualValue(now))
+              ..orderBy([(t) => OrderingTerm.asc(t.dueAt)]))
+            .get();
     return rows.map(_toDomain).toList();
   }
 
   @override
   Future<void> saveSchedule(ReviewSchedule schedule) async {
     try {
-      await _db.into(_db.reviewScheduleTable).insertOnConflictUpdate(
+      await _db
+          .into(_db.reviewScheduleTable)
+          .insertOnConflictUpdate(
             ReviewScheduleTableCompanion.insert(
               conceptId: schedule.conceptId,
               dueAt: schedule.dueAt,
@@ -41,7 +44,9 @@ class ReviewScheduleRepositoryImpl implements ReviewScheduleRepository {
             ),
           );
     } on Exception catch (e) {
-      throw LocalDatabaseException('Failed to save review schedule for ${schedule.conceptId}: $e');
+      throw LocalDatabaseException(
+        'Failed to save review schedule for ${schedule.conceptId}: $e',
+      );
     }
   }
 

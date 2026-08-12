@@ -51,6 +51,15 @@ class Exercise extends Equatable {
   }
 
   @override
-  List<Object?> get props => [id, type, prompt, hints, code, expectedAnswer, solutionCode,
-      solutionExplanation, difficultyLevel];
+  List<Object?> get props => [
+    id,
+    type,
+    prompt,
+    hints,
+    code,
+    expectedAnswer,
+    solutionCode,
+    solutionExplanation,
+    difficultyLevel,
+  ];
 }

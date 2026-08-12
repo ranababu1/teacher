@@ -48,7 +48,8 @@ class AppSettings {
       explanationDepth: explanationDepth ?? this.explanationDepth,
       dailyTargetMinutes: dailyTargetMinutes ?? this.dailyTargetMinutes,
       difficultyPreference: difficultyPreference ?? this.difficultyPreference,
-      weeklyFlashcardsEnabled: weeklyFlashcardsEnabled ?? this.weeklyFlashcardsEnabled,
+      weeklyFlashcardsEnabled:
+          weeklyFlashcardsEnabled ?? this.weeklyFlashcardsEnabled,
       debugMode: debugMode ?? this.debugMode,
       aiRequestLogging: aiRequestLogging ?? this.aiRequestLogging,
     );

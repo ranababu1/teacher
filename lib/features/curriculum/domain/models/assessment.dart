@@ -39,6 +39,13 @@ class Assessment extends Equatable {
   }
 
   @override
-  List<Object?> get props =>
-      [id, type, prompt, options, correctOptionIndex, explanation, modelAnswer];
+  List<Object?> get props => [
+    id,
+    type,
+    prompt,
+    options,
+    correctOptionIndex,
+    explanation,
+    modelAnswer,
+  ];
 }

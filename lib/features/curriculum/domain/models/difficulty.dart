@@ -11,8 +11,8 @@ enum Difficulty {
   }
 
   String get label => switch (this) {
-        Difficulty.beginner => 'Beginner',
-        Difficulty.intermediate => 'Intermediate',
-        Difficulty.advanced => 'Advanced',
-      };
+    Difficulty.beginner => 'Beginner',
+    Difficulty.intermediate => 'Intermediate',
+    Difficulty.advanced => 'Advanced',
+  };
 }

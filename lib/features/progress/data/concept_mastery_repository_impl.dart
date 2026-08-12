@@ -13,9 +13,9 @@ class ConceptMasteryRepositoryImpl implements ConceptMasteryRepository {
 
   @override
   Future<ConceptMastery> getMastery(String conceptId) async {
-    final row = await (_db.select(_db.conceptMasteryTable)
-          ..where((t) => t.conceptId.equals(conceptId)))
-        .getSingleOrNull();
+    final row = await (_db.select(
+      _db.conceptMasteryTable,
+    )..where((t) => t.conceptId.equals(conceptId))).getSingleOrNull();
     return row == null ? ConceptMastery.empty(conceptId) : _toDomain(row);
   }
 
@@ -28,7 +28,9 @@ class ConceptMasteryRepositoryImpl implements ConceptMasteryRepository {
   @override
   Future<void> saveMastery(ConceptMastery mastery) async {
     try {
-      await _db.into(_db.conceptMasteryTable).insertOnConflictUpdate(
+      await _db
+          .into(_db.conceptMasteryTable)
+          .insertOnConflictUpdate(
             ConceptMasteryTableCompanion.insert(
               conceptId: mastery.conceptId,
               recallScore: Value(mastery.recallScore),
@@ -48,7 +50,9 @@ class ConceptMasteryRepositoryImpl implements ConceptMasteryRepository {
             ),
           );
     } on Exception catch (e) {
-      throw LocalDatabaseException('Failed to save mastery for ${mastery.conceptId}: $e');
+      throw LocalDatabaseException(
+        'Failed to save mastery for ${mastery.conceptId}: $e',
+      );
     }
   }
 

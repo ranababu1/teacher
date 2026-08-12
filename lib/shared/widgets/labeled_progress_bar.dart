@@ -28,7 +28,9 @@ class LabeledProgressBar extends StatelessWidget {
             Expanded(child: Text(label, style: theme.textTheme.bodyMedium)),
             Text(
               percentLabel,
-              style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
         ),

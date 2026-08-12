@@ -40,11 +40,14 @@ class AppTheme {
       useMaterial3: true,
       brightness: brightness,
       colorScheme: colorScheme,
-      scaffoldBackgroundColor:
-          isDark ? AppColors.darkSurface : AppColors.lightSurface,
+      scaffoldBackgroundColor: isDark
+          ? AppColors.darkSurface
+          : AppColors.lightSurface,
       textTheme: textTheme,
       appBarTheme: AppBarTheme(
-        backgroundColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+        backgroundColor: isDark
+            ? AppColors.darkSurface
+            : AppColors.lightSurface,
         foregroundColor: colorScheme.onSurface,
         elevation: 0,
         scrolledUnderElevation: 1,
@@ -56,24 +59,32 @@ class AppTheme {
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+          side: BorderSide(
+            color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+          ),
         ),
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: isDark ? AppColors.darkSurface : AppColors.lightSurface,
+        backgroundColor: isDark
+            ? AppColors.darkSurface
+            : AppColors.lightSurface,
         elevation: 0,
         height: 64,
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
       ),
       dividerTheme: DividerThemeData(
@@ -93,14 +104,42 @@ class AppTheme {
   static TextTheme _buildTextTheme(ColorScheme colorScheme) {
     const family = 'Roboto';
     return const TextTheme(
-      displaySmall: TextStyle(fontFamily: family, fontWeight: FontWeight.w600, height: 1.2),
-      headlineMedium: TextStyle(fontFamily: family, fontWeight: FontWeight.w600, height: 1.25),
-      headlineSmall: TextStyle(fontFamily: family, fontWeight: FontWeight.w600, height: 1.3),
-      titleLarge: TextStyle(fontFamily: family, fontWeight: FontWeight.w600, height: 1.3),
-      titleMedium: TextStyle(fontFamily: family, fontWeight: FontWeight.w600, height: 1.35),
-      titleSmall: TextStyle(fontFamily: family, fontWeight: FontWeight.w500, height: 1.4),
+      displaySmall: TextStyle(
+        fontFamily: family,
+        fontWeight: FontWeight.w600,
+        height: 1.2,
+      ),
+      headlineMedium: TextStyle(
+        fontFamily: family,
+        fontWeight: FontWeight.w600,
+        height: 1.25,
+      ),
+      headlineSmall: TextStyle(
+        fontFamily: family,
+        fontWeight: FontWeight.w600,
+        height: 1.3,
+      ),
+      titleLarge: TextStyle(
+        fontFamily: family,
+        fontWeight: FontWeight.w600,
+        height: 1.3,
+      ),
+      titleMedium: TextStyle(
+        fontFamily: family,
+        fontWeight: FontWeight.w600,
+        height: 1.35,
+      ),
+      titleSmall: TextStyle(
+        fontFamily: family,
+        fontWeight: FontWeight.w500,
+        height: 1.4,
+      ),
       bodyLarge: TextStyle(fontFamily: family, height: 1.5, letterSpacing: 0.1),
-      bodyMedium: TextStyle(fontFamily: family, height: 1.5, letterSpacing: 0.1),
+      bodyMedium: TextStyle(
+        fontFamily: family,
+        height: 1.5,
+        letterSpacing: 0.1,
+      ),
       bodySmall: TextStyle(fontFamily: family, height: 1.4, letterSpacing: 0.1),
       labelLarge: TextStyle(fontFamily: family, fontWeight: FontWeight.w600),
       labelMedium: TextStyle(fontFamily: family, fontWeight: FontWeight.w500),

@@ -30,7 +30,7 @@ class LearningPathsScreen extends ConsumerWidget {
             return ListView.separated(
               padding: const EdgeInsets.all(16),
               itemCount: paths.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              separatorBuilder: (_, _) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
                 final path = paths[index];
                 final summary = summaries?.firstWhere(
@@ -83,7 +83,8 @@ class _LearningPathCard extends StatelessWidget {
               Text(path.description, style: theme.textTheme.bodyMedium),
               const SizedBox(height: 14),
               LabeledProgressBar(
-                label: '${path.conceptCount} concepts · ~${path.estimatedHours}h',
+                label:
+                    '${path.conceptCount} concepts · ~${path.estimatedHours}h',
                 progress: summary?.overallPercent ?? 0,
               ),
             ],

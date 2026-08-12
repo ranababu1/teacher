@@ -11,11 +11,11 @@ enum SelfRating {
   final int score;
 
   String get label => switch (this) {
-        SelfRating.again => 'Again',
-        SelfRating.hard => 'Hard',
-        SelfRating.good => 'Good',
-        SelfRating.easy => 'Easy',
-      };
+    SelfRating.again => 'Again',
+    SelfRating.hard => 'Hard',
+    SelfRating.good => 'Good',
+    SelfRating.easy => 'Easy',
+  };
 }
 
 /// Coarse performance bucket used to drive review scheduling — see
@@ -55,7 +55,9 @@ class AttemptOutcome {
   }
 
   PerformanceBucket get performanceBucket {
-    if (isCorrect != null) return isCorrect! ? PerformanceBucket.good : PerformanceBucket.poor;
+    if (isCorrect != null) {
+      return isCorrect! ? PerformanceBucket.good : PerformanceBucket.poor;
+    }
     return switch (selfRating ?? SelfRating.good) {
       SelfRating.again => PerformanceBucket.poor,
       SelfRating.hard => PerformanceBucket.poor,

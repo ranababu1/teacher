@@ -11,7 +11,11 @@ import '../../../progress/presentation/widgets/mastery_status_icon.dart';
 import '../curriculum_providers.dart';
 
 class ModuleDetailScreen extends ConsumerWidget {
-  const ModuleDetailScreen({super.key, required this.pathId, required this.moduleId});
+  const ModuleDetailScreen({
+    super.key,
+    required this.pathId,
+    required this.moduleId,
+  });
 
   final String pathId;
   final String moduleId;
@@ -33,13 +37,17 @@ class ModuleDetailScreen extends ConsumerWidget {
               return const Center(child: Text('Topic not found.'));
             }
             final masteryByConceptId = {
-              for (final m in masteryValue.valueOrNull ?? const []) m.conceptId: m,
+              for (final m in masteryValue.valueOrNull ?? const [])
+                m.conceptId: m,
             };
 
             return ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                Text(module.title, style: Theme.of(context).textTheme.headlineSmall),
+                Text(
+                  module.title,
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
                 const SizedBox(height: 6),
                 Text(
                   '${module.concepts.length} concepts',
@@ -49,9 +57,13 @@ class ModuleDetailScreen extends ConsumerWidget {
                 for (final concept in module.concepts) ...[
                   Card(
                     child: ListTile(
-                      onTap: () => context.go(Routes.lesson(pathId, moduleId, concept.id)),
+                      onTap: () => context.go(
+                        Routes.lesson(pathId, moduleId, concept.id),
+                      ),
                       leading: MasteryStatusIcon(
-                        status: masteryByConceptId[concept.id]?.status ?? MasteryStatus.notStarted,
+                        status:
+                            masteryByConceptId[concept.id]?.status ??
+                            MasteryStatus.notStarted,
                         size: 22,
                       ),
                       title: Text(concept.title),

@@ -4,6 +4,12 @@ import 'concept.dart';
 import 'curriculum_module.dart';
 import 'difficulty.dart';
 
+/// Best-effort code-display language for a learning path, keyed by id.
+/// Concept examples always specify their own `language` explicitly; this
+/// is only a fallback for items (like exercises) that don't.
+String languageForLearningPathId(String learningPathId) =>
+    learningPathId == 'react' ? 'javascript' : 'python';
+
 /// A full subject (e.g. Python, ReactJS) — see instructions.md section 9.
 class LearningPath extends Equatable {
   const LearningPath({
@@ -28,6 +34,11 @@ class LearningPath extends Equatable {
 
   int get conceptCount => allConcepts.length;
 
+  /// Best-effort language tag for code display when an item (e.g. an
+  /// exercise) doesn't carry its own `language` field. Concept examples
+  /// always specify their own language explicitly.
+  String get primaryLanguage => languageForLearningPathId(id);
+
   Concept? findConcept(String conceptId) {
     for (final concept in allConcepts) {
       if (concept.id == conceptId) return concept;
@@ -43,8 +54,15 @@ class LearningPath extends Equatable {
   }
 
   @override
-  List<Object?> get props =>
-      [id, title, description, difficulty, iconName, estimatedHours, modules];
+  List<Object?> get props => [
+    id,
+    title,
+    description,
+    difficulty,
+    iconName,
+    estimatedHours,
+    modules,
+  ];
 }
 
 /// Lightweight manifest entry — just enough to know what to load.
@@ -80,6 +98,13 @@ class LearningPathManifestEntry extends Equatable {
   }
 
   @override
-  List<Object?> get props =>
-      [id, title, description, difficulty, iconName, estimatedHours, moduleFiles];
+  List<Object?> get props => [
+    id,
+    title,
+    description,
+    difficulty,
+    iconName,
+    estimatedHours,
+    moduleFiles,
+  ];
 }

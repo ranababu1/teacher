@@ -27,9 +27,16 @@ class PathProgressSummary extends Equatable {
   int get masteredCount => countOf(MasteryStatus.mastered);
   int get needsReviewCount => countOf(MasteryStatus.needsReview);
   int get inProgressCount =>
-      countOf(MasteryStatus.learning) + countOf(MasteryStatus.developing) +
+      countOf(MasteryStatus.learning) +
+      countOf(MasteryStatus.developing) +
       countOf(MasteryStatus.proficient);
 
   @override
-  List<Object?> get props => [learningPathId, title, totalConcepts, overallPercent, statusCounts];
+  List<Object?> get props => [
+    learningPathId,
+    title,
+    totalConcepts,
+    overallPercent,
+    statusCounts,
+  ];
 }
