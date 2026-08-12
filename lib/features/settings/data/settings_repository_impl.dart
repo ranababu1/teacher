@@ -1,7 +1,4 @@
-import 'package:drift/drift.dart';
-
 import '../../../core/database/app_database.dart';
-import '../../../core/database/tables/settings_table.dart';
 import '../../../core/errors/app_exception.dart';
 import '../domain/settings_models.dart';
 import '../domain/settings_repository.dart';
