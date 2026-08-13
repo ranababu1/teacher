@@ -6,7 +6,12 @@ plugins {
 
 android {
     namespace = "com.example.teacher"
-    compileSdk = flutter.compileSdkVersion
+    // Pinned instead of flutter.compileSdkVersion: that resolves to API 37,
+    // whose SDK platform is only published as "android-37.0" on this
+    // machine (a naming mismatch with newer Android point-releases), not
+    // the plain "android-37" Gradle looks for. API 36 is installed and
+    // plenty current.
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

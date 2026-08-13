@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/config/app_config_provider.dart';
 import '../../../../shared/widgets/async_value_view.dart';
 import '../../domain/settings_models.dart';
 import '../providers/settings_providers.dart';
+import '../widgets/api_key_section.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -12,7 +12,6 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settingsValue = ref.watch(settingsControllerProvider);
-    final appConfig = ref.watch(appConfigProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
@@ -23,28 +22,9 @@ class SettingsScreen extends ConsumerWidget {
           data: (settings) => ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              _SectionCard(
+              const _SectionCard(
                 title: 'AI Provider',
-                children: [
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(
-                      appConfig.isAIConfigured
-                          ? Icons.smart_toy
-                          : Icons.smart_toy_outlined,
-                      color: appConfig.isAIConfigured
-                          ? Theme.of(context).colorScheme.primary
-                          : Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                    title: const Text('Gemini API configuration'),
-                    subtitle: Text(
-                      appConfig.isAIConfigured
-                          ? 'Configured — AI teacher features are available.'
-                          : 'Not configured. Add GEMINI_API_KEY to your .env file to enable '
-                                'the AI teacher.',
-                    ),
-                  ),
-                ],
+                children: [ApiKeySection()],
               ),
               const SizedBox(height: 16),
               _SectionCard(

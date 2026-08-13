@@ -1,16 +1,11 @@
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-
 enum AppEnvironment { development, staging, production }
 
-enum AIProviderType { gemini, openAI, local, none }
-
-/// Optional capabilities that can be toggled without a full release.
-///
-/// These are read once at startup from environment configuration. They are
-/// intentionally simple booleans — see instructions.md section 28.
+/// Build-time capability toggles — distinct from *runtime* configuration
+/// like whether an AI provider API key has been entered. See
+/// instructions.md section 28 and [features/ai_teacher] for the latter.
 class FeatureFlags {
   const FeatureFlags({
-    this.aiTeacherEnabled = false,
+    this.aiTeacherEnabled = true,
     this.advancedAssessmentsEnabled = false,
     this.experimentalCurriculumEnabled = false,
     this.projectsEnabled = false,
@@ -24,37 +19,20 @@ class FeatureFlags {
   final bool analyticsEnabled;
 }
 
-/// Central, environment-driven application configuration.
+/// Central application configuration.
 ///
-/// Never hard-code secrets here — values are sourced from `.env` via
-/// flutter_dotenv, which is gitignored. See instructions.md section 27.
+/// This deliberately holds no secrets. Per-user AI provider API keys are
+/// entered at runtime and stored via the OS-backed secure storage in
+/// features/ai_teacher — never bundled into the app or the source tree.
+/// See instructions.md section 27.
 class AppConfig {
   const AppConfig({
-    required this.environment,
-    required this.aiProvider,
-    required this.apiBaseUrl,
-    required this.featureFlags,
-    required this.geminiApiKey,
+    this.environment = AppEnvironment.development,
+    this.apiBaseUrl = '',
+    this.featureFlags = const FeatureFlags(),
   });
 
   final AppEnvironment environment;
-  final AIProviderType aiProvider;
   final String apiBaseUrl;
   final FeatureFlags featureFlags;
-  final String? geminiApiKey;
-
-  bool get isAIConfigured => geminiApiKey != null && geminiApiKey!.isNotEmpty;
-
-  factory AppConfig.fromEnv() {
-    final geminiKey = dotenv.env['GEMINI_API_KEY'];
-    final hasGeminiKey = geminiKey != null && geminiKey.isNotEmpty;
-
-    return AppConfig(
-      environment: AppEnvironment.development,
-      aiProvider: hasGeminiKey ? AIProviderType.gemini : AIProviderType.none,
-      apiBaseUrl: dotenv.env['API_BASE_URL'] ?? '',
-      featureFlags: FeatureFlags(aiTeacherEnabled: hasGeminiKey),
-      geminiApiKey: geminiKey,
-    );
-  }
 }
