@@ -1,0 +1,235 @@
+{
+  "learningPathId": "python",
+  "moduleId": "error-handling",
+  "title": "Error Handling",
+  "order": 8,
+  "concepts": [
+    {
+      "id": "python-exception-handling",
+      "title": "Exception Handling",
+      "description": "try/except/else/finally give you precise control over what runs when code fails, and understanding the exception class hierarchy is what makes the difference between catching exactly the failure you anticipated and silently swallowing bugs you didn't.",
+      "moduleId": "error-handling",
+      "topicId": "error-handling",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 35,
+      "prerequisites": ["python-control-flow"],
+      "learningObjectives": [
+        "Trace the control flow of a try/except/else/finally block, including when each clause runs.",
+        "Raise an exception with raise, and re-raise a caught exception with a bare raise.",
+        "Explain the exception class hierarchy and how except matches by inheritance, not exact type.",
+        "Explain concretely why a bare except: is dangerous, including its effect on KeyboardInterrupt and SystemExit.",
+        "Apply the principle of only catching exceptions you can meaningfully handle."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "try / except: Catching What Goes Wrong",
+            "body": "A `try` block wraps code that *might* raise an exception; one or more `except` clauses following it specify what to do if a *particular kind* of exception actually occurs during that block's execution:\n\n```python\ntry:\n    age = int(input(\"Enter your age: \"))\nexcept ValueError:\n    print(\"That wasn't a valid number.\")\n```\n\nIf `int(...)` raises a `ValueError` (because the user typed `\"abc\"`, say), execution jumps immediately out of the `try` block -- skipping any remaining lines in it entirely, even ones that don't look related to the failure -- into the matching `except` block, and continues from after the whole try/except structure once that block finishes. If no exception occurs, the `except` block is skipped entirely and execution just continues normally.\n\nYou can catch multiple exception types with separate `except` clauses, each handling a different failure differently, or group several types into one clause with a tuple: `except (ValueError, TypeError):`. You can also capture the actual exception object to inspect its message or type at runtime: `except ValueError as e: print(f\"Bad value: {e}\")`."
+          },
+          {
+            "heading": "else and finally: The Blocks People Forget",
+            "body": "try/except has two additional, optional clauses that get skipped over far more often than they should, mostly because their exact purpose isn't obvious from the keyword alone.\n\n**`else`** runs only if the `try` block completed with **no** exception at all. It might seem redundant with 'just put that code after the try/except' -- but it isn't: code placed after the whole try/except structure runs regardless of whether an exception was caught and handled, whereas code in `else` specifically only runs on the success path.\n\n**`finally`** runs **unconditionally** -- whether the try block succeeded, raised and got caught, or raised and was *not* caught (in which case finally still runs, right before the exception propagates onward). It's the right place for cleanup that absolutely must happen either way: closing a file handle, releasing a lock, closing a network connection.\n\n```python\ndef read_config(path):\n    f = open(path)\n    try:\n        data = f.read()\n    except OSError as e:\n        print(f\"Couldn't read config: {e}\")\n        return None\n    else:\n        print(\"Config read successfully\")\n        return data\n    finally:\n        f.close()   # runs no matter what happened above\n```\n\nWorth noting: `finally` runs even when the `try` or `except` block already contains a `return` statement -- Python runs the `finally` block's code before actually handing control back to the caller, even though the `return` keyword appeared earlier in the source. Modern code more often reaches for a `with` statement (a context manager) for exactly this file-closing use case, since it guarantees cleanup more concisely -- but the underlying guarantee `finally` provides, 'this runs no matter what,' is the same guarantee a context manager's `__exit__` relies on internally, so understanding `finally` is what makes `with` make sense in the first place."
+          },
+          {
+            "heading": "raise: Signaling That Something Went Wrong",
+            "body": "`raise` is how your own code signals that something has gone wrong, by creating and throwing an exception object explicitly:\n\n```python\ndef withdraw(balance, amount):\n    if amount > balance:\n        raise ValueError(f\"Cannot withdraw {amount}; balance is only {balance}\")\n    return balance - amount\n```\n\nCalling `withdraw(100, 500)` raises a `ValueError` with that message, which propagates upward -- out of `withdraw`, out of whatever called it, and so on -- until either some `except` clause up the call stack catches it, or it reaches the top of the program uncaught, printing a traceback and ending the program.\n\nA bare `raise` (with nothing after it), used specifically inside an `except` block, **re-raises the exception currently being handled**, unchanged, including its original traceback -- useful when you want to react to an exception (log it, clean something up) but still let it propagate onward afterward, rather than swallowing it."
+          },
+          {
+            "heading": "The Exception Class Hierarchy -- and Why except Exception Isn't Automatically Good",
+            "body": "Every exception Python raises is an instance of some class, and those classes form an inheritance hierarchy rooted (for anything you should normally ever catch) at `Exception`. Common built-ins like `ValueError`, `TypeError`, `KeyError`, `IndexError`, `FileNotFoundError`, and `ZeroDivisionError` are all, directly or indirectly, subclasses of `Exception`. `except` matches by this inheritance relationship, not by exact type equality -- `except Exception:` catches essentially *any* of these, because they're all subclasses of it, the same way `except OSError:` catches `FileNotFoundError` specifically because `FileNotFoundError` is itself a subclass of `OSError`.\n\nThis inheritance-based matching is genuinely useful -- it's why `except (ValueError, TypeError):` or a shared parent class can group related failures -- but it's exactly why reaching for a broad `except Exception:` reflexively is a real design smell, not a convenient safety net. A function that catches `Exception` around a large block of code will just as happily catch a genuine, unexpected bug (an `AttributeError` from a typo, a `KeyError` from data shaped differently than you assumed) as it catches the one specific, anticipated failure you actually meant to handle -- and it'll handle both identically, often by printing a generic message or silently moving on, which can hide real bugs for a long time by making them look like 'expected, handled' conditions instead of the crashes they should have been. The narrower and more specific your `except` clause, the more confident you can be that when it fires, it's firing for the reason you actually designed it to fire for."
+          },
+          {
+            "heading": "Bare except: and Why It's Dangerous",
+            "body": "A bare `except:`, with no exception type at all, is a stricter version of the same problem, and genuinely dangerous in a way worth understanding precisely, not just avoiding by rule of thumb. `except Exception:` catches every subclass of `Exception` -- which is almost everything, but not *quite* everything. `KeyboardInterrupt` (raised when the user presses Ctrl+C) and `SystemExit` (raised by `sys.exit()`) both inherit directly from `BaseException`, deliberately *outside* the `Exception` branch of the hierarchy, specifically so that ordinary exception-handling code doesn't accidentally intercept them.\n\nA bare `except:`, however, is equivalent to `except BaseException:` -- it catches literally everything, including those two. Concretely, this means a program with a bare `except:` somewhere in a loop can become **impossible to stop with Ctrl+C**: the user's interrupt signal gets silently caught and swallowed by that except block, exactly like any other error, and the program just keeps running. This is not a hypothetical edge case; it's a real, reproducible, frustrating bug pattern, and it alone is a sufficient reason to never write a truly bare `except:` in real code -- if you genuinely need to catch 'anything that might go wrong' for logging or a top-level safety net, write `except Exception:` at minimum, which deliberately excludes exactly these two control-flow signals."
+          },
+          {
+            "heading": "The Principle: Don't Catch What You Can't Handle",
+            "body": "A useful, general discipline for exception handling is: **only catch an exception at a point in your code where you can do something genuinely useful in response.** 'Useful' means something more specific than printing a message and continuing -- it means retrying, falling back to a default, informing the user in a way they can act on, or cleanly aborting a specific operation while leaving the rest of the program's state consistent.\n\nIf a piece of code catches an exception it doesn't actually know how to meaningfully recover from, and just logs it (or worse, does nothing at all) and moves on, it's often better to simply *not* catch it there, and let it propagate to a place that either can handle it properly or where it visibly crashes the program -- a visible crash with a full traceback pointing at the real problem is almost always more useful, and easier to fix, than a program that silently continues in a broken, half-recovered state because an exception was caught and papered over somewhere deep in the call stack. This is the deeper reason narrow, specific `except` clauses are preferred over broad ones: narrow clauses are a natural byproduct of only catching exceptions you've actually thought through a recovery plan for."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "try/except/else/finally in a Realistic Function",
+          "language": "python",
+          "code": "def get_user_age(profile):\n    try:\n        age = profile[\"age\"]\n    except KeyError:\n        print(\"No age on file -- defaulting to 0\")\n        return 0\n    else:\n        print(\"Found age on file\")\n        return age\n    finally:\n        print(\"Finished checking profile\")\n\nprint(get_user_age({\"name\": \"Amy\", \"age\": 30}))\nprint(get_user_age({\"name\": \"Ben\"}))\n# Found age on file\n# Finished checking profile\n# 30\n# No age on file -- defaulting to 0\n# Finished checking profile\n# 0",
+          "explanation": "For the first call, profile[\"age\"] succeeds, so the else block runs (printing 'Found age on file'), and its return age is queued up -- but before that return value actually leaves the function, finally still runs, printing 'Finished checking profile'. Only after that does 30 actually get returned. For the second call, profile[\"age\"] raises KeyError (no 'age' key in {\"name\": \"Ben\"}), so the except KeyError block runs instead, printing the default message and queuing up return 0 -- and again, finally runs before that return value is actually handed back, printing 'Finished checking profile' one more time. Notice that else never runs for the second call at all, since the try block didn't complete successfully; and notice that finally runs in BOTH cases, regardless of which path (else's success return or except's fallback return) was taken -- that unconditional guarantee is exactly what finally is for."
+        },
+        {
+          "title": "A Bare except: Silently Hiding a Real Bug",
+          "language": "python",
+          "code": "def process(data):\n    try:\n        return dat.upper()   # typo: should be 'data', not 'dat'\n    except:\n        return None\n\nresult = process(\"hello\")\nprint(result)   # None -- but WHY None? The real bug is now invisible",
+          "explanation": "dat is not defined anywhere -- data is the actual parameter name -- so dat.upper() raises NameError every single time process is called. The bare except: doesn't distinguish that from any other kind of failure; it catches the NameError exactly the same way it would catch a genuinely anticipated error, and quietly returns None. Calling code sees process(\"hello\") return None and has no way to tell, from that alone, whether None means 'this input legitimately has no result' or 'this function is completely broken due to a typo.' If this function ran inside a long-lived loop or service, the same bare except: would also make that loop impossible to stop with Ctrl+C, since KeyboardInterrupt would be swallowed identically to the typo's NameError. Narrowing the except clause to the specific exception type you actually anticipate (here, arguably none at all, since a typo should never be silently caught) would have let this bug surface immediately as a loud, visible NameError instead of a silent, wrong None."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "except Exception: is basically the same thing as a bare except: -- both just mean 'catch anything', so it doesn't really matter which one you write.",
+          "clarification": "They differ in exactly the cases that matter most. except Exception: catches every subclass of Exception, which covers essentially all ordinary errors (ValueError, KeyError, TypeError, and so on) -- but KeyboardInterrupt and SystemExit deliberately inherit directly from BaseException, outside the Exception branch, specifically so normal error handling doesn't catch them by accident. A bare except:, however, is equivalent to except BaseException: -- it catches literally everything, including those two. That difference is exactly why a bare except: can make a program impossible to stop with Ctrl+C, while except Exception: in the same spot would let KeyboardInterrupt through untouched."
+        },
+        {
+          "description": "Code written right after a try/except block (not inside an else) only runs if no exception happened -- the same condition as else.",
+          "clarification": "Code placed after the entire try/except structure runs regardless of whether an exception occurred and was successfully caught -- it is not conditioned on success the way else is. else specifically only runs when the try block completes with no exception at all; code merely written after the whole structure runs after ANY handled outcome, whether that's the try block succeeding or an except block catching and finishing. The only way to skip past code written after the structure is for an exception to occur that is NOT caught by any except clause, causing it to propagate past the whole structure entirely -- or for a return, break, or continue to exit early from inside one of the blocks."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "python-exception-handling-ex1",
+          "type": "predictOutput",
+          "prompt": "What does this print, for each call, and in what order?",
+          "code": "def check(n):\n    try:\n        if n < 0:\n            raise ValueError(\"negative!\")\n        return \"ok\"\n    except ValueError:\n        return \"bad\"\n    finally:\n        print(\"checked\", n)\n\nprint(check(5))\nprint(check(-1))",
+          "hints": [
+            "finally runs no matter what -- even when the try or except block already contains a return statement.",
+            "For each call, first figure out whether the raise actually fires, and which block's return value ends up being used.",
+            "The print() call inside finally happens before the function's return value is actually handed back to the caller, even though the return keyword appears earlier in the source for that branch."
+          ],
+          "expectedAnswer": "checked 5, then ok, then checked -1, then bad. For check(5), no exception occurs, so try's return \"ok\" is queued, finally prints 'checked 5' first, then \"ok\" is returned and printed. For check(-1), n < 0 raises ValueError, caught by except, which queues return \"bad\"; finally prints 'checked -1' first, then \"bad\" is returned and printed.",
+          "solutionExplanation": "check(5): n < 0 is false, so no exception is raised, and try reaches return \"ok\" -- but before that value is actually handed back to the caller, finally runs, printing 'checked 5'. Only after that does the function actually return \"ok\", which the outer print() then displays. check(-1): n < 0 is true, so raise ValueError(\"negative!\") fires, transferring control to except ValueError, which queues up return \"bad\". Exactly as before, finally runs before that return value actually leaves the function, printing 'checked -1', and only then does \"bad\" get returned and printed. So the full output, in order, is: checked 5 / ok / checked -1 / bad."
+        },
+        {
+          "id": "python-exception-handling-ex2",
+          "type": "debugging",
+          "prompt": "This function is supposed to return the total length of all the strings in a list, skipping any items that aren't strings. It always returns 0, even for a list that's clearly all strings. Find and fix the bug.",
+          "code": "def total_length(items):\n    total = 0\n    for item in items:\n        try:\n            total += lenn(item)   # typo: lenn instead of len\n        except:\n            pass\n    return total\n\nprint(total_length([\"a\", \"bb\", \"ccc\"]))   # expected: 6, actual: 0",
+          "hints": [
+            "The bare except: at the bottom catches EVERY exception, not just the 'item isn't a string' case it was probably meant to handle -- what exception is actually being raised inside the loop here?",
+            "Look very closely at the function call inside the try block -- is its name spelled correctly?",
+            "Try removing the bare except temporarily, or narrowing it to a specific exception type, and see what Python actually reports."
+          ],
+          "solutionCode": "def total_length(items):\n    total = 0\n    for item in items:\n        try:\n            total += len(item)\n        except TypeError:\n            pass\n    return total\n\nprint(total_length([\"a\", \"bb\", \"ccc\"]))   # 6",
+          "solutionExplanation": "lenn is not defined anywhere -- len is the actual built-in -- so lenn(item) raises NameError on every single iteration, for every item, string or not. The bare except: swallows every one of those NameErrors identically to how it would swallow a genuine TypeError from a non-string item, so total never accumulates anything at all, and the real bug (the typo) is completely invisible from the output. Fixing the typo to len(item) makes the intended computation actually run. Narrowing the except clause to except TypeError: (the specific, anticipated failure when calling len() on something that doesn't support it, like an int) means only that intended case is silently skipped going forward -- an unrelated bug like this typo would now raise a visible, unhandled NameError instead of vanishing silently into an incorrect result."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "python-exception-handling-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "Which of the following is NOT caught by `except Exception:`?",
+          "options": [
+            "A ValueError raised by int(\"abc\")",
+            "A KeyError raised by a missing dict key lookup",
+            "A KeyboardInterrupt raised by the user pressing Ctrl+C",
+            "A custom exception class defined as class MyError(Exception): pass"
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "ValueError, KeyError, and any custom exception that subclasses Exception (directly or indirectly) are all part of the Exception branch of the hierarchy, so except Exception: catches all three. KeyboardInterrupt, however, inherits directly from BaseException, deliberately outside the Exception branch, specifically so that code catching Exception (the normal, recommended broad catch-all) does not accidentally intercept a user's Ctrl+C. Only a bare except: (or an explicit except BaseException:) would catch KeyboardInterrupt too."
+        },
+        {
+          "id": "python-exception-handling-assess-scenario1",
+          "type": "scenario",
+          "prompt": "A support engineer wraps an entire background job's main loop in a bare `except: pass`, 'just to be safe,' so a single bad record doesn't crash the whole job. Explain two concrete problems this causes, beyond general style advice.",
+          "modelAnswer": "First, it hides genuine bugs, not just bad records. A bare except: pass catches absolutely everything happening inside the loop identically -- a truly malformed record it was meant to skip, but equally a typo, a logic error, a KeyError from data shaped differently than expected, or any other real defect in the job's own code. All of these get silently swallowed the same way, so a real, fixable bug can run undetected for a long time, quietly producing wrong or incomplete results while looking, from the outside, like the job is running successfully. Second, and more specifically: KeyboardInterrupt and SystemExit are both caught by a bare except: too, since it's equivalent to except BaseException:. That means the job becomes difficult or impossible to stop cleanly -- an operator's Ctrl+C, or an orchestration system's attempt to shut the process down via sys.exit(), gets caught and discarded just like any other error, and the loop keeps running. A better approach narrows the except clause to only the specific exception type actually expected from a bad record (for example, a specific ValueError or a custom RecordParseError raised deliberately during parsing), applied only around the smallest necessary piece of per-record processing -- so a genuinely bad record is skipped as intended, while unexpected bugs and control-flow signals like KeyboardInterrupt still surface visibly."
+        }
+      ]
+    },
+    {
+      "id": "python-custom-exceptions",
+      "title": "Custom Exceptions",
+      "description": "Subclassing Exception lets code define its own named failure types for callers to catch specifically, and raise ... from ... deliberately links a newly-raised exception to the original one it was translated from, preserving the full debugging trail.",
+      "moduleId": "error-handling",
+      "topicId": "error-handling",
+      "difficulty": "advanced",
+      "estimatedMinutes": 30,
+      "prerequisites": ["python-exception-handling"],
+      "learningObjectives": [
+        "Define a custom exception type by subclassing Exception.",
+        "Judge whether a custom exception is worth creating for a given situation, versus using a built-in exception type.",
+        "Use raise ... from ... to chain a newly-raised exception to the original exception that caused it.",
+        "Explain why exception chaining matters for debugging, and what raise ... from None does differently."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "Subclassing Exception to Define Your Own Error Type",
+            "body": "Defining your own exception type is almost always this simple: subclass `Exception` (or a more specific built-in exception it makes sense to specialize), usually with no additional code at all beyond a docstring, since the value of a custom exception class is almost entirely in its *name* and its place in a hierarchy, not in unique behavior:\n\n```python\nclass InsufficientFundsError(Exception):\n    \"\"\"Raised when a withdrawal would take an account balance below zero.\"\"\"\n    pass\n\ndef withdraw(balance, amount):\n    if amount > balance:\n        raise InsufficientFundsError(f\"Cannot withdraw {amount}; balance is only {balance}\")\n    return balance - amount\n```\n\nCallers of `withdraw` can now write `except InsufficientFundsError:` and catch *exactly* this one specific failure mode, distinct from, say, a `TypeError` caused by passing in the wrong argument types by mistake, or a `ValueError` from some completely unrelated part of the same codebase. You can add real attributes and a custom `__init__` if a specific piece of structured data about the failure is genuinely useful to callers (`self.shortfall = amount - balance`, say) -- but plenty of perfectly good custom exceptions are just an empty subclass with a descriptive name and a docstring; that's not a sign you did it wrong."
+          },
+          {
+            "heading": "When a Custom Exception Is Worth It -- and When It's Overkill",
+            "body": "Custom exceptions earn their keep at a real API or library **boundary** -- a place where code you wrote is called by code you don't control (or that other people on your team maintain separately), and where the caller genuinely needs to distinguish *your* specific, anticipated failure modes from generic Python errors, so they can decide how to react. A payments library raising `InsufficientFundsError` and `CardDeclinedError` as distinct, named types lets its callers write targeted recovery logic for each -- retry with a different card versus show a top-up prompt -- instead of parsing an error message string to guess what went wrong.\n\nIt's overkill, by contrast, inside a single, small, self-contained script or module where nothing outside that same file ever needs to tell one failure apart from another -- reaching for `ValueError` or `RuntimeError` (Python's own general-purpose built-ins for 'the argument was bad' and 'something went wrong at runtime,' respectively) is often perfectly sufficient there, and creating a custom exception type nobody will ever specifically catch just adds a class to read and maintain without adding any real distinguishing power. A reasonable rule of thumb: if you can point to actual calling code that would want to write `except YourCustomError:` specifically -- as opposed to just `except Exception:` generically -- the custom exception is earning its place; if you can't, a built-in exception type is probably enough."
+          },
+          {
+            "heading": "raise ... from ...: Exception Chaining",
+            "body": "When you catch one exception while handling it and decide to raise a *different*, often more specific or more meaningful, exception in its place, `raise NewException(...) from original_exception` explicitly links the two together, rather than letting the connection between them be lost:\n\n```python\nimport json\n\nclass ConfigError(Exception):\n    \"\"\"Raised when the application's config file cannot be loaded or parsed.\"\"\"\n    pass\n\ndef load_user_config(path):\n    try:\n        with open(path) as f:\n            return json.load(f)\n    except FileNotFoundError as e:\n        raise ConfigError(f\"No config file at {path}\") from e\n```\n\n`from e` sets the new exception's `__cause__` attribute to the original exception object, and it changes Python's own traceback wording to 'The above exception was the direct cause of the following exception' -- explicitly telling whoever reads this traceback that `ConfigError` didn't just coincidentally follow the `FileNotFoundError`; it happened *because of* it, on purpose, as a deliberate translation from a low-level failure into a higher-level, more meaningful one for this function's own callers."
+          },
+          {
+            "heading": "Why Chaining Preserves Debugging Context",
+            "body": "This distinction is not cosmetic. When something goes wrong in production and all you have is a logged traceback, the difference between 'here's the specific low-level cause, deliberately wrapped into a clearer error' and an unclear, unlinked failure is the difference between quickly finding the real root cause and spending real time chasing what looks like two separate, unrelated bugs. `raise ... from ...` keeps the *entire* causal chain visible in one traceback -- both the original, low-level exception (a `FileNotFoundError`, in the example above, pointing at exactly which file and exactly which line tried to open it) and the higher-level exception your own code chose to raise instead -- rather than forcing a choice between showing only the friendly, high-level error, or only the confusing low-level one that might not even mention what higher-level operation was actually being attempted.\n\nIt's worth knowing that `raise NewException(...) from None` also exists, and does something quite different from simply omitting `from` entirely: it explicitly suppresses the display of the original exception's context, so the traceback shows only the new exception, with no trace of what actually caused it. That's the right tool for the rare, deliberate case where the original low-level exception would genuinely be pure noise to whoever reads the traceback -- but it should be an intentional choice, made on purpose, not the default outcome of forgetting `from e` when you actually meant to preserve the original cause."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "A Custom Exception with Structured Data, Caught Specifically",
+          "language": "python",
+          "code": "class InsufficientFundsError(Exception):\n    \"\"\"Raised when a withdrawal would take a balance below zero.\"\"\"\n    def __init__(self, balance, amount):\n        self.balance = balance\n        self.amount = amount\n        super().__init__(f\"Cannot withdraw {amount}; balance is only {balance}\")\n\ndef withdraw(balance, amount):\n    if amount > balance:\n        raise InsufficientFundsError(balance, amount)\n    return balance - amount\n\ntry:\n    withdraw(50, 100)\nexcept InsufficientFundsError as e:\n    print(f\"Blocked: needed {e.amount}, had {e.balance}\")\nexcept TypeError:\n    print(\"Bad argument types\")\n# Blocked: needed 100, had 50",
+          "explanation": "InsufficientFundsError's own __init__ stores balance and amount as real attributes on the exception object, in addition to calling super().__init__(...) to set the usual human-readable message (so str(e) and default traceback printing still work normally). This means the except InsufficientFundsError as e: block can access e.amount and e.balance directly, as structured data, rather than having to parse a message string to recover the same information. Because InsufficientFundsError and TypeError are unrelated branches of the exception hierarchy (neither is a subclass of the other), the order of these two except clauses doesn't matter here -- but if InsufficientFundsError were instead defined as a subclass of ValueError, and a broader except ValueError: clause were also present, the more specific InsufficientFundsError clause would need to come first, for the same reason a more specific elif branch needs to come before a more general one."
+        },
+        {
+          "title": "Chaining a Low-Level Exception into a Higher-Level One",
+          "language": "python",
+          "code": "import json\n\nclass ConfigError(Exception):\n    \"\"\"Raised when the application's config file cannot be loaded or parsed.\"\"\"\n    pass\n\ndef load_user_config(path):\n    try:\n        with open(path) as f:\n            return json.load(f)\n    except FileNotFoundError as e:\n        raise ConfigError(f\"No config file at {path}\") from e\n    except json.JSONDecodeError as e:\n        raise ConfigError(f\"Config file at {path} is not valid JSON\") from e\n\nload_user_config(\"missing_config.json\")\n# Traceback (most recent call last):\n#   ...\n# FileNotFoundError: [Errno 2] No such file or directory: 'missing_config.json'\n#\n# The above exception was the direct cause of the following exception:\n#\n# Traceback (most recent call last):\n#   ...\n# ConfigError: No config file at missing_config.json",
+          "explanation": "Two separate except clauses translate two different low-level failures -- a missing file and invalid JSON -- into the same higher-level ConfigError, each using from e to link back to whichever specific original exception actually occurred. The resulting traceback (shown in the comment) displays BOTH exceptions: the original FileNotFoundError, including its own specific message naming the missing file, and the ConfigError raised in its place, explicitly connected by the phrase 'The above exception was the direct cause of the following exception.' A developer reading this traceback immediately sees not just that config loading failed, but exactly why at the lowest level -- information that a plain raise ConfigError(...) with no from, or worse, raise ConfigError(...) from None, would have left out of what's actually shown."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "Creating a custom exception means you need to override __init__ and write meaningful custom logic -- a bare subclass with just pass wouldn't actually do anything useful.",
+          "clarification": "A bare subclass -- class MyError(Exception): pass -- is a completely valid, common, and often sufficient custom exception. Its value comes almost entirely from being a distinct, named type that calling code can catch specifically with except MyError:, separate from other unrelated exceptions, not from any custom behavior it implements. Adding a custom __init__ and extra attributes is worthwhile when there's genuinely useful structured data to attach to the failure, but plenty of well-designed custom exceptions never need one."
+        },
+        {
+          "description": "raise NewError(...) from original_error re-raises the original error, essentially the same thing as a bare raise inside an except block.",
+          "clarification": "These do genuinely different things. A bare raise (no argument) inside an except block re-raises the SAME exception object currently being handled, completely unchanged -- no new exception type is introduced, and callers further up the stack still see the original exception's type. raise NewError(...) from original_error, by contrast, raises a brand NEW, different exception object (of a different type, with its own message) while merely recording original_error as that new exception's __cause__, for traceback and debugging purposes. Callers further up the stack now see NewError, not the original exception's type at all -- from does not make the original exception 'still the one propagating'; it only preserves a visible record of what caused the new one."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "python-custom-exceptions-ex1",
+          "type": "predictOutput",
+          "prompt": "What does this print, and why?",
+          "code": "class NegativeAmountError(ValueError):\n    pass\n\ndef deposit(amount):\n    if amount < 0:\n        raise NegativeAmountError(f\"Cannot deposit a negative amount: {amount}\")\n    return amount\n\ntry:\n    deposit(-10)\nexcept ValueError as e:\n    print(f\"Rejected: {e}\")\nexcept NegativeAmountError as e:\n    print(f\"Specifically negative: {e}\")",
+          "hints": [
+            "NegativeAmountError inherits from ValueError -- does that mean an instance of it IS also considered an instance of ValueError, for except-matching purposes?",
+            "except clauses are checked top to bottom, and execution stops at the FIRST one that matches -- even if a later clause would also have matched.",
+            "Which clause is written first here: the one for ValueError, or the one for NegativeAmountError?"
+          ],
+          "expectedAnswer": "Rejected: Cannot deposit a negative amount: -10. Because NegativeAmountError is a subclass of ValueError, the first except ValueError clause already matches it, and since except clauses are checked top to bottom with the first match winning, the second, more specific except NegativeAmountError clause never gets a chance to run -- even though it would have matched too.",
+          "solutionExplanation": "NegativeAmountError(ValueError) means every NegativeAmountError instance IS ALSO, by inheritance, a ValueError instance -- so it matches except ValueError: just as validly as it would match except NegativeAmountError:. Python checks except clauses top to bottom and stops at the first match, exactly like an if/elif chain. Since except ValueError: is written first here, it catches the raised NegativeAmountError immediately, prints 'Rejected: Cannot deposit a negative amount: -10', and the second, more specific except NegativeAmountError: clause below it never even gets evaluated. Swapping the order of the two except clauses would let the specific one fire instead, printing 'Specifically negative: ...' -- the general rule, exactly as with elif chains, is that more specific except clauses need to come before more general ones that would also match the same exception."
+        },
+        {
+          "id": "python-custom-exceptions-ex2",
+          "type": "debugging",
+          "prompt": "This function is supposed to wrap a low-level file error in a friendlier ConfigError while still preserving the original error for debugging, but teammates report that the traceback they see in production is missing the real underlying cause entirely. Find and fix the bug.",
+          "code": "class ConfigError(Exception):\n    pass\n\ndef load_user_config(path):\n    try:\n        with open(path) as f:\n            return f.read()\n    except FileNotFoundError as e:\n        raise ConfigError(f\"No config file at {path}\") from None\n\nload_user_config(\"missing.json\")",
+          "hints": [
+            "from None is not the same as leaving out chaining entirely -- it actively does something specific. What?",
+            "Compare from None to from e -- one of them keeps a visible link to the original exception; the other explicitly discards that link.",
+            "The original exception is already captured right there as e in the except clause -- use it instead of None."
+          ],
+          "solutionCode": "class ConfigError(Exception):\n    pass\n\ndef load_user_config(path):\n    try:\n        with open(path) as f:\n            return f.read()\n    except FileNotFoundError as e:\n        raise ConfigError(f\"No config file at {path}\") from e\n\nload_user_config(\"missing.json\")",
+          "solutionExplanation": "from None explicitly sets the new exception's __cause__ to None and suppresses the display of the original exception's context entirely, so the resulting traceback shows ONLY ConfigError, with the original FileNotFoundError -- including the exact filename and the exact line where open() actually failed -- discarded completely from what gets displayed to whoever reads it. That's the opposite of what this function was meant to do. Changing from None to from e deliberately attaches the caught FileNotFoundError as ConfigError's cause, so the printed traceback shows both exceptions, connected by 'The above exception was the direct cause of the following exception,' preserving the original, specific debugging detail (which file, which underlying OS error) alongside the friendlier high-level message ConfigError provides."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "python-custom-exceptions-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "What is the primary value of defining an empty custom exception class like `class PaymentDeclinedError(Exception): pass`, rather than just raising a generic Exception or RuntimeError with a similar message?",
+          "options": [
+            "It makes the raise statement execute faster than raising a built-in exception",
+            "It lets callers write except PaymentDeclinedError: to catch specifically this failure mode, distinct from unrelated errors",
+            "Python requires every raise statement inside a library to use a custom exception class",
+            "It automatically logs the error to a file whenever it's raised"
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "A custom exception class's main value is giving a specific, named type that calling code can target with except PaymentDeclinedError:, distinguishing it from unrelated errors (a TypeError from a bad argument, a generic RuntimeError from some other part of the codebase) without having to inspect a message string. Option A invents a performance difference that doesn't exist. Option C is false -- Python has no such requirement; built-in exceptions are used constantly in real libraries. Option D is false -- raising an exception has no automatic logging behavior of any kind; that would require separate, explicit logging code."
+        },
+        {
+          "id": "python-custom-exceptions-assess-explain1",
+          "type": "explanation",
+          "prompt": "A teammate re-raises a translated exception with `raise HighLevelError(...) from low_level_exc` and asks why not just use a bare `raise` instead, since both seem to 'keep information about the original error.' Explain the actual difference in what gets raised, and why the distinction matters for code further up the call stack.",
+          "modelAnswer": "A bare raise (with no argument, inside an except block) re-raises the exact same exception object currently being handled, completely unchanged -- its type, message, and traceback are all untouched. No new exception is introduced at all; it's appropriate when you want to react to an exception (log it, run some cleanup) but ultimately let the original propagate onward exactly as it was. raise HighLevelError(...) from low_level_exc does something different: it raises a genuinely NEW exception object, of a different type and with its own message, chosen to be more meaningful to this function's own callers -- while explicitly recording low_level_exc as that new exception's __cause__, purely for traceback and debugging purposes. This distinction matters a lot for code further up the call stack: a caller that only knows about, and only catches, HighLevelError needs the code to actually raise a HighLevelError -- a bare raise here would still propagate low_level_exc's original type, which that caller might not know to catch at all. Conversely, from is the right choice specifically when the low-level exception type isn't meaningful to callers of this higher-level function (they shouldn't need to know it was, say, a FileNotFoundError internally) and you want to present a cleaner, purpose-specific error instead, without losing the original diagnostic trail from the traceback."
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,345 @@
+{
+  "learningPathId": "python",
+  "moduleId": "functions-advanced",
+  "title": "Advanced Functions",
+  "order": 6,
+  "concepts": [
+    {
+      "id": "python-args-kwargs",
+      "title": "*args and **kwargs",
+      "description": "*args and **kwargs let a function accept an open-ended number of positional or keyword arguments, and the same syntax unpacks a sequence or dict back into individual arguments at a call site.",
+      "moduleId": "functions-advanced",
+      "topicId": "functions-advanced",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 20,
+      "prerequisites": ["python-functions-basics"],
+      "learningObjectives": [
+        "Explain what *args collects into and what **kwargs collects into inside a function body.",
+        "Write a function signature that mixes named parameters, *args, keyword-only parameters, and **kwargs in the correct order.",
+        "Use * and ** at a call site to unpack an existing list/tuple or dict into individual arguments.",
+        "Forward arguments unchanged from a wrapper function to another function using *args, **kwargs.",
+        "Explain when explicit named parameters communicate a function's contract better than *args/**kwargs."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "Collecting Extra Positional Arguments with *args",
+            "body": "A parameter written with a single leading asterisk, `*args`, tells Python: 'gather up any extra positional arguments that weren't already matched to a named parameter, and bundle them into a tuple.' The name `args` is pure convention -- only the `*` actually matters to Python -- but virtually every Python codebase uses `args`, so deviating from it without a good reason just makes code harder to skim.\n\n```python\ndef total(*args):\n    return sum(args)\n\nprint(total(1, 2, 3))        # 6\nprint(total(1, 2, 3, 4, 5))  # 15\nprint(total())                # 0\n```\n\nInside `total`, `args` really is an ordinary tuple -- `(1, 2, 3)` on the first call, `()` on the third. This is what lets a single function accept any number of positional arguments instead of committing to a fixed parameter list like `def total(a, b, c)`, which would reject a fourth argument outright with a `TypeError`."
+          },
+          {
+            "heading": "Collecting Extra Keyword Arguments with **kwargs",
+            "body": "A parameter written with two leading asterisks, `**kwargs`, does the analogous thing for keyword arguments: it gathers any extra keyword arguments -- ones that don't match a named parameter -- into a dict, keyed by the names used at the call site.\n\n```python\ndef describe(**kwargs):\n    for key, value in kwargs.items():\n        print(f\"{key}: {value}\")\n\ndescribe(name=\"Amy\", age=30, city=\"Boston\")\n# name: Amy\n# age: 30\n# city: Boston\n```\n\nSince Python 3.7, regular dicts preserve insertion order, so `kwargs.items()` reflects the order the arguments were actually passed in. You can mix named parameters, `*args`, keyword-only parameters, and `**kwargs` in a single signature, but the order is fixed by the language: named/default parameters first, then `*args`, then any keyword-only parameters, then `**kwargs` last -- `def request(method, url, *args, timeout=30, **headers):` is a valid ordering; putting `**headers` before `timeout` would not be."
+          },
+          {
+            "heading": "The Other Direction: Unpacking at the Call Site",
+            "body": "The same `*` and `**` syntax means something different, but related, when it appears at a *call site* rather than in a function definition: instead of collecting arguments into a tuple/dict, it *spreads* an existing sequence or mapping back out into individual arguments.\n\n```python\ndef add(a, b, c):\n    return a + b + c\n\nvalues = [1, 2, 3]\nprint(add(*values))     # same as add(1, 2, 3) -> 6\n\nconfig = {\"a\": 10, \"b\": 20, \"c\": 30}\nprint(add(**config))    # same as add(a=10, b=20, c=30) -> 60\n```\n\nThis is genuinely useful whenever you have data already sitting in a list or dict that needs to become individual arguments to some existing function, rather than manually writing out `add(values[0], values[1], values[2])`. It's also the second half of the pattern that makes wrapper functions and decorators possible: a function that collects arguments with `*args, **kwargs` in its own signature can turn around and unpack that same `args`/`kwargs` right back out when it calls through to another function -- `func(*args, **kwargs)` -- forwarding whatever it received completely unchanged."
+          },
+          {
+            "heading": "When Variadic Parameters Help -- and When They Hurt Readability",
+            "body": "`*args`/`**kwargs` are powerful specifically because they make a function's signature open-ended, but that open-endedness has a real cost. A signature like `def create_user(name, email, age=None, is_admin=False):` documents, right there in the definition, exactly what a caller can pass and what each thing means -- editors autocomplete it, and a typo'd keyword argument raises an immediate, clear `TypeError` at the call site. A signature like `def create_user(*args, **kwargs):` documents none of that: you have to go read the function body to know what's actually accepted, and a typo'd keyword argument doesn't raise anything at all -- it just silently ends up as an unused entry inside `kwargs`.\n\nThe legitimate uses are fairly narrow: wrapping or forwarding functions (decorators, proxies, logging wrappers) that genuinely need to accept whatever the thing they wrap accepts; APIs that are inherently variable-arity, like the built-in `print(*objects, sep=' ', end='\\n')`; and subclass methods that need to accept 'whatever the parent class's method accepts' without re-typing that whole signature. The illegitimate use is reaching for `**kwargs` out of habit, or to avoid deciding what a function's parameters actually are, when the parameters are in fact known and fixed. If you can list the parameters a function needs, list them -- variadic parameters are a tool for genuine flexibility, not a way to dodge writing a clear signature."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Combining Named Parameters, *args, Keyword-Only Parameters, and **kwargs",
+          "language": "python",
+          "code": "def build_request(method, url, *args, timeout=30, **headers):\n    print(f\"{method} {url}\")\n    print(\"extra positional:\", args)\n    print(\"timeout:\", timeout)\n    print(\"headers:\", headers)\n\nbuild_request(\"GET\", \"/users\", \"extra1\", \"extra2\", timeout=5, Authorization=\"Bearer xyz\")\n# GET /users\n# extra positional: ('extra1', 'extra2')\n# timeout: 5\n# headers: {'Authorization': 'Bearer xyz'}",
+          "explanation": "`\"GET\"` and `\"/users\"` fill `method` and `url` positionally, exactly as normal. `\"extra1\"` and `\"extra2\"` don't match any named parameter, so they get swept into the `args` tuple. `timeout=5` matches the keyword-only parameter `timeout` directly, overriding its default of 30. `Authorization=\"Bearer xyz\"` doesn't match any named parameter either, so -- because it was passed by keyword, not position -- it lands in `**headers` instead of `*args`. This single signature can now accept a call with any number of extra positional arguments and any number of extra, arbitrarily-named keyword arguments, without the function ever needing to know their names in advance."
+        },
+        {
+          "title": "Forwarding Arguments Unchanged with func(*args, **kwargs)",
+          "language": "python",
+          "code": "def call_with_logging(func, *args, **kwargs):\n    print(f\"Calling {func.__name__} with args={args}, kwargs={kwargs}\")\n    return func(*args, **kwargs)\n\ndef add(a, b):\n    return a + b\n\nresult = call_with_logging(add, 2, 3)\nprint(result)\n# Calling add with args=(2, 3), kwargs={}\n# 5",
+          "explanation": "`call_with_logging` doesn't know or care what arguments `add` needs -- it collects whatever was passed after `func` into `args` and `kwargs`, logs them, and then unpacks them straight back out with `func(*args, **kwargs)` to actually call the wrapped function. Because collecting and unpacking use the exact same `*`/`**` syntax, this pattern reads almost like a pass-through: 'whatever came in, send the same thing on.' This exact shape -- a function whose own signature is `(*args, **kwargs)` and whose body calls something else with `(*args, **kwargs)` -- is the backbone of nearly every decorator you'll write, which is the very next concept in this module."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "args and kwargs are special reserved words that Python itself understands -- like Python knows 'args' specifically means 'the extra positional arguments'.",
+          "clarification": "The names `args` and `kwargs` are pure convention, not special keywords. `def f(*positional, **named):` behaves identically to `def f(*args, **kwargs):` -- Python only cares about the `*` and `**` prefixes, not the identifier attached to them. Every experienced Python developer uses `args`/`kwargs` by convention so the pattern is instantly recognizable at a glance, but nothing breaks if you rename them; you'd just be making your code slightly less familiar-looking to other Python readers for no benefit."
+        },
+        {
+          "description": "Since **kwargs can accept anything, adding it to a function's signature 'just in case' is basically always a free, harmless bonus for flexibility.",
+          "clarification": "It isn't free. Once a function accepts `**kwargs`, a caller who misspells a keyword argument gets no error at all -- the mistyped argument just silently disappears into the `kwargs` dict, unused, instead of raising the immediate `TypeError: unexpected keyword argument` they'd get from a function with an explicit, fixed parameter list. It also erases the signature as documentation: someone calling the function has to go read its body (or its docs) to discover what it actually does with the arguments, rather than seeing the contract directly in the `def` line. Adding `**kwargs` should be a deliberate choice for genuine flexibility (forwarding to another function, an intentionally open-ended API), not a default habit applied to every function 'to be safe.'"
+        }
+      ],
+      "exercises": [
+        {
+          "id": "python-args-kwargs-ex1",
+          "type": "predictOutput",
+          "prompt": "What does this print?",
+          "code": "def summarize(title, *scores, passing=60, **notes):\n    print(title)\n    print(\"scores:\", scores)\n    print(\"passing:\", passing)\n    print(\"notes:\", notes)\n\nsummarize(\"Midterm\", 72, 88, 91, passing=70, curved=True)",
+          "hints": [
+            "\"Midterm\" is the only argument that matches a named parameter positionally -- where do 72, 88, and 91 end up?",
+            "passing=70 is passed by keyword and matches the keyword-only parameter passing directly -- it does NOT go into scores or notes.",
+            "curved=True doesn't match any named parameter, and it was passed by keyword, not position -- which of *scores or **notes can it possibly land in?"
+          ],
+          "expectedAnswer": "Midterm / scores: (72, 88, 91) / passing: 70 / notes: {'curved': True}. \"Midterm\" fills title; 72, 88, 91 are extra positional arguments collected into the scores tuple; passing=70 overrides the passing parameter directly; curved=True doesn't match any named parameter and was passed by keyword, so it lands in the notes dict.",
+          "solutionExplanation": "\"Midterm\" matches title positionally. The three numbers that follow don't match any other named parameter, so they're swept into *scores as the tuple (72, 88, 91). passing=70 is passed by keyword and matches the keyword-only parameter passing exactly, overriding its default of 60 -- it is not eligible to end up in scores (which only takes extra positional arguments) or notes (which only takes extra keyword arguments that don't match a named parameter). Finally, curved=True doesn't match title, scores, or passing, and since it was supplied by keyword, it can only be collected by **notes, giving notes = {'curved': True}."
+        },
+        {
+          "id": "python-args-kwargs-ex2",
+          "type": "debugging",
+          "prompt": "This wrapper function is supposed to forward any call straight through to add, regardless of how the caller supplies the arguments. It works when called with two positional arguments, but raises a TypeError when a keyword argument is used. Find and fix the bug.",
+          "code": "def add(a, b):\n    return a + b\n\ndef call_with_logging(func, *args):\n    print(f\"Calling {func.__name__}\")\n    return func(*args)\n\nprint(call_with_logging(add, 2, 3))       # works: 5\nprint(call_with_logging(add, 2, b=3))     # TypeError!",
+          "hints": [
+            "call_with_logging's own signature only has *args -- is there anywhere for a keyword argument like b=3 to go when calling call_with_logging itself?",
+            "Compare this function's parameter list to the one used for forwarding a call inside a decorator -- what's missing?",
+            "*args only ever collects POSITIONAL arguments. What collects the extra keyword ones?"
+          ],
+          "solutionCode": "def add(a, b):\n    return a + b\n\ndef call_with_logging(func, *args, **kwargs):\n    print(f\"Calling {func.__name__}\")\n    return func(*args, **kwargs)\n\nprint(call_with_logging(add, 2, 3))       # 5\nprint(call_with_logging(add, 2, b=3))     # 5",
+          "solutionExplanation": "call_with_logging's signature only declares (func, *args) -- there is no **kwargs to catch a keyword argument, so passing b=3 to call_with_logging itself raises TypeError: call_with_logging() got an unexpected keyword argument 'b' before the function body ever runs; it never even gets a chance to try forwarding it to add. Adding **kwargs to call_with_logging's own parameter list gives keyword arguments somewhere to go, and changing the forwarding call to func(*args, **kwargs) unpacks both the collected positional and keyword arguments back out when actually calling add, so add(2, b=3) resolves correctly to a=2, b=3."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "python-args-kwargs-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "Inside a function defined as `def f(*args, **kwargs):`, what are the types of args and kwargs when the function is actually called?",
+          "options": [
+            "args is a list, kwargs is a dict",
+            "args is a tuple, kwargs is a dict",
+            "args is a dict, kwargs is a list",
+            "Both args and kwargs are tuples"
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "*args always collects extra positional arguments into a tuple, and **kwargs always collects extra keyword arguments into a dict, keyed by the argument names used at the call site. Option A is a common mix-up since tuples and lists are both sequences, but Python specifically constructs a tuple here, not a list. Options C and D swap or misstate the types entirely."
+        },
+        {
+          "id": "python-args-kwargs-assess-explain1",
+          "type": "explanation",
+          "prompt": "A teammate has written a public function with the signature `def create_report(*args, **kwargs):` because, in their words, 'it's more flexible this way.' Explain the concrete downsides of this signature compared to writing out the actual expected parameters explicitly, even though both versions would technically work.",
+          "modelAnswer": "The *args/**kwargs version does work in the narrow sense that it will accept a call with any combination of arguments without immediately erroring -- but that flexibility is exactly the problem for a function whose actual parameters are known and fixed. First, it destroys the signature as documentation: a caller (or an IDE's autocomplete) can't tell what create_report actually expects just by looking at the def line; they have to go read the entire function body to figure out which keys of kwargs it actually uses and what args[0] is supposed to mean. Second, and more concretely dangerous, it removes Python's own built-in argument checking: if a caller misspells a keyword argument -- writing formate=\"pdf\" instead of format=\"pdf\" -- an explicit signature would raise an immediate, clear TypeError pointing at the mistake, right at the call site. With **kwargs, that typo just silently becomes an unused entry in the kwargs dict; the function may run to completion having never noticed the caller's mistake, producing a wrong result (or a confusing internal KeyError deep inside the function body) with no indication of what actually went wrong. *args/**kwargs are the right tool for genuinely open-ended or forwarding functions, but for a function with a known, fixed set of parameters, writing them out explicitly gives both better documentation and better error-checking for free."
+        }
+      ]
+    },
+    {
+      "id": "python-lambda-map-filter",
+      "title": "Lambda, map, and filter",
+      "description": "lambda creates a small anonymous function limited to a single expression, and map/filter apply a function across an iterable in a functional style that often -- but not always -- reads worse than an equivalent list comprehension.",
+      "moduleId": "functions-advanced",
+      "topicId": "functions-advanced",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 20,
+      "prerequisites": ["python-functions-basics"],
+      "learningObjectives": [
+        "Write a lambda expression and explain why its body is restricted to a single expression.",
+        "Identify situations where a lambda genuinely improves readability versus situations where a named def is clearer.",
+        "Use map and filter to transform and select elements from an iterable.",
+        "Rewrite a map/filter-with-lambda expression as an equivalent list comprehension, and explain the readability tradeoffs of each."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "lambda Syntax and Its One-Expression Limit",
+            "body": "A `lambda` is an anonymous, inline function *expression*: `lambda parameters: expression`. It can take any number of parameters, including defaults and `*args`/`**kwargs`, but its body must be exactly **one expression** -- no statements, no assignments, no loops, no multiple lines, and (with one exception below) no `if` statements.\n\n```python\nsquare = lambda x: x ** 2\nprint(square(5))   # 25\n```\n\nThis is functionally close to `def square(x): return x ** 2` -- calling either produces the same result -- but a lambda has no `return` keyword at all; the single expression's value is automatically what gets returned. The 'no statements' restriction is a real language rule, not a style guideline: `lambda x: x = 5` or `lambda x: print(x); return x` are both syntax errors, because assignment and multiple statements separated by semicolons/newlines aren't expressions. The one exception is the **conditional expression** `a if condition else b`, which is itself a single expression (not an `if` statement), so `lambda x: \"even\" if x % 2 == 0 else \"odd\"` is perfectly legal."
+          },
+          {
+            "heading": "When a Lambda Is the Right Tool: Throwaway Key Functions",
+            "body": "Lambdas earn their keep specifically when a short function is needed exactly once, inline, purely as an argument to something else -- most commonly the `key=` argument of `sorted()`, `max()`, `min()`, or `list.sort()`. In that spot, giving the function a name would just introduce a name you use on exactly one line and never again.\n\n```python\npeople = [(\"Amy\", 30), (\"Ben\", 25), (\"Cara\", 25)]\n\n# sort by age, then by name as a tiebreaker\npeople.sort(key=lambda person: (person[1], person[0]))\nprint(people)   # [('Ben', 25), ('Cara', 25), ('Amy', 30)]\n```\n\nWriting `lambda person: (person[1], person[0])` directly inline is arguably clearer here than defining a separate, one-off `def _sort_key(person): return (person[1], person[0])` a few lines above just to reference it once -- the logic and the place it's used stay visually adjacent, and there's no throwaway name to invent or later confuse with something else."
+          },
+          {
+            "heading": "map and filter as Functional-Style Alternatives to a Loop",
+            "body": "`map(function, iterable)` applies `function` to every element of `iterable` and produces the results *lazily* -- it returns a `map` object (an iterator), not a list, so you typically wrap it in `list(...)` to see or store the results, or just iterate over it directly. `filter(function, iterable)` keeps only the elements for which `function(element)` is truthy, also returning a lazy iterator.\n\n```python\nnums = [1, 2, 3, 4, 5]\n\nsquares = list(map(lambda x: x ** 2, nums))\nevens = list(filter(lambda x: x % 2 == 0, nums))\n\nprint(squares)   # [1, 4, 9, 16, 25]\nprint(evens)     # [2, 4]\n```\n\nBoth express the same idea as an explicit loop -- 'do this to every item' or 'keep only the items where this is true' -- without writing out the loop's `for` statement, accumulator list, and `.append()` calls by hand. `map` genuinely shines when you already have a plain, named function to apply and no lambda is even needed: `list(map(str.upper, [\"amy\", \"ben\"]))` reads cleanly as 'apply str.upper to each,' with nothing to write inline at all."
+          },
+          {
+            "heading": "An Honest Comparison to List Comprehensions",
+            "body": "For the common case of mapping or filtering with a lambda specifically, most Python style guidance -- and most experienced Python developers' actual habits -- favors an equivalent **list comprehension** instead:\n\n```python\nsquares = [x ** 2 for x in nums]\nevens = [x for x in nums if x % 2 == 0]\n```\n\nThis preference isn't arbitrary. A comprehension reads left-to-right in roughly the order you'd describe the computation in English ('x squared, for each x in nums'), whereas `map(lambda x: x ** 2, nums)` reads inside-out: you have to parse the lambda's body first to know what transformation is even happening, then notice it's being mapped, then notice over what. A comprehension also doesn't need the `list(...)` wrapper to materialize a list immediately -- `map`/`filter` return lazy iterators, which is exactly the right behavior sometimes (genuinely large or infinite streams of data, where you don't want to build the whole result in memory at once), but is an extra, easy-to-forget step for the common case where you just wanted a list.\n\nThe honest counterpoint: `map`/`filter` are not *wrong*, and the preference for comprehensions applies most strongly specifically when a *lambda* is involved. `map(str.upper, words)` -- passing an existing named function directly, with no lambda at all -- is arguably just as readable as `[w.upper() for w in words]`, maybe more concise. And if you're chaining several functional operations together (`map` feeding into `filter` feeding into another `map`), that pipeline style can read reasonably well too, depending on taste and the codebase's existing conventions. The rule worth internalizing isn't 'never use map/filter' -- it's 'reach for a comprehension by default when a lambda would otherwise be involved, and reserve map/filter for cases with an existing named function or a genuine need for laziness.'"
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Sorting with a Lambda Key Function",
+          "language": "python",
+          "code": "words = [\"banana\", \"kiwi\", \"fig\", \"apple\"]\n\nby_length = sorted(words, key=lambda w: len(w))\nprint(by_length)   # ['fig', 'kiwi', 'apple', 'banana']\n\nby_last_letter = sorted(words, key=lambda w: w[-1])\nprint(by_last_letter)   # ['banana', 'apple', 'fig', 'kiwi']",
+          "explanation": "sorted() calls key(item) once for every item to decide sort order, then sorts based on those computed keys rather than the items themselves. lambda w: len(w) computes each word's length on the fly; lambda w: w[-1] computes each word's last character. Both lambdas are used exactly once, purely as an argument to sorted(), which is precisely the situation where a lambda is preferable to a separate named function -- there's no reason to invent and name a one-off helper like def _by_length(w): return len(w) just to reference it on this single line. (Note that lambda w: len(w) is functionally identical to just passing key=len directly, since len is already a plain function -- the lambda only earns its place when the key logic is more than a single existing function call, as in the second example.)"
+        },
+        {
+          "title": "map/filter vs. the Equivalent List Comprehension",
+          "language": "python",
+          "code": "prices = [19.99, 5.50, 42.00, 3.25, 100.00]\n\n# map/filter with lambdas\ndiscounted = list(map(lambda p: round(p * 0.9, 2), prices))\naffordable = list(filter(lambda p: p < 20, prices))\n\n# equivalent list comprehensions\ndiscounted_lc = [round(p * 0.9, 2) for p in prices]\naffordable_lc = [p for p in prices if p < 20]\n\nprint(discounted == discounted_lc)   # True\nprint(affordable == affordable_lc)   # True",
+          "explanation": "Both approaches compute exactly the same results -- discounted applies a 10% discount to every price, affordable keeps only prices under 20. The map/filter versions require wrapping in list() to materialize an actual list (without it, discounted would just be a map object, printing as something like <map object at 0x...> rather than a list of numbers), and reading them requires mentally unpacking the lambda first, then noticing it's being mapped over prices. The list comprehension versions read in a single pass, left to right, and never need an explicit list() call since a comprehension already produces a list directly. This is exactly the case -- mapping/filtering with a lambda -- where comprehensions are generally considered the more idiomatic, more readable choice in modern Python."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "You can write an if/else statement, a loop, or several statements inside a lambda's body, the same way you would inside a regular function's body -- you just write them after the colon.",
+          "clarification": "A lambda's body must be a single *expression*, not a sequence of statements -- this is a hard syntax restriction, not a style guideline. You cannot put an `if` statement, a `for`/`while` loop, an assignment, or multiple lines separated by semicolons inside a lambda; all of those are statements, and Python's grammar doesn't allow a statement where an expression is required. The one thing that looks like a conditional but is allowed is the *conditional expression*, `a if condition else b`, because that construct is itself a single expression that evaluates to one of two values -- `lambda x: \"even\" if x % 2 == 0 else \"odd\"` is fine, but `lambda x: if x % 2 == 0: return \"even\"` is a SyntaxError."
+          },
+        {
+          "description": "Assigning a lambda to a variable name, like `square = lambda x: x ** 2`, is just a shorter, equally good alternative to writing `def square(x): return x ** 2`.",
+          "clarification": "It works, but it has real downsides that a plain def doesn't. The resulting function object's `__name__` is literally the string `'<lambda>'`, not `'square'`, which makes tracebacks and debugging output more confusing (an error would report 'in <lambda>' rather than 'in square'). A lambda also cannot have a docstring, since a docstring is a statement (an expression statement as the first line of the body) and the lambda body can only ever be a single expression. PEP 8 explicitly recommends against binding a lambda to an identifier for exactly these reasons, suggesting a normal `def` instead whenever a function is going to be given a name and reused -- a lambda's whole value proposition is being a short, unnamed, throwaway expression passed directly where it's needed; the moment you're naming it and keeping it around, you've lost that advantage while keeping the downsides."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "python-lambda-map-filter-ex1",
+          "type": "predictOutput",
+          "prompt": "What does this print?",
+          "code": "nums = [1, 2, 3, 4, 5, 6]\nresult = list(filter(lambda x: x % 2 == 0, map(lambda x: x * 3, nums)))\nprint(result)",
+          "hints": [
+            "Work from the inside out -- map runs first here, before filter ever sees anything.",
+            "List out what map(lambda x: x * 3, nums) actually produces before worrying about the filter at all.",
+            "Once you have the mapped list, apply the filter condition (x % 2 == 0) to THOSE values, not to the original nums."
+          ],
+          "expectedAnswer": "[6, 12, 18]. map first multiplies every number in nums by 3, giving [3, 6, 9, 12, 15, 18]; filter then keeps only the even values from that mapped sequence, which are 6, 12, and 18.",
+          "solutionExplanation": "map(lambda x: x * 3, nums) is evaluated first (it's the innermost call), transforming [1, 2, 3, 4, 5, 6] into [3, 6, 9, 12, 15, 18]. filter(lambda x: x % 2 == 0, ...) then runs over THAT sequence, not the original nums, keeping only values divisible by 2 -- which are 6, 12, and 18. Wrapping the whole thing in list(...) materializes the final lazy filter iterator into an actual list, giving [6, 12, 18]."
+        },
+        {
+          "id": "python-lambda-map-filter-ex2",
+          "type": "debugging",
+          "prompt": "This code is supposed to print the first doubled value from a list, but it raises a TypeError. Find and fix the bug.",
+          "code": "nums = [1, 2, 3, 4]\ndoubled = map(lambda x: x * 2, nums)\nprint(doubled[0])   # intended to print 2",
+          "hints": [
+            "map() does not return a list -- what does it actually return?",
+            "Can you use [0] indexing directly on the kind of object map() gives you back?",
+            "You need to turn the map object into something indexable, or avoid indexing altogether."
+          ],
+          "solutionCode": "nums = [1, 2, 3, 4]\ndoubled = list(map(lambda x: x * 2, nums))\nprint(doubled[0])   # 2",
+          "solutionExplanation": "map() returns a lazy map object (an iterator), not a list -- it doesn't support indexing with [0] at all, which is exactly why doubled[0] raises TypeError: 'map' object is not subscriptable. Wrapping the map call in list(...) eagerly consumes the iterator and builds an actual list, [2, 4, 6, 8], which does support indexing, so doubled[0] correctly gives 2. An alternative fix that avoids materializing the whole list would be next(doubled), which pulls just the first value directly out of the iterator without needing indexing at all."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "python-lambda-map-filter-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "Which of the following is NOT allowed inside the body of a lambda expression?",
+          "options": [
+            "A conditional expression, like x if x > 0 else -x",
+            "A function call, like len(x)",
+            "An assignment statement, like x = x + 1",
+            "An arithmetic expression, like x ** 2 + 1"
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "A lambda's body must be a single expression, and an assignment (x = x + 1) is a statement, not an expression -- Python's grammar simply does not permit a statement in that position, so it's a SyntaxError, not just bad style. Conditional expressions (option A), function calls (option B), and arithmetic expressions (option D) are all genuine expressions that evaluate to a value, so all of them are perfectly legal lambda bodies."
+        },
+        {
+          "id": "python-lambda-map-filter-assess-explain1",
+          "type": "explanation",
+          "prompt": "A code reviewer suggests replacing `list(map(lambda x: x.strip().lower(), names))` with the list comprehension `[x.strip().lower() for x in names]`. Explain the reasoning behind this kind of suggestion -- is map() with a lambda actually wrong, and when would map() still be the more reasonable choice?",
+          "modelAnswer": "map() with a lambda isn't incorrect -- both versions compute exactly the same result -- but the comprehension is generally considered more idiomatic and more readable in this specific situation, for a couple of concrete reasons. First, the comprehension reads in the order the computation actually happens conceptually: 'strip and lowercase x, for each x in names,' left to right, matching how you'd describe it in English. The map version reads inside-out: you have to parse the lambda's body first to see what transformation is happening, and only then notice it's being applied via map across names. Second, map() returns a lazy iterator, so seeing the actual results requires the extra list(...) wrapper -- an easy step to forget, and one the comprehension doesn't need at all, since a comprehension already produces a list directly. That said, map() is still the more reasonable choice specifically when there's an existing named function to apply and no lambda is needed at all -- list(map(str.strip, names)) is arguably just as clean as the comprehension version, since there's no inline lambda body to parse. map() (without a lambda) is also worth keeping when you deliberately want laziness -- processing a very large or unbounded stream of data one item at a time without building the whole result list in memory -- since a list comprehension always eagerly builds the full list up front."
+        }
+      ]
+    },
+    {
+      "id": "python-decorators",
+      "title": "Decorators",
+      "description": "A decorator is syntactic sugar for reassigning a function to whatever a wrapping function returns, and writing one from scratch -- correctly, with *args/**kwargs and functools.wraps -- reveals exactly how tools like @staticmethod, @app.route, and @pytest.fixture actually work.",
+      "moduleId": "functions-advanced",
+      "topicId": "functions-advanced",
+      "difficulty": "advanced",
+      "estimatedMinutes": 45,
+      "prerequisites": ["python-closures", "python-args-kwargs"],
+      "learningObjectives": [
+        "Explain @decorator syntax as exactly equivalent to func = decorator(func).",
+        "Write a decorator from scratch that works correctly on any wrapped function, regardless of its signature.",
+        "Explain what functools.wraps fixes and predict the bugs that occur when it's omitted.",
+        "Build a practical decorator (timing or logging) that forwards arguments and preserves metadata.",
+        "Trace the execution order of multiple stacked decorators and explain why the order they're written in matters."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "Decorator Syntax Is Sugar for Reassignment",
+            "body": "You've already seen the essence of this idea in the Closures concept: `slow_square = memoize(slow_square)` takes an existing function, passes it into another function that returns a wrapped version, and rebinds the original name to point at that wrapped version instead. A **decorator** is nothing more than syntax for exactly this pattern, written differently:\n\n```python\ndef memoize(fn):\n    cache = {}\n    def wrapper(*args):\n        if args not in cache:\n            cache[args] = fn(*args)\n        return cache[args]\n    return wrapper\n\n@memoize\ndef slow_square(n):\n    return n * n\n```\n\nThe line `@memoize` placed directly above `def slow_square(n):` is defined by the language to mean precisely: 'define slow_square as normal, then immediately run slow_square = memoize(slow_square).' Nothing more mysterious happens. `@` is not invoking some special decorator protocol on a special kind of object -- `memoize` is just an ordinary function that takes a function and returns a function (usually a closure wrapping the original, as here), and `@memoize` is purely syntactic sugar that saves you from writing the reassignment line yourself. Whenever a decorator's behavior seems confusing, it helps to mentally rewrite `@decorator_name` above `def f(): ...` as `f = decorator_name(f)` placed right after the definition -- the two are exactly, mechanically equivalent, not just similar in spirit."
+          },
+          {
+            "heading": "Writing a Decorator From Scratch",
+            "body": "Writing a decorator means writing a function that (a) accepts a function as its one argument, and (b) returns a new function meant to stand in for it. That returned function is almost always a closure defined inside the decorator, so it can 'remember' the original function via its enclosing scope -- exactly the closure mechanism from the previous concept.\n\n```python\ndef announce(func):\n    def wrapper():\n        print(f\"About to call {func.__name__}\")\n        result = func()\n        print(f\"Finished calling {func.__name__}\")\n        return result\n    return wrapper\n\n@announce\ndef say_hello():\n    print(\"Hello!\")\n\nsay_hello()\n# About to call say_hello\n# Hello!\n# Finished calling say_hello\n```\n\nThis works, but only for functions that take **zero arguments**, exactly like `say_hello`. `wrapper` was written with a fixed, empty parameter list, so it can only ever call `func()` with no arguments. Decorate a function that takes a parameter instead -- `def greet(name): print(f\"Hi, {name}\")` -- and calling `greet(\"Amy\")` raises `TypeError: wrapper() takes 0 positional arguments but 1 was given`. The call goes to `wrapper` (since `greet` now IS `wrapper`, after decoration), not directly to the original code, and `wrapper` simply wasn't built to accept anything."
+          },
+          {
+            "heading": "Making Decorators Work on Any Function: *args and **kwargs",
+            "body": "This is exactly the problem *args and **kwargs solve, and it's why decorators are one of the most common real-world uses for them. Instead of guessing at a fixed parameter list, `wrapper` accepts anything and forwards it, unchanged, to the wrapped function:\n\n```python\ndef announce(func):\n    def wrapper(*args, **kwargs):\n        print(f\"About to call {func.__name__}\")\n        result = func(*args, **kwargs)\n        print(f\"Finished calling {func.__name__}\")\n        return result\n    return wrapper\n\n@announce\ndef greet(name, greeting=\"Hello\"):\n    print(f\"{greeting}, {name}!\")\n\ngreet(\"Amy\")\ngreet(\"Ben\", greeting=\"Hey\")\n```\n\nNow `announce` works on `say_hello` (zero arguments), `greet` (one positional plus one keyword), or literally any other function regardless of its signature, because `wrapper` never actually needs to know what the arguments are -- it just gathers whatever was passed into `args` and `kwargs`, and hands them straight through with `func(*args, **kwargs)`. Both roles of `*`/`**` from the previous concept show up in a single decorator: collecting in `wrapper`'s own parameter list, and unpacking again at the `func(...)` call site."
+          },
+          {
+            "heading": "The functools.wraps Problem: Losing __name__ and the Docstring",
+            "body": "There's a subtler cost to wrapping a function this way that has nothing to do with arguments: the object you get back from decoration is not, in any deep sense, the original function -- it's `wrapper`, a genuinely different function object that happens to call the original internally. Python doesn't know or care that `wrapper` is 'standing in for' `greet`, and that shows up the moment you inspect the decorated function's own identity:\n\n```python\n@announce\ndef greet(name):\n    \"\"\"Say a friendly greeting to name.\"\"\"\n    print(f\"Hello, {name}!\")\n\nprint(greet.__name__)   # 'wrapper'  -- not 'greet'!\nprint(greet.__doc__)    # None       -- the docstring is gone\n```\n\nAfter decoration, `greet.__name__` reports `'wrapper'` and `greet.__doc__` is `None`, because those attributes belong to the `wrapper` function object that `announce` actually returned -- the original `greet` function still exists momentarily inside `announce`'s closure, but nothing outside `announce` can see its metadata anymore, only `wrapper`'s. This is a genuinely common, real bug: tracebacks become confusing ('why does the error say it happened in wrapper?'), `help(greet)` shows useless information, auto-generated API docs lose their descriptions, and any tool or test that checks `func.__name__` breaks -- worse, if two different functions are both decorated by the same undecorated-with-wraps decorator, they'll BOTH report `__name__ == 'wrapper'`, making it impossible to tell them apart from that attribute alone.\n\nThe fix is `functools.wraps`, a decorator (yes, a decorator for writing decorators) that copies `__name__`, `__doc__`, `__module__`, and a few other metadata attributes from the original function onto the wrapper:\n\n```python\nimport functools\n\ndef announce(func):\n    @functools.wraps(func)\n    def wrapper(*args, **kwargs):\n        print(f\"About to call {func.__name__}\")\n        return func(*args, **kwargs)\n    return wrapper\n\n@announce\ndef greet(name):\n    \"\"\"Say a friendly greeting to name.\"\"\"\n    print(f\"Hello, {name}!\")\n\nprint(greet.__name__)   # 'greet' -- correct now\nprint(greet.__doc__)    # 'Say a friendly greeting to name.'\n```\n\n`@functools.wraps(func)` is applied directly above `def wrapper(...)`, and it patches `wrapper`'s metadata to match `func`'s before `wrapper` is returned. There's essentially no downside to including it, and skipping it is one of the most common code-review flags on hand-written decorators -- treat `functools.wraps` as a default you always include, not an optional extra."
+          },
+          {
+            "heading": "A Practical Example: Timing How Long a Function Takes",
+            "body": "Putting all of the above together -- a closure, *args/**kwargs forwarding, and functools.wraps -- produces a genuinely useful, production-style decorator. Here's one that measures and reports how long any function takes to run, without that function needing to know or care that it's being timed:\n\n```python\nimport functools\nimport time\n\ndef timed(func):\n    @functools.wraps(func)\n    def wrapper(*args, **kwargs):\n        start = time.perf_counter()\n        result = func(*args, **kwargs)\n        elapsed = time.perf_counter() - start\n        print(f\"{func.__name__} took {elapsed:.4f}s\")\n        return result\n    return wrapper\n\n@timed\ndef slow_sum(n):\n    return sum(range(n))\n\ntotal = slow_sum(10_000_000)\n# slow_sum took 0.3142s   (actual time will vary)\n```\n\nEvery piece here is doing real work: `wrapper(*args, **kwargs)` means `timed` can decorate `slow_sum(n)` or any other function regardless of its own signature; `time.perf_counter()` is called immediately before and after the actual `func(*args, **kwargs)` call, so only the wrapped function's own execution time is measured, not any of the decorator's own bookkeeping; and `@functools.wraps(func)` ensures `slow_sum.__name__` still correctly reports `'slow_sum'` afterward, which matters if it's later introspected, tested, or shows up in a traceback. Notice, too, that `wrapper` still `return`s `result` -- a decorator that forgets to return the wrapped function's result silently turns every decorated function into one that always returns `None`, a real and easy-to-make mistake."
+          },
+          {
+            "heading": "Stacking Multiple Decorators",
+            "body": "Nothing stops you from applying more than one decorator to the same function, and once you do, the order they're written in matters, in a specific and learnable way:\n\n```python\n@decorator_a\n@decorator_b\ndef f():\n    ...\n```\n\nis exactly equivalent to writing:\n\n```python\nf = decorator_a(decorator_b(f))\n```\n\nRead that from the inside out: `decorator_b` wraps the original `f` *first*, producing an intermediate wrapped function; `decorator_a` then wraps *that* intermediate result. So `decorator_b` is the one 'closest to' the function, both in the source code and in the wrapping order. At call time, this produces an onion-like layering: `decorator_a`'s wrapper code runs first (it's the outermost function actually being invoked), which -- assuming it calls through, as any well-behaved wrapper should -- triggers `decorator_b`'s wrapper code next, which finally calls the real, original `f`. Control then unwinds back outward: anything `decorator_b`'s wrapper does *after* its call to `f` runs before anything `decorator_a`'s wrapper does after its own call.\n\n```python\ndef a(func):\n    def wrapper(*args, **kwargs):\n        print(\"a: before\")\n        result = func(*args, **kwargs)\n        print(\"a: after\")\n        return result\n    return wrapper\n\ndef b(func):\n    def wrapper(*args, **kwargs):\n        print(\"b: before\")\n        result = func(*args, **kwargs)\n        print(\"b: after\")\n        return result\n    return wrapper\n\n@a\n@b\ndef f():\n    print(\"f\")\n\nf()\n# a: before\n# b: before\n# f\n# b: after\n# a: after\n```\n\nThis ordering has real consequences once decorators do more than print statements -- a logging decorator stacked outside an exception-catching decorator behaves very differently than the same two stacked the other way around, because whether the outer one ever sees an exception at all depends entirely on whether the inner one already caught and swallowed it before it could propagate outward."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "functools.wraps: Broken vs. Fixed",
+          "language": "python",
+          "code": "import functools\n\ndef log_calls(func):\n    def wrapper(*args, **kwargs):\n        return func(*args, **kwargs)\n    return wrapper\n\ndef log_calls_fixed(func):\n    @functools.wraps(func)\n    def wrapper(*args, **kwargs):\n        return func(*args, **kwargs)\n    return wrapper\n\n@log_calls\ndef fetch_user(user_id):\n    \"\"\"Look up a user by id.\"\"\"\n    return {\"id\": user_id}\n\n@log_calls_fixed\ndef fetch_order(order_id):\n    \"\"\"Look up an order by id.\"\"\"\n    return {\"id\": order_id}\n\nprint(fetch_user.__name__, \"|\", fetch_user.__doc__)\nprint(fetch_order.__name__, \"|\", fetch_order.__doc__)\n# wrapper | None\n# fetch_order | Look up an order by id.",
+          "explanation": "Both decorators do the same forwarding work with *args, **kwargs, so both fetch_user and fetch_order still behave correctly when called. The difference only shows up when you inspect their identity: fetch_user.__name__ reports 'wrapper' and its docstring is gone entirely, because log_calls never patched wrapper's metadata to match the original fetch_user. fetch_order, decorated by the fixed version that applies @functools.wraps(func) to its own wrapper, correctly reports 'fetch_order' and keeps its real docstring. If a monitoring tool logged func.__name__ for every incoming request, every function decorated by the broken log_calls would show up in those logs simply as 'wrapper', making it impossible to tell which endpoint was actually being called -- a subtle but very real production debugging problem."
+        },
+        {
+          "title": "A Reusable Timing Decorator Applied to Two Different Functions",
+          "language": "python",
+          "code": "import functools\nimport time\n\ndef timed(func):\n    @functools.wraps(func)\n    def wrapper(*args, **kwargs):\n        start = time.perf_counter()\n        result = func(*args, **kwargs)\n        elapsed = time.perf_counter() - start\n        print(f\"{func.__name__} took {elapsed:.4f}s\")\n        return result\n    return wrapper\n\n@timed\ndef slow_sum(n):\n    return sum(range(n))\n\n@timed\ndef greet(name, greeting=\"Hello\"):\n    return f\"{greeting}, {name}!\"\n\nslow_sum(5_000_000)\nprint(greet(\"Amy\", greeting=\"Hi\"))\n# slow_sum took 0.1502s\n# Hi, Amy!\n# greet took 0.0000s",
+          "explanation": "Because wrapper's signature is (*args, **kwargs), the exact same timed decorator applies cleanly to slow_sum(n) -- one positional argument -- and to greet(name, greeting=\"Hello\") -- one positional plus one keyword argument -- without needing any changes. Each call to a decorated function measures only the time spent inside that specific call to the real function (via time.perf_counter() taken immediately before and after func(*args, **kwargs)), and functools.wraps means slow_sum.__name__ and greet.__name__ still correctly report their real names inside the f-string, rather than both printing 'wrapper took ...' and being indistinguishable from each other in the output."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "The @ symbol is special decorator syntax that does something fundamentally different from, and more powerful than, an ordinary function call.",
+          "clarification": "@decorator_name above a def statement is purely syntactic sugar for func = decorator_name(func), executed immediately after the function is defined. decorator_name itself is just an ordinary callable that happens to take a function and return one -- there is no separate 'decorator protocol' or special object type involved. Anything @ can do, you can do yourself by writing out the equivalent assignment by hand; @ just saves you the extra line and makes the intent ('this function is being wrapped/modified') visually obvious at the definition site instead of buried somewhere below it."
+        },
+        {
+          "description": "As long as a decorator's wrapper actually calls the original function and returns its result, skipping functools.wraps is a nice-to-have omission, not something that would really break real code.",
+          "clarification": "It's a real, shipped bug pattern, not a cosmetic nitpick. Without functools.wraps, every function decorated by that decorator reports __name__ == 'wrapper' and __doc__ == None -- so logging that includes func.__name__ becomes useless (every log entry says 'wrapper', regardless of which actual function ran), auto-generated documentation tools show nothing useful for any decorated function, tracebacks point confusingly at 'wrapper' instead of the real function name, and anything that keys off a function's own name -- a registry, a cache keyed by name, a test runner listing test function names -- can break outright or become unable to distinguish between different decorated functions. functools.wraps has essentially zero cost to include and fixes all of this, which is exactly why omitting it is one of the most common findings in real code review."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "python-decorators-ex1",
+          "type": "predictOutput",
+          "prompt": "What does this print, and in what order?",
+          "code": "def shout(func):\n    def wrapper(*args, **kwargs):\n        print(\"shout: start\")\n        result = func(*args, **kwargs)\n        print(\"shout: end\")\n        return result\n    return wrapper\n\ndef whisper(func):\n    def wrapper(*args, **kwargs):\n        print(\"whisper: start\")\n        result = func(*args, **kwargs)\n        print(\"whisper: end\")\n        return result\n    return wrapper\n\n@whisper\n@shout\ndef greet():\n    print(\"hi\")\n\ngreet()",
+          "hints": [
+            "Rewrite @whisper above @shout above def greet(): ... as an equivalent assignment -- which decorator ends up on the OUTSIDE of the nested call?",
+            "The decorator written closest to the function (shout, here) wraps the original function first -- it ends up as the INNER layer, not the outer one.",
+            "Trace it like nested function calls: the outermost wrapper's 'before' code runs first, then control passes inward, eventually reaching the real greet, then control unwinds back outward through each wrapper's 'after' code."
+          ],
+          "expectedAnswer": "whisper: start / shout: start / hi / shout: end / whisper: end. @whisper @shout def greet() is equivalent to greet = whisper(shout(greet)), so whisper's wrapper is the outermost layer (runs first and last) and shout's wrapper is the inner layer (runs second and second-to-last), with the real greet() call sandwiched in the middle.",
+          "solutionExplanation": "@whisper @shout def greet(): ... is equivalent to greet = whisper(shout(greet)) -- shout wraps the original greet first, producing an intermediate function, and whisper then wraps that intermediate result. This makes whisper's wrapper the outermost function actually invoked when you call greet(), so its 'whisper: start' print runs first. That wrapper then calls through to shout's wrapper (the intermediate function), printing 'shout: start', which finally calls the real, original greet(), printing 'hi'. Control then unwinds: shout's wrapper resumes after its call and prints 'shout: end', returning control to whisper's wrapper, which resumes after ITS call and prints 'whisper: end' last."
+        },
+        {
+          "id": "python-decorators-ex2",
+          "type": "debugging",
+          "prompt": "This decorator is supposed to work on any function, but calling greet(\"Ben\", greeting=\"Hi\") raises a TypeError, even though greet(\"Amy\") on its own works fine. Find and fix the bug.",
+          "code": "import functools\n\ndef announce(func):\n    @functools.wraps(func)\n    def wrapper(*args):\n        print(f\"Calling {func.__name__}\")\n        return func(*args)\n    return wrapper\n\n@announce\ndef greet(name, greeting=\"Hello\"):\n    print(f\"{greeting}, {name}!\")\n\ngreet(\"Amy\")\ngreet(\"Ben\", greeting=\"Hi\")   # TypeError!",
+          "hints": [
+            "The first call, greet(\"Amy\"), only uses a positional argument and works fine -- the second one, which uses a keyword argument, is the one that fails. What's different about how it's calling wrapper?",
+            "Look closely at wrapper's own parameter list: def wrapper(*args): -- does it have any way to accept a keyword argument at all?",
+            "wrapper needs to accept and forward BOTH kinds of extra arguments greet's caller might supply, not just positional ones."
+          ],
+          "solutionCode": "import functools\n\ndef announce(func):\n    @functools.wraps(func)\n    def wrapper(*args, **kwargs):\n        print(f\"Calling {func.__name__}\")\n        return func(*args, **kwargs)\n    return wrapper\n\n@announce\ndef greet(name, greeting=\"Hello\"):\n    print(f\"{greeting}, {name}!\")\n\ngreet(\"Amy\")                  # Hello, Amy!\ngreet(\"Ben\", greeting=\"Hi\")   # Hi, Ben!",
+          "solutionExplanation": "wrapper's signature only declares (*args) -- there is no **kwargs to catch a keyword argument. greet(\"Amy\") works because it only supplies a positional argument, which *args happily collects. But greet(\"Ben\", greeting=\"Hi\") supplies greeting as a keyword argument, and wrapper has nowhere for it to go, so Python raises TypeError: wrapper() got an unexpected keyword argument 'greeting' before wrapper's body -- and therefore before func(*args) -- ever runs. Adding **kwargs to wrapper's parameter list, and changing the forwarding call to func(*args, **kwargs), gives keyword arguments a place to be collected and then unpacked back out when calling the real greet, so both call styles now work correctly regardless of how the caller chooses to pass arguments."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "python-decorators-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "```python\n@my_decorator\ndef process(data):\n    return data\n```\nWhich line of code is this exactly equivalent to?",
+          "options": [
+            "process(data) = my_decorator(data)",
+            "process = my_decorator(process)",
+            "my_decorator = process(my_decorator)",
+            "process = my_decorator, then process is called normally"
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "@decorator_name placed above a def statement is exactly, mechanically equivalent to defining the function normally and then immediately running name = decorator_name(name) -- here, process = my_decorator(process). Option A misapplies the decorator to the data argument rather than the function itself. Option C reverses which side is the decorator and which is being decorated. Option D describes simply aliasing the name to the decorator function itself, with no actual wrapping or function call involved, which is not what @ does."
+        },
+        {
+          "id": "python-decorators-assess-scenario1",
+          "type": "scenario",
+          "prompt": "A colleague stacks two decorators on a view function: `@login_required` above `@log_request` above `def view(request): ...`. login_required's wrapper checks authentication and returns an error response immediately, without calling the wrapped function at all, when the user isn't logged in. log_request's wrapper logs every incoming request before calling through to whatever it wraps. After deploying, the team notices that requests from logged-out users never show up in the request logs at all. Explain why, based on how decorator stacking order works, and how you would fix it.",
+          "modelAnswer": "@login_required @log_request def view(request): ... is equivalent to view = login_required(log_request(view)). That makes login_required's wrapper the OUTERMOST function actually invoked whenever a request comes in -- it's the first (and possibly only) thing that runs. Because login_required's wrapper is written to return an error response immediately and NOT call through to whatever it wraps when the user isn't authenticated, log_request's wrapper -- which is nested INSIDE login_required, as the inner layer -- never even gets a chance to run for those rejected requests. So for every logged-out user, the call never reaches log_request's wrapper at all, and nothing gets logged, even though log_request itself is written correctly and would log the request just fine if it were actually invoked. The fix is to swap the stacking order so log_request becomes the OUTERMOST decorator instead: @log_request above @login_required above def view(request): ..., equivalent to view = log_request(login_required(view)). Now log_request's wrapper always runs first and unconditionally logs the incoming request before login_required's wrapper ever gets a chance to check authentication and potentially short-circuit -- so every request gets logged, whether or not it's ultimately allowed through."
+        }
+      ]
+    }
+  ]
+}

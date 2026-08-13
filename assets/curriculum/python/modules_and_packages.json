@@ -1,0 +1,340 @@
+{
+  "learningPathId": "python",
+  "moduleId": "modules-and-packages",
+  "title": "Modules and Packages",
+  "order": 7,
+  "concepts": [
+    {
+      "id": "python-modules-imports",
+      "title": "Modules and Imports",
+      "description": "A module is just a .py file that Python executes once and caches, and import/from-import, sys.path, and the __name__ == \"__main__\" guard together determine what a program actually loads and runs.",
+      "moduleId": "modules-and-packages",
+      "topicId": "modules-and-packages",
+      "difficulty": "beginner",
+      "estimatedMinutes": 25,
+      "prerequisites": ["python-syntax-basics"],
+      "learningObjectives": [
+        "Explain what a module is and what actually happens when it's imported for the first time.",
+        "Explain why importing the same module a second time does not re-run its top-level code.",
+        "Choose between import module_name and from module_name import name based on the tradeoffs of each.",
+        "Explain the role of sys.path in module resolution.",
+        "Use the if __name__ == \"__main__\": guard correctly and explain the bug it prevents.",
+        "Recognize the cause of a circular import and describe at least one way to fix it."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "A Module Is Just a .py File",
+            "body": "A module is nothing more mysterious than a `.py` file. When you write `import math`, Python doesn't do anything magical -- it locates a file (or, for built-ins like `math`, a compiled extension) that defines `math`'s contents, **executes that file from top to bottom, exactly once**, and then makes the resulting namespace -- every name that ended up defined at that file's top level: functions, classes, variables -- available to you as attributes of the resulting module object.\n\n'Executes... exactly once' matters more than it sounds like it should: the first time any code anywhere in your program imports a given module, Python runs that module's top-level code (any print statements, module-level computations, class/function definitions) and then caches the finished module object in a dict called `sys.modules`, keyed by module name. Every subsequent `import that_module` anywhere else in the program -- even from a completely different file -- does **not** re-run the module's code; it just looks up the already-built module object in `sys.modules` and hands back a reference to that same object.\n\n```python\n# counters.py\nprint(\"counters.py is running\")\ncount = 0\n```\n\n```python\n# main.py\nimport counters\nimport counters   # does NOT print \"counters.py is running\" again -- already cached\nprint(counters.count)\n```\n\nThis is why module-level code with side effects (opening a file, connecting to a database, printing something) only actually happens once per program run, no matter how many different files import that module."
+          },
+          {
+            "heading": "import vs. from module_name import name",
+            "body": "`import module_name` brings in the module object itself, under the name `module_name` (or an alias, with `import module_name as alias`); you then access anything inside it through attribute access: `math.sqrt(16)`, `counters.count`. This is unambiguous about where a name came from -- reading `math.sqrt` at any call site, you immediately know it isn't some locally-defined `sqrt`.\n\n`from module_name import specific_name` instead pulls specific names directly out of the module's namespace and binds them straight into your current namespace: `from math import sqrt` lets you write `sqrt(16)` directly, with no `math.` prefix. This is more convenient for names you use constantly, but it comes at a real cost: it's easy to accidentally shadow a built-in or an existing name (`from math import log` can collide with a variable named `log` elsewhere in the same file), and it makes it harder to tell, just by reading a bare name, which module it originally came from. `from module_name import *` -- importing everything a module defines -- takes this same tradeoff to its extreme, and is broadly discouraged for exactly that reason: it dumps an unknown, unbounded set of names into your namespace, any of which might silently collide with something you already have."
+          },
+          {
+            "heading": "How Python Finds a Module: sys.path",
+            "body": "When Python sees `import some_module`, it needs to actually locate the corresponding file. It does this by searching, **in order**, through a list of directory paths stored in `sys.path` -- a plain list of strings you can inspect (`import sys; print(sys.path)`) and even modify at runtime. That list typically includes: the directory containing the script you're running (or the current directory, for the interactive interpreter), a set of standard-library locations bundled with your Python installation, and any site-packages directories where third-party packages installed via pip live (covered in the next concept).\n\nPython checks these directories **in the order they appear** and imports the first matching module it finds -- which is exactly the mechanism behind a specific, recurring beginner mistake: naming your own script `math.py` or `random.py` in the same directory as code that does `import math` or `import random`. Because your current directory is searched (typically first), your own same-named file shadows the real standard-library module entirely, and every one of its actual functions disappears, replaced by whatever code happens to be in your file -- often producing confusing errors that have nothing obviously to do with a naming collision."
+          },
+          {
+            "heading": "if __name__ == \"__main__\": and Why It Exists",
+            "body": "Every module, while it's running, has a built-in variable `__name__` that Python sets automatically -- to different values depending on *how* that file started running. If the file is being run directly (`python my_script.py`), Python sets `__name__` to the string `\"__main__\"` for that specific run. If the file is instead being *imported* by some other module (`import my_script`), Python sets `__name__` to the module's own name (`\"my_script\"`) instead.\n\n```python\n# my_script.py\ndef main():\n    print(\"Running as the main program\")\n\nif __name__ == \"__main__\":\n    main()\n```\n\nThis lets a single file serve two purposes at once: it can be a reusable module that other files import for its functions/classes (in which case `__name__` will be `\"my_script\"`, the `if` is false, and nothing extra runs), *and* it can be run directly as a standalone script for testing or as an entry point (in which case `__name__` is `\"__main__\"`, the `if` fires, and `main()` executes). Without this guard, any 'run this as a script' code -- a `main()` call, test invocations, a demo print -- would also fire every single time some other file merely imports this one for its useful definitions, which is almost never what you want."
+          },
+          {
+            "heading": "The Circular Import Pitfall",
+            "body": "A circular import happens when module A imports module B, and module B -- directly or indirectly -- imports module A back, forming a cycle. Because Python executes a module's code top-to-bottom exactly once, and registers it in `sys.modules` progressively *as it goes* rather than all at once, a circular import can catch a module 'half-built': if A is in the middle of running (say, it's only defined its first function so far) when its import of B triggers B to try to import A back, Python finds A already present in `sys.modules` (the import machinery marks it as 'in progress' immediately, before the file even finishes) and hands back that half-finished module object, rather than re-running A from scratch (which would infinite-loop) or waiting for it to finish (which Python's import system doesn't do). B then tries to use something from A that hasn't been defined yet at that point in A's own execution, and you get an `ImportError` or `AttributeError` that can be genuinely confusing to track down, since each module looks correct in isolation.\n\nThe practical fixes, roughly in order of how much they change your design: move the import so it happens inside a function body instead of at the top of the file, deferring it until the function is actually called, by which point both modules have usually finished their top-level execution; restructure so the shared functionality both modules need lives in a third module that both of them import, instead of importing each other directly; or -- often the real signal -- treat a circular import as a hint that the two modules are too tightly coupled and should be redesigned, rather than purely a technical problem to route around."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "A Module Only Runs Once, No Matter How Many Times It's Imported",
+          "language": "python",
+          "code": "# counters.py\nprint(\"counters.py is running\")\ncount = 0\n\ndef increment():\n    global count\n    count += 1\n    return count\n\n# main.py\nimport counters\nimport counters              # does NOT print \"counters.py is running\" again\n\nprint(counters.increment())  # 1\nprint(counters.increment())  # 2\n\nimport other_module          # other_module.py also does `import counters`\n# still does not re-print \"counters.py is running\" -- and other_module sees\n# counters.count already at 2, not reset back to 0",
+          "explanation": "The first import counters anywhere in the program runs counters.py from top to bottom exactly once, printing its message and creating count = 0, then caches the resulting module object in sys.modules under the key 'counters'. Every later import counters -- whether it's the second line in main.py, or a completely separate import inside other_module.py -- finds 'counters' already in sys.modules and just hands back a reference to that exact same, already-built module object, without running the file again. Because every part of the program that imports counters gets a reference to the SAME object, calling counters.increment() from main.py genuinely changes the count that other_module.py would also see if it read counters.count afterward -- there's only ever one counters module in memory for the whole program, not a fresh copy per import."
+        },
+        {
+          "title": "if __name__ == \"__main__\": in Action",
+          "language": "python",
+          "code": "# calculator.py\ndef add(a, b):\n    return a + b\n\nprint(f\"calculator module loaded, __name__ is {__name__!r}\")\n\nif __name__ == \"__main__\":\n    print(\"Running calculator.py directly as a script\")\n    print(add(2, 3))\n\n# Running `python calculator.py` directly prints:\n# calculator module loaded, __name__ is '__main__'\n# Running calculator.py directly as a script\n# 5\n\n# Meanwhile, `import calculator` from another file prints only:\n# calculator module loaded, __name__ is 'calculator'\n# (the if block never fires -- __name__ is 'calculator', not '__main__')",
+          "explanation": "The print statement right after the function definitions is NOT inside the if guard, so it always runs on import, in both scenarios -- only the value of __name__ printed differs. When calculator.py is run directly, Python sets __name__ to the string '__main__' for that run, so the if condition is true and the script-only code (the second print and the add(2, 3) call) executes. When some other file does import calculator instead, Python sets __name__ to 'calculator' -- the module's own name -- so the condition is false, and only the useful, reusable parts of the file (the add function's definition, and the unconditional print) actually take effect, without also running whatever demo or test code was meant only for running calculator.py as a standalone script."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "import some_module re-runs that module's top-level code every single time it's imported, in every file that imports it.",
+          "clarification": "Python caches every module it imports in a dict called sys.modules, keyed by module name, the first time it's imported anywhere in the running program. Every later import of that same module -- from the same file or a different one -- just retrieves the already-built module object from that cache; it does not re-execute the module's code. This is why a module with a print statement or a database connection at its top level only actually triggers that side effect once per program run, regardless of how many different files import it."
+        },
+        {
+          "description": "from module_name import * is just a convenient shortcut for import module_name -- it saves typing the module prefix, with no other real differences.",
+          "clarification": "from module_name import * pulls every public name the module defines directly into your current namespace, with no prefix at all, which creates a genuine risk of silently overwriting an existing name of yours (or one from a different import) that happens to share the same identifier -- and unlike a normal import, there's often no way to tell, just by reading a bare name later in the file, which module it actually came from. import module_name, by contrast, only ever adds one single name (the module itself) to your namespace, and every name you access through it is unambiguously prefixed (module_name.something), which is exactly why it doesn't carry the same collision risk. Most style guidance treats from module import * as something to avoid in ordinary application code, reserving it for narrow, deliberate cases like re-exporting a curated set of names from a package's own __init__.py."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "python-modules-imports-ex1",
+          "type": "predictOutput",
+          "prompt": "What does this print? Assume config.py and main.py are separate files in the same directory.",
+          "code": "# config.py\nprint(\"loading config...\")\nDEBUG = True\n\n# main.py\nimport config\nimport config\nprint(config.DEBUG)\nDEBUG = False\nprint(config.DEBUG)",
+          "hints": [
+            "How many times does the message \"loading config...\" actually print, given that config is imported twice in main.py?",
+            "DEBUG = False in main.py creates a variable local to main.py's own namespace -- does it touch config.DEBUG at all?",
+            "config.DEBUG and the plain name DEBUG (after the reassignment) refer to two completely separate variables, living in two separate modules' namespaces."
+          ],
+          "expectedAnswer": "loading config... (only once), then True, then True again. The second import config does not re-run config.py, so \"loading config...\" prints only once. DEBUG = False creates a new variable named DEBUG in main.py's own namespace -- it does not modify config.DEBUG at all, so config.DEBUG still reads True both times it's printed.",
+          "solutionExplanation": "The first import config runs config.py top to bottom, printing 'loading config...' and setting config.DEBUG = True; that module object is then cached in sys.modules. The second import config finds 'config' already cached and does not re-run the file, so the message is not printed again. print(config.DEBUG) then correctly prints True. The line DEBUG = False does NOT reach into config's namespace at all -- it creates a brand new, separate variable named DEBUG local to main.py's own top-level scope, completely unrelated to config.DEBUG. So the second print(config.DEBUG) still reads config's own DEBUG attribute, which was never touched, and still prints True."
+        },
+        {
+          "id": "python-modules-imports-ex2",
+          "type": "debugging",
+          "prompt": "utils.py is meant to be imported by other files purely for its calculate_total function, but importing it triggers an unwanted print of \"60\" as a side effect. Find and fix the bug.",
+          "code": "# utils.py\ndef calculate_total(prices):\n    return sum(prices)\n\nprint(calculate_total([10, 20, 30]))   # meant only as a quick manual test while developing\n\n# main.py\nfrom utils import calculate_total\nprint(calculate_total([1, 2, 3]))\n# expected output: just \"6\"\n# actual output: \"60\" printed first, then \"6\"",
+          "hints": [
+            "The print(calculate_total([10, 20, 30])) line inside utils.py runs whenever the file is executed -- does that include when it's merely imported by another file?",
+            "Is there anything in utils.py that distinguishes 'this file is being run directly, as a script' from 'this file is being imported for its functions'?",
+            "There's a specific if-guard, based on a built-in variable, meant exactly for code that should only run when a file is executed directly."
+          ],
+          "solutionCode": "# utils.py\ndef calculate_total(prices):\n    return sum(prices)\n\nif __name__ == \"__main__\":\n    print(calculate_total([10, 20, 30]))   # only runs when utils.py is executed directly\n\n# main.py\nfrom utils import calculate_total\nprint(calculate_total([1, 2, 3]))\n# 6",
+          "solutionExplanation": "The original utils.py has an unconditional print(calculate_total([10, 20, 30])) at its top level, with nothing to distinguish 'run directly' from 'imported elsewhere' -- so that line executes every single time the module is loaded, including when main.py does from utils import calculate_total purely to reuse the function. Wrapping it in if __name__ == \"__main__\": means that line only runs when utils.py is executed directly (where __name__ would be \"__main__\"), not when it's imported by another module (where __name__ is \"utils\" instead, making the condition false). After the fix, importing calculate_total from main.py no longer triggers the leftover manual test print, and print(calculate_total([1, 2, 3])) correctly outputs just 6."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "python-modules-imports-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "Two different files in the same running program both write `import config` at some point. How many times does config.py's top-level code actually execute?",
+          "options": [
+            "Once total, the first time any file in the program imports it",
+            "Once per file that imports it -- so twice, in this case",
+            "Once per line that says import config anywhere in the program",
+            "Zero times, unless something inside config.py is explicitly called afterward"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "Python caches every module in sys.modules the first time it's imported anywhere in the running program, keyed by module name. Every subsequent import of that same module -- from the same file or a different one -- just retrieves the cached module object rather than re-running the file. So config.py's top-level code executes exactly once total, regardless of how many files, or how many import statements across the whole program, reference it. Options B and C both describe re-running the module once per import statement, which is exactly what the sys.modules cache prevents; option D is wrong because importing a module DOES execute its top-level code immediately, whether or not anything inside it is explicitly called afterward."
+        },
+        {
+          "id": "python-modules-imports-assess-scenario1",
+          "type": "scenario",
+          "prompt": "A module named shared_state.py defines a module-level variable: `active_users = []`. Two other files, file_a.py and file_b.py, both write `import shared_state` near the top, at different points in the program's execution. file_a.py runs first and does `shared_state.active_users.append(\"amy\")`. Later, file_b.py runs and reads `shared_state.active_users`. What does file_b.py actually see, and why, based on how Python's import system works?",
+          "modelAnswer": "file_b.py sees ['amy'] -- the mutation made by file_a.py is visible. Even though shared_state is imported separately in two different files, Python's import caching (via sys.modules) means both import shared_state statements, no matter where or when they run, end up referring to the exact same module object in memory -- there is only ever one shared_state module for the whole running program, built once the first time it's imported, and reused (not rebuilt) by every subsequent import anywhere else. Since active_users is a mutable list living as an attribute of that one shared module object, and file_a.py's append() mutates that list in place (rather than reassigning shared_state.active_users to point at a brand new list), any other code that later accesses shared_state.active_users -- including file_b.py, importing the same cached module -- sees the same, already-mutated list, including amy's entry. This is exactly why modules can be used (deliberately, and carefully) as a lightweight way to share mutable state across different parts of a program -- and also why unexpected shared mutable module state can be a source of confusing bugs if the sharing isn't intentional."
+        }
+      ]
+    },
+    {
+      "id": "python-packages-pip",
+      "title": "Packages and pip",
+      "description": "A package is a directory of related modules that Python can import as one unit, pip is the standard tool for installing third-party packages from PyPI, and requirements.txt records exactly what a project depends on so it can be reproduced elsewhere.",
+      "moduleId": "modules-and-packages",
+      "topicId": "modules-and-packages",
+      "difficulty": "beginner",
+      "estimatedMinutes": 20,
+      "prerequisites": ["python-modules-imports"],
+      "learningObjectives": [
+        "Explain the difference between a module and a package.",
+        "Install, upgrade, and uninstall a third-party package using pip.",
+        "Explain the purpose of requirements.txt and generate one for a project.",
+        "Describe, in broad terms, what PyPI is and why installing an unfamiliar package carries some inherent trust risk."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "Package vs. Module: Directories vs. Files",
+            "body": "A **module** is a single `.py` file, as covered in the previous concept. A **package** is one level up: a *directory* of Python code that Python treats as a single importable unit, typically containing multiple modules (and possibly sub-packages) organized together. What conventionally marks a directory as a package is the presence of an `__init__.py` file inside it -- historically this file was *required* for Python to recognize the directory as a package at all; modern Python (3.3+) also supports 'namespace packages' without `__init__.py` in some situations, but including an (even empty) `__init__.py` remains the clear, conventional way to signal 'this directory is a package,' and it's also exactly the place to put code that should run once when the package itself is imported, or to control what a plain `import my_package` exposes.\n\n```\nmy_project/\n    shapes/\n        __init__.py\n        circle.py\n        square.py\n    main.py\n```\n\nHere, `shapes` is a package containing two modules, `circle` and `square`. From `main.py`, you could write `from shapes import circle` and then `circle.area(5)`, or `from shapes.circle import area` to pull the function directly. Packages let real projects and libraries organize dozens or hundreds of modules into a coherent, navigable structure instead of dumping every `.py` file flat into one directory."
+          },
+          {
+            "heading": "Installing Third-Party Code with pip",
+            "body": "Most useful third-party functionality -- HTTP clients, data analysis libraries, web frameworks, testing tools -- doesn't ship with Python itself; it's distributed as packages you install separately, using **pip**, Python's standard package installer. `pip install requests` downloads the `requests` package (and anything it itself depends on) from the Python Package Index and installs it somewhere on your `sys.path` -- typically a `site-packages` directory -- so that any `import requests` in your code can find it, following exactly the same module-resolution mechanism from the previous concept.\n\nOther common pip operations worth knowing early: `pip install package_name==2.1.0` installs a specific version rather than whatever's newest; `pip install --upgrade package_name` installs the latest version over an existing one; `pip uninstall package_name` removes it; `pip list` shows what's currently installed in whichever Python environment pip is currently pointed at -- a detail that becomes important in the next concept; `pip show package_name` gives details about an installed package, including its own dependencies."
+          },
+          {
+            "heading": "requirements.txt and Reproducibility",
+            "body": "A `requirements.txt` file is a plain text list of package names -- usually with version constraints -- that a project depends on, one per line: `requests==2.31.0`, `pandas>=2.0`, and so on. Its entire purpose is **reproducibility**: instead of verbally telling every other developer, or your future self on a new machine, 'oh, you'll also need to install these five packages, in roughly these versions,' you commit `requirements.txt` alongside your code, and anyone can recreate an equivalent set of dependencies with a single command: `pip install -r requirements.txt`.\n\nYou can generate a first-pass version of this file automatically from whatever's currently installed with `pip freeze > requirements.txt` -- though `pip freeze` dumps *everything* currently installed, including transitive dependencies you never explicitly asked for, so many teams prefer to hand-maintain a shorter list of direct dependencies (leaving more thorough, fully-pinned lockfiles to dedicated tools like `pip-tools` or `poetry`) rather than committing a raw `pip freeze` dump without reviewing it first."
+          },
+          {
+            "heading": "A Brief Mental Model of PyPI",
+            "body": "The Python Package Index (**PyPI**, at pypi.org) is the default public registry pip talks to -- a huge, open, community-run catalog where anyone can publish a package under a unique name. When you run `pip install requests`, pip is, by default, asking PyPI 'do you have a package named requests, and if so, what files make it up?', downloading whatever it finds, and installing it locally.\n\nTwo things are worth an early, honest mental note. First, PyPI has essentially no vetting of what gets published -- a package name existing and installing cleanly is not, by itself, any guarantee the code is well-maintained, secure, or even does what its name suggests, so installing an unfamiliar package is worth at least a moment's thought about its popularity, maintenance activity, and whether you actually trust its source. Second, package names are a flat, global namespace on PyPI -- once someone registers a name, no one else can publish under that exact name, which is why heavily-used generic words tend to already be taken, and why 'typosquatting' (publishing malicious packages under names one character off from popular ones, hoping for a mistyped `pip install`) is a real, documented risk worth being aware of, not a paranoid theoretical concern."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "A Package Containing Two Modules",
+          "language": "python",
+          "code": "# directory layout:\n# my_project/\n#     shapes/\n#         __init__.py\n#         circle.py\n#         square.py\n#     main.py\n\n# shapes/circle.py\ndef area(radius):\n    return 3.14159 * radius ** 2\n\n# shapes/square.py\ndef area(side):\n    return side ** 2\n\n# main.py\nfrom shapes import circle, square\n\nprint(circle.area(5))    # 78.53975\nprint(square.area(4))    # 16",
+          "explanation": "shapes is a package -- a directory containing __init__.py -- with two modules inside it, circle and square. Both modules happen to define a function named area, and that's completely fine, because they live in separate namespaces: main.py accesses them as circle.area and square.area, so there's no collision despite the identical function name. from shapes import circle, square pulls both modules (not the individual area functions) into main.py's namespace, which is why the calls still need the module prefix -- this is a deliberate middle ground between import shapes (requiring shapes.circle.area) and from shapes.circle import area (which would drop the prefix entirely, at the cost of losing the 'which module is this from' context if both circle.area and square.area were imported directly by name)."
+        },
+        {
+          "title": "From Freeform Installs to a Reproducible requirements.txt",
+          "language": "python",
+          "code": "# terminal session (not Python code):\n# $ pip install requests\n# $ pip install pandas==2.1.0\n# $ pip freeze > requirements.txt\n\n# resulting requirements.txt might contain far more than you expect,\n# since pip freeze includes every transitive dependency too:\n# requests==2.31.0\n# pandas==2.1.0\n# numpy==1.26.0        <- pandas depends on this; you never typed 'pip install numpy'\n# python-dateutil==2.8.2\n# pytz==2023.3\n# six==1.16.0\n\n# a teammate on a fresh machine then runs:\n# $ pip install -r requirements.txt\n# ...which installs all six packages at those exact pinned versions",
+          "explanation": "Only requests and pandas were installed directly by name, but pip freeze captures the FULL, currently-installed dependency tree, including packages like numpy that pandas itself depends on internally -- these are called transitive dependencies. This is exactly why some teams prefer to hand-maintain a short requirements.txt of just their direct dependencies (requests, pandas) and let pip resolve compatible versions of the rest at install time, rather than committing every transitive dependency's exact pinned version, which can make the file harder to read and can make upgrading a single direct dependency later require manually untangling which pinned transitive versions are still needed. Either approach solves the same core problem: a teammate on a different machine can run one command and end up with a working, reproducible set of dependencies, rather than guessing."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "Any folder containing .py files is automatically a package you can import, as long as the files themselves are valid Python.",
+          "clarification": "The conventional, always-reliable way to mark a directory as an importable package is to include an __init__.py file inside it -- that's the explicit signal, historically required and still the clear convention, that tells Python 'treat this directory as a package.' Modern Python does support so-called namespace packages that can work without __init__.py under specific conditions, but relying on that behavior without understanding it is a common source of confusing ModuleNotFoundError or unexpected import behavior for beginners. The safe, predictable habit is: if you intend a directory to be imported as a package, give it an __init__.py."
+        },
+        {
+          "description": "pip install package_name installs the package globally for 'the computer' -- once installed, it's available to every project you ever work on, forever, the same way installing an application usually is.",
+          "clarification": "Where pip actually installs a package depends entirely on which Python installation (or, as covered in the next concept, which virtual environment) pip is currently associated with at the moment you run the command. Without any virtual environment active, yes, it typically does go into one shared, global installation that every project on the machine would see -- but that's precisely the problem virtual environments exist to solve, letting each project have its own private, independent set of installed packages instead of all sharing (and potentially conflicting over) one global set."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "python-packages-pip-ex1",
+          "type": "debugging",
+          "prompt": "Given this project layout, main.py raises ModuleNotFoundError: No module named 'circle' when run from inside my_project/. Find and fix the bug.",
+          "code": "# project layout:\n# my_project/\n#     shapes/\n#         __init__.py\n#         circle.py      (defines: def area(radius): return 3.14159 * radius ** 2)\n#     main.py\n\n# main.py:\nimport circle\nprint(circle.area(5))\n# run with: python main.py   (from inside my_project/)\n# ModuleNotFoundError: No module named 'circle'",
+          "hints": [
+            "Where does circle.py actually live relative to main.py -- are they in the same directory?",
+            "Only the directory containing the script you run directly (my_project/, here) is added to sys.path automatically -- does that include shapes/ as a separate, directly-importable location?",
+            "circle is a module INSIDE the shapes package -- how do you tell Python to look for it there, rather than treating it as a top-level module of its own?"
+          ],
+          "solutionCode": "# main.py:\nfrom shapes import circle\nprint(circle.area(5))   # 78.53975",
+          "solutionExplanation": "circle.py is not directly on sys.path -- only my_project/ (the directory containing main.py, the script being run) is added automatically. shapes/ is a subdirectory, not a separate sys.path entry, so `import circle` fails: Python has no top-level module named circle to find. circle is only reachable through the shapes package that contains it, so `from shapes import circle` (or equivalently `import shapes.circle` followed by `shapes.circle.area(5)`) correctly tells Python to look for circle as a module living inside the shapes package, which it can resolve because shapes itself, as a package directory inside my_project/, is discoverable."
+        },
+        {
+          "id": "python-packages-pip-ex2",
+          "type": "coding",
+          "prompt": "A project depends on requests at exactly version 2.31.0, and on pandas at version 2.0 or newer (any version 2.0+). Write the contents of a requirements.txt file capturing both constraints, and state the single pip command a new team member would run to install everything it lists.",
+          "hints": [
+            "Version-pinning syntax goes directly after the package name, with no space, using a comparison operator.",
+            "'Exactly this version' and 'at least this version' use two different operators -- they are not interchangeable.",
+            "The pip command that installs from a requirements file uses a specific flag to point at that file."
+          ],
+          "solutionCode": "# requirements.txt\nrequests==2.31.0\npandas>=2.0\n\n# command to install everything listed:\n# pip install -r requirements.txt",
+          "solutionExplanation": "requests==2.31.0 pins that package to exactly version 2.31.0 using the == operator, matching the 'exactly this version' requirement. pandas>=2.0 uses the >= operator instead, allowing version 2.0 or any newer version, matching the 'at least this version' requirement -- using == here would have been too strict, since it would reject perfectly acceptable newer pandas releases. pip install -r requirements.txt reads the file line by line and installs each listed package at a version satisfying its constraint, which is exactly the single command a teammate needs to reproduce this project's dependencies from scratch."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "python-packages-pip-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "What primarily distinguishes a Python package from a Python module?",
+          "options": [
+            "A module is a .py file; a package is a directory (conventionally containing __init__.py) that can hold multiple modules and sub-packages",
+            "A package is faster to import than a module because it's precompiled",
+            "A module can only contain one function, while a package can contain many",
+            "There is no real difference -- the terms are used interchangeably in Python"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "A module is a single .py file; a package is a directory that Python treats as a single importable unit, typically holding several modules (and possibly nested sub-packages), conventionally marked with an __init__.py. Option B invents a performance claim with no basis. Option C is false -- a single module can define any number of functions, classes, and variables. Option D is wrong; the two terms describe genuinely different things and the distinction matters for how you structure and import code."
+        },
+        {
+          "id": "python-packages-pip-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain why a team commits requirements.txt to version control instead of just telling new developers which packages to pip install by hand, and describe one real problem that can arise if a raw pip freeze output is committed without any review.",
+          "modelAnswer": "requirements.txt exists to make a project's dependencies reproducible: instead of relying on a teammate remembering (or being told, and remembering correctly) a list of packages and versions to install by hand -- which inevitably drifts out of date, gets forgotten, or is applied inconsistently across different machines -- the file itself is the single source of truth, and anyone can recreate an equivalent set of dependencies with one command, pip install -r requirements.txt. This also means the exact dependency set used in development, testing, and production can be kept consistent and tracked in version control alongside the code that depends on it. One concrete problem with committing a raw, unreviewed pip freeze output: pip freeze lists EVERY package currently installed, including transitive dependencies that some direct dependency pulls in internally (a package like numpy that you never explicitly installed yourself, but that pandas depends on) -- so the resulting requirements.txt can end up far larger and more tightly pinned than necessary, making it harder to read, harder to know which pins are actually required versus incidental, and harder to safely upgrade one direct dependency later without having to untangle which of the many pinned transitive versions still need to change alongside it."
+        }
+      ]
+    },
+    {
+      "id": "python-virtual-environments",
+      "title": "Virtual Environments",
+      "description": "A virtual environment gives each project its own isolated Python interpreter and site-packages directory, solving the problem of different projects on the same machine needing incompatible versions of the same package.",
+      "moduleId": "modules-and-packages",
+      "topicId": "modules-and-packages",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 25,
+      "prerequisites": ["python-packages-pip"],
+      "learningObjectives": [
+        "Explain why isolating dependencies per project matters, using a concrete version-conflict scenario.",
+        "Create and activate a virtual environment using the venv module.",
+        "Diagnose the classic 'installed but not found' bug caused by installing a package before activating the intended virtual environment.",
+        "Explain how virtual environments and requirements.txt work together to make a project's setup reproducible."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "Why Isolate Dependencies Per Project",
+            "body": "Without any isolation, every `pip install` on your machine targets one single, global Python installation shared by literally every project you work on. That's fine right up until two projects need genuinely incompatible things from the same package: Project A depends on `requests==2.10.0` because some function signature it relies on changed in later versions, while Project B needs `requests>=2.28` for a security fix or a feature it uses. There is only one `requests` installed globally at any given moment -- installing the version one project needs necessarily overwrites the version the other project needs, so you literally cannot satisfy both projects at once from a single shared global installation.\n\nThis isn't a rare edge case; it's the default state of affairs the moment you work on more than one nontrivial Python project on the same machine, which is why isolating dependencies **per project** is treated as baseline practice, not an advanced technique. A **virtual environment** (venv) is the standard solution: a self-contained, isolated copy of the Python interpreter and its own private `site-packages` directory, associated with one specific project. Packages installed 'into' a virtual environment go into that private directory, completely independent of both the global Python installation and every other project's own virtual environment. Two projects can each have their own virtual environment, each with its own independently chosen version of `requests`, and neither ever knows the other one exists."
+          },
+          {
+            "heading": "Creating and Activating a Virtual Environment",
+            "body": "Python's standard library includes the `venv` module for exactly this purpose (no separate installation needed, unlike some third-party alternatives). Creating one is a single command, typically run once per project, from inside the project's own directory:\n\n```\npython -m venv .venv\n```\n\nThis creates a directory (commonly named `.venv` or `venv`) containing a private copy of the Python interpreter and an empty `site-packages`. Creating it doesn't, by itself, change anything about how your terminal behaves yet -- for that, you need to **activate** it, which is a shell-specific command:\n\n```\n# macOS / Linux\nsource .venv/bin/activate\n\n# Windows (PowerShell)\n.venv\\Scripts\\Activate.ps1\n```\n\nActivation modifies your *current shell session's* PATH (and a couple of other environment variables) so that, for the rest of that session, plain `python` and `pip` commands resolve to the virtual environment's own copies instead of whatever global Python is otherwise installed on the machine. Your prompt typically changes to show the active environment's name (often `(.venv)` prepended) as a visual reminder that you're 'inside' it. Deactivating (`deactivate`) reverses this, restoring the shell to whatever it pointed at before."
+          },
+          {
+            "heading": "The Classic Mistake: Installing Before Activating",
+            "body": "Here is the single most common practical mistake with virtual environments, and it's worth internalizing precisely because the symptom is so misleading: running `pip install some_package` **before** activating the project's virtual environment in that terminal session. Nothing about that command visibly fails -- pip happily downloads and installs `some_package` exactly as asked, with no error at all. The catch is *where* it installs it: with no virtual environment active, `pip` and `python` still point at whatever the global installation is, so the package genuinely does get installed -- just not into the isolated environment you meant, into the shared global one instead.\n\nThe confusing part comes next: you then activate the virtual environment and try to `import some_package`, and get `ModuleNotFoundError: No module named 'some_package'` -- which reads exactly like the install failed, even though it succeeded a moment ago. It didn't fail; it installed into the wrong place, because the venv wasn't active *at the time you ran pip install*. This is why it's worth building the habit of checking which Python/pip you're actually using before installing anything new in a project you know has its own venv -- `which python` (macOS/Linux) or `where python` (Windows) shows the actual path currently in use, and it should point *inside* your project's `.venv` directory, not at a system-wide location, before you trust that a fresh `pip install` is going where you think it's going."
+          },
+          {
+            "heading": "Connecting Back to requirements.txt",
+            "body": "Virtual environments and `requirements.txt` are two halves of the same reproducibility story: a virtual environment gives each project its own genuinely isolated place to install packages into, and `requirements.txt` records *what* should be installed there, so that isolation can be recreated on any machine, by any teammate, at any time. The standard project setup routine is: create a fresh virtual environment, activate it, then `pip install -r requirements.txt` to populate that empty, isolated environment with exactly the dependencies the project declares -- rather than either sharing one global installation across every project (the problem venvs solve) or relying purely on word-of-mouth about which packages to install (the problem requirements.txt solves).\n\nSkipping the venv and just running `pip install -r requirements.txt` globally 'works,' in the narrow sense that the imports will succeed -- but it reintroduces the exact cross-project version-conflict problem venvs exist to prevent, the moment you work on a second project with different needs."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Creating, Activating, and Verifying a Virtual Environment",
+          "language": "bash",
+          "code": "$ cd my_project\n$ python -m venv .venv\n$ which python\n/usr/bin/python\n$ source .venv/bin/activate\n(.venv) $ which python\n/home/amy/my_project/.venv/bin/python\n(.venv) $ pip install requests\n(.venv) $ pip freeze > requirements.txt\n(.venv) $ deactivate\n$ which python\n/usr/bin/python",
+          "explanation": "Right after creating .venv, which python still reports the global system interpreter -- creating the venv directory alone does not change the current shell's PATH. Only after source .venv/bin/activate does which python change to point inside the project's own .venv/bin directory, confirming the virtual environment is genuinely active for this shell session. With it active, pip install requests installs into .venv's private site-packages, completely separate from the global installation, and pip freeze > requirements.txt records exactly that (isolated) set of installed packages. deactivate reverses the PATH change, and which python afterward reports the original global interpreter again -- the isolation and its reversal are both just PATH manipulation, nothing deeper."
+        },
+        {
+          "title": "The Install-Before-Activate Trap, Concretely",
+          "language": "bash",
+          "code": "$ cd my_project\n$ python -m venv .venv\n$ pip install pandas          # venv NOT active yet -- this installs globally!\n$ source .venv/bin/activate\n(.venv) $ python -c \"import pandas\"\nTraceback (most recent call last):\n  ...\nModuleNotFoundError: No module named 'pandas'\n(.venv) $ pip install pandas   # now it actually goes into .venv\n(.venv) $ python -c \"import pandas\"\n# no error this time -- works fine",
+          "explanation": "The first pip install pandas runs before the venv is activated, so it succeeds -- with no error message at all -- by installing pandas into the global Python installation, not into .venv. Once .venv is activated and python -c \"import pandas\" is run, Python looks inside the now-active virtual environment's own, still-empty site-packages, doesn't find pandas there (it's sitting in the global installation instead), and raises ModuleNotFoundError. This is the exact symptom of the install-before-activate mistake: the earlier pip install genuinely succeeded, just in the wrong location, which makes the later 'it's not found' error feel contradictory until you notice the venv wasn't active yet when the install actually ran. Running pip install pandas again, now with the venv active, correctly installs it into .venv's site-packages, and the import succeeds."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "Creating a virtual environment with python -m venv .venv is enough by itself -- packages installed afterward will automatically go into it.",
+          "clarification": "Creating the .venv directory only builds the isolated environment; it does not change anything about your current shell session. Until you explicitly activate it (source .venv/bin/activate on macOS/Linux, or .venv\\Scripts\\Activate.ps1 on Windows), your shell's python and pip commands still point at whatever they pointed at before -- typically the global installation -- so any pip install run in between creating and activating the venv goes to the wrong place entirely."
+        },
+        {
+          "description": "If pip install completes with no error message, the package was definitely installed into your project's intended virtual environment.",
+          "clarification": "Success just means the install went wherever pip currently points at that moment -- which depends entirely on whether the intended virtual environment was actually active when the command ran, not on whether you merely intended to be using it. pip has no way of knowing which environment you meant to target; it only knows which one is currently active (or, absent that, the global one). Success and 'went to the right place' are two genuinely different things, which is exactly why checking which python/where python before installing, in a project you know has its own venv, is a useful habit rather than unnecessary caution."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "python-virtual-environments-ex1",
+          "type": "debugging",
+          "prompt": "A developer creates a virtual environment, installs a package, activates the environment, and then can't import that package. Find the bug in this sequence of commands.",
+          "code": "$ cd my_project\n$ python -m venv .venv\n$ pip install requests\n$ source .venv/bin/activate\n(.venv) $ python -c \"import requests\"\nTraceback (most recent call last):\n  ...\nModuleNotFoundError: No module named 'requests'",
+          "hints": [
+            "Look carefully at the ORDER of these commands -- when exactly does source .venv/bin/activate happen relative to pip install requests?",
+            "pip install requests didn't raise any error, so it definitely installed requests SOMEWHERE. The question is where.",
+            "Without an active virtual environment, pip and python point at the global installation, not at .venv -- even though .venv already exists as a directory at that point."
+          ],
+          "solutionCode": "$ cd my_project\n$ python -m venv .venv\n$ source .venv/bin/activate\n(.venv) $ pip install requests\n(.venv) $ python -c \"import requests\"\n# no error -- works fine",
+          "solutionExplanation": "In the original sequence, pip install requests runs BEFORE source .venv/bin/activate, so at that moment no virtual environment is active and pip installs requests into the global Python installation instead of into .venv. Activating the venv afterward doesn't retroactively move that already-installed package -- it just switches which python/pip the shell uses going forward. So when python -c \"import requests\" then runs inside the now-active (but still requests-less) .venv, it correctly reports ModuleNotFoundError, because requests was never actually installed into THIS environment's site-packages. The fix is simply to activate the virtual environment first, and only then run pip install requests, so the install actually lands inside .venv."
+        },
+        {
+          "id": "python-virtual-environments-ex2",
+          "type": "predictOutput",
+          "prompt": "What does each `which python` call print, given the commands run between them? Assume the project lives at /home/amy/my_project.",
+          "code": "$ cd /home/amy/my_project\n$ which python\n/usr/bin/python\n$ python -m venv .venv\n$ which python\n$ source .venv/bin/activate\n(.venv) $ which python\n(.venv) $ deactivate\n$ which python",
+          "hints": [
+            "Does simply creating a venv directory change your shell's PATH at all, or does something else have to happen first?",
+            "Compare the path right after python -m venv .venv to the path right after source .venv/bin/activate -- what specifically changed in between those two points?",
+            "deactivate is designed to exactly reverse whatever activate did to the shell's PATH."
+          ],
+          "expectedAnswer": "/usr/bin/python, then /usr/bin/python again (unchanged -- creating the venv doesn't touch PATH), then /home/amy/my_project/.venv/bin/python (after activation), then /usr/bin/python again (after deactivate restores the original PATH).",
+          "solutionExplanation": "The second which python call happens right after python -m venv .venv, which only creates the .venv directory and its contents -- it does not modify the shell's PATH at all, so which python still reports the original global interpreter, /usr/bin/python, unchanged. After source .venv/bin/activate, the shell's PATH is modified to put .venv/bin first, so which python now reports /home/amy/my_project/.venv/bin/python -- the virtual environment's own private interpreter. After deactivate, the PATH modification is reversed back to what it was before activation, so which python reports /usr/bin/python once more, identical to the very first call."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "python-virtual-environments-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "A developer runs `pip install flask` without having activated any virtual environment first, and it completes with no errors. What actually happened?",
+          "options": [
+            "flask was installed into the global/system Python installation, since no virtual environment was active to redirect it elsewhere",
+            "pip refuses to install anything unless a virtual environment is active, so nothing was actually installed",
+            "flask was automatically installed into the most recently created virtual environment on the machine, even without activation",
+            "The install silently failed despite showing no error message"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "pip and python always resolve to whichever installation is currently on PATH -- with no virtual environment active, that's the global/system installation, so the install genuinely succeeds there. Option B is wrong: pip has no such restriction and will happily install globally. Option C is wrong: pip has no notion of a 'most recently created' venv to fall back to -- it only knows about whatever is currently active (or the global installation, absent that). Option D is wrong: the install did succeed, just in the global location rather than an intended, but not-yet-active, virtual environment."
+        },
+        {
+          "id": "python-virtual-environments-assess-scenario1",
+          "type": "scenario",
+          "prompt": "Two projects on the same laptop need different, incompatible versions of the same package: Project A requires requests==2.10.0, Project B requires requests>=2.28. Explain how virtual environments solve this, and specifically what would go wrong if the developer instead just used the single global Python installation for both projects.",
+          "modelAnswer": "Without virtual environments, both projects would share one single global Python installation and therefore one single global site-packages directory, which can only ever hold ONE version of requests installed at a time. Installing requests==2.10.0 for Project A would leave Project B without the newer version it needs, and later installing requests>=2.28 for Project B would overwrite the 2.10.0 install Project A depends on -- there is no way to satisfy both requirements simultaneously from a single shared installation; switching between the two projects would require constantly reinstalling a different version of requests, and running both projects' code at the same time (or forgetting to reinstall) would silently use the wrong version for at least one of them. Virtual environments solve this by giving each project (Project A and Project B) its own separate, private site-packages directory, created once via python -m venv, and activated whenever working on that specific project. Project A's virtual environment can have requests==2.10.0 installed inside it, and Project B's completely separate virtual environment can have requests>=2.28 installed inside its own, independent site-packages -- neither environment is aware of or affected by what's installed in the other, so both projects' exact version requirements can be satisfied permanently and simultaneously, with no reinstalling required when switching between them."
+        }
+      ]
+    }
+  ]
+}

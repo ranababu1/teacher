@@ -1,0 +1,432 @@
+{
+  "learningPathId": "react",
+  "moduleId": "react-core",
+  "title": "React Core Concepts",
+  "order": 3,
+  "concepts": [
+    {
+      "id": "react-props",
+      "title": "Props",
+      "description": "Props are the read-only inputs a parent component passes down to a child, and they're the primary way components share data and communicate in a React application.",
+      "moduleId": "react-core",
+      "topicId": "react-core",
+      "difficulty": "beginner",
+      "estimatedMinutes": 20,
+      "prerequisites": ["react-components-jsx"],
+      "learningObjectives": [
+        "Explain why props must be treated as read-only inside the component that receives them.",
+        "Predict what happens on screen when a component mutates a prop directly.",
+        "Give a prop a default value and explain exactly when that default is used.",
+        "Explain what the children prop is and how it enables composition.",
+        "Use a function passed as a prop so a child can communicate an event back up to its parent."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "Props Flow One Way: Parent to Child",
+            "body": "A **prop** is just a value a parent component passes into a child, the same way an argument is passed into a function -- in fact, that's exactly what's happening under the hood: `<PriceTag amount={19.99} />` calls `PriceTag({ amount: 19.99 })`. Because of that, the same discipline you'd apply to a function's parameters applies to props: you read them, you don't reassign them and expect the caller to notice.\n\nThis matters more in React than it does in an ordinary function, because of what mutating a prop actually breaks. React's whole data-flow model is unidirectional -- data flows down the component tree from parent to child, never back up through direct mutation. A parent owns a piece of data; it decides when that data changes and re-renders its children with the new value. If a child reaches into its own props and changes them (`props.amount = props.amount * 1.1`), two things go wrong at once: React has no idea anything changed, since nothing called a state setter or passed new props down, so nothing gets scheduled to re-render; and the child has silently violated its contract with the parent, which still believes it's the sole owner of that value. In a small app this might look harmless, but in a larger one, where many components might receive the same prop, this kind of silent, out-of-band mutation is exactly the sort of bug that's brutal to track down, because the actual data change happened somewhere far from wherever the symptom shows up.\n\nThe fix, when a component needs to display something that changes over time, is never to mutate the prop -- it's to give the component its own **state** (the next concept), which it's actually allowed to update, or to derive a new value locally without touching the original (`const amountWithTax = amount * 1.1;`) rather than reassigning `amount` itself."
+          },
+          {
+            "heading": "Default Prop Values",
+            "body": "You'll often want a prop to have a sensible fallback when the parent doesn't bother passing it. Because props arrive as a single destructured parameter object, you can lean on ordinary JavaScript default-parameter syntax:\n\n```jsx\nfunction Button({ label, variant = \"primary\" }) {\n  return <button className={variant}>{label}</button>;\n}\n\n<Button label=\"Save\" />                 // variant defaults to \"primary\"\n<Button label=\"Delete\" variant=\"danger\" /> // variant is explicitly \"danger\"\n```\n\nThe detail worth internalizing precisely: a default value only kicks in when the prop is `undefined` -- that is, when the parent genuinely didn't pass it at all, or explicitly passed `variant={undefined}`. It does **not** kick in for other falsy values. `<Button label=\"Save\" variant={null} />` or `<Button label=\"Save\" variant={0} />` will NOT fall back to `\"primary\"` -- the component receives exactly `null` or `0`, because JavaScript's default-parameter mechanism specifically checks for `undefined`, nothing broader. This is a common source of confusion for anyone expecting \"falsy means use the default\"; the actual rule is narrower and worth remembering exactly."
+          },
+          {
+            "heading": "The children Prop and Composition",
+            "body": "`children` is not special React syntax -- it's an entirely ordinary prop that React populates automatically with whatever you nest between a component's opening and closing JSX tags:\n\n```jsx\nfunction Card({ title, children }) {\n  return (\n    <div className=\"card\">\n      <h3>{title}</h3>\n      <div className=\"card-body\">{children}</div>\n    </div>\n  );\n}\n\n<Card title=\"Profile\">\n  <p>Name: Amara</p>\n  <button>Edit</button>\n</Card>\n```\n\nEverything between `<Card ...>` and `</Card>` -- the paragraph and the button -- becomes `props.children` inside `Card`, without `Card` ever needing to know or care what's actually inside. This is what makes **composition** possible: `Card` only needs to know where to place its content (wrapped in a title and a bordered box); the caller decides what that content actually is, every time, without `Card` needing a separate prop for every possible thing someone might want to put inside it. This same pattern is how layout components, modals, and wrappers of every kind are built in React -- accept `children`, decide how to arrange it, and let the composition happen at the call site."
+          },
+          {
+            "heading": "Callbacks: How a Child Talks Back to Its Parent",
+            "body": "Since data only flows one way -- down -- a child can never reach up and directly change something the parent owns. So how does a child report that something happened (a button was clicked, a value was typed) if it can't touch the parent's data itself? By calling a **function the parent handed it as a prop**. This is the standard, and really the *only*, way a child communicates upward in React:\n\n```jsx\nfunction LikeButton({ isLiked, onToggle }) {\n  return (\n    <button onClick={onToggle}>\n      {isLiked ? \"\\u2665 Liked\" : \"\\u2661 Like\"}\n    </button>\n  );\n}\n\nfunction Post({ post, onLikeToggle }) {\n  return (\n    <article>\n      <p>{post.text}</p>\n      <LikeButton isLiked={post.liked} onToggle={() => onLikeToggle(post.id)} />\n    </article>\n  );\n}\n```\n\n`LikeButton` never touches `post` or any state directly -- it just calls `onToggle` (a function it received) when clicked. The parent (`Post`, or further up, whoever actually owns the `liked` state) decides what `onLikeToggle` does, typically calling a state setter. The naming convention `onX` for a callback prop (`onToggle`, `onLikeToggle`, `onClick`) versus `handleX` for the function that actually implements the response (`handleLikeToggle`) is worth adopting early -- it makes the direction of communication obvious at a glance: `onX` is what a child is given to call; `handleX` is the parent's own implementation of what happens when it's called."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Mutating a Prop vs Deriving a Local Value",
+          "language": "jsx",
+          "code": "// ANTI-PATTERN: reassigning a prop inside the component\nfunction BrokenPriceTag({ amount }) {\n  amount = amount * 1.1; // adding 10% tax -- looks harmless, isn't\n  return <span>${amount.toFixed(2)}</span>;\n}\n\n// CORRECT: derive a new local value, leave the prop untouched\nfunction PriceTag({ amount }) {\n  const amountWithTax = amount * 1.1;\n  return <span>${amountWithTax.toFixed(2)}</span>;\n}",
+          "explanation": "Both components render the same number on screen, so this bug is easy to miss in a quick glance -- the visible output looks identical. The difference shows up the moment `amount` is anything other than a plain number the child fully owns for its own lifetime, e.g. an object mutated in place, or a value the parent re-renders with fresh data over time: BrokenPriceTag has now developed a habit of reassigning an input it was only ever supposed to read, and the moment that input becomes something with real, referenced identity (an object, for instance), the exact same instinct -- 'just update it in place' -- becomes a real, hard-to-trace bug instead of a merely bad habit. PriceTag sidesteps the whole problem: it never touches `amount`, it just computes a new, separate value from it."
+        },
+        {
+          "title": "children Enables Composition Without Extra Props",
+          "language": "jsx",
+          "code": "function Card({ title, children }) {\n  return (\n    <div className=\"card\">\n      <h3>{title}</h3>\n      <div className=\"card-body\">{children}</div>\n    </div>\n  );\n}\n\n<Card title=\"Profile\">\n  <p>Name: Amara</p>\n  <button>Edit</button>\n</Card>\n\n<Card title=\"Empty State\">\n  <p>No results found.</p>\n</Card>",
+          "explanation": "Card is used twice here with completely different nested content, and it required zero changes to Card itself -- no `bodyText` prop, no `showButton` flag, no special-casing. children is populated automatically from whatever JSX is nested inside the tags at each call site, and Card just decides where to place that content (inside `.card-body`) without needing to understand what it actually is. This is the composability payoff: a component built around children can be reused in situations its author never specifically anticipated."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "If a child component needs to update something, it should just directly change the prop value it was given, the way you'd update a local variable.",
+          "clarification": "Mutating a prop doesn't propagate anywhere and doesn't trigger a re-render -- React only reacts to a state setter being called, or a parent passing genuinely new props down after its own re-render. The correct pattern is the reverse: the parent owns the data (usually as state) and passes the child a callback prop; the child calls that callback to report what happened, and the parent -- the actual owner -- decides how to update its own state in response. The new value then flows back down to the child as a fresh prop, completing the loop without the child ever touching the original data itself."
+        },
+        {
+          "description": "children is special React syntax you have to specifically opt into, separate from normal props.",
+          "clarification": "children is a completely ordinary prop, populated automatically by React with whatever's nested between a component's JSX tags. You access it exactly like any other prop -- including destructuring it (`function Card({ children })`) -- and you could even pass it explicitly as a named attribute (`<Card children={<p>Hi</p>} />`), though nesting content between tags is the far more common and readable way to supply it. There's no separate mechanism at play; it's just a prop with a reserved name and automatic population."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "react-props-ex1",
+          "type": "predictOutput",
+          "prompt": "What does each of these three calls log to the console?",
+          "code": "function greet({ name = \"Guest\" }) {\n  return `Hi, ${name}!`;\n}\n\nconsole.log(greet({}));\nconsole.log(greet({ name: null }));\nconsole.log(greet({ name: undefined }));",
+          "hints": [
+            "The default value `= \"Guest\"` is JavaScript's ordinary default-parameter syntax, not something React-specific -- ask what JS rule actually triggers it.",
+            "Does the default trigger for any falsy value, or specifically for one particular value?",
+            "null and undefined are both 'nothing-ish' in everyday conversation, but JavaScript's default-parameter mechanism treats them differently. Which one actually counts as 'not passed'?"
+          ],
+          "expectedAnswer": "\"Hi, Guest!\", then \"Hi, null!\", then \"Hi, Guest!\". The default only applies when the value is exactly undefined -- an explicit null is used as-is (interpolated into the template string as the text \"null\"), while an explicit undefined (or omitting the key entirely) does trigger the default.",
+          "solutionExplanation": "`greet({})` doesn't include a `name` key at all, so destructuring sees `name` as `undefined`, which is precisely the condition JavaScript's default-parameter syntax checks for -- so `name` becomes \"Guest\", producing \"Hi, Guest!\". `greet({ name: null })` explicitly supplies `null` as the value; `null` is not `undefined`, so the default is never consulted, and `name` stays `null` -- template-string interpolation converts that to the literal text \"null\", producing \"Hi, null!\". `greet({ name: undefined })` explicitly supplies `undefined`, which is exactly what the default-parameter check looks for, so it behaves identically to the first case: \"Hi, Guest!\". The general lesson: a prop default is not a stand-in for 'any falsy or empty-ish value' -- it is specifically a stand-in for 'this key is undefined,' which is worth remembering whenever a prop might legitimately be `null`, `0`, or `\"\"` on purpose."
+        },
+        {
+          "id": "react-props-ex2",
+          "type": "debugging",
+          "prompt": "Clicking \"Apply 10% off\" is supposed to reduce the shown price by 10%, but nothing changes on screen (assume React only re-renders a component when its own state or props change, and this component receives no new props between clicks). Find the bug and describe a fix.",
+          "code": "function ShoppingCartItem({ item }) {\n  function applyDiscount() {\n    item.price = item.price * 0.9;\n  }\n\n  return (\n    <div>\n      <span>{item.name}: ${item.price.toFixed(2)}</span>\n      <button onClick={applyDiscount}>Apply 10% off</button>\n    </div>\n  );\n}",
+          "hints": [
+            "item is a prop -- specifically, an object. What's different about mutating a field on an object prop versus reassigning a primitive prop like a number or string?",
+            "item.price = ... does genuinely change the real object in memory, since objects are mutated in place -- so is the data actually wrong, or is it something else that's not happening?",
+            "Does calling applyDiscount tell React, in any way, that it should re-run ShoppingCartItem and produce fresh JSX?"
+          ],
+          "solutionCode": "function ShoppingCartItem({ item, onApplyDiscount }) {\n  return (\n    <div>\n      <span>{item.name}: ${item.price.toFixed(2)}</span>\n      <button onClick={() => onApplyDiscount(item.id)}>Apply 10% off</button>\n    </div>\n  );\n}\n\n// The parent owns the cart data and is the only one allowed to change it:\nfunction ShoppingCart({ items, onApplyDiscount }) {\n  return (\n    <div>\n      {items.map((item) => (\n        <ShoppingCartItem key={item.id} item={item} onApplyDiscount={onApplyDiscount} />\n      ))}\n    </div>\n  );\n}",
+          "solutionExplanation": "item is an object, so `item.price = item.price * 0.9` is a real, in-place mutation of the parent's own data -- unlike reassigning a primitive parameter, this doesn't just change a local copy, it actually corrupts the shared object out from under whoever else holds a reference to it. But mutating it this way never goes through React at all: no state setter was called, so nothing schedules a re-render, and ShoppingCartItem keeps displaying whatever it last rendered, which is now silently out of sync with the real (mutated) price sitting in memory. The fix removes the mutation entirely: the child calls a callback prop (`onApplyDiscount`) that the parent supplies, and the parent -- the actual owner of the cart data -- applies the discount through its own state setter (not shown here, but typically something like `setItems(items.map(i => i.id === id ? { ...i, price: i.price * 0.9 } : i))`), which correctly triggers a re-render with the new price flowing back down as a fresh prop."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "react-props-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "A child component needs to notify its parent that the user clicked a \"Delete\" button, so the parent can remove that item from its list. What is the standard React way to do this?",
+          "options": [
+            "The child directly sets props.onDelete = true, and the parent checks that prop on its next render.",
+            "The child imports the parent's state setter function directly and calls it.",
+            "The parent passes a callback function down as a prop (e.g. onDelete), and the child calls that function when the button is clicked.",
+            "The child mutates a shared global variable that the parent happens to also read."
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "Since data only flows one way in React -- parent to child -- a child can never reach up and directly modify something the parent owns. The standard mechanism is for the parent to pass a function as a prop; the child simply calls that function (typically from an event handler) to report that something happened, and the parent decides what to do about it, usually by updating its own state. Option A describes mutating a prop, which doesn't propagate anywhere and triggers no re-render. Option B isn't how components are structured -- a child doesn't import or directly invoke a parent's internal state setter; it only ever receives what the parent explicitly hands it as a prop. Option D describes an ad hoc global-mutation pattern that defeats React's data-flow model and its ability to know when to re-render."
+        }
+      ]
+    },
+    {
+      "id": "react-state",
+      "title": "State",
+      "description": "State is data a component owns itself, can change over its lifetime, and -- unlike a prop or a plain local variable -- persists across re-renders and must be updated through a setter so React knows to re-render.",
+      "moduleId": "react-core",
+      "topicId": "react-core",
+      "difficulty": "beginner",
+      "estimatedMinutes": 25,
+      "prerequisites": ["react-components-jsx", "react-props"],
+      "learningObjectives": [
+        "Explain how state differs from props: who owns it, and what triggers it to change.",
+        "Explain why directly mutating a state value (e.g. state.value = x) does not cause a re-render.",
+        "Explain, in terms of what React can and can't observe, why a setter function is required.",
+        "Predict whether a given value persists across re-renders based on whether it's state or a plain local variable.",
+        "Apply the principle of state colocation to decide where a piece of state should live."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "State vs Props: Who Owns What",
+            "body": "Props and state are both just data a component has access to while rendering, but they differ in one crucial way: **who owns them, and who's allowed to change them.** A prop is external input, owned by the parent -- the component receiving it only ever reads it (as the previous concept covered). **State** is the opposite: it's data the component owns itself, can change over the course of its lifetime in response to things like user interaction, and -- critically -- changing it is what causes the component to re-render with new output.\n\nIn a function component, state is introduced with the `useState` hook (covered in full depth later in this course; here you only need the basic shape):\n\n```jsx\nfunction Counter() {\n  const [count, setCount] = useState(0);\n  return <button onClick={() => setCount(count + 1)}>Clicked {count} times</button>;\n}\n```\n\n`useState(0)` returns a pair: the current value (`count`) and a function to update it (`setCount`). Calling `setCount(...)` does two things at once: it stores the new value for this component instance, and it tells React to re-render this component so its output reflects that new value. Nothing about props works this way -- a prop only ever changes because the *parent* re-rendered and passed a new value down; the child has no setter for its own props at all."
+          },
+          {
+            "heading": "Why Direct Mutation Doesn't Trigger a Re-render",
+            "body": "The single most important fact about state in React: **writing directly to a state value -- `state.value = x`, or mutating an object/array stored in state -- does not cause a re-render.** You must call the setter function React gave you.\n\nThe reason is worth understanding rather than memorizing. JavaScript has no built-in, general-purpose way to 'watch' a plain variable or an object's property and be notified the instant it changes -- there's no ambient mechanism for React to sit there observing every value in your program for mutations. A React function component is, at its core, just a function that gets called again to produce new output; React decides *when* to call it again based on a small, deliberate set of triggers -- state setters being called, or a parent re-rendering and passing new props. If you mutate a piece of state directly, the underlying value may well change in memory (if it's an object, this is a real, persistent mutation) -- but you never went through one of the triggers React actually watches for, so nothing tells React 'hey, call this component's function again.' The screen simply keeps showing whatever it last rendered, now silently out of sync with the actual data sitting in memory.\n\nCalling the setter is not a formality -- it *is* the mechanism. `setCount(newValue)` is simultaneously 'store this as the current value' and 'please schedule a re-render.' There is no way to get the second half of that without the first."
+          },
+          {
+            "heading": "Mutating an Object in State: The Same Bug, More Deceptive",
+            "body": "This gets more deceptive with objects and arrays, because mutating one of those really does change the underlying data -- it's just that React still never finds out:\n\n```jsx\nfunction ProfileForm() {\n  const [user, setUser] = useState({ name: \"Amara\", age: 29 });\n\n  function haveBirthday() {\n    user.age = user.age + 1; // mutates the object in place -- doesn't work\n    console.log(user.age);   // logs the new age just fine!\n  }\n\n  return (\n    <div>\n      <p>{user.name} is {user.age}</p>\n      <button onClick={haveBirthday}>Happy birthday</button>\n    </div>\n  );\n}\n```\n\n`user.age = user.age + 1` genuinely mutates the object React is holding in state -- `console.log(user.age)` proves the new value really exists. But React doesn't inspect the internals of whatever value it's storing to detect that something inside it changed; it only reacts to `setUser` being called. So the component never re-renders, and the paragraph keeps showing the old age indefinitely, even though the actual object backing it has already changed. The fix is to never mutate the existing object, and instead give `setUser` a brand new one: `setUser({ ...user, age: user.age + 1 })`. This both updates the stored value and, because it's an actual call to the setter, correctly triggers a re-render."
+          },
+          {
+            "heading": "State Persists Across Renders -- a Local Variable Doesn't",
+            "body": "A subtlety worth making explicit: state is genuinely different from a plain variable declared inside the component's function body, in a way that has nothing to do with mutation. Every render calls the component function again from scratch, which means any `let` or `const` declared directly in that function body is recreated, from its initial value, on every single render. State is not -- React stores it separately, associated with this specific component instance, outside of any one call to the function. Calling `useState(0)` again on the fifth render does not reset the value back to `0`; the `0` argument is only ever used on the very first render for that instance. Every render after that, `useState` just hands back whatever was most recently set. This is precisely why state needs a hook at all, rather than just being an ordinary variable -- an ordinary variable cannot survive the fact that the whole function reruns from the top every time."
+          },
+          {
+            "heading": "State Colocation: Keep State Close to Where It's Used",
+            "body": "A practical design principle follows directly from 'state is owned by whichever component holds it': default to placing a piece of state in the lowest, most specific component that actually needs it, not higher up 'just in case.' If only one component reads and updates a value, that value should live in that component, full stop -- there's no benefit to hoisting it to a parent or grandparent ahead of time.\n\nThe exception is when two or more sibling components genuinely need to read or coordinate around the *same* value -- for example, a search box and a results list that both depend on the current query text. In that case, the state has to move up to the nearest common ancestor of both siblings (a technique usually called **lifting state up**, covered as its own concept later), since neither sibling can hold state the other one also needs to see. But that move should be a deliberate response to an actual sharing requirement, not a default habit -- state kept unnecessarily high in the tree tends to cause more of the tree to re-render than needed, and forces prop-drilling a value down through components that don't otherwise care about it. Start local; lift only when you're forced to."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "A Plain Local Variable vs Real State",
+          "language": "jsx",
+          "code": "function BrokenCounter() {\n  let count = 0;\n\n  function handleClick() {\n    count = count + 1;\n    console.log(count);\n  }\n\n  return <button onClick={handleClick}>Clicked {count} times</button>;\n}\n\nfunction Counter() {\n  const [count, setCount] = useState(0);\n\n  function handleClick() {\n    setCount(count + 1);\n  }\n\n  return <button onClick={handleClick}>Clicked {count} times</button>;\n}",
+          "explanation": "In BrokenCounter, `count` is a plain local variable, recreated at `let count = 0` every time the function runs. Clicking the button does increment it (console.log proves it), but nothing ever calls BrokenCounter again, so that incremented value is never seen -- the button stays frozen at \"Clicked 0 times\" forever, and even if something else caused a re-render, `let count = 0` would just reset it back to 0 again, since that line runs fresh every call. Counter instead asks React to own and persist this value via useState: `count` survives across renders (tied to this component instance, not to any one function call), and `setCount(...)` both updates the stored value and schedules the re-render that actually makes the new count visible."
+        },
+        {
+          "title": "Mutating Object State Silently Fails",
+          "language": "jsx",
+          "code": "function ProfileForm() {\n  const [user, setUser] = useState({ name: \"Amara\", age: 29 });\n\n  function haveBirthdayBroken() {\n    user.age = user.age + 1;      // mutates the stored object -- no re-render\n  }\n\n  function haveBirthdayFixed() {\n    setUser({ ...user, age: user.age + 1 }); // new object -- triggers re-render\n  }\n\n  return <p>{user.name} is {user.age}</p>;\n}",
+          "explanation": "haveBirthdayBroken really does change `user.age` in memory (objects are mutated in place), but since it never calls `setUser`, React never learns anything happened, so the paragraph keeps showing the old age. haveBirthdayFixed builds a brand-new object with the spread operator and passes that to `setUser` -- this is both an actual call to the setter (which is what schedules the re-render) and a fresh reference, which is exactly what state updates for objects/arrays are supposed to look like: never mutate the existing value, always produce a new one and hand it to the setter."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "If I mutate an object or array stored in state, React should notice, since the underlying data really did change.",
+          "clarification": "React only schedules a re-render when the setter function returned by useState is actually called -- it never inspects the internals of the value it's holding to detect that something inside changed. Mutating an object in place is a real change to that object in memory, but it bypasses the one mechanism (the setter call) React actually watches for. The fix is always to call the setter with a new value (e.g. a copied-and-modified object or array), never to mutate the existing one directly."
+        },
+        {
+          "description": "State gets reset every time the component re-renders, the same way a plain local variable declared in the function body would.",
+          "clarification": "This is backwards. A plain local variable IS reset every render, because the entire function body runs again from scratch. State is specifically designed not to be -- React stores it outside of any single function call, tied to that component instance, and calling useState(initialValue) on a later render ignores initialValue entirely, simply returning whatever was most recently set. State only resets if the component instance itself unmounts and a fresh one mounts later; a render on its own never resets it."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "react-state-ex1",
+          "type": "predictOutput",
+          "prompt": "The button below is clicked three times. What text does the page actually display after all three clicks, and what does each of the three console.log lines print?",
+          "code": "function Counters() {\n  let plainCount = 0;\n  const [stateCount, setStateCount] = useState(0);\n\n  function handleClick() {\n    plainCount = plainCount + 1;\n    setStateCount(stateCount + 1);\n    console.log(\"plainCount:\", plainCount, \"| stateCount (this render):\", stateCount);\n  }\n\n  return (\n    <div>\n      <p>Plain: {plainCount} | State: {stateCount}</p>\n      <button onClick={handleClick}>Click</button>\n    </div>\n  );\n}",
+          "hints": [
+            "`let plainCount = 0;` sits at the very top of the component's function body. Think about exactly when that line of code actually runs.",
+            "Every re-render calls Counters from the top again -- what happens to a `let` declaration at the top of a function every single time that function runs?",
+            "stateCount is different: useState only uses its argument (0) on the very first render for this component instance, and otherwise returns whatever was most recently set via setStateCount."
+          ],
+          "expectedAnswer": "The displayed text always shows \"Plain: 0 | State: 3\" after three clicks -- Plain never advances past 0, no matter how many clicks happen, while State correctly climbs to 3. All three console.log lines print \"plainCount: 1\" (never a running total), paired with stateCount as of the render each click's handleClick closed over: 0, then 1, then 2.",
+          "solutionExplanation": "plainCount is a plain local variable re-declared at `let plainCount = 0` every time Counters runs -- and Counters runs again on every re-render. So no matter how many times a given click's handleClick increments its own render's plainCount to 1, that increment never survives to the next render, because the very first line of the next render's function call resets it back to 0 again before anything is displayed. That's why the JSX always shows \"Plain: 0\", forever. stateCount behaves completely differently: React persists it across renders, so each click's setStateCount(stateCount + 1) genuinely advances the stored value by one, and the displayed State climbs 0, 1, 2, 3 across the three clicks. The console.log lines reveal the closure mechanics underneath: each click's handleClick function was created during a specific render and closes over that render's plainCount (always 0 before the increment, so always 1 after it, within that one call) and that render's stateCount (0 on the first click, 1 on the second, 2 on the third -- one step behind the value that click's setStateCount is busy updating, since the JSX hasn't re-rendered yet at the moment console.log runs inside the same handler call)."
+        },
+        {
+          "id": "react-state-ex2",
+          "type": "debugging",
+          "prompt": "Clicking a to-do item is supposed to toggle its strikethrough (done) styling, but clicking any item does nothing -- no re-render happens at all, and no console error appears. Find the bug and fix it.",
+          "code": "function TodoItem({ todo, todos, setTodos }) {\n  function toggleDone() {\n    todo.done = !todo.done;\n    setTodos(todos);\n  }\n\n  return (\n    <li onClick={toggleDone} style={{ textDecoration: todo.done ? \"line-through\" : \"none\" }}>\n      {todo.text}\n    </li>\n  );\n}",
+          "hints": [
+            "setTodos IS being called here -- so why might React still decide not to re-render? Think about what value is actually being passed to it.",
+            "`todos` is the exact same array reference before and after `todo.done = !todo.done` runs -- mutating an item inside an array doesn't change the array's own identity.",
+            "React compares the new state value to the old one to decide whether anything actually changed; what does that comparison look like when you pass back the very same reference you started with?"
+          ],
+          "solutionCode": "function TodoItem({ todo, todos, setTodos }) {\n  function toggleDone() {\n    setTodos(\n      todos.map((t) => (t.id === todo.id ? { ...t, done: !t.done } : t))\n    );\n  }\n\n  return (\n    <li onClick={toggleDone} style={{ textDecoration: todo.done ? \"line-through\" : \"none\" }}>\n      {todo.text}\n    </li>\n  );\n}",
+          "solutionExplanation": "toggleDone mutates `todo.done` directly (a real, in-place mutation of an object inside the array) and then calls `setTodos(todos)` -- but `todos` is still the exact same array reference it was before the mutation; only its contents changed, not its identity. React uses a reference comparison to decide whether state genuinely changed, and since the array passed to setTodos is literally the same object it already had stored, React concludes nothing changed and skips the re-render entirely -- so nothing on screen updates, even though the underlying data was in fact mutated. The fix avoids mutating anything: `.map()` builds a brand-new array, and for the matching to-do, a brand-new object (via `{ ...t, done: !t.done }`) rather than a mutated one. That new array is a genuinely different reference from the old one, so React's comparison correctly detects a change and re-renders -- and none of the original data was touched in place along the way, which also protects any other code elsewhere that might be holding a reference to the same objects."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "react-state-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "A component has `const [items, setItems] = useState([1, 2, 3]);` and a click handler that calls `items.push(4);`. Why doesn't the UI update to show the new item?",
+          "options": [
+            "Because push() throws an error inside React components, so the update never actually happens.",
+            "Because React only schedules a re-render when its setter function (here, setItems) is called; mutating the array in place changes the underlying data but never signals React that anything happened, so no re-render is scheduled.",
+            "Because arrays can't be stored in state at all -- only primitive values like numbers and strings can.",
+            "Because push() is asynchronous, so the update simply hasn't finished by the time the component re-renders."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "push() runs fine and does mutate the array in memory -- the bug isn't that the data failed to change, it's that React never finds out. React's only trigger for scheduling a re-render is a call to the state setter function; it doesn't watch the contents of whatever value it's holding for changes. Since setItems was never called, nothing tells React to re-render, so the component keeps showing whatever it last rendered, now silently out of sync with the mutated array. Option A is false -- push() works fine on a plain array, React or not. Option C is false -- arrays and objects are extremely common things to store in state; the issue here is mutation, not the type of value. Option D misdescribes push(), which is synchronous and completes immediately; the real issue is that no setter call ever occurred to trigger a re-render in the first place."
+        }
+      ]
+    },
+    {
+      "id": "react-events-and-forms",
+      "title": "Events and Forms",
+      "description": "React normalizes DOM events into a consistent synthetic event system, and forms are typically built as controlled inputs where state drives what the input displays and every keystroke updates that state.",
+      "moduleId": "react-core",
+      "topicId": "react-core",
+      "difficulty": "beginner",
+      "estimatedMinutes": 25,
+      "prerequisites": ["react-state"],
+      "learningObjectives": [
+        "Explain what React's synthetic event system is and why it exists, at a practical level.",
+        "Build a controlled input where an input's displayed value comes from state.",
+        "Explain what makes an input 'uncontrolled' and diagnose the classic 'my input won't let me type' bug.",
+        "Explain why e.preventDefault() is almost always needed inside a React onSubmit handler.",
+        "Predict the consequence of forgetting preventDefault() on a form submission."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "React's Synthetic Event System",
+            "body": "When you write `onClick={handleClick}` or `onChange={handleChange}` in JSX, you're using React's **synthetic event system** -- React wraps the browser's native event objects in its own consistent wrapper before handing them to your handler. You don't need to understand the internals deeply to use React productively; the practical takeaway is simply that event props like `onClick`, `onChange`, `onSubmit`, and friends exist for essentially every interaction you'd expect, they're named in camelCase (matching the general JSX attribute convention), and the event object your handler receives (`e` or `event`, by convention, as the first argument) behaves predictably across browsers -- you don't have to write different code to account for inconsistent native event behavior the way you sometimes would with raw `addEventListener` calls in plain JavaScript. React attaches and cleans up the actual underlying listeners for you; you never call `addEventListener` yourself for ordinary interactions like clicks or input changes."
+          },
+          {
+            "heading": "Controlled Inputs: State Drives the DOM, Not the Other Way Around",
+            "body": "The standard React pattern for a text input is to make it **controlled**: the input's displayed value comes from state, and every keystroke updates that state via `onChange`.\n\n```jsx\nfunction NameField() {\n  const [name, setName] = useState(\"\");\n\n  return (\n    <input\n      value={name}\n      onChange={(e) => setName(e.target.value)}\n      placeholder=\"Enter your name\"\n    />\n  );\n}\n```\n\nTrace the actual sequence on every keystroke: the user presses a key, the browser fires a native input event, React's `onChange` handler runs, you read the freshly typed value off `e.target.value`, you call `setName` with it, the component re-renders, and the input's `value` prop is set again -- this time to the value you just stored. Visually this feels instantaneous and invisible, but it's a real round trip every single keystroke, not the DOM independently tracking what was typed. The payoff for this indirection: at any given instant, the input's displayed content genuinely *is* your application state -- you can validate it, transform it, mirror it elsewhere in the UI, or disable a submit button based on it, all by reading that one piece of state, with no separate step required to 'ask the DOM what it currently contains.'"
+          },
+          {
+            "heading": "Controlled vs Uncontrolled: The Missing value Prop",
+            "body": "An input becomes **uncontrolled** the moment it's rendered without its `value` prop bound to state -- for example, `<input onChange={handleChange} />` with no `value=` at all. In that case, the DOM itself becomes the source of truth for what's currently typed, not React; this is a legitimate, if less common, escape hatch (typically combined with `defaultValue` and a ref, useful for very large forms where controlling every single keystroke would be wasteful).\n\nThe far more common situation is doing this *by accident*: writing `<input value={text} />` with no `onChange` handler at all. This produces a React warning about providing a value without an onChange handler, and, more visibly, an input the user literally cannot type into. Here's why: on every keystroke, the DOM tries to update its own display, but React immediately re-renders (or, on the very next render triggered by anything else) and forces the `value` prop back to whatever `text` still is -- which never changed, since nothing ever called a setter. The input snaps back to its old contents on every keypress. This exact symptom -- 'my input won't let me type anything' -- is one of the most common beginner bugs in React, and it almost always traces back to a `value` prop with no matching `onChange`."
+          },
+          {
+            "heading": "Handling Form Submission: onSubmit and preventDefault",
+            "body": "Forms are wired up with `<form onSubmit={handleSubmit}>` rather than listening for a click on the submit button directly, since `onSubmit` also fires correctly for other ways of submitting a form (like pressing Enter inside a text field).\n\nThe detail that trips up nearly everyone the first time: a browser's *native* behavior for submitting a form is to perform an actual page navigation -- reloading the current page or navigating to whatever URL the form's `action` points to (or the current page, by default). In a React single-page app, this is almost never what you want, since React is already handling the form's data entirely in state and doesn't need (or want) the browser to reload anything. So the very first line of a React `onSubmit` handler is almost always `e.preventDefault()`:\n\n```jsx\nfunction handleSubmit(e) {\n  e.preventDefault();\n  console.log(\"Submitting:\", email, password);\n}\n```\n\nForgetting it doesn't throw an error or crash anything -- it silently lets the browser's default navigation proceed, which, for a same-page form, typically means a full page reload. That wipes out every piece of React state your app was holding and looks, from the user's perspective, like the page 'flashed' and reset for no clear reason, which is a genuinely confusing symptom to debug if you don't already know to expect it."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "A Controlled Text Input",
+          "language": "jsx",
+          "code": "function NameField() {\n  const [name, setName] = useState(\"\");\n\n  return (\n    <div>\n      <input\n        value={name}\n        onChange={(e) => setName(e.target.value)}\n        placeholder=\"Enter your name\"\n      />\n      <p>You typed: {name}</p>\n    </div>\n  );\n}",
+          "explanation": "At any instant, the input's displayed text and the `<p>` below it both reflect the exact same source of truth: the `name` state variable. Typing a character fires onChange, which reads `e.target.value` (the input's new content, as the browser sees it) and stores it via setName, triggering a re-render where the input's value prop -- and the paragraph -- both reflect the updated state. Nothing here reads the DOM's current value independently; React's state is the single source of truth the whole time."
+        },
+        {
+          "title": "A Form With preventDefault",
+          "language": "jsx",
+          "code": "function LoginForm() {\n  const [email, setEmail] = useState(\"\");\n  const [password, setPassword] = useState(\"\");\n\n  function handleSubmit(e) {\n    e.preventDefault();\n    console.log(\"Logging in with\", email, password);\n  }\n\n  return (\n    <form onSubmit={handleSubmit}>\n      <input value={email} onChange={(e) => setEmail(e.target.value)} />\n      <input type=\"password\" value={password} onChange={(e) => setPassword(e.target.value)} />\n      <button type=\"submit\">Log In</button>\n    </form>\n  );\n}",
+          "explanation": "Both fields are controlled inputs feeding their own state. handleSubmit's very first line, e.preventDefault(), stops the browser's default full-page navigation that would otherwise occur the instant the form is submitted (whether by clicking the button or pressing Enter in a field) -- without it, the console.log line would likely never even get a chance to matter, since the page would already be reloading."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "You need to call addEventListener manually inside a component to listen for clicks or input changes, the same way you would in plain JavaScript.",
+          "clarification": "JSX event props like onClick and onChange already declaratively wire this up -- React attaches (and later cleans up) the real underlying event listeners for you behind the scenes. You just supply the handler function as a prop; there's no manual addEventListener/removeEventListener bookkeeping needed for ordinary interactions handled this way."
+        },
+        {
+          "description": "An input with its value prop bound to state but no onChange handler is a perfectly valid way to make a kind of 'read-only-looking' controlled input.",
+          "clarification": "This produces a React warning (providing a value prop without an onChange handler) and, in practice, an input the user cannot type into at all: every keystroke's visual update gets immediately overwritten back to the unchanged state value on the next render, since nothing ever called a setter to update it. If you actually want a read-only field, the correct tool is the `readOnly` attribute (`<input value={text} readOnly />`), not simply omitting onChange."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "react-events-and-forms-ex1",
+          "type": "predictOutput",
+          "prompt": "What happens when a user clicks into this input and tries to type the word \"react\"?",
+          "code": "function SearchBox() {\n  const [query, setQuery] = useState(\"\");\n\n  return <input value={query} placeholder=\"Search...\" />;\n}",
+          "hints": [
+            "The input's value prop is bound to query state -- but is there anything here that ever changes query?",
+            "On every keystroke, the browser tries to update what the input visually shows -- what does React do on the very next render regarding the value prop?",
+            "Compare to a controlled input that DOES have an onChange handler wired to a setter -- what's the one piece missing here?"
+          ],
+          "expectedAnswer": "Nothing appears to get typed -- the input visually rejects every keystroke and stays empty (query never leaves its initial value of \"\"), and React logs a console warning about providing a value prop without an onChange handler.",
+          "solutionExplanation": "value={query} makes this a controlled input, which means React (not the DOM) is the source of truth for what it displays -- but with no onChange handler, nothing ever calls setQuery, so query stays \"\" forever. Every keystroke, the browser briefly tries to show the typed character, but on the next render React re-asserts value={query}, which is still \"\", snapping the input back to empty. The net visual effect is an input that appears to reject all typing. This is the single most common cause of the beginner complaint 'my input won't let me type' -- a value prop bound to state with no matching onChange to actually update that state."
+        },
+        {
+          "id": "react-events-and-forms-ex2",
+          "type": "debugging",
+          "prompt": "Submitting this feedback form is supposed to just log the message to the console, but instead the whole page visibly reloads/flashes and the typed message disappears. Find the bug and fix it.",
+          "code": "function FeedbackForm() {\n  const [message, setMessage] = useState(\"\");\n\n  function handleSubmit() {\n    console.log(\"Submitting:\", message);\n  }\n\n  return (\n    <form onSubmit={handleSubmit}>\n      <textarea value={message} onChange={(e) => setMessage(e.target.value)} />\n      <button type=\"submit\">Send</button>\n    </form>\n  );\n}",
+          "hints": [
+            "handleSubmit doesn't accept any parameter at all -- what does React normally pass as the first argument to an onSubmit handler, and what method does that object have?",
+            "What is a browser's default, built-in behavior when a <form> is submitted, if nothing tells it to do otherwise?",
+            "Somewhere near the very top of handleSubmit, one specific method call is missing."
+          ],
+          "solutionCode": "function FeedbackForm() {\n  const [message, setMessage] = useState(\"\");\n\n  function handleSubmit(e) {\n    e.preventDefault();\n    console.log(\"Submitting:\", message);\n  }\n\n  return (\n    <form onSubmit={handleSubmit}>\n      <textarea value={message} onChange={(e) => setMessage(e.target.value)} />\n      <button type=\"submit\">Send</button>\n    </form>\n  );\n}",
+          "solutionExplanation": "handleSubmit never receives (or calls preventDefault on) the submit event, so nothing stops the browser's native default behavior for a form submission, which is to navigate/reload the page. That reload happens essentially immediately, wiping out the component's state -- including the typed message -- and looking, from the user's point of view, like the page flashed and reset for no reason; console.log may or may not even get a chance to run before the navigation takes over. The fix is to accept the event object as a parameter and call e.preventDefault() as the very first line, which stops the native navigation and leaves handleSubmit fully in control of what happens next."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "react-events-and-forms-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "Why does a React onSubmit handler almost always start with e.preventDefault()?",
+          "options": [
+            "Because JSX forms don't work at all unless preventDefault() is called first.",
+            "Because a browser's default behavior for a form submission is to navigate the page, which would reload the app and wipe out React's state -- preventDefault() stops that default navigation so the handler's own logic can run instead.",
+            "Because preventDefault() is required to make the form's onChange handlers fire correctly.",
+            "Because React batches state updates, and preventDefault() is what triggers that batching to actually apply."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "A <form> submission's native browser behavior is to perform a page navigation (reloading the current page, by default). In a React app, that navigation would tear down the whole component tree and its state, which is essentially never what you want, since the app is meant to handle the submission entirely in JavaScript. preventDefault() stops that native navigation so your handler's own logic -- reading state, validating it, sending a request -- runs uninterrupted instead. Option A is false: forms render and work fine without it; you just also get an unwanted page navigation. Option C confuses submission with the separate onChange handlers on individual inputs, which fire regardless. Option D misattributes batching, which is an unrelated React scheduling behavior, not something preventDefault controls."
+        }
+      ]
+    },
+    {
+      "id": "react-conditional-rendering-and-lists",
+      "title": "Conditional Rendering and Lists",
+      "description": "React has a few common idioms for rendering something conditionally or rendering a collection with .map(), and both come with real, easy-to-hit pitfalls -- a falsy-but-non-boolean short-circuit value rendering as visible text, and unstable keys causing state to attach to the wrong list item.",
+      "moduleId": "react-core",
+      "topicId": "react-core",
+      "difficulty": "beginner",
+      "estimatedMinutes": 25,
+      "prerequisites": ["react-state"],
+      "learningObjectives": [
+        "Use ternaries, && short-circuiting, and early returns to conditionally render JSX.",
+        "Predict when a && expression renders a stray, visible value instead of nothing.",
+        "Render a list of components from an array using .map(), with a stable key on each item.",
+        "Explain, in terms of reconciliation, why React needs keys to reliably update a list.",
+        "Explain concretely what breaks when array index is used as a key for a list that can reorder or have items inserted/removed."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "Common Conditional Rendering Patterns",
+            "body": "React has no special conditional-rendering syntax -- you're just choosing, with ordinary JavaScript, what JSX expression to produce. Three patterns cover almost every case: a **ternary** for genuine either/or choices (`isLoggedIn ? <Dashboard /> : <LoginForm />`); **&& short-circuiting** for 'render this, or render nothing' (`isNewUser && <WelcomeBanner />`); and an **early return** when an entire component should bail out to something else altogether, most commonly for loading or error states (`if (loading) return <Spinner />;` before the component's main return statement). Early return is often the clearest of the three once a component has more than one condition to handle, since stacking several ternaries or &&s inside one big JSX return can get hard to read quickly."
+            },
+          {
+            "heading": "The 0 && Gotcha",
+            "body": "`&&` short-circuits by returning whichever operand it actually lands on -- not necessarily a boolean. This becomes a real, subtle bug the moment the left-hand side can be `0`:\n\n```jsx\nfunction CartBadge({ itemCount }) {\n  return <div>{itemCount && <span className=\"badge\">{itemCount}</span>}</div>;\n}\n```\n\nWhen `itemCount` is `0`, `0 && <span>...</span>` evaluates to `0` itself (that's what `&&` returns when its left side is falsy -- the falsy value, not `false`). React renders numbers as visible text content just like strings, so this produces a literal, visible \"0\" on the page -- exactly in the situation where you wanted nothing to show at all. `false`, `null`, and `undefined` all render as nothing, but `0` (and, similarly, `NaN`) render as themselves. The fix is to make sure the left-hand side is an actual boolean: `itemCount > 0 && <span>...</span>`, or `Boolean(itemCount) && ...`. This is worth checking any time a `&&` condition's left side could plausibly be a number rather than something already boolean."
+          },
+          {
+            "heading": "Rendering Lists with .map()",
+            "body": "To render one component per item in an array, `.map()` each item into a JSX element and let JSX render the resulting array directly -- React accepts an array of elements as a valid child just as readily as a single element:\n\n```jsx\nfunction TodoList({ todos }) {\n  return (\n    <ul>\n      {todos.map((todo) => (\n        <li key={todo.id}>{todo.text}</li>\n      ))}\n    </ul>\n  );\n}\n```\n\nThis is the standard way to turn any array of data into UI -- no separate 'list rendering' API exists; it's the same `.map()` you'd use for any other array transformation, just returning JSX instead of, say, numbers or strings."
+          },
+          {
+            "heading": "Why Keys Matter: Reconciliation",
+            "body": "Notice the `key={todo.id}` above. **Keys** are how React matches each element in a newly rendered list back to the corresponding element from the *previous* render, in order to decide what to actually do to the real DOM: update an existing node in place, move it, create a brand-new one, or remove one that's gone. Without a stable key (or with duplicate/unstable ones), React has no reliable way to tell 'this is the same logical item, just now in a different position' apart from 'this is a completely new item that happens to look similar' -- and getting that distinction wrong can mean recreating DOM nodes unnecessarily, or worse, quietly reusing a DOM node (and anything tied to it) for a different underlying item than the one it used to represent."
+          },
+          {
+            "heading": "The Index-as-Key Anti-Pattern",
+            "body": "A tempting shortcut is `key={index}` from `.map((item, index) => ...)` -- it's always unique within a single render, so it doesn't cause any warning. But 'unique within one render' is not the actual requirement; a key needs to stay attached to the *same logical item* across renders, even as the list changes, and an index fails that the moment the list can reorder, or have items inserted or removed anywhere but the very end.\n\nConcretely: imagine a to-do list where each `<li>` has an uncontrolled checkbox (`<input type=\"checkbox\" defaultChecked={todo.done} />`) keyed by index. Delete the first to-do, and every remaining to-do shifts up one position. React, seeing `key={0}` still present, assumes the `<li>` now at position 0 is the *same* one that was there before -- so it reuses the exact same DOM node, including whatever checked state the user had actually clicked into that checkbox, rather than the checked state of the to-do that's now conceptually sitting there. The checkbox's visual checked/unchecked state ends up pinned to a *list position*, not to the to-do item it's supposed to represent -- so after a deletion, checkmarks can appear to jump onto the wrong items. Keying by something that uniquely and stably identifies the underlying data itself (`key={todo.id}`) fixes this: React can tell exactly which `<li>` corresponds to which to-do regardless of where it currently sits in the array, so it correctly removes only the one DOM node for the item that's actually gone, and leaves every other row's own node -- and its own state -- attached to the right item."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "The 0 && Gotcha, Rendered",
+          "language": "jsx",
+          "code": "function CartBadge({ itemCount }) {\n  // BUGGY: renders a literal \"0\" when itemCount is 0\n  return <div>{itemCount && <span className=\"badge\">{itemCount}</span>}</div>;\n}\n\nfunction FixedCartBadge({ itemCount }) {\n  // FIXED: the left side of && is now an actual boolean\n  return <div>{itemCount > 0 && <span className=\"badge\">{itemCount}</span>}</div>;\n}",
+          "explanation": "With itemCount = 0, CartBadge's `0 && <span>...</span>` evaluates to 0 (the value && actually landed on), and React renders that number as visible text -- a stray \"0\" shows up on screen exactly when the cart is empty and nothing should be shown. FixedCartBadge instead evaluates `itemCount > 0` first, which produces a real boolean (false, when itemCount is 0); `false && ...` correctly short-circuits to false, and React renders false as nothing at all."
+        },
+        {
+          "title": "Index-as-Key Attaches State to the Wrong Row After a Reorder",
+          "language": "jsx",
+          "code": "// BUGGY: key={index} lets checkbox state 'stick' to a position, not a player\nfunction PlayerList({ players, onSort }) {\n  return (\n    <div>\n      <button onClick={onSort}>Sort alphabetically</button>\n      <ul>\n        {players.map((player, index) => (\n          <li key={index}>\n            {player.name} <input type=\"checkbox\" defaultChecked={player.active} />\n          </li>\n        ))}\n      </ul>\n    </div>\n  );\n}\n\n// FIXED: key={player.id} follows the actual player, not the list position\nfunction FixedPlayerList({ players, onSort }) {\n  return (\n    <div>\n      <button onClick={onSort}>Sort alphabetically</button>\n      <ul>\n        {players.map((player) => (\n          <li key={player.id}>\n            {player.name} <input type=\"checkbox\" defaultChecked={player.active} />\n          </li>\n        ))}\n      </ul>\n    </div>\n  );\n}",
+          "explanation": "In PlayerList, clicking 'Sort alphabetically' reorders the players array but each <li>'s key is still just its position (0, 1, 2...). React sees the same set of keys before and after the sort, so it assumes each <li> at a given position is unchanged and reuses that exact DOM node -- including the checkbox's real, live checked state, which lives in the DOM node itself once the user has clicked it (defaultChecked only sets the *initial* value). The result: a checkbox that was checked for 'Zoe' can end up visually checked for whoever the sort happens to place at that same position afterward. FixedPlayerList keys by player.id instead, so React correctly recognizes each row's true identity across the reorder and moves the right DOM nodes (checkbox state included) along with the right players."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "Using the array index as a key is basically always fine, since .map((item, index) => ...) does give every item a unique key.",
+          "clarification": "Uniqueness within a single render isn't the actual requirement -- a key needs to stay attached to the same logical item across renders, including when the list is reordered or items are inserted/removed anywhere but the end. An index is only 'the same' for an item if that item never changes position, which fails the moment the list can reorder or shrink/grow in the middle. A value drawn from the data itself (an id) stays correct regardless of position."
+        },
+        {
+          "description": "{value && <Component />} is a generally safe way to conditionally render, no matter what value actually is.",
+          "clarification": "It's only safe when value is already a real boolean (or you're comfortable with it being null/undefined, which also render as nothing). If value can be 0 (or an empty string, which is also falsy-but-renders-as-nothing here, so that case is actually fine) but specifically the number 0, && will return that 0 and React will render it as visible text. Comparing to produce an explicit boolean (value > 0, or Boolean(value)) avoids the surprise."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "react-conditional-rendering-and-lists-ex1",
+          "type": "predictOutput",
+          "prompt": "This component is rendered with unreadCount equal to 0. What actually appears on the page?",
+          "code": "function Inbox({ unreadCount }) {\n  return (\n    <div>\n      <h2>Inbox</h2>\n      {unreadCount && <span>({unreadCount} unread)</span>}\n    </div>\n  );\n}",
+          "hints": [
+            "What does the expression `unreadCount && <span>...</span>` actually evaluate to when unreadCount is 0 -- not what you intend it to mean, but what JavaScript's && operator literally returns.",
+            "React renders certain 'nothing' values (false, null, undefined) as nothing at all on screen. Does it treat every falsy value the exact same way?",
+            "Try substituting 0 directly into the && expression by hand and see what value comes out the other side."
+          ],
+          "expectedAnswer": "The page shows the \"Inbox\" heading followed by a stray, visible \"0\" -- not nothing. Because unreadCount is 0, `unreadCount && <span>...</span>` evaluates to 0 itself (not false), and React renders that literal 0 as text.",
+          "solutionExplanation": "&& returns whichever operand it short-circuits on, without converting it to a boolean first. Since unreadCount is 0 (a falsy value), the expression short-circuits immediately and evaluates to 0 -- not to false, and not to nothing. React treats numbers as valid, directly renderable JSX children, exactly like strings, so this 0 gets rendered as visible text right after the Inbox heading, producing a page that reads something like \"Inbox 0\" instead of the intended \"Inbox\" with no unread indicator at all. Rewriting the condition as `unreadCount > 0 && <span>...</span>` avoids this, since a comparison always produces an actual boolean, and `false && ...` correctly renders as nothing."
+        },
+        {
+          "id": "react-conditional-rendering-and-lists-ex2",
+          "type": "debugging",
+          "prompt": "Each player row has its own note field (a local text input). Typing a note next to \"Zoe\", then clicking \"Sort alphabetically\", causes the typed note to visually end up attached to a different player instead of staying with Zoe. Find the bug and fix it.",
+          "code": "function PlayerList({ players, onSort }) {\n  return (\n    <div>\n      <button onClick={onSort}>Sort alphabetically</button>\n      <ul>\n        {players.map((player, index) => (\n          <li key={index}>\n            <PlayerRow player={player} />\n          </li>\n        ))}\n      </ul>\n    </div>\n  );\n}\n\nfunction PlayerRow({ player }) {\n  const [note, setNote] = useState(\"\");\n  return (\n    <span>\n      {player.name} \\u2014 <input value={note} onChange={(e) => setNote(e.target.value)} placeholder=\"note\" />\n    </span>\n  );\n}",
+          "hints": [
+            "PlayerRow owns its own note state. React decides whether to reuse an existing component instance (state included) at a given tree position, or discard it and mount a new one, based on that position's key.",
+            "After the sort, does key={index} still identify 'the row for Zoe,' or does it just identify 'whichever player is now third in the array'?",
+            "What would key={player.id} (or another value drawn from the player's own data) tell React that key={index} can't?"
+          ],
+          "solutionCode": "function PlayerList({ players, onSort }) {\n  return (\n    <div>\n      <button onClick={onSort}>Sort alphabetically</button>\n      <ul>\n        {players.map((player) => (\n          <li key={player.id}>\n            <PlayerRow player={player} />\n          </li>\n        ))}\n      </ul>\n    </div>\n  );\n}\n\nfunction PlayerRow({ player }) {\n  const [note, setNote] = useState(\"\");\n  return (\n    <span>\n      {player.name} \\u2014 <input value={note} onChange={(e) => setNote(e.target.value)} placeholder=\"note\" />\n    </span>\n  );\n}",
+          "solutionExplanation": "key={index} tells React 'the <li> (and the PlayerRow instance inside it) at this position is the same one as before,' which is only true if the array's order never changes. Sorting rearranges the players array, so the player who used to be at, say, position 4 (Zoe) may now be at position 1 -- but React, matching purely on the key (the index), assumes the PlayerRow now at position 1 is unchanged, and reuses that existing component instance and its note state rather than mounting a fresh one for whichever player is actually there now. The note the user typed for Zoe stays attached to a list position, not to Zoe. Switching to key={player.id} fixes it: React can now tell that a given PlayerRow instance genuinely belongs to a specific player regardless of where that player currently sits in the array, so it moves the correct instance (and its note state) along with the correct player during the reorder."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "react-conditional-rendering-and-lists-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "Why does React need a key on each item when rendering a list with .map(), rather than just using each element's position in the array automatically?",
+          "options": [
+            "Keys are purely a performance hint that make rendering marginally faster, but every list works identically correctly without them.",
+            "Keys let React match each element in the new render to the corresponding element from the previous render, so it can correctly decide what to update in place, move, create, or remove -- without a stable key, it can't reliably tell 'the same item, moved' from 'a new item.'",
+            "Keys are required by JSX syntax rules and would cause a build error if omitted, similar to a missing closing tag.",
+            "Keys determine the order elements are displayed on screen, overriding the order of the array itself."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Keys exist to give React a stable identity for each item across renders, which is what makes correct reconciliation possible -- matching 'this item moved from position 2 to position 0' versus 'this is a brand-new item' versus 'this item was removed.' Option A undersells the issue: without stable keys, React can and does make the wrong call about what changed, which can cause real bugs (state or DOM attaching to the wrong item), not just a performance cost. Option C is false -- omitting keys produces a console warning, not a build error, and the list still renders (just with reconciliation correctness at risk). Option D is false -- the array's own order (as produced by .map()) determines display order; keys are about matching identity across renders, not about display sequence."
+        }
+      ]
+    }
+  ]
+}

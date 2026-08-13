@@ -1,0 +1,329 @@
+{
+  "learningPathId": "react",
+  "moduleId": "react-architecture",
+  "title": "React Architecture",
+  "order": 5,
+  "concepts": [
+    {
+      "id": "react-composition-and-lifting-state",
+      "title": "Composition and Lifting State Up",
+      "description": "React favors composing small components together over configuring one giant component, and solves sibling components needing the same data by moving that state up to their closest common parent.",
+      "moduleId": "react-architecture",
+      "topicId": "react-architecture",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 25,
+      "prerequisites": ["react-props", "react-state"],
+      "learningObjectives": [
+        "Contrast a component configured via a growing prop list with one that accepts children, and explain why the latter scales better.",
+        "Recognize when two sibling components need their state lifted to a common parent.",
+        "Lift a piece of duplicated, drifting state up to the closest common ancestor and wire it back down via props.",
+        "Explain the container/presentational split as a useful organizing pattern, not a mandatory rule.",
+        "Explain why only the specific shared piece of state should be lifted, not a component's entire local state."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "Composition Over Configuration",
+            "body": "React's main extensibility model is **composition**: build complex UI by nesting small, focused components inside each other, rather than by making one component configurable enough to handle every case through an ever-growing list of props. The alternative -- **configuration** -- looks tempting at first: give a component a boolean or option for every variation it might need (`showIcon`, `iconType`, `showCloseButton`, `footerText`, ...), and let callers flip the right combination of props. The problem is that this list only ever grows. Every new use case that doesn't fit the existing options becomes a new prop, and the component's internals have to grow an `if`/ternary branch to handle it -- the component becomes a small configuration language you have to learn, and it can never anticipate every combination a caller might eventually want.\n\nComposition sidesteps this by having a component accept **children** (or specific *slot* props for more structured cases) instead of a config object. A `Panel` component that renders `<div className=\"panel\">{children}</div>` doesn't need to know or care what's inside it -- a caller can put an icon, a heading, a button, all three, or something nobody anticipated, without Panel's source ever changing. The component only owns the part it's actually responsible for (in this case, the visual chrome), and the caller retains full control over content by composing arbitrary JSX inside it. This is the same idea as function composition in plain JavaScript -- build complex behavior by combining simple, focused pieces -- applied to UI."
+          },
+          {
+            "heading": "Lifting State Up: When Siblings Need to Agree",
+            "body": "A specific, very common problem composition alone doesn't solve: two **sibling** components (components that don't render each other, but are both rendered by some shared parent) that both need to read or affect the *same* underlying piece of information. If each sibling keeps its own local state for that value, using `useState` inside each one independently, you end up with two separate copies of something that's supposed to represent one shared truth -- and nothing keeps those two copies in sync, because neither sibling has any way to see or react to the other's state. Typing into one doesn't -- and structurally cannot -- update the other's copy.\n\nThe fix is called **lifting state up**: move that specific piece of state out of both siblings and into their closest common parent (the nearest component that is an ancestor of both), then pass it back down to each sibling as props -- typically the current value plus a callback the sibling calls to request a change (e.g. `query` and `onQueryChange`). Neither sibling owns the value anymore; the parent does, and both siblings simply read it and report intended changes upward. Because there is now exactly one copy of that state, it becomes structurally impossible for the two siblings to disagree about its current value -- there's nothing left to drift out of sync, since there's only one thing to be in sync with."
+          },
+          {
+            "heading": "The Container/Presentational Split",
+            "body": "One common way to organize the results of lifting state up is the **container/presentational** pattern: split responsibility between a component that manages state, data-fetching, or business logic (often called a *container* or *smart* component) and a component that just receives props and renders UI from them, with little or no state of its own (a *presentational* or *dumb* component). For example, a `UserProfileContainer` might hold the fetched user data and loading/error state, while a `UserProfileView` just takes `{ user }` as a prop and focuses entirely on layout and markup.\n\nThe benefit is real: presentational components become trivially reusable (they're a pure function of their props, with no dependency on *how* the data they render was obtained) and easy to test in isolation, while a container isolates all the messier logic of *getting* the data in one place. But treat this as a useful lens for organizing responsibility, not a rule every component must literally satisfy. With hooks, this split has become much softer than it used to be -- a lot of what containers did is now commonly expressed as a custom hook (e.g. `useUserProfile()`) that a single component calls, both fetching data and rendering UI in the same function, without needing a dedicated wrapper component at all. Reach for a container/presentational split when it genuinely clarifies a component's responsibilities, not because every component is expected to come in a matching pair."
+          },
+          {
+            "heading": "Lift the Value, Not the Whole Component",
+            "body": "A common overcorrection after learning about lifting state up is lifting *everything* a component owns to its parent 'just in case' something else might eventually need it. Resist that. Lift only the specific piece of state that is genuinely shared across multiple components; state that's truly private to one component -- whether a dropdown inside it happens to be open, the current value of an input before it's submitted -- should stay right where it is. Pushing private state upward unnecessarily bloats the parent with details it has no real reason to manage, and it means the parent (and everything under it) re-renders on changes that, before the unnecessary lift, would have stayed contained to a single small component.\n\nComposition and lifting state up work well together: you lift the specific shared value up to the common parent, and you use composition (children or slot props) so that the parent doesn't also need to know the presentation details of everything it's handing that value to. As an app grows and the 'closest common parent' for some shared value ends up many layers above where it's actually used, passing it down through props at every intermediate layer (sometimes called *prop drilling*) starts to feel painful -- that specific pain is what motivates React's Context API, covered in a later concept, as a way to skip the intermediate layers rather than threading props through components that don't otherwise care about that value."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Configuration Props vs. Composition for a Panel Component",
+          "language": "jsx",
+          "code": "// Approach A: one component configured via a growing prop list.\n// Every new use case becomes another prop and another internal branch.\nfunction InfoPanel({ title, message, showIcon, iconType, showCloseButton, onClose, footerText }) {\n  return (\n    <div className=\"panel\">\n      {showIcon && <Icon type={iconType} />}\n      <h3>{title}</h3>\n      <p>{message}</p>\n      {showCloseButton && <button onClick={onClose}>Close</button>}\n      {footerText && <footer>{footerText}</footer>}\n    </div>\n  );\n}\n\n// Approach B: composition -- Panel only owns the chrome, the caller\n// supplies the content by nesting whatever JSX it actually needs.\nfunction Panel({ children }) {\n  return <div className=\"panel\">{children}</div>;\n}\n\n// Usage: the caller assembles exactly what it needs, no unused\n// props to figure out or skip, and no changes to Panel required.\n<Panel>\n  <Icon type=\"warning\" />\n  <h3>Storage almost full</h3>\n  <p>You're using 95% of your plan's storage.</p>\n  <button onClick={handleClose}>Close</button>\n</Panel>",
+          "explanation": "Approach A's prop list only grows over time: a panel that needs two footer buttons instead of one, or no title at all, or an icon with no close button, each becomes another prop, another optional branch, another combination to keep straight -- and InfoPanel has to be edited every time a new variation shows up. Approach B's Panel never needs to change for any of that, because it doesn't try to anticipate every combination -- it just renders whatever is nested inside it. The tradeoff is real: Panel gives up fine-grained control over its content in exchange for never having to grow a matching prop for every new use case, which is exactly the trade composition is meant to make."
+        },
+        {
+          "title": "Lifting State Up: Two Siblings Sharing One Query",
+          "language": "jsx",
+          "code": "// BEFORE: each sibling keeps its own copy of \"query\" -- they can drift apart.\nfunction SearchBox() {\n  const [query, setQuery] = useState(\"\");\n  return <input value={query} onChange={(e) => setQuery(e.target.value)} />;\n}\n\nfunction ResultsList() {\n  // ResultsList has no way to know what SearchBox's query currently is --\n  // this is a second, entirely disconnected copy.\n  const [query, setQuery] = useState(\"\");\n  const results = allItems.filter((item) => item.includes(query));\n  return <ul>{results.map((r) => <li key={r}>{r}</li>)}</ul>;\n}\n\n// AFTER: the closest common parent owns the one shared value.\nfunction SearchPage() {\n  const [query, setQuery] = useState(\"\");\n\n  return (\n    <>\n      <SearchBox query={query} onQueryChange={setQuery} />\n      <ResultsList query={query} />\n    </>\n  );\n}\n\nfunction SearchBox({ query, onQueryChange }) {\n  return <input value={query} onChange={(e) => onQueryChange(e.target.value)} />;\n}\n\nfunction ResultsList({ query }) {\n  const results = allItems.filter((item) => item.includes(query));\n  return <ul>{results.map((r) => <li key={r}>{r}</li>)}</ul>;\n}",
+          "explanation": "In BEFORE, SearchBox's query and ResultsList's query are two completely separate state variables that merely happen to share a name. Typing into the input updates only SearchBox's own copy; ResultsList's copy never hears about it, so the results never actually reflect what's typed -- renaming variables wouldn't fix this, because as long as each sibling holds its own copy of a value meant to represent one shared thing, there is no mechanism connecting them. In AFTER, query is lifted to SearchPage, the closest component that is an ancestor of both siblings. Now there's exactly one state variable: SearchBox displays it and reports changes upward through onQueryChange, and ResultsList just reads it. Neither child has its own useState for this value anymore, so it's no longer possible for them to disagree about the current query -- there's only one copy of that truth left to disagree with."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "Lifting state up means moving all of a component's state to its parent, just in case something else might need it someday.",
+          "clarification": "Only lift the specific piece of state that is actually shared or needed by multiple components right now. State that is genuinely private to one component -- like whether a dropdown inside it is currently open -- should stay local to it. Lifting everything defensively pushes unrelated internal details up into a parent that now has to manage every child's private concerns, bloats that parent, and causes it (and everything under it) to re-render on changes that a smaller, more local piece of state would have kept contained."
+        },
+        {
+          "description": "A component that just takes children can't be as flexible as one with lots of configuration props, since it has less control over what's rendered inside it.",
+          "clarification": "It's the opposite: because children can be any JSX at all, a children-based component is strictly more flexible for the caller, not less. What it gives up is not flexibility but the need to anticipate every possible content variation in advance -- the caller keeps full control over what actually gets rendered, and the component never needs a new prop or internal branch added just to support a new combination of content."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "react-composition-and-lifting-state-ex1",
+          "type": "scenario",
+          "prompt": "You're building a page with a `<PriceFilter>` slider and a `<ProductGrid>`. Right now each manages its own local `minPrice`/`maxPrice` state independently, and the grid always shows every product regardless of what the slider is set to. What's the underlying problem, and where should this state actually live?",
+          "hints": [
+            "PriceFilter and ProductGrid are siblings -- do they have any way to see each other's local state right now?",
+            "Think about what the closest component is that is an ancestor of both PriceFilter and ProductGrid.",
+            "Once the state lives in that shared parent, what does each sibling need to receive as props to keep doing its job?"
+          ],
+          "solutionExplanation": "The underlying problem is that minPrice/maxPrice are being kept as two separate, disconnected pieces of local state -- one inside PriceFilter, one that ProductGrid would need in order to actually filter, but has no way to obtain. The fix is to lift minPrice and maxPrice up to their closest common parent (for example, a ProductsPage component that renders both). That parent owns the state via useState and passes the current values plus an onChange-style callback down to PriceFilter (so it can display and update the range), and passes the current values down to ProductGrid as filter criteria (so it can filter its list before rendering). Neither sibling needs its own copy of this state anymore, so the slider and the grid can no longer disagree about what range is currently selected."
+        },
+        {
+          "id": "react-composition-and-lifting-state-ex2",
+          "type": "debugging",
+          "prompt": "Clicking 'Open Settings' below is supposed to open the SettingsModal, but nothing visibly happens when clicked. Find the bug and fix it.",
+          "code": "function SettingsButton() {\n  const [isOpen, setIsOpen] = useState(false);\n  return <button onClick={() => setIsOpen(true)}>Open Settings</button>;\n}\n\nfunction SettingsModal() {\n  const [isOpen, setIsOpen] = useState(false);\n  if (!isOpen) return null;\n  return <div className=\"modal\">Settings...</div>;\n}\n\nfunction SettingsPanel() {\n  return (\n    <>\n      <SettingsButton />\n      <SettingsModal />\n    </>\n  );\n}",
+          "hints": [
+            "SettingsButton and SettingsModal are siblings under SettingsPanel -- can one sibling's own useState affect what another sibling renders?",
+            "Both components call useState(false) independently. How many separate copies of isOpen does that actually create, and does clicking the button change the modal's copy?",
+            "Where does isOpen need to live so that both the button (which sets it) and the modal (which reads it) are looking at the same value?"
+          ],
+          "solutionCode": "function SettingsPanel() {\n  const [isOpen, setIsOpen] = useState(false);\n\n  return (\n    <>\n      <SettingsButton onOpen={() => setIsOpen(true)} />\n      <SettingsModal isOpen={isOpen} />\n    </>\n  );\n}\n\nfunction SettingsButton({ onOpen }) {\n  return <button onClick={onOpen}>Open Settings</button>;\n}\n\nfunction SettingsModal({ isOpen }) {\n  if (!isOpen) return null;\n  return <div className=\"modal\">Settings...</div>;\n}",
+          "solutionExplanation": "SettingsButton and SettingsModal each declare their own independent isOpen state via useState(false), so there are two separate copies of it in memory. Clicking the button calls setIsOpen(true) on SettingsButton's own copy -- which causes SettingsButton to re-render harmlessly, since it doesn't display isOpen at all -- but SettingsModal's completely separate copy of isOpen never changes, so it stays false forever and the modal never renders. The fix lifts isOpen up to SettingsPanel, the closest common parent of the two siblings, and passes a callback (onOpen) down to the button and the boolean value (isOpen) down to the modal, so both are now reading and writing the same single piece of state."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "react-composition-and-lifting-state-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "Two sibling components, `<TabList>` and `<TabPanel>`, both need to know which tab is currently active. Following the 'lift state up' principle, where should the `activeTab` state live?",
+          "options": [
+            "Inside TabList, since it's the component that changes it when the user clicks a tab.",
+            "Inside TabPanel, since it's the component that uses it to decide what to render.",
+            "In the closest common parent of TabList and TabPanel, passed down to each as props.",
+            "In both TabList and TabPanel independently, kept in sync with a useEffect that watches the other's value."
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "The closest common parent is the right home for activeTab because both siblings need to read or write it, and neither sibling has any built-in way to see the other's local state. Options A and B each only serve one side of the relationship -- whichever sibling doesn't own the state has no way to access it. Option D reintroduces the exact problem lifting state up exists to prevent: two separate copies of the same logical value that can drift apart, plus unnecessary complexity and lag from trying to reconcile them after the fact instead of never letting them diverge in the first place."
+        },
+        {
+          "id": "react-composition-and-lifting-state-assess-explain1",
+          "type": "explanation",
+          "prompt": "A teammate says: 'I'll just add a `renderFooter` boolean and a `footerButtons` array prop to our `<Card>` component so people can put whatever buttons they want in the footer.' Explain, using the idea of composition, a different way to give callers that same flexibility, and why it scales better as more variations show up.",
+          "modelAnswer": "Instead of adding configuration props for every footer variation, Card can accept the footer content directly as a slot -- either through its regular children, or through a dedicated prop like `footer` that accepts arbitrary JSX: `<Card footer={<><Button>Save</Button><Button>Cancel</Button></>}>...</Card>`, or an even more explicit compound form like `<Card><Card.Footer><Button>Save</Button></Card.Footer></Card>`. Either way, Card itself never needs to know how many buttons there are, what they say, or what they do -- it just renders whatever was passed into that slot. This scales better than the boolean-plus-array approach because every new footer variation a caller wants (one button, three buttons, a link instead of a button, no footer at all) requires zero changes to Card's source: the caller simply composes different JSX into the slot. The configuration approach, by contrast, needs Card's internals modified (or at least reasoned about) every time a new footer shape doesn't fit the existing footerButtons array structure, and the combinations of props that need testing grow with every new option added."
+        }
+      ]
+    },
+    {
+      "id": "react-router",
+      "title": "React Router",
+      "description": "Client-side routing swaps which components are rendered based on the URL without a full page reload, and React Router gives that behavior a declarative, component-based API on top of the browser's low-level History API.",
+      "moduleId": "react-architecture",
+      "topicId": "react-architecture",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 25,
+      "prerequisites": ["react-conditional-rendering-and-lists"],
+      "learningObjectives": [
+        "Explain what client-side routing actually does differently from a traditional multi-page site.",
+        "Define a route with a URL parameter and read that parameter inside the matched component.",
+        "Explain why nested routes let related pages share layout without duplicating it.",
+        "Explain why a routing library exists instead of using the browser's History API directly."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "Traditional Navigation vs. Client-Side Routing",
+            "body": "On a traditional multi-page site, every link is a fresh round-trip: clicking `<a href=\"/about\">` tells the browser to throw away the current page entirely, request a brand-new HTML document from the server, and render that document from scratch. Any in-memory JavaScript state on the page -- an open modal, scroll position, the contents of a half-filled form outside what's persisted -- is gone the moment that navigation happens, because the browser is not preserving the previous page at all; it's discarding it and loading a new one.\n\n**Client-side routing** changes what happens when a link is clicked, without changing what the URL means. Your own JavaScript intercepts the click before the browser's default full-page navigation kicks in, updates the URL using the browser's History API (so the address bar, back button, and refresh all still behave sensibly), and then swaps which components your app renders -- entirely in memory, with no new HTML document requested from the server. Anything living outside the part of the tree that changes (a persistent header, an app-wide state store) is untouched by the navigation, because there was never a full reload to destroy it in the first place."
+          },
+          {
+            "heading": "Routes and Route Params",
+            "body": "A **route** maps a URL pattern to the component that should render when the current URL matches it. A pattern like `/users/:id` contains a **route param** -- the `:id` segment is a placeholder that matches any value in that position (`/users/42`, `/users/amara`, ...), and the actual matched text becomes available inside the matched component, typically through a hook like `useParams()`.\n\nOne detail worth internalizing early: route params always arrive as plain strings, because they're extracted directly out of the URL's text -- `/users/42` gives you the string `\"42\"`, not the number `42`. If a component needs to use that value as a number (to compare it, or to pass it somewhere expecting a number), it has to convert it explicitly; comparing a route param directly against a number with `===` will silently fail even when the values 'look' equal."
+          },
+          {
+            "heading": "Nested Routes for Shared Layout",
+            "body": "Related pages often need to share the same surrounding layout -- a settings section with a persistent sidebar, where only the main content area changes between `/settings/profile` and `/settings/billing`. **Nested routes** let a parent route render that shared layout once, with a placeholder (typically an `<Outlet />`) marking where the matching child route's content should appear:\n\n```jsx\nfunction SettingsLayout() {\n  return (\n    <div className=\"settings-layout\">\n      <SettingsSidebar />\n      <Outlet />\n    </div>\n  );\n}\n\n<Route path=\"/settings\" element={<SettingsLayout />}>\n  <Route path=\"profile\" element={<ProfileSettings />} />\n  <Route path=\"billing\" element={<BillingSettings />} />\n</Route>\n```\n\nNavigating between `/settings/profile` and `/settings/billing` keeps SettingsLayout (and therefore SettingsSidebar) mounted the whole time -- only whatever renders inside `<Outlet />` changes. Without nesting, each top-level page would have to duplicate the sidebar and surrounding markup itself, and that duplicated layout would need to be kept in sync by hand every time it changed."
+          },
+          {
+            "heading": "Why This Needs a Library at All",
+            "body": "The browser already exposes a **History API** -- `history.pushState(...)` to change the URL without a full reload, and a `popstate` event that fires when the user navigates via back/forward. But that API is deliberately low-level: it has no concept of 'this URL pattern maps to this component,' no syntax for matching params or wildcards, and no notion of nested route trees. Using it directly means hand-writing your own URL-matching logic and your own re-render-the-right-thing logic, and re-testing that logic every time your routing needs grow more complex.\n\nReact Router (and similar libraries) wrap the History API with a declarative layer that fits React's component model directly: you describe a mapping from URL patterns to components (`<Route path=... element=... />`), and the library handles matching the current URL against that mapping, extracting params, and rendering the right component tree -- including nested layouts. Utilities like `<Link to=\"/about\">` render a real `<a>` tag (so browser features like right-click-to-open-in-a-new-tab keep working) while intercepting plain clicks to perform the client-side swap instead of a full page load, and `useNavigate()` lets code trigger a navigation programmatically (e.g. after a form submits successfully) -- all of it built on top of the same low-level History API, just without you having to write the matching and rendering logic yourself."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Traditional Link vs. Client-Side Navigation",
+          "language": "jsx",
+          "code": "// Traditional anchor tag: clicking triggers a full page reload,\n// a fresh request to the server, and a brand-new HTML document.\n<a href=\"/dashboard\">Dashboard</a>\n\n// React Router's Link: renders a real <a> for accessibility and\n// right-click behavior, but intercepts a plain click, updates the\n// URL, and swaps components -- no server round-trip, no full reload.\nimport { Link } from \"react-router-dom\";\n\n<Link to=\"/dashboard\">Dashboard</Link>",
+          "explanation": "Both render as an anchor tag in the DOM, and both change the URL to /dashboard, so from a pure markup standpoint they look nearly identical. The difference is entirely in what happens after the click: the plain <a> lets the browser's default navigation run, which discards the current page and requests /dashboard fresh from the server. Link's onClick handler calls e.preventDefault() on a plain left-click, updates the URL via the History API, and lets React Router swap in the Dashboard component -- all without a new document ever being requested."
+        },
+        {
+          "title": "Defining a Route with a Param and Reading It",
+          "language": "jsx",
+          "code": "import { BrowserRouter, Routes, Route, useParams } from \"react-router-dom\";\n\nfunction UserProfile() {\n  const { id } = useParams(); // always a string, e.g. \"42\"\n  return <h1>Profile for user #{id}</h1>;\n}\n\nfunction App() {\n  return (\n    <BrowserRouter>\n      <Routes>\n        <Route path=\"/\" element={<HomePage />} />\n        <Route path=\"/users/:id\" element={<UserProfile />} />\n      </Routes>\n    </BrowserRouter>\n  );\n}",
+          "explanation": "Visiting /users/42 matches the /users/:id pattern, and React Router extracts \"42\" as the id param, making it available inside UserProfile via useParams(). Note that id is the string \"42\", not the number 42 -- if UserProfile needed to fetch data by a numeric id, or compare it against a number somewhere, it would need to convert explicitly (e.g. Number(id)), since useParams() always hands back raw text pulled straight out of the URL, regardless of what it 'looks like.'"
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "With client-side routing, the URL doesn't really matter anymore since everything happens in JavaScript -- it's just decoration.",
+          "clarification": "The URL is still the actual source of truth for 'where the user currently is' -- it's what makes a page shareable, bookmarkable, and usable with the browser's back/forward buttons and refresh. Client-side routing's entire job is to keep the URL and the rendered UI in sync without a server round-trip on every change; it doesn't make the URL meaningless, it just changes the mechanism that updates it and reacts to it."
+        },
+        {
+          "description": "A route param like :id will give you a number automatically if the URL segment looks numeric, e.g. /users/42 gives id the number 42.",
+          "clarification": "useParams() always returns strings, because it's extracting a slice of raw text out of the URL -- /users/42 gives id the string \"42\", not the number 42. Code that compares a param with strict equality against a number (id === 42) would silently evaluate to false even for a 'matching' value; any numeric comparison or usage requires an explicit conversion first."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "react-router-ex1",
+          "type": "scenario",
+          "prompt": "Your app has /settings/profile and /settings/billing, and both currently duplicate an identical sidebar and page header inside two separate, unrelated top-level components. How would nested routes let you remove that duplication, and what renders inside the shared parent to make room for each page's specific content?",
+          "hints": [
+            "Nested routes let a parent route own layout that multiple child routes share -- what would that parent route render for /settings?",
+            "The parent needs a placeholder marking exactly where the currently-matched child route's content should appear.",
+            "That placeholder component is typically called Outlet."
+          ],
+          "solutionExplanation": "A parent route for /settings can render a single SettingsLayout component containing the sidebar and header once, plus an <Outlet /> marking where page-specific content goes. Two child routes, profile and billing, nest underneath it and each render only their own specific content (ProfileSettings, BillingSettings) into that Outlet. Navigating between /settings/profile and /settings/billing now keeps SettingsLayout mounted the entire time -- only whatever renders inside Outlet changes -- so the sidebar and header exist in exactly one place in the code instead of being copy-pasted into two unrelated top-level components that would otherwise need to be kept in sync by hand."
+        },
+        {
+          "id": "react-router-ex2",
+          "type": "debugging",
+          "prompt": "UserProfile is supposed to show the current user's id from the URL, but it always renders 'Profile for user #undefined'. Find the bug and fix it.",
+          "code": "function UserProfile() {\n  const { id } = useParams();\n  return <h1>Profile for user #{id}</h1>;\n}\n\n<Routes>\n  <Route path=\"/users/:userId\" element={<UserProfile />} />\n</Routes>",
+          "hints": [
+            "Compare the name of the param placeholder in the route's path to the name being destructured out of useParams().",
+            "useParams() returns an object keyed by whatever name follows the colon in the route's path -- not a generic 'id' key.",
+            "There are two equally valid fixes: change the route's param name, or change what UserProfile destructures. Either one just needs to match the other."
+          ],
+          "solutionCode": "function UserProfile() {\n  const { userId } = useParams();\n  return <h1>Profile for user #{userId}</h1>;\n}\n\n<Routes>\n  <Route path=\"/users/:userId\" element={<UserProfile />} />\n</Routes>",
+          "solutionExplanation": "The route defines its param as :userId, so useParams() returns an object with a userId key -- not id. UserProfile was destructuring { id }, which doesn't exist on that object, so id was always undefined regardless of what URL was actually visited. The fix is simply making the two names agree -- here, renaming the destructured variable to userId to match the route's param name (renaming the route's param to :id instead would work equally well, as long as both sides use the same name)."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "react-router-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "What's the key difference between clicking a traditional `<a href>` link on a multi-page site and clicking a `<Link>` from a client-side router?",
+          "options": [
+            "There is no real difference -- both always result in a full page reload.",
+            "A traditional link always uses a POST request, while Link always uses GET.",
+            "A traditional link triggers a full round-trip to the server for a new HTML document and a full page reload; Link intercepts the click and swaps rendered components using JavaScript, updating the URL without a full reload.",
+            "Link only works for external URLs, while traditional <a> tags only work for URLs within the same app."
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "A plain <a href> lets the browser run its default navigation, discarding the current page and requesting an entirely new HTML document from the server. Link intercepts a plain click, updates the URL via the History API, and has React Router swap the rendered component tree in memory -- no new document is requested and no full reload occurs. Options A, B, and D describe behavior that isn't actually how either mechanism works."
+        },
+        {
+          "id": "react-router-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain to someone why React Router 'needs to exist' at all, given that browsers already provide a History API for changing the URL without a full reload.",
+          "modelAnswer": "The browser's History API is deliberately low-level: pushState/replaceState change the URL and add an entry to the browser's history, and the popstate event fires when the user navigates back or forward -- but none of that comes with any built-in notion of 'this URL pattern should render that component.' There's no matching syntax for params or wildcards, no concept of nested route trees, and no integration with a component-based rendering model. Using the History API directly to build real app routing means hand-writing your own logic to parse the current URL, decide which component(s) it corresponds to, extract any dynamic segments, and re-run that logic every time popstate fires or a navigation happens -- and getting all of that right, including nested layouts, gets complicated fast. React Router exists to provide that missing layer: a declarative way to describe URL-pattern-to-component mappings (including nested ones), hooks to read params and trigger navigation, and components like Link that integrate directly with React's rendering model -- all built on top of the same underlying History API, so you describe the mapping instead of hand-rolling the matching and re-rendering logic yourself."
+        }
+      ]
+    },
+    {
+      "id": "react-state-management",
+      "title": "State Management",
+      "description": "Client state and server state are fundamentally different problems that need different tools, and knowing which category of dedicated library solves which problem matters more than memorizing any one library's API.",
+      "moduleId": "react-architecture",
+      "topicId": "react-architecture",
+      "difficulty": "advanced",
+      "estimatedMinutes": 30,
+      "prerequisites": ["react-context-api"],
+      "learningObjectives": [
+        "Distinguish client state from server state and explain why they need different handling.",
+        "Explain when local state and Context genuinely stop being sufficient, referencing Context's re-render caveat.",
+        "Name the category of tool that solves complex client state versus the category that solves server (API) state.",
+        "Apply a simple decision framework to categorize a given piece of state and pick an appropriate approach."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "Client State vs. Server State: Two Different Problems",
+            "body": "**Client state** is UI state that lives only in the frontend -- whether a modal is open, which tab is selected, the current (unsubmitted) value of a form input. Its source of truth *is* the frontend; there's no separate 'real' copy living anywhere else that it needs to stay in agreement with. **Server state** is data that actually originates from, and is owned by, a server or database -- a user record, a product catalog, a list of comments. What a component holds for server state is never the data itself; it's a cached, possibly-stale copy of something that lives elsewhere and can change independently of anything happening in the browser.\n\nThis distinction matters because the two need genuinely different tooling. Client state changes only when the user interacts with the UI, and storing/reading it is exactly what useState, useReducer, or Context are built for. Server state needs to be fetched over the network in the first place, needs a strategy for deciding whether a cached copy is still trustworthy or should be refetched, needs loading and error handling for the fetch itself, and is often needed by multiple components that shouldn't each independently trigger their own redundant fetch for 'the same' data. useState alone gives you no help with any of that -- as seen in the data-fetching concept, you end up hand-rolling loading/error state and race-condition guards yourself, for every fetch, in every component that needs one."
+          },
+          {
+            "heading": "When Local State and Context Genuinely Aren't Enough",
+            "body": "Local state is the right tool when only one component (or its direct children, via props) needs a value. Context solves a different, specific problem: state that's needed *widely* across the tree, where threading it down through props at every intermediate layer (prop drilling) becomes painful. But Context has a real caveat covered earlier: every component that consumes a context re-renders whenever the value provided to that context changes -- and if that value changes frequently while being read across a large tree, that means a lot of re-rendering triggered by updates that most of the consuming components don't actually care about visually.\n\nThe practical rule this leads to: Context is a good fit for state that's needed broadly but changes relatively rarely (the current theme, the logged-in user, the active locale). It becomes a poor fit for state that is needed broadly *and* changes frequently (a value updating many times per second, read by components scattered across an otherwise-unrelated part of a large tree) -- that specific combination is exactly the situation dedicated client-state libraries were built to handle better."
+          },
+          {
+            "heading": "A Landscape Overview: Naming the Right Tool for Each Problem",
+            "body": "For complex, frequently-changing **client** state that needs to be read across a large tree without Context's blanket re-render behavior, there's a category of dedicated **client-state libraries** -- Zustand, Redux, Jotai, and others are common names in this space. What they share is more granular subscriptions: a component generally only re-renders when the specific slice of the store it actually reads changes, not whenever *anything* in the store changes. The goal here is knowing this category exists and roughly what problem it solves -- not memorizing any one of these libraries' APIs in depth.\n\nFor **server** state specifically -- data that came from an API -- there's a separate category of **server-state libraries**, most commonly React Query (TanStack Query), along with alternatives like SWR or RTK Query. Given a fetch function and a cache key, these handle caching so multiple components asking for 'the same' data share one cached result instead of triggering duplicate requests, deduplicate simultaneous identical requests, revalidate stale data automatically (e.g. when a window regains focus), retry failed requests, and track loading/error state for you -- which is exactly the boilerplate a hand-rolled useEffect-based fetch has to reimplement, imperfectly, at every call site. Real apps commonly use a client-state library and a server-state library side by side, because they solve genuinely different halves of the state problem; reaching for a client-state library to hold API data (or the reverse) tends to fight the tool rather than use it as intended."
+          },
+          {
+            "heading": "A Practical Decision Framework",
+            "body": "When deciding how to handle a given piece of state, a short set of questions usually points to the right tool. Is this value used only by one component and the children it can pass props to directly? Local state (useState/useReducer) is enough. Is it needed more widely across the tree, but changes relatively rarely? Context is a reasonable fit. Is it client-only, but complex and/or updated frequently across a large, otherwise-unrelated part of the tree? That's the situation a dedicated client-state library exists for. Does the value represent data that actually lives on a server? Then it's server state, regardless of how simple or complex your client-state needs elsewhere are -- it deserves explicit handling for loading/caching/revalidation, whether that means a server-state library or at minimum a deliberate, consistent hand-rolled approach to those concerns."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Client State vs. Server State in the Same Component",
+          "language": "jsx",
+          "code": "function ProductPage({ productId }) {\n  // Client state: purely UI, lives only here, no \"true\" copy elsewhere.\n  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);\n\n  // Server state: really lives in a database; this is a cached, fetched copy.\n  const [product, setProduct] = useState(null);\n  const [isLoading, setIsLoading] = useState(true);\n  const [error, setError] = useState(null);\n\n  useEffect(() => {\n    let isCurrent = true;\n    setIsLoading(true);\n\n    fetchProduct(productId)\n      .then((data) => {\n        if (isCurrent) {\n          setProduct(data);\n          setError(null);\n        }\n      })\n      .catch((err) => {\n        if (isCurrent) setError(err);\n      })\n      .finally(() => {\n        if (isCurrent) setIsLoading(false);\n      });\n\n    return () => {\n      isCurrent = false;\n    };\n  }, [productId]);\n\n  // ...render logic omitted for brevity\n}",
+          "explanation": "isDescriptionExpanded never needs to be fetched, revalidated, or checked for staleness -- it's a UI flag with no counterpart anywhere else, and useState is exactly the right tool for it. product, by contrast, is a local snapshot of something that lives on a server and can change independently of this component -- another user could edit the product, or its price could update. useState can hold that snapshot, but it gives no help at all with caching this across other components that also need 'the current product,' no automatic sense of when the cached copy might be stale, and (as shown here) leaves loading/error/race-condition handling entirely up to you to hand-roll, correctly, at every fetch site. That gap is exactly what server-state libraries are built to close."
+        },
+        {
+          "title": "Why Context Struggles for Frequently-Changing, Widely-Needed State",
+          "language": "jsx",
+          "code": "// A single context holding fast-changing state, read widely across the tree.\nconst CursorContext = createContext();\n\nfunction App() {\n  const [cursorPosition, setCursorPosition] = useState({ x: 0, y: 0 });\n\n  return (\n    <CursorContext.Provider value={cursorPosition}>\n      <HugeAppLayout /> {/* hundreds of components underneath */}\n    </CursorContext.Provider>\n  );\n}\n\n// Every component that reads CursorContext re-renders on every mouse\n// move, even ones that only occasionally care about cursorPosition.\nfunction UnrelatedSidebarWidget() {\n  const cursorPosition = useContext(CursorContext);\n  // ...\n}",
+          "explanation": "cursorPosition changes many times per second while the mouse moves, and it's read by components scattered across a huge, otherwise unrelated tree. Because every consumer of a context re-renders whenever the value it's given changes, mounting this under HugeAppLayout means every single consumer -- including UnrelatedSidebarWidget, which may not even visibly change as a result -- re-renders on every mouse move. This is exactly the combination (changes often, needed broadly) that motivates reaching for a dedicated client-state library instead: those are generally built so a component only re-renders when the specific slice of state it actually subscribes to changes, not whenever the store changes at all."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "Once an app adopts a state management library, all of its state should move into that store -- including things like whether a dropdown is open.",
+          "clarification": "Purely local, single-component UI state doesn't benefit from living in a global store -- it adds indirection (an action, a dispatch, a subscription) for something useState already handles in one line, and it makes that state's lifecycle harder to trace, since it's now tied to an app-wide store rather than the one component that actually owns it. Global stores earn their keep for state that's genuinely shared or complex across many components, not for every scrap of local UI state."
+        },
+        {
+          "description": "A server-state library like React Query is just a fancier way to store fetched data in state, similar to useState.",
+          "clarification": "The meaningful part isn't storage -- useState can store fetched data fine -- it's the behavior around that storage: caching by key so multiple components requesting 'the same' data don't each trigger a duplicate network request, deduplicating simultaneous identical requests, automatically revalidating data that might have gone stale, retrying failed requests, and handling fast-changing params without race conditions. All of that is exactly what a hand-rolled useState-plus-useEffect fetch requires you to build and get right yourself, at every single fetch site in an app."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "react-state-management-ex1",
+          "type": "scenario",
+          "prompt": "A dashboard shows the logged-in user's name in a header, a 'Recent Orders' list fetched from an API, and a sidebar collapse/expand toggle. Categorize each of these three as client state or server state, and briefly justify each.",
+          "hints": [
+            "Ask, for each one: does this value originate from and get owned by a server/database, or does it only ever exist in the frontend?",
+            "The sidebar toggle clearly has no server-side counterpart at all.",
+            "The logged-in user's name might feel 'global' because it's shared widely, but ask where that name actually came from in the first place."
+          ],
+          "solutionExplanation": "The sidebar collapse/expand toggle is client state -- it's a pure UI flag with no server-side counterpart; the frontend is its only source of truth. The 'Recent Orders' list is server state -- it's fetched from an API, genuinely lives in a database, and can change independently of the frontend (a new order could be placed elsewhere), so it needs the loading/caching/revalidation treatment server state requires. The logged-in user's name is a slightly trickier case: even though it's often shared broadly (e.g. via Context) and might feel like straightforward 'global client state,' it's still server state at its root, since it was originally fetched from a profile/auth endpoint -- it can go stale if the user updates their display name elsewhere, even if many apps pragmatically treat it as fetched-once-then-cached for the session rather than aggressively revalidating it."
+        },
+        {
+          "id": "react-state-management-ex2",
+          "type": "coding",
+          "prompt": "Three separate components each independently fetch /api/me on mount and store the result in their own useState, resulting in three duplicate network requests every time all three are on screen together. Without introducing a new library, restructure this so the data is fetched once and shared. Write the shape of your solution.",
+          "hints": [
+            "Where have you already learned to put state that multiple components need to read, so that there's exactly one shared copy?",
+            "You don't need a state management library just to deduplicate this fetch -- what tool already lets you provide one value to many components at different depths in the tree?",
+            "Fetching once in a provider component mounted near the root, then reading the result via a custom hook (built on useContext) in each of the three consumers, avoids all three independently calling the API."
+          ],
+          "solutionCode": "const CurrentUserContext = createContext(null);\n\nfunction CurrentUserProvider({ children }) {\n  const [currentUser, setCurrentUser] = useState(null);\n  const [isLoading, setIsLoading] = useState(true);\n\n  useEffect(() => {\n    let isCurrent = true;\n    fetch(\"/api/me\")\n      .then((res) => res.json())\n      .then((data) => {\n        if (isCurrent) setCurrentUser(data);\n      })\n      .finally(() => {\n        if (isCurrent) setIsLoading(false);\n      });\n    return () => {\n      isCurrent = false;\n    };\n  }, []);\n\n  return (\n    <CurrentUserContext.Provider value={{ currentUser, isLoading }}>\n      {children}\n    </CurrentUserContext.Provider>\n  );\n}\n\nfunction useCurrentUser() {\n  return useContext(CurrentUserContext);\n}\n\n// Each of the three components now does this instead of its own fetch:\nfunction Header() {\n  const { currentUser } = useCurrentUser();\n  return <span>{currentUser?.name}</span>;\n}",
+          "solutionExplanation": "The fetch to /api/me now happens exactly once, inside CurrentUserProvider mounted near the root of the app, instead of once per consuming component. All three original components replace their own useState-plus-useEffect fetch with a call to useCurrentUser() (built on useContext), which just reads the already-fetched value -- eliminating the duplicate network calls entirely. This is a case where Context is a perfectly reasonable fix, since the data, once loaded, changes rarely and is read widely -- exactly the profile Context is good at. If this app had many more differently-shaped server endpoints, or needed cache invalidation and revalidation-on-refocus, a server-state library like React Query would remove even more of this boilerplate for free rather than hand-writing a new provider per endpoint -- but for one shared value like this, a Context provider is enough."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "react-state-management-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "A dropdown's open/closed boolean and a list of blog posts fetched from an API are both 'state' in a React app, but they have different needs. Which statement best captures why?",
+          "options": [
+            "There's no real difference; both should always be managed the same way, e.g. both in useState.",
+            "The dropdown's boolean is client state, with the frontend as its own source of truth; the blog posts are server state -- a cached copy of data that actually lives on a server and can go stale, needing revalidation and caching strategies that useState doesn't provide on its own.",
+            "The blog posts are client state because they end up stored in a React component's state, and the dropdown's boolean is server state because it affects what's rendered on screen.",
+            "Both are server state, since all state in a deployed React app is technically served from a server."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The dropdown's boolean has no source of truth outside the component -- it's genuinely client state. The blog posts are a cached copy of something that lives on a server and can change independently of the frontend, which is exactly what makes them server state and why they need revalidation/caching handling that plain useState doesn't provide by itself. Option C mixes up the categories based on where the value happens to be stored rather than where it originates; option D confuses 'the app's code is served from a server' with 'the data represents server-owned information,' which are unrelated ideas."
+        },
+        {
+          "id": "react-state-management-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain to a teammate why reaching for Context to hold state that updates many times per second and is read across a large, mostly-unrelated part of the component tree tends to cause performance problems, and what category of tool exists specifically to avoid that problem.",
+          "modelAnswer": "Context's re-render behavior is all-or-nothing for its consumers: every component that calls useContext for a given context re-renders whenever the value passed to that context's Provider changes, regardless of whether that particular consumer's own rendered output would actually look any different. If the provided value changes many times per second (like a live cursor position or a frequently-ticking counter) and it's read by components spread across a large, largely unrelated part of the tree, every one of those consumers re-renders on every single change -- most of that re-rendering work has nothing to do with anything actually changing on screen for most of those components. Dedicated client-state libraries (Zustand, Redux, and similar) exist specifically to avoid this: they generally offer more granular subscriptions, where a component only re-renders when the specific slice of the store it actually reads changes, not whenever the store changes at all. That's the category of tool to reach for once state is both frequently-changing and widely-needed -- the exact combination Context handles poorly."
+        }
+      ]
+    }
+  ]
+}

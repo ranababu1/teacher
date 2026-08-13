@@ -1,0 +1,602 @@
+{
+  "learningPathId": "react",
+  "moduleId": "react-hooks",
+  "title": "React Hooks",
+  "order": 4,
+  "concepts": [
+    {
+      "id": "react-usestate",
+      "title": "useState",
+      "description": "useState gives a function component its own persistent value and a setter to update it, but the setter's asynchronous, closure-based mechanics create two of the most common real-world React bugs: lost updates from rapid same-render calls, and stale values read inside delayed callbacks.",
+      "moduleId": "react-hooks",
+      "topicId": "react-hooks",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 30,
+      "prerequisites": ["react-state"],
+      "learningObjectives": [
+        "Describe exactly what useState returns and what calling its setter actually does.",
+        "Use a functional update (setCount(c => c + 1)) and explain why it behaves differently from setCount(count + 1) when called multiple times in quick succession.",
+        "Explain the stale-closure bug in terms of the JS closure mechanism already covered in the JavaScript Foundations module.",
+        "Predict the value logged by a delayed callback (e.g. inside setTimeout) that reads state directly, given a sequence of state updates.",
+        "Choose between a functional update and a ref-based approach depending on whether new state needs to be computed or the latest value simply needs to be read."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "useState Mechanics: The [value, setter] Pair",
+            "body": "`const [state, setState] = useState(initialValue)` returns a two-element array, destructured into the current value and a setter function permanently bound to that particular piece of state for this component instance. `initialValue` is only ever consulted on the very first render for this instance; every later render, `useState` simply hands back whatever was most recently set.\n\nCalling `setState(newValue)` does two distinct things: it records `newValue` as the value React should use for this state the next time this component renders, and it schedules a re-render of the component. Neither half happens without the other -- there's no way to 'just schedule a re-render' without also providing the new value, and no way to 'just store a value' without React noticing. Note the phrase *the next time this component renders* -- calling the setter does not retroactively change the `state` variable in the currently executing render; that variable is a plain constant for the duration of this one render, fixed the moment `useState` returned it."
+          },
+          {
+            "heading": "Functional Updates: setCount(c => c + 1)",
+            "body": "Instead of passing a plain value to the setter, you can pass a *function* -- React calls it with the most up-to-date pending value for that state and uses whatever it returns as the new value:\n\n```jsx\nsetCount((c) => c + 1);\n```\n\nThis matters the moment you call the setter for the same state more than once within a single event handler, before a re-render has happened in between:\n\n```jsx\nfunction handleClick() {\n  setCount(count + 1);\n  setCount(count + 1);\n}\n```\n\nBoth calls here read the exact same `count` from this render's closure (say, 0), so both are really \"set state to 1\" -- React doesn't treat them as two separate \"add one\" operations; the net effect after handleClick finishes is 1, not 2, no matter how many times you repeat that same-render `count + 1` call. Functional updates fix this precisely because each one operates on the *result of the previous update already queued*, not on the render-time snapshot:\n\n```jsx\nfunction handleClick() {\n  setCount((c) => c + 1);\n  setCount((c) => c + 1);\n}\n```\n\nThe first functional update receives 0 and produces 1; the second receives that just-produced 1 (not the original render-time 0) and produces 2. This is the concrete, common answer to 'why doesn't clicking this button once increment by 2 the way I expected' -- and it's the reason functional updates exist at all, rather than being a stylistic alternative."
+          },
+          {
+            "heading": "The Stale Closure Bug: Referencing State Directly in a Delayed Callback",
+            "body": "This is the exact JS closure mechanism from the JavaScript Foundations module, now showing up as a genuine, common React bug. Every render of a component creates entirely new function values for everything defined in its body -- event handlers, and, critically, callbacks passed to things like `setTimeout`, `setInterval`, or a `.then()`. Each of those specific function instances closes over the state values exactly as they existed *during that particular render*, following the same lexical-scoping rule that governs every JS closure: the variable a nested function sees is fixed by where it was written and what was in scope at that moment, not by what happens afterward.\n\nIf a component schedules a `setTimeout` whose callback reads a state variable *directly* (not through a functional update), that callback keeps referencing whatever value that state had at the exact render during which the timeout was scheduled -- no matter how many further renders, and how many newer values of that state, occur before the timeout actually fires. The callback isn't 'watching' the state; it closed over one specific, frozen value the moment it was created, exactly like any other JS closure."
+          },
+          {
+            "heading": "A Concrete Stale-Closure Timeline",
+            "body": "```jsx\nfunction DelayedCount() {\n  const [count, setCount] = useState(0);\n\n  function handleLogLater() {\n    setTimeout(() => {\n      console.log(\"count is\", count);\n    }, 2000);\n  }\n\n  function increment() {\n    setCount(count + 1);\n  }\n\n  return (\n    <div>\n      <button onClick={increment}>+1</button>\n      <button onClick={handleLogLater}>Log in 2s</button>\n    </div>\n  );\n}\n```\n\nSuppose a user clicks \"+1\" once (count becomes 1 after the re-render), then clicks \"Log in 2s\" (scheduling a timeout whose callback closes over count as it is *right now*, which is 1), then clicks \"+1\" twice more in the next second (count becomes 3). Two seconds after \"Log in 2s\" was clicked, the console prints `count is 1` -- not 3. The scheduled callback is a specific function value, permanently tied to the render during which it was created; the two later `+1` clicks each produce their own new render, with their own new `increment` function and their own freshly closed-over count value, but none of that reaches back and changes the timeout callback that's already scheduled and simply waiting to fire. Meanwhile, the screen has correctly been showing \"count: 3\" the whole time -- it's specifically the frozen closure inside the timeout that's out of date, not the component's actual rendered state."
+          },
+          {
+            "heading": "Fixing Stale Closures: Functional Updates, and the Limits of That Fix",
+            "body": "When the stale value is being used to *compute a new piece of state* (not just read for display or logging), a functional update fixes the staleness, because it defers to whatever the latest queued value actually is at the moment the update is applied, rather than to whatever was closed over when the callback was created:\n\n```jsx\nsetTimeout(() => {\n  setCount((c) => c + 1); // always increments from the truly current value\n}, 2000);\n```\n\nBut functional updates only help when you're *producing a new state value* -- they don't help when you need to simply read the absolute latest value of some state from inside an already-stale closure without setting anything (for a log statement, a comparison, or passing to some other API). Functional updates aren't a general 'give me the live value' mechanism; they're specifically for computing a new value from whatever the current one turns out to be. For that read-only 'I just need the latest value, right now, inside this stale callback' case, the standard escape hatch is a **ref** kept manually in sync with the state -- covered in the next concept -- since a ref's `.current` is always read fresh through the same persistent object, rather than through a snapshot captured at closure-creation time."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Same-Render Increments: Plain Value vs Functional Update",
+          "language": "jsx",
+          "code": "function DoubleIncrementBroken() {\n  const [count, setCount] = useState(0);\n\n  function handleClick() {\n    setCount(count + 1);\n    setCount(count + 1);\n  }\n\n  return <button onClick={handleClick}>Count: {count}</button>;\n}\n// Clicking once only ever increments by 1, never by 2\n\nfunction DoubleIncrementFixed() {\n  const [count, setCount] = useState(0);\n\n  function handleClick() {\n    setCount((c) => c + 1);\n    setCount((c) => c + 1);\n  }\n\n  return <button onClick={handleClick}>Count: {count}</button>;\n}\n// Clicking once correctly increments by 2",
+          "explanation": "In DoubleIncrementBroken, both setCount(count + 1) calls close over the exact same count value from this render (say 0), so both calls really mean 'set state to 1' -- applying the same instruction twice still leaves the result at 1. In DoubleIncrementFixed, each functional update receives whatever the most current pending value is: the first call turns 0 into 1, and the second call -- because React processes queued updates to the same state in order -- receives that freshly produced 1 and turns it into 2. The fix isn't about syntax preference; it's that only the functional form actually chains off the previous update rather than off a shared, frozen render-time snapshot."
+        },
+        {
+          "title": "A Stale Closure Inside setTimeout",
+          "language": "jsx",
+          "code": "function DelayedCount() {\n  const [count, setCount] = useState(0);\n\n  function handleLogLater() {\n    setTimeout(() => {\n      console.log(\"count is\", count);\n    }, 2000);\n  }\n\n  function increment() {\n    setCount(count + 1);\n  }\n\n  return (\n    <div>\n      <p>Count: {count}</p>\n      <button onClick={increment}>+1</button>\n      <button onClick={handleLogLater}>Log in 2s</button>\n    </div>\n  );\n}",
+          "explanation": "The moment \"Log in 2s\" is clicked, handleLogLater -- specifically the version of it created during whichever render was current at that click -- schedules a timeout callback that closes over that same render's count value. Any \"+1\" clicks afterward produce new renders with their own new increment and handleLogLater functions and their own freshly closed-over count values, but they have no way to reach back and update a callback that's already been scheduled and is simply waiting in the background. Two seconds later, the callback logs whatever count was at the moment it was created, which can easily be several increments behind whatever the screen is showing by the time it actually fires."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "Calling the setter updates the state variable immediately, so I can read the new value on the very next line of the same function.",
+          "clarification": "Calling setState schedules an update and a re-render; it does not reach back and mutate the `state` variable currently in scope, which is a plain constant for the duration of this render. Reading `state` on the line right after calling `setState(newValue)`, within the same function call, still gives you the OLD value -- the new value only exists as a distinct variable once the component function actually runs again, on the next render."
+        },
+        {
+          "description": "Calling setCount(count + 1) twice in a row should always increment by 2, since the setter was called twice.",
+          "clarification": "Both calls, within a single function call, close over the identical count value from that render -- so both are really 'set state to count + 1,' applied twice, which nets out to the same single increment, not two. Only functional updates (setCount(c => c + 1)) chain correctly off each other's result, because each one is evaluated against the most recently queued value rather than a shared, frozen render-time snapshot."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "react-usestate-ex1",
+          "type": "predictOutput",
+          "prompt": "A user clicks \"+1\" once (count becomes 1). They then immediately click \"Log in 2s\" (scheduling the timeout below). Within the next second, before the timeout fires, they click \"+1\" two more times (count becomes 3). What does the console log two seconds after \"Log in 2s\" was clicked, and why?",
+          "code": "function DelayedCount() {\n  const [count, setCount] = useState(0);\n\n  function handleLogLater() {\n    setTimeout(() => {\n      console.log(\"count is\", count);\n    }, 2000);\n  }\n\n  function increment() {\n    setCount(count + 1);\n  }\n\n  return (\n    <div>\n      <button onClick={increment}>+1</button>\n      <button onClick={handleLogLater}>Log in 2s</button>\n    </div>\n  );\n}",
+          "hints": [
+            "handleLogLater is a specific function value, created fresh on a specific render. Which render's count did the setTimeout callback actually close over -- the value count had when the timeout was scheduled, or whatever count happens to be by the time it fires?",
+            "Clicking +1 after scheduling the timeout triggers new renders, each with its own brand-new increment function and its own freshly closed-over count. Does creating those new functions reach back and modify the timeout callback that's already scheduled and waiting?",
+            "This is the same rule as a JS closure capturing a loop variable's value at creation time rather than tracking it live -- apply that rule to figure out exactly which count value got captured, and when."
+          ],
+          "expectedAnswer": "\"count is 1\" is logged -- not 3. The setTimeout callback closed over the count value (1) as it was during the specific render active when \"Log in 2s\" was clicked. The two later \"+1\" clicks create entirely new function instances closing over newer count values (2, then 3), but none of that affects the callback that was already scheduled two seconds earlier.",
+          "solutionExplanation": "By the time \"Log in 2s\" is clicked, the earlier \"+1\" click has already caused a re-render, so count is 1 during that render, and handleLogLater's setTimeout callback closes over exactly that value: 1. This is a live JS closure, formed at the moment the function was created, over whatever was in scope then -- not a reference that tracks count going forward. The next two \"+1\" clicks each cause a fresh render, each time creating a brand-new increment function and a brand-new (never-scheduled) version of handleLogLater closing over count values of 2 and then 3 -- but the ORIGINAL timeout callback, already sitting in the browser's task queue since the first click, is entirely unaffected; it's a completely separate function instance from either of those later ones. Two seconds after \"Log in 2s\" was clicked, that original callback finally runs and logs the only count value it ever had access to: 1 -- even though the component's actual rendered count (which the screen would show, if displayed) is by then 3."
+        },
+        {
+          "id": "react-usestate-ex2",
+          "type": "debugging",
+          "prompt": "Clicking \"+3\" is supposed to increase the count by 3, but it only ever increases it by 1 per click. Find the bug and fix it.",
+          "code": "function AddThreeButton() {\n  const [count, setCount] = useState(0);\n\n  function addThree() {\n    for (let i = 0; i < 3; i++) {\n      setCount(count + 1);\n    }\n  }\n\n  return (\n    <div>\n      <p>Count: {count}</p>\n      <button onClick={addThree}>+3</button>\n    </div>\n  );\n}",
+          "hints": [
+            "All three setCount(count + 1) calls inside the loop happen during the same single call to addThree -- what value of count does each one actually close over?",
+            "Are these three calls really three independent 'add one more on top of whatever the last call produced' operations, or are they three copies of the exact same instruction?",
+            "What kind of update lets each call build on the result of the previous one, rather than all reading the same frozen render-time value?"
+          ],
+          "solutionCode": "function AddThreeButton() {\n  const [count, setCount] = useState(0);\n\n  function addThree() {\n    for (let i = 0; i < 3; i++) {\n      setCount((c) => c + 1);\n    }\n  }\n\n  return (\n    <div>\n      <p>Count: {count}</p>\n      <button onClick={addThree}>+3</button>\n    </div>\n  );\n}",
+          "solutionExplanation": "All three iterations of the loop run within the same single call to addThree, so all three setCount(count + 1) calls close over the identical count value from this render (say 0) -- each one is really 'set state to 1,' just repeated three times, which nets out to a single net increment, not three. Switching to the functional form, setCount((c) => c + 1), fixes it because React applies queued functional updates to the same state in order, each one operating on the result of the update just before it: the first call turns 0 into 1, the second turns that 1 into 2, and the third turns that 2 into 3 -- a genuine, cumulative +3 per click."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "react-usestate-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "```jsx\nfunction handleClick() {\n  setCount(count + 1);\n  setCount(count + 1);\n  setCount(count + 1);\n}\n```\nIf count starts at 0, what is count after handleClick runs once and the component re-renders?",
+          "options": [
+            "3, because setCount was called three times, each adding one.",
+            "1, because all three calls close over the same render's count value (0), so each one independently evaluates to 'set state to 1.'",
+            "0, because calling setCount with a plain value never actually updates state.",
+            "It depends on network latency, since setCount is an asynchronous network call."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "All three calls happen within the same execution of handleClick, so all three read the identical count value captured in this render's closure -- 0. Each call evaluates count + 1 using that same 0, producing 1 every time; React doesn't chain these into a running total, so the net result after all three is 1, not 3. Option A assumes each call builds on the previous call's result, which is exactly what plain-value setState calls do not do (that chaining behavior is what functional updates are for). Option C is false -- setCount(count + 1) does update state, just not three times additively. Option D is a distractor; setCount is a synchronous scheduling call, not a network request."
+        },
+        {
+          "id": "react-usestate-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain, in terms of how JavaScript closures work, why a setTimeout callback defined inside a component can end up logging an outdated value of a state variable, even though the component's displayed output is fully up to date.",
+          "modelAnswer": "Every render of a component is a fresh call to that component's function, and any function defined inside that call -- including a callback passed to setTimeout -- is a brand-new function value, created fresh on that specific render. Like any JavaScript closure, that callback's connection to the surrounding scope is fixed by where it was written and what was in scope at the moment it was created, following ordinary lexical scoping -- not by anything that happens afterward. So if the callback reads a state variable directly (say, `count`), it's reading whichever specific value that variable held during the exact render on which the callback was defined -- a frozen snapshot, not a live, ever-updating link to 'whatever count currently is.' If the component re-renders multiple times between when the timeout was scheduled and when it actually fires -- each of those re-renders producing its own new state values and its own new (never-scheduled) versions of that same callback -- none of that reaches back and modifies the one specific callback instance that's already sitting in the timer queue, waiting. It keeps referencing only the value it closed over at creation time. Meanwhile, the component's JSX is recalculated fresh on every render using whatever the current state actually is, so the screen stays correctly up to date the whole time -- it's specifically the old, already-scheduled callback's closure that's stale, not the component's rendered output. This is the same exact mechanism as the classic var-in-a-loop closure bug from plain JavaScript, just appearing here because React re-runs the component function (creating fresh closures) far more often than a typical loop would."
+        }
+      ]
+    },
+    {
+      "id": "react-useeffect",
+      "title": "useEffect",
+      "description": "useEffect lets a component synchronize with something outside React's own rendering -- a subscription, a fetch, a timer -- running after render completes, guided by a dependency array that must honestly list everything reactive the effect reads, and cleaned up via an optional returned function before the next run and on unmount.",
+      "moduleId": "react-hooks",
+      "topicId": "react-hooks",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 35,
+      "prerequisites": ["react-usestate"],
+      "learningObjectives": [
+        "Explain what an effect is for, and why it runs after render rather than during it.",
+        "Explain why omitting a dependency an effect actually reads is a correctness bug, not just a missed optimization.",
+        "Write and explain the purpose of a cleanup function returned from an effect.",
+        "Diagnose why a given effect causes an infinite render loop and fix it.",
+        "Distinguish situations that genuinely need an effect from ones that are better handled as a plain calculation during render."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "What Effects Are For: Synchronizing With the Outside World",
+            "body": "A component's job, in React's model, is to take props and state and produce a description of UI -- that calculation is supposed to be pure: given the same inputs, it should produce the same output, with no side effects along the way. But real applications constantly need to do things that reach *outside* that model: subscribing to a WebSocket or a browser event, manually querying or mutating a DOM node beyond what JSX already expresses, calling an external API, starting a timer, writing to localStorage. Each of these is a **side effect**, and `useEffect` is the hook for expressing 'after this component renders (or re-renders), synchronize with X.'\n\nThe key timing detail: an effect runs **after** render -- specifically, after React has already updated the real DOM to match that render's output -- never during the render calculation itself. This isn't an arbitrary rule; it's what keeps rendering a predictable, side-effect-free calculation of 'what should the UI look like,' with anything that reaches outside that calculation deliberately pushed into a separate phase that runs afterward."
+          },
+          {
+            "heading": "The Dependency Array",
+            "body": "```jsx\nuseEffect(() => {\n  // effect body\n}, [dep1, dep2]);\n```\n\nOn every render, React compares each dependency to the value it had on the *previous* render; the effect only re-runs if at least one of them changed. This array must honestly list every reactive value -- state, props, or anything derived from them -- that the effect body actually reads. Leaving one out isn't a harmless optimization; it's a real bug, and specifically a stale-closure bug of the exact same kind covered for useState: the effect function itself is a closure, created fresh on whichever render last caused it to run, and if a value it reads isn't listed as a dependency, the effect has no reason to run again when that value changes -- so it keeps operating on the old, closed-over value from whenever it last ran.\n\nThis is exactly why `eslint-plugin-react-hooks`'s exhaustive-deps rule exists and flags this: it's catching real, hard-to-notice bugs (an effect quietly using stale data), not enforcing a style preference. Silencing the warning with an eslint-disable comment, without actually fixing the underlying issue, doesn't resolve anything -- it just hides the warning while the bug remains. Two special cases are worth knowing: an empty array `[]` means 'run once, after the very first render, and never again'; omitting the array argument entirely means 'run after every single render,' which is rarely the intended behavior and usually a mistake rather than a deliberate choice."
+          },
+          {
+            "heading": "The Cleanup Function",
+            "body": "If the function passed to `useEffect` returns another function, React treats that returned function as **cleanup**. It runs right before the effect runs again (for a newer set of dependency values) and once more when the component unmounts entirely:\n\n```jsx\nuseEffect(() => {\n  function handleResize() {\n    setWidth(window.innerWidth);\n  }\n  window.addEventListener(\"resize\", handleResize);\n\n  return () => {\n    window.removeEventListener(\"resize\", handleResize);\n  };\n}, []);\n```\n\nThis matters enormously for anything that would otherwise leak or duplicate. A subscription that's never unsubscribed keeps invoking a callback tied to a component that may have already re-run its effect (or unmounted) -- calling into stale closures, or updating state for a component instance that no longer logically exists. An interval or timeout that's never cleared keeps firing indefinitely. And an effect that runs more than once without cleanup in between (because its dependencies changed) can quietly accumulate multiple simultaneous subscriptions or timers, instead of always having exactly one active at a time -- so a resize handler that should fire once per resize might end up firing several times, once per leftover, uncleaned listener."
+          },
+          {
+            "heading": "The Classic Infinite-Loop Bug",
+            "body": "```jsx\nfunction BuggyCounter() {\n  const [count, setCount] = useState(0);\n\n  useEffect(() => {\n    setCount(count + 1);\n  }, [count]);\n\n  return <p>{count}</p>;\n}\n```\n\nThis effect depends on `count` and unconditionally sets a new `count` on every single run. Trace it: render (count = 0) -> effect runs because it's the first run -> setCount(1) -> re-render (count = 1) -> count changed, so the effect runs again -> setCount(2) -> re-render (count = 2) -> ... forever, pegging the CPU and never settling. The effect is, structurally, exactly the condition that causes it to run again, every single time it runs.\n\nThe fix is one of a few things: don't depend on a value you're unconditionally overwriting from inside the very same effect (often achievable with a functional update if you need the *previous* value without needing to list it as a dependency); add a genuine conditional guard so the effect only calls setState when something has changed for an unrelated reason; or -- often the right call -- recognize that the logic doesn't need an effect at all. A great deal of 'derived state' (a value computed from other state or props) doesn't belong in a useEffect-plus-setState pair; it can simply be calculated directly in the component body during render, with no effect, no extra state variable, and no risk of this loop in the first place."
+          },
+          {
+            "heading": "A Realistic Effect, End to End",
+            "body": "```jsx\nfunction UserProfile({ userId }) {\n  const [user, setUser] = useState(null);\n\n  useEffect(() => {\n    let isCurrent = true;\n\n    fetchUser(userId).then((data) => {\n      if (isCurrent) setUser(data);\n    });\n\n    return () => {\n      isCurrent = false;\n    };\n  }, [userId]);\n\n  return user ? <p>{user.name}</p> : <p>Loading...</p>;\n}\n```\n\nThis effect correctly lists `userId` as its only dependency, since that's the only reactive value it reads, and re-fetches whenever it changes. The cleanup function doesn't cancel the actual network request, but it does something just as important: it flips a flag so that if `userId` changes again *before* the current fetch resolves (a real race condition -- the user might click between two profiles quickly), the stale response is simply ignored instead of being applied to state for a userId that's no longer current. This pattern -- dependency array matching exactly what's read, plus a cleanup guarding against a stale, late-arriving result -- is close to the shape of most real-world data-fetching effects."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Subscribing to window resize, with cleanup",
+          "language": "jsx",
+          "code": "function WindowWidth() {\n  const [width, setWidth] = useState(window.innerWidth);\n\n  useEffect(() => {\n    function handleResize() {\n      setWidth(window.innerWidth);\n    }\n\n    window.addEventListener(\"resize\", handleResize);\n\n    return () => {\n      window.removeEventListener(\"resize\", handleResize);\n    };\n  }, []);\n\n  return <p>Window width: {width}px</p>;\n}",
+          "explanation": "The empty dependency array means this effect runs exactly once, right after the first render, subscribing to the browser's resize event. Because the dependency array never changes, the returned cleanup function here only actually runs when WindowWidth unmounts -- but the same cleanup would matter just as much if the effect re-ran for some other dependency: without it, each additional run would add yet another resize listener on top of the previous one, without ever removing it, and eventually a single real resize event would trigger setWidth multiple times, once for each accumulated leftover listener."
+        },
+        {
+          "title": "The Infinite Loop, and the Fix",
+          "language": "jsx",
+          "code": "// BUGGY: effect depends on count, and unconditionally resets it every run\nfunction BuggyCounter() {\n  const [count, setCount] = useState(0);\n\n  useEffect(() => {\n    setCount(count + 1);\n  }, [count]);\n\n  return <p>{count}</p>;\n}\n\n// FIXED: reacts to something external instead of the state it modifies\nfunction FixedCounter({ resetSignal }) {\n  const [count, setCount] = useState(0);\n\n  useEffect(() => {\n    setCount(0);\n  }, [resetSignal]);\n\n  return <p>{count}</p>;\n}",
+          "explanation": "BuggyCounter's effect is triggered by count changing, and it changes count every time it runs -- render, effect runs, count changes, re-render, count changed so the effect runs again, forever. FixedCounter instead only reacts to an external signal (resetSignal) that has nothing to do with the count it's setting, breaking the cycle: changing count doesn't change resetSignal, so the effect doesn't re-trigger itself. More generally, an effect that both depends on and unconditionally overwrites the same piece of state is a strong signal that either a guard condition is missing, or the logic would be simpler and safer as a plain calculation during render instead of an effect at all."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "useEffect runs during render, so it's fine to use it to compute a value this render's JSX needs.",
+          "clarification": "Effects run AFTER the DOM has already been updated to match a completed render -- never during the render calculation itself. Anything the current render's JSX actually needs must be computed directly in the component body (or via useMemo), not produced inside an effect and stored in a separate state variable, since the effect-plus-setState approach introduces an extra render cycle of lag for something that could simply be a synchronous calculation with no lag and no extra state at all."
+        },
+        {
+          "description": "The dependency array is mainly about performance -- leaving something out just means the effect re-runs a bit more or less than ideal, but it still works correctly either way.",
+          "clarification": "Omitting a dependency the effect actually reads is a correctness bug, not a performance tradeoff. The effect function is a closure formed on whichever render last caused it to run; if a value it reads isn't listed, the effect has no trigger to re-run when that value changes, so it keeps using the old, closed-over value from its last run -- exactly the same stale-closure mechanism covered for useState. Disabling the exhaustive-deps lint warning on a case like this hides the symptom without fixing the underlying bug."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "react-useeffect-ex1",
+          "type": "debugging",
+          "prompt": "This component is supposed to re-run its search whenever the query prop changes, but once mounted, it never searches again no matter how many times query changes afterward, and it always shows results for whatever query was passed in on the very first render. Find the bug and fix it.",
+          "code": "function LiveSearch({ query }) {\n  const [results, setResults] = useState([]);\n\n  useEffect(() => {\n    fetchResults(query).then((data) => setResults(data));\n  }, []); // eslint-disable-next-line react-hooks/exhaustive-deps\n\n  return <ResultsList results={results} />;\n}",
+          "hints": [
+            "The dependency array is empty -- what does an empty dependency array actually tell React about when this effect is allowed to run again?",
+            "The eslint-disable-next-line comment is suppressing a real warning about something specific. What is the linter trying to tell you about which values this effect body reads?",
+            "The effect's function body reads `query` directly -- if query isn't in the dependency array, does the effect ever get a reason to notice that query changed?"
+          ],
+          "solutionCode": "function LiveSearch({ query }) {\n  const [results, setResults] = useState([]);\n\n  useEffect(() => {\n    fetchResults(query).then((data) => setResults(data));\n  }, [query]);\n\n  return <ResultsList results={results} />;\n}",
+          "solutionExplanation": "An empty dependency array means 'run once, after the first render, and never again' -- so this effect fetches exactly once, using whatever query was passed in on that first render, and then never runs again, regardless of how many times the query prop subsequently changes. The eslint-disable comment was suppressing exactly the warning that would have caught this: the effect reads query but doesn't list it as a dependency, meaning the effect is closed over query's very first value forever. The fix lists query in the dependency array (and removes the now-unnecessary eslint-disable comment), so the effect correctly re-runs -- and re-fetches -- every time query actually changes."
+        },
+        {
+          "id": "react-useeffect-ex2",
+          "type": "debugging",
+          "prompt": "This component is meant to keep a copy of the current preferences in localStorage, but as soon as it mounts, it renders continuously and the tab becomes unresponsive. Find the bug and fix it.",
+          "code": "function Preferences({ userId }) {\n  const [prefs, setPrefs] = useState({ theme: \"light\" });\n\n  useEffect(() => {\n    localStorage.setItem(\"prefs\", JSON.stringify(prefs));\n    setPrefs({ ...prefs, lastSavedFor: userId });\n  }, [prefs]);\n\n  return <p>Theme: {prefs.theme}</p>;\n}",
+          "hints": [
+            "The effect depends on prefs -- and it calls setPrefs with a new object built via {...prefs, ...} on every single run. Is the object this produces ever considered 'unchanged' from the previous one, even if lastSavedFor happens to already equal userId?",
+            "The dependency array comparison checks whether the reference changed, not whether the meaningful content changed -- what does a fresh object literal built with the spread operator look like from that perspective, every single time?",
+            "Does writing to localStorage actually require also calling setPrefs at all?"
+          ],
+          "solutionCode": "function Preferences({ userId }) {\n  const [prefs, setPrefs] = useState({ theme: \"light\" });\n\n  useEffect(() => {\n    localStorage.setItem(\"prefs\", JSON.stringify(prefs));\n  }, [prefs]);\n\n  return <p>Theme: {prefs.theme}</p>;\n}",
+          "solutionExplanation": "Every run of this effect calls setPrefs({ ...prefs, lastSavedFor: userId }), which builds a brand-new object via the spread operator -- a new reference every single time, regardless of whether any field's actual value changed. Since the effect's dependency array is [prefs], and prefs is now a genuinely new reference after every run, React sees a changed dependency on every subsequent render and runs the effect again -- which produces yet another new object, which triggers the effect again, forever. This is the same infinite-loop shape as an effect depending on a piece of state it unconditionally rewrites, just with an object reference instead of a plain number making the 'changed every time' behavior a bit less obvious. The actual goal here -- persisting prefs to localStorage -- never needed to call setPrefs at all; removing that call leaves an effect that reacts to real changes in prefs (from wherever else it's actually updated) and simply mirrors them to localStorage, with nothing left to trigger itself in a loop."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "react-useeffect-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "A teammate says: \"I left `userId` out of this effect's dependency array on purpose, since I only want it to run once, and it's a minor performance tweak either way.\" The effect reads `userId` inside its body. What's the accurate assessment?",
+          "options": [
+            "That's correct -- dependency arrays are purely a performance optimization, so leaving one out just means the effect might run slightly more or less often than ideal.",
+            "That's incorrect -- omitting a dependency the effect actually reads means the effect's closure keeps using the userId value from whichever render it last ran on; if userId later changes, the effect won't notice and will keep operating on stale data. This is a correctness bug, not a performance tradeoff.",
+            "That's incorrect -- effects with any dependency array shorter than the number of props the component receives will throw a runtime error.",
+            "That's correct, but only because useEffect automatically reruns for every prop change regardless of what's listed in the dependency array."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The dependency array controls when React decides an effect needs to re-run by comparing each listed value to its previous render's value; it says nothing about values NOT listed. If the effect body reads userId but userId isn't listed, the effect simply has no trigger to notice when userId changes -- so it keeps using whatever userId was during the render on which it last ran, which is a real correctness bug (stale data), not merely a missed performance optimization. Option C describes a rule that doesn't exist -- there's no such runtime check. Option D is false -- useEffect only reacts to what's actually listed in its dependency array; it does not automatically track every prop."
+        },
+        {
+          "id": "react-useeffect-assess-scenario1",
+          "type": "scenario",
+          "prompt": "While reviewing a pull request, you see a useEffect call with `// eslint-disable-next-line react-hooks/exhaustive-deps` directly above it, added to silence a warning about a missing dependency. What would you say in the code review, and what would you ask the author to do instead?",
+          "modelAnswer": "I'd flag this as something to address before merging rather than to suppress, because the exhaustive-deps warning is almost always catching a real bug: the effect closes over some reactive value it reads, and if that value isn't listed as a dependency, the effect won't notice when it changes and will keep operating on stale data from whichever render it last ran on -- the same stale-closure mechanism that shows up with useState. Disabling the lint rule doesn't fix that; it just removes the visible signal that the bug exists, which tends to make it harder to find later, once the symptom (some stale value showing up somewhere downstream) is separated from the actual cause by more code and more time. I'd ask the author to either add the missing dependency and confirm the effect still behaves correctly when it re-runs on that value's changes (adding a cleanup function if the effect does something that needs to be undone/reset between runs, like a subscription or timer), or, if there's a genuine reason the value shouldn't be a dependency (for instance, it's a ref, or a value that's deliberately meant to be read only on mount), to say so explicitly with a comment explaining why, rather than a blanket eslint-disable with no justification. The lint rule being occasionally overzealous in rare edge cases is not a reason to reflexively silence it whenever it's inconvenient -- it's a reason to understand why it's firing in this specific case, every time."
+        }
+      ]
+    },
+    {
+      "id": "react-useref",
+      "title": "useRef",
+      "description": "useRef gives a component a mutable value that persists across renders without ever triggering a re-render when it changes, making it the right tool for real DOM node access and for internal bookkeeping that shouldn't drive what's on screen.",
+      "moduleId": "react-hooks",
+      "topicId": "react-hooks",
+      "difficulty": "beginner",
+      "estimatedMinutes": 20,
+      "prerequisites": ["react-usestate"],
+      "learningObjectives": [
+        "Explain what useRef returns and why the same object persists across every render of a component instance.",
+        "State the core contrast between changing state and changing a ref, in terms of what does and doesn't trigger a re-render.",
+        "Use a ref to call an imperative DOM method like .focus() on a real DOM node.",
+        "Use a ref to store an 'instance variable' style value, like a previous render's value or a timer id.",
+        "Decide, for a given value, whether it belongs in state or in a ref."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "What useRef Gives You: A Mutable Box That Persists",
+            "body": "`useRef(initialValue)` returns a plain object shaped like `{ current: initialValue }`. The important part isn't the shape -- it's that this is the *same object*, across every render of a given component instance: React creates it once, on the first render, and simply hands back that identical object every render after that. Writing `myRef.current = newValue` mutates that persistent box directly, in place, and reading `myRef.current` at any later point -- even from inside a callback defined on some earlier render -- always retrieves whatever was most recently written. There's no closure staleness here the way there can be with state read inside a delayed callback: you're always dereferencing through the one, single, live object, not through a variable that got snapshotted into a particular render's closure."
+          },
+          {
+            "heading": "The Core Contrast: State Change Re-renders, Ref Change Doesn't",
+            "body": "This is the single fact to internalize about refs:\n\n- Changing state (by calling its setter) tells React something changed -- it schedules a re-render, the component function runs again, and the JSX reflects the new value.\n- Changing a ref (`myRef.current = x`) tells React nothing at all. No re-render is scheduled. If nothing else happens to cause a re-render, the UI will never reflect that change on its own, no matter how many times `.current` is reassigned.\n\nThis makes refs the correct tool exactly when you have a value the component needs to track or mutate, but where a change to that value should *not*, by itself, cause anything on screen to update. If a value's change genuinely should be visible in the rendered output, it belongs in state -- hiding it in a ref instead just means the UI silently drifts out of sync with the data, which is the same category of problem as mutating state directly rather than going through its setter."
+          },
+          {
+            "heading": "The Most Common Use: Accessing a Real DOM Node",
+            "body": "```jsx\nfunction AutoFocusInput() {\n  const inputRef = useRef(null);\n\n  useEffect(() => {\n    inputRef.current.focus();\n  }, []);\n\n  return <input ref={inputRef} placeholder=\"Focused automatically\" />;\n}\n```\n\nAttaching `ref={inputRef}` to a JSX element tells React to set `inputRef.current` to the actual browser DOM node once it exists (right after that render is committed). This is an escape hatch to real, imperative DOM APIs that JSX has no declarative prop for -- calling `.focus()`, `.scrollIntoView()`, measuring an element's size with `.getBoundingClientRect()`, or integrating a non-React library that expects a raw DOM node to attach itself to. `inputRef.current` starts out `null` (before the element exists) and only becomes the real node once React has mounted it, which is exactly why the `.focus()` call above happens inside a useEffect -- effects run after the DOM has actually been updated for that render, so the node is guaranteed to exist by the time the effect body runs."
+          },
+          {
+            "heading": "Storing 'Instance Variable' Values",
+            "body": "Beyond DOM nodes, refs are the natural home for values a component needs to remember or mutate internally, but that have no business driving what's rendered: the previous render's value of some prop or state (for comparing 'is this rising or falling'), an interval or timeout id (so a later handler or cleanup function can clear it), a boolean flag like 'has the initial fetch already happened,' or a render counter used purely for debugging. None of these, when they change, should cause the component to re-render on their own -- they're bookkeeping the component logic needs access to, not data the UI depicts. Using state for this kind of value would work in the sense that it wouldn't crash, but it would cause extra, unnecessary re-renders every time the bookkeeping value changed, for a value nothing in the JSX actually reads."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Focusing an Input on Mount",
+          "language": "jsx",
+          "code": "function AutoFocusInput() {\n  const inputRef = useRef(null);\n\n  useEffect(() => {\n    inputRef.current.focus();\n  }, []);\n\n  return <input ref={inputRef} placeholder=\"Focused automatically\" />;\n}",
+          "explanation": "inputRef starts as null; React sets inputRef.current to the real <input> DOM node once it exists, right after the first render commits. The effect (which runs after that commit, with an empty dependency array so it only runs once) then calls the actual DOM .focus() method on that node -- something no JSX prop on <input> expresses declaratively, since 'focus yourself once, right now' is a one-off imperative command, not a persistent piece of UI state to describe."
+        },
+        {
+          "title": "Tracking a Previous Value Without Triggering Extra Renders",
+          "language": "jsx",
+          "code": "function TemperatureDisplay({ celsius }) {\n  const prevCelsiusRef = useRef(celsius);\n\n  useEffect(() => {\n    prevCelsiusRef.current = celsius;\n  }, [celsius]);\n\n  const direction =\n    celsius > prevCelsiusRef.current ? \"rising\" :\n    celsius < prevCelsiusRef.current ? \"falling\" : \"steady\";\n\n  return <p>{celsius}\\u00b0C ({direction})</p>;\n}",
+          "explanation": "prevCelsiusRef.current holds whatever celsius was as of the last completed effect run. Crucially, the direction calculation (which runs during render, before this render's own effect has had a chance to update the ref) is comparing the new celsius prop against what the ref still holds from BEFORE this render's update -- exactly the 'previous value' comparison intended. Writing to prevCelsiusRef.current never itself triggers a re-render; it doesn't need to, since the celsius prop actually changing is what already caused this render to happen in the first place."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "Changing a ref's .current value should update what's on screen, the same way calling a state setter does, since it's still 'data belonging to the component.'",
+          "clarification": "Changing a ref never schedules a re-render, no matter what. State changes and ref changes are fundamentally different signals to React: a state setter says 'something changed, please re-render'; a ref mutation says nothing at all. If a value's changes need to be visible in the rendered UI, it has to be state (or something derived from state); a ref that happens to hold the 'right' value doesn't help if nothing ever re-renders to actually display it."
+        },
+        {
+          "description": "Refs are basically a faster version of state -- I should prefer them for values that change often, to avoid extra re-renders.",
+          "clarification": "This only makes sense if the UI genuinely never needs to visually reflect that value's changes. Reaching for a ref purely to dodge re-renders, for a value whose changes SHOULD be visible on screen, just means the screen silently falls out of sync with the real data -- the same category of bug as mutating state directly instead of using its setter. Refs aren't a general performance trick for 'state, but cheaper'; they're for values that legitimately fall outside what the rendered output depicts at all."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "react-useref-ex1",
+          "type": "predictOutput",
+          "prompt": "A user clicks \"Click me\" three times, then clicks \"Force re-render\" once. What does the \"Displayed click count\" text show immediately after each of the three \"Click me\" clicks, and what does it show after \"Force re-render\" is clicked?",
+          "code": "function ClickTracker() {\n  const clickCountRef = useRef(0);\n  const [renderCount, setRenderCount] = useState(0);\n\n  function handleClick() {\n    clickCountRef.current = clickCountRef.current + 1;\n    console.log(\"Ref count is now:\", clickCountRef.current);\n  }\n\n  return (\n    <div>\n      <p>Displayed click count: {clickCountRef.current}</p>\n      <button onClick={handleClick}>Click me</button>\n      <button onClick={() => setRenderCount(renderCount + 1)}>Force re-render</button>\n    </div>\n  );\n}",
+          "hints": [
+            "Does mutating clickCountRef.current, on its own, cause ClickTracker to run again and produce fresh JSX?",
+            "The JSX text only reflects whatever clickCountRef.current happens to be at the moment the component actually renders -- so the real question is: what causes a render to happen here, and what doesn't?",
+            "By the time 'Force re-render' is clicked and setRenderCount actually triggers a new render, what value is genuinely sitting in clickCountRef.current at that moment?"
+          ],
+          "expectedAnswer": "After each of the three 'Click me' clicks, the displayed text still shows 'Displayed click count: 0' -- it never changes, even though clickCountRef.current is truly 1, then 2, then 3 internally (proven by the console logs). Only after 'Force re-render' is clicked does the text update, jumping straight to 'Displayed click count: 3', since that's the ref's true current value by the time this render finally happens.",
+          "solutionExplanation": "Mutating clickCountRef.current inside handleClick never schedules a re-render -- ref changes are invisible to React's rendering system. So ClickTracker never re-runs after any of the three 'Click me' clicks, and the JSX -- which was only evaluated once, back on the initial render, when clickCountRef.current was still 0 -- keeps showing 0 for all three clicks, even though the ref object itself genuinely holds 1, then 2, then 3 by then (which is exactly what the console.log lines prove). Clicking 'Force re-render' calls setRenderCount, a real state update, which does schedule a re-render; when ClickTracker's function runs again for that render, it evaluates {clickCountRef.current} fresh, and by that point the ref's value is 3 -- so the displayed text jumps directly from 0 to 3, skipping 1 and 2 entirely, since those intermediate values were never actually rendered."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "react-useref-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "Which of these changes, by itself, causes a component to re-render?",
+          "options": [
+            "Mutating a ref's .current property.",
+            "Calling a state setter function returned by useState.",
+            "Reading a prop's current value inside the component body.",
+            "Declaring a new local variable with let inside the component function."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Calling a state setter is one of React's actual triggers for scheduling a re-render -- it's the mechanism specifically designed to say 'something changed, please run this component again.' Mutating a ref's .current (option A) is explicitly the opposite case: React has no way of knowing, and schedules nothing. Reading a prop (option C) doesn't change anything by itself -- it's just accessing a value already provided; a prop only changes because the parent re-rendered and passed something new, not because the child read it. Declaring a local variable (option D) has no effect on React's rendering system at all -- it's just an ordinary piece of JavaScript scoped to that one function call."
+        }
+      ]
+    },
+    {
+      "id": "react-usememo-and-usecallback",
+      "title": "useMemo and useCallback",
+      "description": "useMemo caches an expensive computed value and useCallback caches a function reference (really just useMemo specialized for functions), both leaning on JavaScript's referential-equality rules -- and both are optimizations with a real cost of their own, not something to apply everywhere by default.",
+      "moduleId": "react-hooks",
+      "topicId": "react-hooks",
+      "difficulty": "advanced",
+      "estimatedMinutes": 30,
+      "prerequisites": ["react-useeffect"],
+      "learningObjectives": [
+        "Explain referential equality and why two structurally identical objects, arrays, or functions are not === equal.",
+        "Explain why a function or object literal written inside a component body is a new value on every render.",
+        "Distinguish what useMemo memoizes from what useCallback memoizes, and explain why useCallback is really useMemo specialized for functions.",
+        "Identify the specific situations where memoization has a real payoff versus where it's needless overhead.",
+        "Fix a bug caused by an unstable object or function reference being used as a dependency."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "Referential Equality: Same Contents, Different Identity",
+            "body": "JavaScript's `===` operator compares objects, arrays, and functions by **identity** -- are these literally the same value in memory -- not by comparing their contents field by field:\n\n```javascript\nconsole.log({ a: 1 } === { a: 1 });          // false\nconsole.log([1, 2, 3] === [1, 2, 3]);        // false\nconsole.log((() => {}) === (() => {}));       // false\n\nconst obj = { a: 1 };\nconsole.log(obj === obj);                     // true -- same reference\n```\n\nThis is a sharp contrast with primitives (numbers, strings, booleans, null, undefined), where `===` does compare by value -- `5 === 5` is true, `\"hi\" === \"hi\"` is true. Two functions with byte-for-byte identical bodies are still two distinct function objects if they were created as two separate function expressions -- `===` says false, every time, regardless of what's inside them."
+          },
+          {
+            "heading": "Every Render Creates New Objects, Arrays, and Functions",
+            "body": "A component function runs again, from the top, on every render. Any object literal, array literal, or function definition written directly inside that function body is therefore a brand-new value every single time, even when it looks identical to what the previous render produced:\n\n```jsx\nfunction Parent() {\n  const config = { color: \"blue\" }; // a genuinely new object, every render\n  return <Child config={config} />;\n}\n```\n\n`config` is a different object reference on every render of Parent, even though `{ color: \"blue\" }` reads identically each time. This matters anywhere something downstream cares about reference identity rather than content -- most importantly, a dependency array (which compares references) or a component wrapped in `React.memo` (which shallow-compares props by reference)."
+          },
+          {
+            "heading": "useMemo: Memoizing a Computed Value",
+            "body": "```jsx\nconst result = useMemo(() => computeExpensiveValue(a, b), [a, b]);\n```\n\n`useMemo` runs the function you give it and caches the returned value; on later renders, it only re-runs that function (and returns a genuinely new value) if one of the listed dependencies has changed since the previous render -- otherwise it just hands back the exact same cached value it returned last time, reference and all. This has two possible payoffs: skipping a genuinely expensive recomputation, and -- often the more important one in practice -- keeping a stable reference across renders when that value is going to be compared by identity somewhere downstream (as a dependency of another hook, or as a prop into a memoized child)."
+          },
+          {
+            "heading": "useCallback: Actually Just useMemo for Functions",
+            "body": "```jsx\nconst handleClick = useCallback((id) => {\n  doSomething(id);\n}, [doSomething]);\n```\n\n`useCallback(fn, deps)` is defined to behave identically to `useMemo(() => fn, deps)` -- it exists purely as a slightly clearer, dedicated name for the extremely common specific case of memoizing a *function reference*, rather than being a fundamentally different mechanism. There's nothing useCallback does that useMemo couldn't also express; it's a convenience wrapper for one common shape of the same underlying idea."
+          },
+          {
+            "heading": "The Honest Cost: Optimizations Aren't Free",
+            "body": "Both hooks have a real cost, every render, whether or not they end up recomputing anything: React still has to check whether each listed dependency changed, and it holds onto the cached value plus its dependency list in memory between renders. For a cheap computation, or a function that's never compared by identity anywhere that matters, wrapping it in useMemo/useCallback adds overhead and extra code for no real benefit -- 'memoize everything, just in case' is a genuine anti-pattern, not a safe default, and it makes components harder to read for no measurable win.\n\nThey earn their keep specifically in two situations: (1) the memoized value or function is itself listed as a *dependency of another hook* (like useEffect) -- without memoizing it, that other hook would see a 'new' dependency on every render and re-run pointlessly, even though nothing meaningful actually changed; and (2) a function or object is passed as a prop into a child wrapped in `React.memo` -- without memoizing it, the child would see a 'changed' prop on every render (since the reference is always new), which defeats the entire purpose of wrapping it in React.memo in the first place. Outside of those two shapes of problem, reach for useMemo/useCallback only once you've actually noticed a cost worth solving, not preemptively."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Referential Equality, Demonstrated",
+          "language": "javascript",
+          "code": "console.log({ a: 1 } === { a: 1 });          // false -- different objects\nconsole.log([1, 2, 3] === [1, 2, 3]);        // false -- different arrays\nconsole.log((() => {}) === (() => {}));       // false -- different functions\n\nconst obj = { a: 1 };\nconsole.log(obj === obj);                     // true -- the SAME reference\n\nconsole.log(5 === 5);                         // true -- primitives compare by value\nconsole.log(\"hi\" === \"hi\");                   // true",
+          "explanation": "Every === comparison between two separately-created objects, arrays, or functions returns false, no matter how identical their contents look -- === for these types checks whether both sides point to the exact same thing in memory, not whether they'd look the same if printed. Only comparing a value to itself (the same reference, stored once and reused) returns true. Primitives are the odd case out: they compare by value, which is why 5 === 5 and \"hi\" === \"hi\" are both true -- there's no separate 'identity' for a primitive apart from its value."
+        },
+        {
+          "title": "useCallback Preserving a Stable Reference for React.memo",
+          "language": "jsx",
+          "code": "const ExpensiveList = React.memo(function ExpensiveList({ onItemClick }) {\n  console.log(\"ExpensiveList rendered\");\n  return <div>{/* imagine thousands of rows here */}</div>;\n});\n\nfunction Parent() {\n  const [count, setCount] = useState(0);\n\n  const handleItemClick = useCallback((id) => {\n    console.log(\"clicked\", id);\n  }, []);\n\n  return (\n    <div>\n      <button onClick={() => setCount(count + 1)}>Re-render Parent ({count})</button>\n      <ExpensiveList onItemClick={handleItemClick} />\n    </div>\n  );\n}",
+          "explanation": "React.memo makes ExpensiveList skip re-rendering whenever its props are all reference-equal to last time. Without useCallback, handleItemClick would be a brand-new function on every render of Parent -- so clicking the button would give ExpensiveList a 'new' onItemClick every time, even though what that function actually does never changes, and React.memo's shallow prop comparison would see a changed prop and re-render ExpensiveList anyway, silently defeating the whole point of wrapping it in React.memo. Wrapping handleItemClick in useCallback with an empty dependency array keeps it as the exact same function reference across every render of Parent, so ExpensiveList correctly sees an unchanged onItemClick and skips re-rendering when only count changes."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "Two objects (or arrays, or functions) with exactly the same contents should be === equal, since they represent 'the same data.'",
+          "clarification": "=== for objects, arrays, and functions compares identity (are these literally the same value in memory), not structural content. {a: 1} === {a: 1} is false, even though both sides look identical, because they're two separately created objects. Only comparing a value to itself -- the same reference stored once and reused -- returns true. This is different from primitives like numbers and strings, which do compare by value."
+        },
+        {
+          "description": "Wrapping every function and computed value in useCallback/useMemo is always at least harmless, so it's safer to just do it everywhere.",
+          "clarification": "The memoization machinery itself has a real cost every render -- comparing dependencies, holding onto cached values and dependency lists in memory -- and for a value that's never compared by reference anywhere downstream (not a hook dependency, not a prop into a React.memo'd child), that cost buys nothing. Using useMemo/useCallback everywhere 'just in case' adds overhead and reading complexity without a corresponding benefit; they're targeted tools for specific referential-identity problems, not a general-purpose safety habit."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "react-usememo-and-usecallback-ex1",
+          "type": "debugging",
+          "prompt": "This effect is supposed to only re-run the search when query actually changes, but it fires on every single render of SearchResults, regardless of whether query changed. Find both issues and fix them.",
+          "code": "function SearchResults({ query }) {\n  const options = { caseSensitive: false, limit: 10 };\n\n  useEffect(() => {\n    fetchSearch(query, options).then((data) => {\n      console.log(data);\n    });\n  }, [options]);\n\n  return null;\n}",
+          "hints": [
+            "options is an object literal written directly inside the component body. What's true about its reference on every single render, regardless of whether its contents ever actually change?",
+            "The dependency array compares options by reference, not by contents -- what does that comparison look like when options is a new object every render?",
+            "Separately: the effect body also reads query directly. Is that listed anywhere it needs to be?"
+          ],
+          "solutionCode": "function SearchResults({ query }) {\n  const options = useMemo(() => ({ caseSensitive: false, limit: 10 }), []);\n\n  useEffect(() => {\n    fetchSearch(query, options).then((data) => {\n      console.log(data);\n    });\n  }, [query, options]);\n\n  return null;\n}",
+          "solutionExplanation": "There are two separate bugs here. First, options is a fresh object literal on every render of SearchResults -- a new reference every time, even though {caseSensitive: false, limit: 10} never actually changes in content -- so listing it as a dependency means the effect sees a 'changed' dependency on every render and fires every time, regardless of query. Wrapping it in useMemo with an empty dependency array gives it a stable reference that only changes if its own deps changed (here, never after the first render), so it stops looking different every render. Second, the effect body reads query directly but the original dependency array never listed it -- a separate, real stale-closure bug where the effect would have kept searching with whatever query was on its first run. The fixed version lists both query and the now-memoized options, so the effect correctly re-runs exactly when query changes, and no longer re-runs needlessly just because options was recreated."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "react-usememo-and-usecallback-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "A component computes `const total = items.reduce((sum, i) => sum + i.price, 0);` from a small array of 5 items, on every render, and this value isn't passed to any other hook's dependency array or to a React.memo'd child. Should this be wrapped in useMemo?",
+          "options": [
+            "Yes, always -- any computed value should be memoized as a general best practice.",
+            "No -- summing 5 items is cheap, and since the result isn't used anywhere that cares about referential identity or expensive recomputation, useMemo would add the cost of a dependency check and cached-value bookkeeping for no real benefit.",
+            "Yes, but only because reduce() is always considered an expensive operation in React.",
+            "No -- useMemo cannot be used with array methods like reduce()."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "useMemo earns its cost when either the computation itself is genuinely expensive, or the resulting value's reference identity matters downstream (as a dependency of another hook, or a prop into a React.memo'd child). Neither applies here: summing 5 numbers is trivial, and nothing downstream compares this value by reference. Wrapping it in useMemo would mean paying for a dependency comparison and cached-value storage every render, in exchange for skipping a computation that was already essentially free -- a net loss, not a win. Option A describes the 'memoize everything just in case' anti-pattern directly. Option C is false -- reduce() over a small array is not inherently expensive; cost depends on what's actually being computed and over how much data. Option D is false -- useMemo works with any computation, reduce() included."
+        }
+      ]
+    },
+    {
+      "id": "react-custom-hooks",
+      "title": "Custom Hooks",
+      "description": "A custom hook is just a regular function, named starting with 'use', that calls other hooks internally to bundle up reusable stateful logic -- and the Rules of Hooks exist because React matches hook calls to their stored state purely by call order, every render.",
+      "moduleId": "react-hooks",
+      "topicId": "react-hooks",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 25,
+      "prerequisites": ["react-useeffect", "react-useref"],
+      "learningObjectives": [
+        "Explain what actually makes a function a 'custom hook,' and why the useX naming convention matters practically.",
+        "State the Rules of Hooks and explain, in terms of call order, why breaking them causes state to attach to the wrong hook call.",
+        "Extract a repeated stateful pattern (like fetch-with-loading-and-error) into a reusable custom hook.",
+        "Identify a violation of the Rules of Hooks in given code and fix it."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "A Custom Hook Is Just a Function",
+            "body": "There's no special React API for declaring a custom hook. A custom hook is simply an ordinary JavaScript function that happens to call one or more other hooks inside its own body, named -- by convention -- starting with `use` (`useWindowWidth`, `useFetch`, `useDebounce`). That naming convention isn't cosmetic: it's how the linter (specifically, `eslint-plugin-react-hooks`) recognizes that this particular function is expected to follow the Rules of Hooks and is allowed to call other hooks inside it, and it's how any other developer reading the code instantly understands what kind of function this is and what constraints apply to calling it. Naming it something else -- `getWindowWidth` instead of `useWindowWidth` -- doesn't literally break anything at the JavaScript language level, but it disables the linter's ability to correctly check hook usage inside it, and it actively misleads anyone reading the code about what this function is allowed to do internally and where it's safe to call it from."
+          },
+          {
+            "heading": "Why Extract a Custom Hook",
+            "body": "The entire point is reuse. Whenever multiple components need the exact same combination of hooks working together -- subscribing to window resize and tracking the current width; tracking online/offline status; fetching a URL and tracking loading/error state -- pulling that combination into one named function avoids copy-pasting the same useState/useEffect/useRef calls into every component that needs it. It also gives the pattern a name, which makes every component that uses it shorter and clearer about *what* it's doing (`const { data, loading, error } = useFetch(url);`) rather than *how* it's doing it."
+          },
+          {
+            "heading": "The Rules of Hooks: Why Call Order Matters",
+            "body": "Two firm rules govern every hook, custom or built-in: only call hooks at the top level of a component (or another hook) -- never inside an `if`, a loop, a nested regular function, or after an early `return`.\n\nHere's the concrete reason, not just the rule: React does not track a component's hook state *by name* -- it tracks it *by the order hooks are called in*, on every render, for a given component instance. Internally, it's roughly 'the 1st hook call this component makes is always this state slot; the 2nd is always that other one' -- matched up purely by position, render after render. If a hook call is conditionally skipped on some renders but not others, every hook call that comes *after* that point in the function shifts by one position relative to React's internally tracked list on the renders where it's skipped. React has no way to detect that this happened; it just hands back whatever it has stored at that position, which may now belong to a completely different hook call than the one asking for it -- state and refs can silently get cross-wired to the wrong variable, with no error thrown."
+          },
+          {
+            "heading": "A Concrete Example: Extracting useFetch",
+            "body": "```jsx\n// BEFORE: this exact combination is duplicated in every component that fetches something\nfunction UserProfile({ userId }) {\n  const [data, setData] = useState(null);\n  const [loading, setLoading] = useState(true);\n  const [error, setError] = useState(null);\n\n  useEffect(() => {\n    setLoading(true);\n    setError(null);\n    fetch(`/api/users/${userId}`)\n      .then((res) => res.json())\n      .then((json) => setData(json))\n      .catch((err) => setError(err))\n      .finally(() => setLoading(false));\n  }, [userId]);\n\n  if (loading) return <p>Loading...</p>;\n  if (error) return <p>Something went wrong.</p>;\n  return <p>{data.name}</p>;\n}\n\n// AFTER: the pattern is extracted once, and reused anywhere it's needed\nfunction useFetch(url) {\n  const [data, setData] = useState(null);\n  const [loading, setLoading] = useState(true);\n  const [error, setError] = useState(null);\n\n  useEffect(() => {\n    setLoading(true);\n    setError(null);\n    fetch(url)\n      .then((res) => res.json())\n      .then((json) => setData(json))\n      .catch((err) => setError(err))\n      .finally(() => setLoading(false));\n  }, [url]);\n\n  return { data, loading, error };\n}\n\nfunction UserProfile({ userId }) {\n  const { data, loading, error } = useFetch(`/api/users/${userId}`);\n\n  if (loading) return <p>Loading...</p>;\n  if (error) return <p>Something went wrong.</p>;\n  return <p>{data.name}</p>;\n}\n```\n\nuseFetch is nothing more than a function that itself calls useState three times and useEffect once, bundled behind one name and one return shape. UserProfile (and any other component with the same fetch-and-track need) can now just call `useFetch(url)`. Crucially, those three useState calls and one useEffect call still fully 'belong' to whichever component actually calls useFetch on a given render -- React doesn't care that they're textually written inside a different function; what matters is only that useFetch itself is called, unconditionally, from the top level, on every render of whatever calls it."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Extracting a Repeated Fetch Pattern Into useFetch",
+          "language": "jsx",
+          "code": "function useFetch(url) {\n  const [data, setData] = useState(null);\n  const [loading, setLoading] = useState(true);\n  const [error, setError] = useState(null);\n\n  useEffect(() => {\n    setLoading(true);\n    setError(null);\n    fetch(url)\n      .then((res) => res.json())\n      .then((json) => setData(json))\n      .catch((err) => setError(err))\n      .finally(() => setLoading(false));\n  }, [url]);\n\n  return { data, loading, error };\n}\n\nfunction UserProfile({ userId }) {\n  const { data, loading, error } = useFetch(`/api/users/${userId}`);\n  if (loading) return <p>Loading...</p>;\n  if (error) return <p>Something went wrong.</p>;\n  return <p>{data.name}</p>;\n}\n\nfunction ProductPage({ productId }) {\n  const { data, loading, error } = useFetch(`/api/products/${productId}`);\n  if (loading) return <p>Loading...</p>;\n  if (error) return <p>Something went wrong.</p>;\n  return <p>{data.title}</p>;\n}",
+          "explanation": "UserProfile and ProductPage each need the exact same 'fetch a URL, track loading and error' logic, just against different endpoints. Instead of duplicating three useState calls and a useEffect in both places, both components call the same useFetch hook -- the underlying hook calls still run fresh for each component instance that calls useFetch (React tracks the state per component instance, not per shared hook definition), so UserProfile and ProductPage each get their own independent data/loading/error state, just built from one shared, named implementation."
+        },
+        {
+          "title": "Violating the Rules of Hooks",
+          "language": "jsx",
+          "code": "function Profile({ userId, showDetails }) {\n  if (showDetails) {\n    const [details, setDetails] = useState(null); // BREAKS THE RULES OF HOOKS\n  }\n\n  const [name, setName] = useState(\"\");\n\n  // ...\n}",
+          "explanation": "On a render where showDetails is true, this component calls useState twice, in the order details-then-name. On a render where showDetails is false, it calls useState only once: name. React tracks hook state purely by call order/position for this component instance -- so on renders where the first call is skipped, React's 'first hook call slot' now means something different than it did before, and every hook call after that point (here, just name) can end up reading or writing the wrong stored value. React has no way to detect that the meaning of a position shifted; it simply doesn't know a hook call was conditionally skipped versus genuinely absent."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "Custom hooks are a distinct React feature or API, separate from just writing an ordinary function.",
+          "clarification": "There's no special createHook function or API -- a custom hook is purely a regular JavaScript function that happens to call other real hooks inside it, combined with a naming convention (starting with use). The 'custom hook' label describes how an ordinary function is being used and named, not a separate mechanism React provides."
+        },
+        {
+          "description": "As long as a hook call definitely happens somewhere during a render, it doesn't matter whether it's inside an if statement or a loop -- the important thing is just that it eventually runs.",
+          "clarification": "It matters enormously, because React tracks hook state by call ORDER/position for a given component instance across renders, not by name or by 'did it run at all this render.' If a hook call is conditionally present on some renders and absent on others, every hook call after that point shifts position on the renders where it's skipped, and React ends up matching stored state to the wrong hook call -- a silent, hard-to-diagnose bug rather than a thrown error."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "react-custom-hooks-ex1",
+          "type": "debugging",
+          "prompt": "Sometimes, seemingly at random, this component's name field appears to show details-related data instead of a name, or vice versa, especially right after showDetails toggles. Find the Rules-of-Hooks violation and fix it.",
+          "code": "function Profile({ userId, showDetails }) {\n  if (showDetails) {\n    const [details, setDetails] = useState(null);\n  }\n\n  const [name, setName] = useState(\"\");\n\n  useEffect(() => {\n    fetchName(userId).then(setName);\n    if (showDetails) {\n      fetchDetails(userId).then(setDetails);\n    }\n  }, [userId, showDetails]);\n\n  return <p>{name}</p>;\n}",
+          "hints": [
+            "The useState call for details is inside an if block -- does that hook call happen on every render of Profile, or only on some?",
+            "React matches each useState call to its stored value by the ORDER hooks are called in during a render, not by variable name -- what happens to that ordering across renders where showDetails is true versus false?",
+            "What would change if useState(null) for details were called unconditionally at the top, with the `if (showDetails)` check moved to control only how that value is used or updated, not whether the hook itself is called?"
+          ],
+          "solutionCode": "function Profile({ userId, showDetails }) {\n  const [details, setDetails] = useState(null);\n  const [name, setName] = useState(\"\");\n\n  useEffect(() => {\n    fetchName(userId).then(setName);\n    if (showDetails) {\n      fetchDetails(userId).then(setDetails);\n    }\n  }, [userId, showDetails]);\n\n  return <p>{name}</p>;\n}",
+          "solutionExplanation": "Calling useState(null) for details only when showDetails is true means Profile sometimes calls useState twice per render (details, then name) and sometimes only once (name) -- so on renders where the call count differs from the previous render, React's position-based matching of hook calls to stored state gets shifted, and name can end up reading or writing whatever React actually has stored in a different slot than intended. The fix moves the useState(null) call for details to the unconditional top level, so it's called on every single render regardless of showDetails -- the conditional logic (whether to actually fetch and populate it) stays inside the effect, where an if statement is completely fine, since useEffect itself is still called unconditionally; only the code *inside* it branches."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "react-custom-hooks-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "Why does calling a hook conditionally (e.g. inside an if statement) risk corrupting a component's state, rather than simply skipping that piece of state entirely on some renders?",
+          "options": [
+            "Because React identifies each hook call by the variable name it's assigned to, and conditional calls confuse that name-matching process.",
+            "Because React matches each hook call to its stored state purely by the order hooks are called in during a render; skipping a call on some renders shifts every subsequent hook call's position relative to React's internally tracked list, causing later calls to read or write the wrong stored value.",
+            "Because conditionally calling a hook causes a JavaScript syntax error that only appears at runtime under specific conditions.",
+            "Because hooks can only be called a fixed maximum number of times per component, and a conditional call risks exceeding that limit."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "React has no name-based lookup for hooks (ruling out option A) -- it relies entirely on call order/position within a given render, matched against the previous render's sequence of calls for that component instance. Skipping a hook call on some renders but not others shifts the position of every hook call that follows it, so React ends up handing back state (or a ref) intended for a different hook call -- silently, with no thrown error, which rules out option C. Option D describes a limit that doesn't exist; the actual issue is purely about consistent ordering across renders, not a call-count ceiling."
+        }
+      ]
+    },
+    {
+      "id": "react-context-api",
+      "title": "Context API",
+      "description": "Context lets a value be read by any descendant component without threading it through every intermediate component's props, but every consumer re-renders whenever that context's value changes -- even if the specific field it reads didn't -- so it's not a free substitute for well-scoped state.",
+      "moduleId": "react-hooks",
+      "topicId": "react-hooks",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 25,
+      "prerequisites": ["react-usestate"],
+      "learningObjectives": [
+        "Explain the prop-drilling problem concretely, with a specific example of intermediate components forwarding a prop they don't use.",
+        "Use createContext, a Provider, and useContext to make a value available to a deeply nested descendant.",
+        "Explain why every consumer of a context re-renders when its value changes, even if the specific field that consumer reads is unaffected.",
+        "Judge whether a given piece of state is a good fit for context, or would cause more unnecessary re-rendering than it solves."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "The Prop-Drilling Problem",
+            "body": "Consider a `theme` value needed by a deeply nested `ThemedButton`, several layers below the component that actually owns it:\n\n```jsx\nfunction Page({ theme }) {\n  return <Sidebar theme={theme} />;\n}\nfunction Sidebar({ theme }) {\n  return <Panel theme={theme} />;\n}\nfunction Panel({ theme }) {\n  return <ThemedButton theme={theme} />;\n}\nfunction ThemedButton({ theme }) {\n  return <button className={theme}>Click</button>;\n}\n```\n\n`Sidebar` and `Panel` both have to accept a `theme` prop and immediately forward it, purely so it can reach `ThemedButton` -- neither of them actually uses `theme` for anything themselves. This is **prop drilling**, and it gets worse the deeper or wider the tree gets: every intermediate component's prop signature becomes coupled to something that's really global configuration, not something specific to that component's own job, and adding a new consumer deep in the tree, or restructuring the tree at all, means touching every layer in between just to keep threading the value through."
+          },
+          {
+            "heading": "createContext, Provider, and useContext",
+            "body": "```jsx\nconst ThemeContext = createContext(\"light\");\n\nfunction Page() {\n  return (\n    <ThemeContext.Provider value=\"dark\">\n      <Sidebar />\n    </ThemeContext.Provider>\n  );\n}\nfunction Sidebar() {\n  return <Panel />;\n}\nfunction Panel() {\n  return <ThemedButton />;\n}\nfunction ThemedButton() {\n  const theme = useContext(ThemeContext);\n  return <button className={theme}>Click</button>;\n}\n```\n\n`createContext(defaultValue)` creates a Context object. Wrapping part of the tree in `<ThemeContext.Provider value=\"dark\">` makes that value available to any descendant, no matter how deeply nested, without threading it through every component in between. `useContext(ThemeContext)`, called inside any descendant, reads the value from the nearest enclosing Provider above it. Notice `Sidebar` and `Panel` no longer mention theme at all -- they're no longer coupled to a value they never used."
+          },
+          {
+            "heading": "The Caveat Nobody Mentions Enough: Every Consumer Re-renders on Value Change",
+            "body": "```jsx\nconst AppContext = createContext(null);\n\nfunction App() {\n  const [user, setUser] = useState({ name: \"Amara\" });\n  const [theme, setTheme] = useState(\"light\");\n  const value = { user, theme, setUser, setTheme };\n\n  return (\n    <AppContext.Provider value={value}>\n      <ThemeLabel />\n      <UserGreeting />\n    </AppContext.Provider>\n  );\n}\n\nfunction ThemeLabel() {\n  const { theme } = useContext(AppContext);\n  return <span>{theme}</span>;\n}\nfunction UserGreeting() {\n  const { user } = useContext(AppContext);\n  return <span>Hi, {user.name}</span>;\n}\n```\n\nCalling `setTheme` here re-renders `App`, which builds a brand-new `value` object -- and because `AppContext`'s value reference has changed, **every** component that calls `useContext(AppContext)` re-renders, including `UserGreeting`, even though `user` never changed at all. `useContext` subscribes a component to the context's value as a single, whole unit; React has no way to know that `UserGreeting` only actually reads the `user` field and doesn't care about `theme` -- it only tracks whether the value reference as a whole changed."
+          },
+          {
+            "heading": "Context Is Not a Free Global-State Replacement",
+            "body": "Because of that re-render-everyone-downstream behavior, putting a frequently-changing value (mouse position, a per-keystroke input value, a message counter) into a context consumed broadly across the tree can cause more unnecessary re-rendering than the prop drilling it was meant to replace -- especially once several unrelated pieces of state get bundled into one context value object, since changing any single one of them re-renders every consumer of the whole bundle. Context is the right tool for values that change relatively rarely across a broad swath of the tree -- theme, the authenticated user, locale/i18n settings, feature flags -- not as a general-purpose substitute for well-scoped local state or ordinary props whenever passing something down feels tedious. When frequent changes and broad consumption genuinely both apply, splitting a single bundled context into several narrower ones (so a component only subscribes to what it actually needs) is the usual first mitigation."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Prop Drilling vs a Context Fix",
+          "language": "jsx",
+          "code": "// PROP DRILLING: theme threaded through layers that never use it\nfunction Page({ theme }) {\n  return <Sidebar theme={theme} />;\n}\nfunction Sidebar({ theme }) {\n  return <Panel theme={theme} />;\n}\nfunction Panel({ theme }) {\n  return <ThemedButton theme={theme} />;\n}\n\n// FIXED WITH CONTEXT: no intermediate component mentions theme at all\nconst ThemeContext = createContext(\"light\");\n\nfunction Page() {\n  return (\n    <ThemeContext.Provider value=\"dark\">\n      <Sidebar />\n    </ThemeContext.Provider>\n  );\n}\nfunction Sidebar() {\n  return <Panel />;\n}\nfunction Panel() {\n  return <ThemedButton />;\n}\nfunction ThemedButton() {\n  const theme = useContext(ThemeContext);\n  return <button className={theme}>Click</button>;\n}",
+          "explanation": "In the prop-drilling version, Sidebar and Panel both have to accept and forward a theme prop purely so ThemedButton can eventually receive it -- neither uses it. The context version removes theme from both of their signatures entirely: ThemedButton reaches directly into the nearest Provider above it via useContext, regardless of how many layers separate them, and neither Sidebar nor Panel needs to know theme exists at all."
+        },
+        {
+          "title": "One Bundled Context Value Causing Unrelated Re-renders",
+          "language": "jsx",
+          "code": "const AppContext = createContext(null);\n\nfunction App() {\n  const [user, setUser] = useState({ name: \"Amara\" });\n  const [theme, setTheme] = useState(\"light\");\n  const value = { user, theme, setUser, setTheme };\n\n  return (\n    <AppContext.Provider value={value}>\n      <ThemeLabel />\n      <UserGreeting />\n      <button onClick={() => setTheme(theme === \"light\" ? \"dark\" : \"light\")}>\n        Toggle theme\n      </button>\n    </AppContext.Provider>\n  );\n}\n\nfunction ThemeLabel() {\n  const { theme } = useContext(AppContext);\n  console.log(\"ThemeLabel rendered\");\n  return <span>{theme}</span>;\n}\nfunction UserGreeting() {\n  const { user } = useContext(AppContext);\n  console.log(\"UserGreeting rendered\");\n  return <span>Hi, {user.name}</span>;\n}",
+          "explanation": "Clicking \"Toggle theme\" calls setTheme, which re-renders App and builds a new value object (a new reference, since it's a fresh object literal every render of App). Because AppContext's value reference changed, both ThemeLabel and UserGreeting re-render -- both console.log lines fire -- even though user never changed. UserGreeting only reads user, but useContext subscribes it to the whole value object, not to the specific field it happens to destructure out of it."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "Context replaces the need for prop drilling entirely, so most shared application state should just go into one big context that components read from with useContext wherever needed.",
+          "clarification": "Bundling many, especially frequently-changing, pieces of state into one context value causes every consumer of that context to re-render whenever ANY one of those pieces changes, regardless of which specific field a given consumer actually reads. This can produce more unnecessary re-rendering across a large tree than the prop drilling it replaced. Context suits relatively stable, broadly-needed values (theme, authenticated user, locale); it isn't a wholesale, cost-free replacement for well-scoped local state or ordinary props."
+        },
+        {
+          "description": "Since useContext just reads a value, calling it doesn't cause a component to re-render unless something else about that component's own props or state also changed.",
+          "clarification": "useContext explicitly subscribes the calling component to that context. Whenever the nearest Provider above it supplies a new value (a new reference), every component subscribed via useContext re-renders because of that subscription alone -- independent of whether anything else about that component's own props or state changed at all."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "react-context-api-ex1",
+          "type": "debugging",
+          "prompt": "Clicking \"Toggle theme\" is supposed to only affect ThemeLabel, but the console shows UserGreeting re-rendering every single time too. Find the cause and describe a fix.",
+          "code": "const AppContext = createContext(null);\n\nfunction App() {\n  const [user, setUser] = useState({ name: \"Amara\" });\n  const [theme, setTheme] = useState(\"light\");\n\n  const value = { user, theme, setUser, setTheme };\n\n  return (\n    <AppContext.Provider value={value}>\n      <ThemeLabel />\n      <UserGreeting />\n      <button onClick={() => setTheme(theme === \"light\" ? \"dark\" : \"light\")}>\n        Toggle theme\n      </button>\n    </AppContext.Provider>\n  );\n}\n\nfunction ThemeLabel() {\n  const { theme } = useContext(AppContext);\n  console.log(\"ThemeLabel rendered\");\n  return <span>{theme}</span>;\n}\n\nfunction UserGreeting() {\n  const { user } = useContext(AppContext);\n  console.log(\"UserGreeting rendered\");\n  return <span>Hi, {user.name}</span>;\n}",
+          "hints": [
+            "value is a single object built fresh inside App on every render. What happens to that object's reference the moment ANY state inside App changes, even state UserGreeting has nothing to do with?",
+            "useContext subscribes a component to the context's value AS A WHOLE. Does React have any way of knowing UserGreeting only actually destructures out the user field, and never touches theme?",
+            "What would change if user-related state and theme-related state each lived in their own separate context, with their own separate Provider, instead of one shared object?"
+          ],
+          "solutionCode": "const UserContext = createContext(null);\nconst ThemeContext = createContext(null);\n\nfunction App() {\n  const [user, setUser] = useState({ name: \"Amara\" });\n  const [theme, setTheme] = useState(\"light\");\n\n  return (\n    <UserContext.Provider value={{ user, setUser }}>\n      <ThemeContext.Provider value={{ theme, setTheme }}>\n        <ThemeLabel />\n        <UserGreeting />\n        <ToggleThemeButton />\n      </ThemeContext.Provider>\n    </UserContext.Provider>\n  );\n}\n\nfunction ThemeLabel() {\n  const { theme } = useContext(ThemeContext);\n  console.log(\"ThemeLabel rendered\");\n  return <span>{theme}</span>;\n}\n\nfunction UserGreeting() {\n  const { user } = useContext(UserContext);\n  console.log(\"UserGreeting rendered\");\n  return <span>Hi, {user.name}</span>;\n}\n\nfunction ToggleThemeButton() {\n  const { theme, setTheme } = useContext(ThemeContext);\n  return (\n    <button onClick={() => setTheme(theme === \"light\" ? \"dark\" : \"light\")}>\n      Toggle theme\n    </button>\n  );\n}",
+          "solutionExplanation": "The original code bundles user and theme into a single value object, rebuilt fresh on every render of App. Toggling theme changes theme state, which re-renders App and produces a new value object -- and since AppContext's value reference changed as a whole, every consumer of AppContext re-renders, including UserGreeting, regardless of the fact that UserGreeting only ever reads user, which never actually changed. Splitting into two separate contexts fixes this: UserContext's value only changes when user or setUser's identity changes (setUser itself never changes, and user only changes when setUser is actually called), so toggling theme now only affects ThemeContext's value -- UserGreeting, which subscribes only to UserContext, correctly stops re-rendering when just the theme changes."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "react-context-api-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "A context's value is an object like { cartItems, cartTotal, wishlist, currentUser }, consumed via useContext by dozens of components across a large app, including a MiniCartIcon that only ever reads cartItems.length. What happens to MiniCartIcon when wishlist changes?",
+          "options": [
+            "Nothing -- useContext only re-renders a component when the specific field it destructures out of the value actually changes.",
+            "MiniCartIcon re-renders anyway, because useContext subscribes it to the context's value as a whole object; a new value reference (caused by wishlist changing) re-renders every consumer, regardless of which specific field each one reads.",
+            "MiniCartIcon throws a runtime error, since it isn't supposed to be affected by a field it doesn't read.",
+            "It depends on whether MiniCartIcon is wrapped in React.memo -- with React.memo, it would never re-render for any reason."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "useContext subscribes to the context's value as a single unit -- React only tracks whether that value's reference changed overall, not which specific fields a given consumer happens to read from it. Since wishlist changing produces a new value object reference (assuming, as is typical, the value is rebuilt fresh whenever any of its constituent state changes), every consumer of that context re-renders, MiniCartIcon included, even though cartItems.length is unaffected. Option C is false -- this doesn't throw; it's a real but silent performance cost, not an error. Option D is a partial distractor: wrapping the component receiving the context value in React.memo doesn't change how useContext itself behaves inside that component -- the re-render is triggered by the subscription itself, not by a prop comparison React.memo could intercept."
+        }
+      ]
+    }
+  ]
+}

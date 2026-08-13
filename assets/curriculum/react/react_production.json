@@ -1,0 +1,660 @@
+{
+  "learningPathId": "react",
+  "moduleId": "react-production",
+  "title": "React in Production",
+  "order": 6,
+  "concepts": [
+    {
+      "id": "react-api-integration-and-loading-states",
+      "title": "API Integration and Loading States",
+      "description": "Fetching data in an effect requires deliberately handling loading, success, empty, and error states as real requirements, and guarding against the classic race condition where a stale response arrives after a newer one.",
+      "moduleId": "react-production",
+      "topicId": "react-production",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 30,
+      "prerequisites": ["js-fetch-and-error-handling", "react-useeffect"],
+      "learningObjectives": [
+        "Implement the standard fetch-in-an-effect pattern, tracking loading, data, and error in state.",
+        "Explain why loading/success/empty/error are all required states, not optional polish.",
+        "Explain the stale-response race condition that occurs when a fetch-triggering prop changes quickly.",
+        "Apply the cleanup-flag and AbortController patterns to ignore or cancel a stale request.",
+        "Compare the cleanup-flag pattern to AbortController and explain when each is appropriate."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "The Standard Pattern: Fetching Inside an Effect",
+            "body": "Fetching data is a **side effect** -- it reaches outside of rendering to talk to the network -- so it belongs inside `useEffect`, not directly in a component's render logic. The standard shape tracks (at minimum) three pieces of state: the fetched `data` itself, an `isLoading` flag, and an `error` value, all updated from callbacks attached to the fetch promise. The effect's dependency array controls when a refetch happens -- for example, `[userId]` means the effect re-runs, and therefore refetches, whenever `userId` changes, which is exactly the behavior you want for a component that displays whichever user's id it was given."
+          },
+          {
+            "heading": "Loading, Success, Empty, and Error Aren't Optional Extras",
+            "body": "A component that only renders the happy path -- straight to `data.map(...)`, assuming `data` is always a populated array -- will visibly break for every real user, not just in some rare edge case. On the very first render, before any fetch has resolved, `data` is whatever its initial state was (commonly `null` or `undefined`), and calling `.map` on that throws immediately. This isn't a hypothetical: it's what happens on literally every normal page load, for every user, during the necessarily nonzero time between mounting and the fetch resolving.\n\nThere are (at least) four distinct states a fetch-driven component needs to render something sensible for, and they are genuinely different from each other: **loading** (the fetch is in flight -- show a spinner or skeleton, not an empty screen or a crash), **success** (data arrived and has entries -- render it), **empty** (the fetch succeeded, but there is genuinely nothing to show, such as zero search results -- this is not an error and is not still loading, and deserves its own message rather than looking identical to either), and **error** (the fetch failed -- a dropped connection, a 404, a 500 -- and the user needs to see something actionable, not a blank area or a thrown exception that takes down the rest of the page)."
+          },
+          {
+            "heading": "The Classic Race Condition: A Stale Response Arriving Late",
+            "body": "Consider a component that re-fetches whenever a prop changes -- for example, a user profile view that refetches every time `userId` changes because a user rapidly clicks through several profiles in a list. Each change to `userId` fires a new fetch, and because network responses are not guaranteed to arrive in the order their requests were sent, an *earlier* request can resolve *after* a *later* one -- due to server load, network variance, or nothing more unusual than ordinary jitter. If the effect naively calls `setData(result)` inside every `.then`, with no check for whether that particular request is still the relevant one, then whichever response happens to arrive last simply overwrites state -- regardless of whether it corresponds to what's actually currently selected.\n\nConcretely: a user clicks profile A, then quickly clicks profile B, then profile C. If A's request happens to take longer than C's (a bigger payload, a slower backend path, anything), A's response can arrive after C's already has -- and the screen ends up showing profile A's data while everything else on screen (the URL, the selected item in a list) still says C is what's selected. This is a real, visible correctness bug that will eventually happen to real users on a real network, not a theoretical concern reserved for unusual conditions."
+          },
+          {
+            "heading": "Fixing It: Ignore (or Cancel) Stale Responses",
+            "body": "There are two common, concrete fix patterns. The **cleanup-flag** pattern declares a local variable (commonly `isCurrent = true`) inside the effect body, and the effect's cleanup function -- which React runs right before the *next* run of the effect, and on unmount -- flips it to `false`. Any state-setting call inside the `.then`/`.catch`/`.finally` chain is guarded with `if (isCurrent)`. Because React runs the previous effect's cleanup before starting the next one, the moment userId changes again, the *older* effect instance's `isCurrent` gets flipped to false -- so by the time its now-stale response eventually arrives, its guarded setters are skipped, and only the response belonging to the most recent request is ever allowed to update state.\n\nThe **AbortController** pattern goes a step further: create `const controller = new AbortController()` inside the effect, pass `controller.signal` to `fetch`, and call `controller.abort()` inside the cleanup function. This doesn't just ignore the eventual result of a stale request -- it actually cancels the underlying network request, saving the wasted bandwidth and server work of continuing to process a response nobody needs anymore. An aborted fetch's promise rejects with a specific error (commonly named `AbortError`), which is an expected, intentional cancellation and should typically be swallowed rather than surfaced as a real error state to the user."
+          },
+          {
+            "heading": "Choosing Between the Two Patterns",
+            "body": "AbortController is generally the more correct and more modern choice when the async operation supports cancellation (as `fetch` does), because it stops wasted work at the source instead of merely discarding a result after the fact. The cleanup-flag pattern remains useful as a simpler, more universal fallback -- it works for any async operation, including ones that have no cancellation mechanism at all (a `setTimeout`-based delay, a third-party promise-based API that doesn't accept a signal). Both patterns solve the exact same underlying problem -- making sure only the most recent request's response is allowed to affect state -- they just differ in whether the stale request's work is actually stopped or merely ignored once it finishes."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "A Complete Fetch Component Handling All Four States",
+          "language": "jsx",
+          "code": "function UserProfile({ userId }) {\n  const [user, setUser] = useState(null);\n  const [isLoading, setIsLoading] = useState(true);\n  const [error, setError] = useState(null);\n\n  useEffect(() => {\n    let isCurrent = true;\n    setIsLoading(true);\n    setError(null);\n\n    fetch(`/api/users/${userId}`)\n      .then((res) => {\n        if (!res.ok) throw new Error(`Request failed: ${res.status}`);\n        return res.json();\n      })\n      .then((data) => {\n        if (isCurrent) setUser(data);\n      })\n      .catch((err) => {\n        if (isCurrent) setError(err);\n      })\n      .finally(() => {\n        if (isCurrent) setIsLoading(false);\n      });\n\n    return () => {\n      isCurrent = false;\n    };\n  }, [userId]);\n\n  if (isLoading) return <Spinner />;\n  if (error) return <p>Couldn't load this user: {error.message}</p>;\n  if (!user) return <p>No user found.</p>;\n\n  return <h1>{user.name}</h1>;\n}",
+          "explanation": "Each of the four render branches corresponds to exactly one of the four states: isLoading true shows a spinner, a set error shows an actionable message instead of crashing, a resolved-but-empty user shows an explicit 'not found' message rather than silently rendering nothing or throwing, and only once all three checks pass does the success case render the actual profile. The order of the checks matters -- loading is checked first because it's true throughout the fetch, before error or user are meaningfully settled either way. isCurrent guards every setter so that if userId changes again before this fetch resolves, this effect instance's eventually-arriving response can no longer affect state -- see the next example for AbortController, an alternative that also cancels the now-unnecessary request itself."
+        },
+        {
+          "title": "The Same Fix Using AbortController",
+          "language": "jsx",
+          "code": "function UserProfile({ userId }) {\n  const [user, setUser] = useState(null);\n  const [error, setError] = useState(null);\n\n  useEffect(() => {\n    const controller = new AbortController();\n\n    fetch(`/api/users/${userId}`, { signal: controller.signal })\n      .then((res) => res.json())\n      .then((data) => setUser(data))\n      .catch((err) => {\n        if (err.name !== \"AbortError\") setError(err);\n      });\n\n    return () => {\n      controller.abort();\n    };\n  }, [userId]);\n\n  // ...render logic omitted for brevity, same four-state shape as before\n}",
+          "explanation": "Every time userId changes, React runs this effect's cleanup before running the new effect -- which calls controller.abort() on the *previous* request's controller, actually cancelling that in-flight network request rather than merely agreeing to disregard its eventual result. The .catch explicitly checks err.name !== \"AbortError\" because an aborted fetch rejects with an AbortError, which represents an intentional cancellation, not a real failure -- surfacing it as an error state would incorrectly alarm the user about something that was actually working as designed. Compared to the cleanup-flag version, this stops the wasted network/server work outright instead of letting the stale request run to completion and simply throwing its result away."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "If I show a loading spinner while fetching, I've covered all the states this component needs to handle.",
+          "clarification": "Loading is only one of at least four states. Skipping the error state means a failed request -- a dropped connection, a 404, a 500 -- leaves the user staring at a spinner forever, or crashes the component outright. Skipping the empty state means a successful-but-empty response (zero search results, a user with no orders yet) either renders a confusing blank area or gets misread by the rest of the component's logic as still loading or as an error. Each of loading, success, empty, and error needs its own deliberate branch in the render logic."
+        },
+        {
+          "description": "Race conditions from fast prop changes are a rare edge case, not something that matters for a typical app.",
+          "clarification": "Any UI where a prop driving a fetch can change again before the previous fetch resolves is exposed to this -- a type-ahead search box, quickly switching between tabs or list items, paginating quickly. It doesn't require an unusual network; it only requires that relative response timing isn't guaranteed to match request order, which is genuinely always true over a real network, even a fast and reliable one. This is a correctness bug that will eventually manifest for real users under normal conditions, not a hypothetical worth deprioritizing."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "react-api-integration-and-loading-states-ex1",
+          "type": "predictOutput",
+          "prompt": "Assume mockFetchUser(1) resolves after 300ms with { id: 1, name: \"Ada\" }, and mockFetchUser(2) resolves after 50ms with { id: 2, name: \"Grace\" }. The component below is rendered with userId=1, then re-rendered with userId=2 about 20ms later (before the first request resolves). This effect has no protection against stale responses. Once both requests have settled, what name ends up displayed, and why?",
+          "code": "function Profile({ userId }) {\n  const [user, setUser] = useState(null);\n\n  useEffect(() => {\n    mockFetchUser(userId).then((data) => setUser(data));\n  }, [userId]);\n\n  return <h1>{user ? user.name : \"Loading...\"}</h1>;\n}",
+          "hints": [
+            "Figure out the actual order in which the two .then callbacks fire in real time, based on each mock's delay and when each request actually started -- not the order the requests were sent in.",
+            "Whichever setUser call happens last overwrites whatever setUser put there before it, regardless of which userId that response was actually for.",
+            "The userId=1 request starts first but takes 300ms; the userId=2 request starts about 20ms later but takes only 50ms, resolving around the 70ms mark overall. Which .then fires later in real time?"
+          ],
+          "expectedAnswer": "\"Ada\" ends up displayed, even though userId is 2 by the time both requests have settled. The userId=1 request, despite starting first, has the longer delay (300ms), so its response arrives after the userId=2 request's response (which resolves around 70ms in). Grace's data gets set first, briefly showing the correct name, but Ada's data arrives afterward and overwrites it -- leaving the screen showing a name that doesn't correspond to the currently selected userId.",
+          "solutionExplanation": "Tracing the timeline: the userId=1 effect starts at t=0ms and its mock resolves at t=300ms. The userId=2 effect starts around t=20ms (when the re-render with the new prop happens) and its mock resolves 50ms later, around t=70ms. So the userId=2 .then fires first (around t=70ms), correctly setting user to Grace -- but the userId=1 .then still fires later, at t=300ms, and since neither effect instance checks whether it's still the current/relevant one, its setUser(data) call unconditionally overwrites state with Ada's data. The final displayed name is therefore Ada, even though the component is now displaying data for the userId that's no longer selected. This is exactly the bug a cleanup-flag (isCurrent) guard or an AbortController would prevent, by ensuring only the response belonging to the most recently started request is allowed to update state."
+        },
+        {
+          "id": "react-api-integration-and-loading-states-ex2",
+          "type": "coding",
+          "prompt": "Add a guard to the Profile component from the previous exercise so that it always displays the user matching the currently selected userId, never a stale response from an earlier request.",
+          "hints": [
+            "You need a way for each effect instance to know, once its own promise resolves, whether a newer effect instance has already started (and therefore whether it should ignore what it just got back).",
+            "React runs an effect's cleanup function right before running that effect again -- that's the moment to mark the previous instance as no longer current.",
+            "A simple local flag, flipped to false in cleanup and checked before calling setUser, is enough here; you don't need AbortController unless you also want to cancel the underlying request itself."
+          ],
+          "solutionCode": "function Profile({ userId }) {\n  const [user, setUser] = useState(null);\n\n  useEffect(() => {\n    let isCurrent = true;\n\n    mockFetchUser(userId).then((data) => {\n      if (isCurrent) setUser(data);\n    });\n\n    return () => {\n      isCurrent = false;\n    };\n  }, [userId]);\n\n  return <h1>{user ? user.name : \"Loading...\"}</h1>;\n}",
+          "solutionExplanation": "Each effect instance now owns its own isCurrent flag, starting true. When userId changes again, React runs the cleanup for the previous effect instance before starting the new one, flipping that previous instance's isCurrent to false. So when the userId=1 request's response eventually arrives at t=300ms, its own isCurrent has already been set to false (because the userId=2 effect started and triggered that cleanup around t=20ms), and its setUser(data) call is skipped. Only the userId=2 effect instance's isCurrent remains true when its response arrives, so it's the only one allowed to update state -- and the display now always matches whichever userId is actually currently selected."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "react-api-integration-and-loading-states-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "A component fetches a list of comments, and before the fetch resolves, its initial state is `comments = null`. Which statement about handling this correctly is true?",
+          "options": [
+            "It's fine to render comments.map(...) directly -- React will wait for the fetch to resolve before running that line.",
+            "The component must explicitly branch on a loading state (and handle a null/undefined value) before attempting to render the list, otherwise it will throw trying to call .map on null during the first render(s).",
+            "This only matters in production, so it's safe to skip explicit handling during local development.",
+            "Only the error state needs explicit handling; loading and empty states render correctly by default without any special-casing."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "React does not pause rendering to wait for a fetch -- the component renders immediately with whatever its initial state is, which here is null, and calling .map on null throws right away, on every single load, before the fetch has any chance to resolve. This is why an explicit loading check (or at minimum a null/undefined guard) has to come before the code that assumes comments is a populated array. Option C is backwards -- this crashes locally exactly as much as in production, immediately, on first render. Option D is wrong because loading and empty states require their own explicit handling just as much as error does; none of the four states render sensibly 'by default' without being deliberately handled."
+        },
+        {
+          "id": "react-api-integration-and-loading-states-assess-scenario1",
+          "type": "scenario",
+          "prompt": "Your `<SearchResults query={query} />` component fetches new results every time query changes as the user types quickly. Users occasionally report seeing results that don't match what's currently in the search box. Diagnose the likely cause and describe, in general terms, how you'd fix it.",
+          "modelAnswer": "This is the classic stale-response race condition: every keystroke that changes query triggers a new fetch, and because network responses aren't guaranteed to resolve in the order their requests were sent, an older request (for an earlier, now-outdated query) can resolve after a newer one. If the effect's .then callback unconditionally calls a state setter with whatever it received, the last response to arrive wins and overwrites state, regardless of whether it corresponds to what's currently typed in the box -- which is exactly the symptom being reported. The fix is to make sure only the response belonging to the most recently fired request is allowed to update state: either a cleanup-flag pattern (a local isCurrent variable per effect instance, flipped to false in that effect's cleanup, checked before calling any setter), or an AbortController that actually cancels the previous in-flight request when a new one starts, aborting it in the effect's cleanup function. Either approach ensures a slow, now-outdated response can no longer clobber the state with results that don't match the current query."
+        }
+      ]
+    },
+    {
+      "id": "react-crud-and-authentication",
+      "title": "CRUD and Authentication",
+      "description": "A CRUD UI wires forms, lists, and API calls together into Create/Read/Update/Delete flows, and authentication on the frontend is mostly about storing a token, attaching it to requests, and protecting routes -- with a real, honest tradeoff around where that token lives.",
+      "moduleId": "react-production",
+      "topicId": "react-production",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 30,
+      "prerequisites": ["react-api-integration-and-loading-states"],
+      "learningObjectives": [
+        "Describe what a CRUD UI is in terms of forms, lists, and API calls tied together.",
+        "Explain how the loading/success/error pattern from data fetching applies to mutations (create/update/delete), not just reads.",
+        "Explain the mechanics of frontend authentication: a token, attaching it to requests, and protecting routes.",
+        "Compare storing an auth token in localStorage versus an httpOnly cookie as a genuine security tradeoff, not a simple right-or-wrong choice."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "What a CRUD UI Actually Is",
+            "body": "CRUD stands for **Create, Read, Update, Delete** -- the four basic operations most data-driven apps need, and a 'CRUD UI' is simply the forms, lists, and API calls that let a user perform all four against some collection of records. **Read** is the list/detail view pattern already covered: fetch and render, with loading/success/empty/error states. **Create** is a form that collects input and sends it as a POST request; on success, it typically redirects to the new record's detail view, or updates a list already on screen. **Update** is a form pre-filled with a record's existing data that sends a PUT or PATCH request with the changes. **Delete** is an action -- often gated behind a confirmation step, since it's destructive and hard to walk back -- that sends a DELETE request and then reflects that record's removal in the UI, either by refetching the affected list or by updating it locally.\n\nAll four are really the same underlying shape applied to different HTTP verbs: each is a network request that can be in flight, can succeed, or can fail, and each deserves the same deliberate handling as a read -- disable a submit button and show a spinner while in flight, redirect or update the UI on success, and show an actionable error message (not a silently-ignored failure) if the request fails."
+          },
+          {
+            "heading": "Authentication, As It Touches the Frontend",
+            "body": "Authentication, at its core, is a server verifying who a user is (via a username/password, an OAuth flow, or similar) and then issuing something -- commonly a JSON Web Token (JWT) or a session identifier -- that proves that verification already happened, so the user doesn't have to re-enter credentials on every subsequent request. The frontend's job around this is mostly mechanical: **store** that token somewhere after login, **attach** it to subsequent requests (typically via an `Authorization: Bearer <token>` header, or automatically via a cookie the browser itself attaches), and **react** appropriately when a request comes back unauthorized (a 401 response), typically by redirecting to a login page.\n\n**Protecting a route** means checking, before rendering a page's real content, whether there's a currently authenticated user -- and redirecting to a login page if not, rather than briefly rendering protected content and only discovering the lack of authorization after an API call fails. A route guard component (or an equivalent check at the routing layer) typically needs its own loading state too: while the app is still determining whether a stored token is valid (e.g., checking it against the server on startup), it should show a loading indicator rather than prematurely redirecting to login or flashing real content before the check finishes."
+          },
+          {
+            "heading": "Where to Put the Token: A Real Tradeoff",
+            "body": "**localStorage** is simple: `localStorage.setItem`/`getItem` persist a value across reloads and tabs until it's explicitly cleared. The real downside is that any JavaScript running on the page can read it -- including a malicious script injected through an XSS (cross-site scripting) vulnerability elsewhere in the app, such as a comment field that renders user-submitted content without properly escaping it. If an attacker manages to get any script running on your page, for any reason, they can trivially read localStorage and exfiltrate the token, then use it to act as that user elsewhere.\n\nAn **httpOnly cookie**, set by the server with the `HttpOnly` flag, is the alternative: JavaScript literally cannot read it (it won't even show up in `document.cookie`), and the browser attaches it automatically to matching requests without any explicit code needed on the frontend. This closes off the XSS-read vector for the token specifically. The tradeoff is real, not one-sided: cookies bring their own concern, CSRF (cross-site request forgery), since the browser attaches them automatically to *any* request to that domain -- including ones a malicious page elsewhere might trigger -- which requires its own separate protections (like a CSRF token), and cookies can be less convenient for certain cross-origin or native-mobile-app scenarios where manually attaching a header is simpler. This is genuinely a tradeoff to understand, not a case of 'localStorage is simply wrong' -- many legitimate, real-world apps use localStorage successfully; the point is knowing specifically what's being traded away either way, rather than defaulting to one option without knowing why."
+          },
+          {
+            "heading": "Putting It Together in a Protected CRUD Flow",
+            "body": "A typical flow ties all of this together: a login form submits credentials via POST, receives a token in response, and stores it (via whichever mechanism was chosen). From then on, every Create/Read/Update/Delete request attaches that token. A route guard checks for a valid, authenticated user before rendering any protected page's content, redirecting to login if there isn't one. And if any request comes back with a 401 -- commonly because the token expired -- the app reacts by clearing whatever it stored and redirecting back to login, rather than leaving the user stuck looking at a broken or infinitely-loading page. CRUD and authentication together cover the two things almost every real app's frontend needs to get right, wired to work with each other rather than as separate, disconnected concerns."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "A Create Form Following the Same Loading/Error Pattern as a Fetch",
+          "language": "jsx",
+          "code": "function CreateCommentForm({ postId, onCreated }) {\n  const [text, setText] = useState(\"\");\n  const [isSubmitting, setIsSubmitting] = useState(false);\n  const [error, setError] = useState(null);\n\n  async function handleSubmit(e) {\n    e.preventDefault();\n    setIsSubmitting(true);\n    setError(null);\n\n    try {\n      const res = await fetch(`/api/posts/${postId}/comments`, {\n        method: \"POST\",\n        headers: { \"Content-Type\": \"application/json\" },\n        body: JSON.stringify({ text }),\n      });\n      if (!res.ok) throw new Error(`Failed to post comment: ${res.status}`);\n      const newComment = await res.json();\n      onCreated(newComment);\n      setText(\"\");\n    } catch (err) {\n      setError(err.message);\n    } finally {\n      setIsSubmitting(false);\n    }\n  }\n\n  return (\n    <form onSubmit={handleSubmit}>\n      <textarea value={text} onChange={(e) => setText(e.target.value)} />\n      <button type=\"submit\" disabled={isSubmitting}>\n        {isSubmitting ? \"Posting...\" : \"Post Comment\"}\n      </button>\n      {error && <p className=\"error\">{error}</p>}\n    </form>\n  );\n}",
+          "explanation": "isSubmitting disables the submit button while the request is in flight, which both gives the user feedback and prevents an accidental double-submission from a second click. error renders any failure explicitly instead of silently doing nothing, which is what would happen if the catch block were empty. onCreated hands the newly created comment back to the parent so it can update its list without necessarily triggering a full refetch. Structurally, this is the exact same in-flight/success/error pattern used for reads -- just triggered by a form submission instead of a mount or a prop change."
+        },
+        {
+          "title": "Attaching a Token and Protecting a Route",
+          "language": "jsx",
+          "code": "function apiFetch(path, options = {}) {\n  const token = localStorage.getItem(\"authToken\");\n  return fetch(path, {\n    ...options,\n    headers: {\n      ...options.headers,\n      Authorization: token ? `Bearer ${token}` : undefined,\n    },\n  });\n}\n\nfunction ProtectedRoute({ children }) {\n  const { currentUser, isLoading } = useCurrentUser();\n\n  if (isLoading) return <Spinner />;\n  if (!currentUser) return <Navigate to=\"/login\" replace />;\n\n  return children;\n}\n\n// Usage:\n<Route\n  path=\"/dashboard\"\n  element={<ProtectedRoute><Dashboard /></ProtectedRoute>}\n/>",
+          "explanation": "apiFetch centralizes attaching the Authorization header in one place, so every request routed through it is authenticated consistently, instead of repeating that logic at every call site. ProtectedRoute checks whether there's a currentUser before rendering the real children at all: while that check is still resolving (isLoading), it shows a spinner rather than flashing protected content or redirecting prematurely; once resolved, it either renders the real page or redirects to /login. This example stores the token in localStorage purely to illustrate the mechanism explicitly -- with an httpOnly cookie instead, the browser would attach the token to requests automatically, removing the need for apiFetch's manual header-attachment step entirely, while also closing off the XSS-read risk described in the explanation."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "Storing the token in localStorage is just wrong and insecure, and no real app should do it.",
+          "clarification": "This is a real tradeoff, not a simple mistake. Many production apps use localStorage successfully, especially when the app already has strong defenses against XSS (such as a framework that auto-escapes rendered content by default). The point isn't 'never use localStorage' -- it's understanding specifically what's being traded: localStorage's readability by any script on the page (a risk if an XSS hole exists anywhere in the app) versus an httpOnly cookie's own cost (needing separate CSRF protections, and less flexibility in some cross-origin setups)."
+        },
+        {
+          "description": "Deleting an item from a UI list is basically instant and doesn't need any loading/error handling the way a fetch does.",
+          "clarification": "A delete is a network request just like a GET, and it can fail (permissions changed, a network drop, a server error) or take a moment to complete. If a component removes an item from its local list immediately and optimistically, before the DELETE request actually confirms success, and that request later fails, the UI is now showing something that isn't true about the server's actual state -- unless it explicitly handles that failure, for example by re-adding the item and showing an error message. Delete deserves the same in-flight/success/error treatment as Create and Update."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "react-crud-and-authentication-ex1",
+          "type": "scenario",
+          "prompt": "A user reports that after logging in, refreshing the page always logs them back out -- even though the server confirms the token it issued is still valid for another 24 hours. What's the most likely place to look in the frontend code, and why?",
+          "hints": [
+            "A full page reload discards all in-memory JavaScript state and reruns everything from scratch -- what happens to a value that was only ever kept in a plain JS variable or component state?",
+            "Look at where the token is stored right after login, and whether the app re-checks that storage location on startup.",
+            "If the token was never persisted anywhere that survives a reload (localStorage, or a cookie the server set), there's nothing left for the app to find when it starts up again after refresh."
+          ],
+          "solutionExplanation": "The most likely cause is that the token is only being kept in an in-memory JS variable or component state, and never persisted to localStorage or set as a cookie by the server. A full page reload discards all in-memory JS state and re-runs the app's startup logic from scratch, so if nothing durable was stored, there's nothing for the app to find when it checks 'is there an authenticated user' on startup -- even though the token itself is still perfectly valid on the server's side. The fix is to persist the token somewhere that survives a reload (localStorage, or letting the server set an httpOnly cookie) and to actually read/check that persisted value (or rely on the cookie being sent automatically) when the app starts up, rather than only ever holding the token in memory."
+        },
+        {
+          "id": "react-crud-and-authentication-ex2",
+          "type": "debugging",
+          "prompt": "This removes a comment from the list immediately when Delete is clicked. What happens to the UI if the DELETE request actually fails (e.g. the user's permissions were revoked, or the network drops), and how would you fix it?",
+          "code": "function CommentList({ comments, setComments }) {\n  function handleDelete(id) {\n    setComments(comments.filter((c) => c.id !== id));\n    fetch(`/api/comments/${id}`, { method: \"DELETE\" });\n  }\n\n  return (\n    <ul>\n      {comments.map((c) => (\n        <li key={c.id}>\n          {c.text}\n          <button onClick={() => handleDelete(c.id)}>Delete</button>\n        </li>\n      ))}\n    </ul>\n  );\n}",
+          "hints": [
+            "handleDelete updates the UI with setComments without waiting for, or checking, the result of the fetch call at all.",
+            "If fetch's promise eventually rejects, or resolves with a non-ok status, does anything in this code react to that?",
+            "Fixing this means either waiting for confirmation before removing the item, or removing it optimistically but rolling back (re-adding it, showing an error) if the request turns out to have failed."
+          ],
+          "solutionCode": "async function handleDelete(id) {\n  const previousComments = comments;\n  setComments(comments.filter((c) => c.id !== id));\n\n  try {\n    const res = await fetch(`/api/comments/${id}`, { method: \"DELETE\" });\n    if (!res.ok) throw new Error(`Delete failed: ${res.status}`);\n  } catch (err) {\n    setComments(previousComments); // roll back\n    alert(\"Couldn't delete this comment. Please try again.\");\n  }\n}",
+          "solutionExplanation": "The original code assumes the DELETE request always succeeds, so nothing ever double-checks the result -- the comment is removed from the UI unconditionally, immediately. If the request actually fails, the UI now shows the comment as gone while it still exists on the server, silently misrepresenting reality until some later full refetch happens to reveal the truth. The fixed version still updates optimistically for a snappy feel, but keeps a reference to the previous list (previousComments) and rolls back to it -- along with surfacing an error -- if the DELETE request turns out to have failed, so the UI never ends up lying about server state for longer than it takes the request to actually fail."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "react-crud-and-authentication-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "Which statement best captures the tradeoff between storing an auth token in localStorage versus in an httpOnly cookie?",
+          "options": [
+            "localStorage is strictly more secure because it's easier to use from JavaScript.",
+            "httpOnly cookies can't be used for authentication at all, only localStorage can.",
+            "localStorage is readable by any JavaScript running on the page (a real risk if the app has an XSS vulnerability), while an httpOnly cookie can't be read by JavaScript at all but is attached to requests automatically by the browser and introduces its own CSRF considerations.",
+            "There's no real difference; both are equally invisible to JavaScript and equally safe."
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "This is a genuine, two-sided tradeoff: localStorage's convenience comes with the cost that any script running on the page (including an attacker's, via an XSS hole) can read it, while an httpOnly cookie closes off that specific read vector but requires separate CSRF protections since the browser attaches it automatically to matching requests, including ones triggered from elsewhere. Options A and D understate or invert the actual tradeoff, and option B is simply false -- httpOnly cookies are a common, valid way to hold an auth token."
+        },
+        {
+          "id": "react-crud-and-authentication-assess-explain1",
+          "type": "explanation",
+          "prompt": "You're building the Update part of a CRUD UI for editing a blog post. A teammate says the update form doesn't need any loading or error state because 'it's just a PUT request.' Explain why they're wrong, referencing the pattern used for Create.",
+          "modelAnswer": "A PUT request is still a network request, and network requests take a nonzero amount of time and can fail -- for exactly the same reasons a POST (Create) request can: a dropped connection, a validation error from the server, a permissions issue, a timeout. If the update form has no in-flight indicator, the user has no feedback that anything is happening after clicking Save, and might click it again, submitting a duplicate or conflicting update. If it has no error handling, a failed update silently does nothing from the user's perspective -- they believe their edit was saved when it wasn't, discovering the truth only later, if ever. This is exactly the same three-state shape (in-flight, success, error) already used for the Create form: disable the submit control and show feedback while the PUT is in flight, redirect or update the UI on a successful response, and surface an actionable error message if it fails. The HTTP verb being PUT instead of POST doesn't change any of that -- it's the same kind of network request with the same kinds of possible outcomes."
+        }
+      ]
+    },
+    {
+      "id": "react-typescript",
+      "title": "TypeScript with React",
+      "description": "TypeScript catches an entire class of prop-shape and state-shape mistakes at compile time instead of at runtime in production, but only for the values you actually give real types to -- reaching for `any` turns that checking off entirely, for that value and everywhere it flows afterward.",
+      "moduleId": "react-production",
+      "topicId": "react-production",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 25,
+      "prerequisites": ["react-props"],
+      "learningObjectives": [
+        "Explain why TypeScript pairs especially well with React's props-based component model.",
+        "Type a component's props using an interface or type, including optional and function-typed props.",
+        "Explain when TypeScript can infer a useState type versus when an explicit type argument is needed, especially for state that starts as null.",
+        "Explain concretely what is lost when a value is typed any instead of given its real type."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "Why TypeScript Pairs Well With React Specifically",
+            "body": "A large share of everyday React bugs come down to a mismatch between what a component expects and what it was actually given: a forgotten required prop, a prop passed as the wrong type (a string where a number was expected, an object where an array was expected), a typo'd prop name, or a callback prop invoked with a different argument shape than the receiver assumes. In plain JavaScript/JSX, none of that is caught until the code actually runs -- and 'runs' can mean 'a real user hits this exact code path in production,' since a prop that's only wrong for some inputs might not be exercised during casual testing at all.\n\nTypeScript checks the *shape* of props against a declared contract at compile time, and -- more usefully day to day -- live in the editor as you type, before you've even saved the file. That turns an entire class of 'forgot to pass X' and 'passed the wrong shape' bugs into something caught immediately, at the point of the mistake, rather than surfacing later as a confusing runtime symptom (a silently blank render, a thrown TypeError from deep inside some unrelated-looking code) that then has to be traced back to its actual source."
+            },
+          {
+            "heading": "Typing Props with an Interface or Type",
+            "body": "A component's props are typically described with an `interface` (or an equivalent `type`), then referenced as the type of the destructured parameter:\n\n```tsx\ninterface UserCardProps {\n  name: string;\n  age: number;\n  isOnline?: boolean; // the ? marks this prop as optional\n  onSelect: (userId: string) => void;\n}\n\nfunction UserCard({ name, age, isOnline = false, onSelect }: UserCardProps) {\n  // ...\n}\n```\n\nThe `?` on `isOnline` marks it optional -- callers may omit it, and a default value can still be supplied via destructuring, as shown. Function-typed props declare their own parameter and return types too: `onSelect: (userId: string) => void` says any function passed for onSelect must accept a string and doesn't need to return anything meaningful -- and any call site passing a function with a different shape (taking a number instead, or returning something that's used as if it mattered) gets flagged immediately, without needing to run the code at all."
+          },
+          {
+            "heading": "Typing useState: When Inference Is Enough, and When It Isn't",
+            "body": "TypeScript can often infer a `useState` call's type directly from its initial value: `useState(0)` infers `number`, `useState(\"\")` infers `string`, `useState(false)` infers `boolean` -- no explicit annotation needed in any of these cases, since the initial value already makes the intended type obvious.\n\nThe gap shows up with state that starts empty and gets populated later -- most commonly, `useState(null)`. Given only `null` as the initial value, TypeScript infers the state's type as literally `null` -- which then rejects the very code you're about to write next, since something typed strictly `null` can never legally be set to anything else. `setUser({ name: \"Ada\" })` becomes a type error under that inferred type, even though setting it to an actual user object later is exactly the intended behavior. The fix is an explicit type argument: `useState<User | null>(null)` tells TypeScript 'this will eventually hold either a User object or null,' so both the initial null and a later `setUser(fetchedUser)` type-check correctly -- this is exactly the shape of state introduced in the data-fetching concept, where a value starts unset and gets populated once a fetch resolves."
+          },
+          {
+            "heading": "The any Escape Hatch: What You Actually Lose",
+            "body": "When a type error is inconvenient to actually resolve, it's tempting to type the offending value as `any` just to make the compiler stop complaining. It's worth being precise about what that does: `any` doesn't mean 'infer the correct type for me' -- it means 'stop type-checking this value, entirely, from this point forward.' Any property access, any method call, any argument passed using a value typed `any` is accepted with zero checking whatsoever.\n\nCritically, that loss of checking doesn't stay contained to the line where `any` appears. If an `any`-typed value gets passed into another function, stored in another variable, or returned from another function, the receiving code loses type safety on it too -- there's nothing left for TypeScript to check it against, since `any` carries no information forward. One `any`, in practice, can quietly erase type safety across a much larger portion of a codebase than the single line it was written on. The underlying bug you were routing around by reaching for `any` doesn't get fixed by doing this -- it just becomes invisible to the compiler, waiting to resurface as a runtime failure exactly where a caught type error would otherwise have pointed you directly at the problem."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Compile-Time Errors From a Props Interface",
+          "language": "jsx",
+          "code": "interface ButtonProps {\n  label: string;\n  onClick: () => void;\n  variant?: \"primary\" | \"secondary\";\n}\n\nfunction Button({ label, onClick, variant = \"primary\" }: ButtonProps) {\n  return <button className={variant} onClick={onClick}>{label}</button>;\n}\n\n// Compile-time errors, caught before any of this code ever runs:\n<Button onClick={() => save()} />           // Error: missing required prop 'label'\n<Button label={42} onClick={() => save()} /> // Error: 'label' expects string, got number\n<Button label=\"Save\" onClick={save()} />     // Error: onClick expects a function, got whatever save() returns",
+          "explanation": "Three real, common mistakes are each caught immediately here: forgetting a required prop entirely, passing a value of the wrong primitive type, and a classic gotcha -- calling a function immediately (save()) instead of passing a reference to it (save) -- which TypeScript flags because onClick's declared type expects an actual function, not whatever save() happens to return. variant's type is a union of specific string literals ('primary' | 'secondary'), not just string, so even a case typo like variant=\"Primary\" would also be caught, which a plain string type would not have caught."
+        },
+        {
+          "title": "Typing useState, Including State That Starts null",
+          "language": "jsx",
+          "code": "interface User {\n  id: string;\n  name: string;\n}\n\nfunction Profile() {\n  // Inferred as number -- no annotation needed.\n  const [count, setCount] = useState(0);\n\n  // Without an explicit type argument, this would infer as `null`,\n  // and a later setUser(realUser) call would be a type error.\n  const [user, setUser] = useState<User | null>(null);\n\n  useEffect(() => {\n    fetchUser().then((data: User) => setUser(data));\n  }, []);\n\n  if (!user) return <p>Loading...</p>;\n\n  // TypeScript now knows user is a User here (not null), because of\n  // the early return above -- this is called \"narrowing\".\n  return <h1>{user.name}</h1>;\n}",
+          "explanation": "count needs no annotation because its initial value, 0, already makes number the obvious inferred type. user needs the explicit <User | null> because null alone would be inferred from useState(null), and that inferred type would then reject the very setUser(data) call this component needs to make once the fetch resolves. The if (!user) return ... check acts as a type guard -- TypeScript statically understands that user cannot be null for the rest of the function after that line runs, a technique called narrowing, which is why user.name can be accessed safely afterward without a type error, even though user's declared type technically still includes null."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "If TypeScript is complaining and there's no time to figure out the correct type right now, using any is a reasonable quick fix.",
+          "clarification": "any doesn't just suppress one inconvenient error -- it removes type checking for that value everywhere it subsequently flows: into other functions, into other variables, out through return values. A more contained escape hatch for a genuinely unknown type is unknown, which still forces the code to check or narrow the value before actually using it, unlike any, which allows any operation on the value with zero verification. Reaching for any by default, rather than as a rare, deliberate exception, defeats the entire point of having typed that value at all."
+        },
+        {
+          "description": "TypeScript replaces the need to test components, since it 'checks' the code.",
+          "clarification": "TypeScript only checks that the shapes of values match what the code declares -- it has no understanding of whether the actual logic is correct. A component can be entirely type-correct (every prop the right shape, every state variable properly typed) and still have a completely wrong onClick handler, an off-by-one error, or render the wrong text -- none of that is a type error, so TypeScript would never catch any of it. It reliably eliminates one specific, common class of bug (wrong shape, missing value) at compile time; it complements testing, it doesn't substitute for it."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "react-typescript-ex1",
+          "type": "debugging",
+          "prompt": "TypeScript flags an error on the Avatar usage inside ProfileHeader below. What's wrong, and how would you fix it in a way that still lets the caller choose a size?",
+          "code": "interface AvatarProps {\n  userId: string;\n  size: number;\n}\n\nfunction Avatar({ userId, size }: AvatarProps) {\n  return <img src={`/avatars/${userId}.png`} width={size} height={size} />;\n}\n\nfunction ProfileHeader({ userId }: { userId: string }) {\n  return (\n    <div>\n      <Avatar userId={userId} size=\"large\" />\n      <h1>Profile</h1>\n    </div>\n  );\n}",
+          "hints": [
+            "Look at what type AvatarProps declares for size, versus what's actually being passed at this call site.",
+            "\"large\" is a string literal, but size is declared as number in AvatarProps.",
+            "There are at least two valid fixes: pass an actual pixel number, or change AvatarProps.size to accept a small set of named string sizes and translate that internally to a pixel value."
+          ],
+          "solutionCode": "interface AvatarProps {\n  userId: string;\n  size: number;\n}\n\nfunction Avatar({ userId, size }: AvatarProps) {\n  return <img src={`/avatars/${userId}.png`} width={size} height={size} />;\n}\n\nfunction ProfileHeader({ userId }: { userId: string }) {\n  return (\n    <div>\n      <Avatar userId={userId} size={64} />\n      <h1>Profile</h1>\n    </div>\n  );\n}",
+          "solutionExplanation": "The bug is a type mismatch: \"large\" is a string, but AvatarProps declares size as number. The simplest fix is passing an actual pixel value (size={64}) as shown; an equally valid alternative is broadening AvatarProps.size to a union of named sizes (size: \"small\" | \"medium\" | \"large\") and mapping those names to pixel values inside Avatar itself. Either way, this is precisely the class of bug TypeScript exists to catch here, before the code ever runs: in plain JavaScript, size=\"large\" would have silently produced width=\"large\" in the rendered DOM, a subtle, easy-to-miss visual bug rather than a loud, immediate, compile-time error pointing straight at the problem."
+        },
+        {
+          "id": "react-typescript-ex2",
+          "type": "scenario",
+          "prompt": "A teammate's pull request types a component's onSave prop as `onSave: any` because 'it always seems to work, whatever gets passed.' Explain what's specifically being given up by typing it that way, and suggest a better type.",
+          "hints": [
+            "\"Always seems to work\" is exactly what any looks like right up until a caller passes something with the wrong shape and it breaks at runtime instead of at compile time.",
+            "Think about what onSave is actually supposed to receive as an argument, and what it's supposed to do with its return value (if anything) -- that's the real type it should have.",
+            "Once onSave has a real function type, any caller passing the wrong argument shape, or expecting a return value that doesn't exist, gets flagged immediately instead of silently accepted."
+          ],
+          "solutionExplanation": "Typing onSave as any means TypeScript accepts absolutely anything passed as that prop -- a function with the wrong number of parameters, the wrong parameter types, a non-function value entirely -- with zero checking, and that lack of checking follows onSave everywhere it's subsequently called or passed along inside the component too. 'It always seems to work' just means no caller has yet passed something incompatible in a way that's been noticed; any doesn't verify that stays true, it just stops TypeScript from telling you if it doesn't. A better type describes what onSave is actually meant to receive and return -- for example, if it's meant to save a form's data, something like onSave: (data: FormValues) => void precisely documents and enforces that contract, so any caller passing the wrong shape (or forgetting to pass onSave a value matching FormValues) is caught immediately, instead of relying on onSave happening to 'seem to work' in whatever cases have been tried so far."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "react-typescript-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "What's the main problem with typing a prop as any instead of giving it its actual type?",
+          "options": [
+            "any makes the code run slower at runtime.",
+            "any disables type checking for that value entirely, including everywhere it's subsequently passed, stored, or returned -- so the underlying bug you were routing around becomes invisible to the compiler rather than actually fixed.",
+            "any is only permitted for props, not for state, so it causes a compile error elsewhere in the file.",
+            "any automatically converts the value to a string at runtime, which usually breaks rendering."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "any's real cost is a total loss of type checking for that value, propagating to anywhere it flows afterward -- not a runtime performance cost, a restriction to certain declaration types, or an automatic string conversion, none of which is how any actually behaves. Options A, C, and D describe behaviors any simply doesn't have."
+        },
+        {
+          "id": "react-typescript-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain why useState(null) often needs an explicit type argument like useState<User | null>(null), while useState(0) doesn't need one.",
+          "modelAnswer": "TypeScript infers a useState call's type from its initial value when that value already makes the intended type clear. useState(0) makes number the obvious inferred type, since 0 is unambiguously a number and the state is presumably meant to hold numbers going forward. useState(null), by contrast, only has null to infer from, so TypeScript infers the narrowest possible type -- literally null -- with no information suggesting the state should ever hold anything else. That inferred null-only type then rejects the very code that's typically written right after, such as setUser(fetchedUserObject) once an API call resolves, because a value typed strictly null can never legally become anything else. Supplying an explicit type argument, useState<User | null>(null), tells TypeScript the real intended type upfront -- either a User or null -- so both the initial null value and the later call that sets it to an actual User object both type-check correctly."
+        }
+      ]
+    },
+    {
+      "id": "react-testing",
+      "title": "Testing React Components",
+      "description": "React's testing ecosystem converged on testing behavior a user would experience rather than implementation details, and React Testing Library's queries -- by role, label, and visible text -- are built to enforce exactly that.",
+      "moduleId": "react-production",
+      "topicId": "react-production",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 25,
+      "prerequisites": ["react-composition-and-lifting-state"],
+      "learningObjectives": [
+        "Explain the 'test behavior, not implementation details' philosophy and why it matters across refactors.",
+        "Describe the React Testing Library mental model of querying the rendered output the way a user would.",
+        "Contrast a brittle test (querying by CSS class) with a resilient one (querying by role/text) and explain why one survives a refactor the other doesn't.",
+        "Write a test that simulates a user interaction and asserts on the resulting visible output."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "Test Behavior, Not Implementation Details",
+            "body": "The React testing ecosystem converged on a specific philosophy: tests should verify what a user actually experiences -- what appears on screen, what happens after they click or type -- rather than internal mechanics like which state variable currently holds a value, whether a specific hook fired, or what a component's internal method is named.\n\nThe reasoning is practical, not aesthetic: implementation details change constantly during normal, entirely correct refactors -- renaming a state variable, switching from useState to useReducer, extracting shared logic into a custom hook. None of those changes anything a user can actually observe. If tests are coupled to those internal details anyway, every such refactor breaks tests that were never actually testing anything wrong with the app -- a false alarm. False alarms are corrosive to a test suite's usefulness over time: once a team learns that red tests often mean 'harmless refactor noise' rather than 'something is actually broken,' people start ignoring failures, which defeats the entire point of having tests in the first place."
+          },
+          {
+            "heading": "The Testing Library Mental Model: Query Like a User",
+            "body": "React Testing Library's central idea is to find elements the way an actual person -- or a piece of assistive technology, like a screen reader -- would find them: by visible text, by accessible role, by an associated label. Not by reaching into implementation details like a CSS class name that exists purely for styling, or a component's internal props or instance.\n\nThis produces a rough priority order in practice: prefer queries like `getByRole(\"button\", { name: \"Submit\" })`, `getByLabelText(\"Email\")`, or `getByText(\"Welcome back\")` over anything equivalent to `container.querySelector(\".some-class\")`. The reasoning behind that ordering isn't only about test resilience -- it doubles as a rough accessibility check. If `getByRole(\"button\", { name: \"Submit\" })` can't find your submit button, there's a real chance a screen reader user can't reliably find it either, since both are relying on the same underlying accessible structure of the markup."
+          },
+          {
+            "heading": "Brittle vs. Resilient: A Concrete Contrast",
+            "body": "Imagine a login form whose submit button currently has the class `.btn-primary`, and a test that finds it via `document.querySelector(\".btn-primary\")`. Now imagine a purely visual redesign renames that class to `.button--primary` -- nothing about what the button does or displays changes at all, only a styling hook's name. The class-based test breaks immediately, even though the app's actual behavior is unchanged -- a false failure that costs someone real time investigating something that was never actually broken.\n\nA test that instead finds the button via `screen.getByRole(\"button\", { name: /log in/i })` keeps passing straight through that same redesign, because the button's accessible role (button) and its visible name ('Log In') never changed -- only an internal, purely presentational detail did, and that detail was never part of what the resilient test was checking in the first place."
+          },
+          {
+            "heading": "What This Looks Like in Practice",
+            "body": "Interactions are typically simulated with `fireEvent` or `userEvent` -- clicking, typing -- the way a real user would produce them, and assertions are made on the resulting visible output: text appearing or disappearing, an input's displayed value changing. What's deliberately absent is any assertion on a component's internal state value directly.\n\nThat's not an accidental limitation -- it's the point. If a test genuinely can't verify, from the outside, whether a component uses useState or useReducer internally, that's a feature of this approach rather than a gap in it: a user interacting with the rendered page can't observe that choice either, so a test that claims to represent what a user experiences shouldn't be able to see it, or care about it, any more than the user can."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Brittle CSS-Class Query vs. Resilient Role/Text Query",
+          "language": "jsx",
+          "code": "// BRITTLE: coupled to a CSS class that exists purely for styling.\ntest(\"brittle: shows an error message\", () => {\n  render(<LoginForm />);\n  fireEvent.click(document.querySelector(\".submit-btn\"));\n  expect(document.querySelector(\".error-text\").textContent).toBe(\n    \"Password is required\"\n  );\n});\n\n// RESILIENT: queries by role and accessible text, the way a user would.\ntest(\"resilient: shows an error message\", () => {\n  render(<LoginForm />);\n  fireEvent.click(screen.getByRole(\"button\", { name: /log in/i }));\n  expect(screen.getByText(\"Password is required\")).toBeInTheDocument();\n});",
+          "explanation": "If a redesign renames .submit-btn to .cta-button, or restructures the error text into a differently-classed element, the brittle test breaks immediately -- even though LoginForm's actual behavior (clicking 'Log In' without a password shows this exact message) hasn't changed at all. The resilient version finds the button by its accessible role and visible label, and finds the error message by the literal text a user would read on screen; neither depends on any CSS class, so a purely visual restructuring leaves it passing, exactly as it should, since nothing the user actually experiences changed."
+        },
+        {
+          "title": "Testing an Interaction Without Touching Internal State",
+          "language": "jsx",
+          "code": "test(\"filters the list as the user types\", () => {\n  render(<SearchableList items={[\"Apple\", \"Banana\", \"Cherry\"]} />);\n\n  const input = screen.getByRole(\"textbox\", { name: /search/i });\n  fireEvent.change(input, { target: { value: \"an\" } });\n\n  expect(screen.getByText(\"Banana\")).toBeInTheDocument();\n  expect(screen.queryByText(\"Apple\")).not.toBeInTheDocument();\n});",
+          "explanation": "This test never touches SearchableList's internal state -- whatever holds the current filter text, or however the filtering itself is implemented -- it interacts with the input the way a user would (finding it by its accessible role and label, then typing into it) and asserts on what ends up visible afterward. Note queryByText (which returns null if nothing matches) is used specifically to assert something is absent, instead of getByText (which throws if nothing matches) -- getByText would throw before the assertion even ran, which is exactly why Testing Library provides both variants for these two different purposes."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "A good test should check that a component's internal state updated correctly after an interaction.",
+          "clarification": "Internal state is an implementation detail invisible to actual users. Testing it directly -- for instance, by exposing internals purely for the sake of testing them -- couples the test to exactly how the component happens to be built today, so a valid, behavior-preserving refactor (changing state shape, splitting logic into a different hook) breaks the test for no real reason. Assert on the rendered, visible outcome instead -- that's the thing that genuinely has to stay correct for users, regardless of how it's implemented underneath."
+        },
+        {
+          "description": "getByRole and similar Testing Library queries are just a more verbose way to do the same thing document.querySelector does.",
+          "clarification": "They aren't equivalent even when they happen to find the same element. Role- and label-based queries only succeed when the markup is actually accessible -- correct semantic elements, appropriate ARIA attributes, real associated labels -- so a passing getByRole-based test carries a side benefit: some baseline evidence the UI is usable via assistive technology, not just navigable with a mouse and readable with eyes. A className-based selector can find any div at all, completely independent of whether a screen reader could ever make sense of it."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "react-testing-ex1",
+          "type": "scenario",
+          "prompt": "A code review comment says: 'This test does expect(wrapper.find(\".modal-overlay\").length).toBe(1) to check the modal opened -- can you make this more resilient?' Describe, in words, a different approach to the assertion, and explain what specifically makes your version survive a future CSS refactor that the original wouldn't.",
+          "hints": [
+            "The original query is coupled to a CSS class -- what does a user actually perceive when a modal opens, that has nothing to do with any class name?",
+            "A modal is typically an accessible dialog with visible text inside it -- what role or text could you query for instead?",
+            "Think about what specifically changes in a purely visual/CSS refactor, and confirm your chosen query doesn't depend on any of that."
+          ],
+          "solutionExplanation": "Instead of counting elements matching a CSS class, query for something a user would actually perceive when the modal opens -- for example, screen.getByRole(\"dialog\") if the modal is marked up with an appropriate accessible role, or screen.getByText(...) matching visible text that only appears once the modal is open, then assert it's present with toBeInTheDocument(). This survives a future CSS refactor because renaming or restructuring .modal-overlay's styling class has no effect on the modal's accessible role or its visible text content -- those are tied to the markup's semantics and content, not to whatever class happens to be attached for styling purposes. The original test breaks under that same refactor because .modal-overlay is precisely the detail being renamed, even though the modal itself still opens and behaves identically from a user's perspective."
+        },
+        {
+          "id": "react-testing-ex2",
+          "type": "coding",
+          "prompt": "Given the CartWidget component below, write a test using React Testing Library-style queries that verifies clicking the 'Add to Cart' button updates the visible item count, without asserting on any internal state directly.",
+          "code": "function CartWidget() {\n  const [count, setCount] = useState(0);\n\n  return (\n    <div>\n      <button onClick={() => setCount(count + 1)}>Add to Cart</button>\n      <p>Items in cart: {count}</p>\n    </div>\n  );\n}",
+          "hints": [
+            "Find the button the way a user would -- by its visible label -- rather than by a class or internal ref.",
+            "After firing the click, assert on the text that's now visible on screen, not on any state variable inside CartWidget.",
+            "screen.getByText can match the exact string that should now be showing, e.g. 'Items in cart: 1'."
+          ],
+          "solutionCode": "test(\"clicking Add to Cart increases the visible item count\", () => {\n  render(<CartWidget />);\n\n  expect(screen.getByText(\"Items in cart: 0\")).toBeInTheDocument();\n\n  fireEvent.click(screen.getByRole(\"button\", { name: \"Add to Cart\" }));\n\n  expect(screen.getByText(\"Items in cart: 1\")).toBeInTheDocument();\n});",
+          "solutionExplanation": "This test finds the button by its accessible role and visible name, fires a real click event the way a user would produce one, and asserts on the exact visible text change before and after. At no point does it reach into CartWidget's count state directly, through an instance, a returned hook value, or an internal ref. If CartWidget's implementation later changed from useState to useReducer, or renamed count to itemCount internally, this test would still pass completely unchanged, because none of that internal detail is visible to a user, and none of it is what this test actually checks."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "react-testing-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "Why does React Testing Library encourage querying by role and accessible text/label instead of by CSS class name?",
+          "options": [
+            "CSS-class-based queries are slower to execute in the test runner.",
+            "Querying by role/label matches how a real user (including one using assistive technology) actually finds things on screen, so tests track real behavior and stay valid across purely visual refactors that change classes without changing what's rendered semantically.",
+            "CSS classes are not supported by the DOM APIs that Testing Library depends on.",
+            "Role and label queries are simply an alias for querySelector with identical behavior under the hood."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The actual reasoning is about what a query represents, not raw execution speed or DOM API support (both of which are non-issues -- option A and C describe problems that don't exist). Role/label queries track the same accessible structure a real user (or their assistive technology) relies on, so they stay valid through refactors that only change styling classes, while a className-based query breaks the moment that class is renamed for purely visual reasons. Option D is false -- role/label queries actively check accessible semantics, which querySelector has no concept of at all."
+        },
+        {
+          "id": "react-testing-assess-explain1",
+          "type": "explanation",
+          "prompt": "A test suite has several tests asserting on a component's internal state values directly, by reaching into a returned hook's internals or a component instance. Explain, in terms of what happens during a refactor, why this is considered an anti-pattern in the React Testing Library philosophy.",
+          "modelAnswer": "Internal state values -- which hook holds them, what they're named, how they're structured -- are implementation details that a real user interacting with the rendered page has no way to observe and no reason to care about. A test that asserts on those details directly is coupled to exactly how the component happens to be built today. If a later, entirely valid refactor changes any of that -- switching from useState to useReducer, splitting logic into a differently-named custom hook, restructuring how a value is stored internally -- without changing anything about what the component actually looks like or does from a user's perspective, that refactor breaks these tests anyway. That's a false failure: the tests are reporting a problem where none actually exists for any real user, and repeated false failures like this train a team to distrust red test results, undermining the entire value of having a test suite. Testing the rendered, visible outcome instead -- what text appears, what happens after a simulated click -- ties tests to behavior that genuinely has to stay correct regardless of implementation, so they only fail when something a user would actually notice has actually broken."
+        }
+      ]
+    },
+    {
+      "id": "react-performance-optimization",
+      "title": "Performance Optimization",
+      "description": "Identifying unnecessary re-renders starts with profiling, not guessing, and tools like React.memo, useCallback/useMemo, and code splitting each solve a specific, measured problem -- reaching for them by default adds real complexity without guaranteed benefit.",
+      "moduleId": "react-production",
+      "topicId": "react-production",
+      "difficulty": "advanced",
+      "estimatedMinutes": 30,
+      "prerequisites": ["react-usememo-and-usecallback"],
+      "learningObjectives": [
+        "Explain why profiling with React DevTools should come before any optimization attempt.",
+        "Explain what React.memo does and when skipping a re-render actually matters.",
+        "Explain why passing a new inline function or object prop on every render defeats React.memo, and how useCallback/useMemo fix it.",
+        "Describe code splitting and lazy loading as a way to reduce initial bundle size, distinct from reducing re-renders.",
+        "Explain the real cost of premature optimization and why profiling should precede and follow any optimization attempt."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "Measure First: The React DevTools Profiler",
+            "body": "Before optimizing anything, the discipline that actually matters is getting real evidence of what's slow and why -- not a guess based on a feeling that 'this component seems like it would be expensive.' The React DevTools Profiler records renders as they actually happen and shows which components rendered, how long each one took, and -- critically -- *why* each one rendered (props changed, state changed, a parent re-rendered, a context value changed). That turns 'I have a hunch this is slow' into a specific, measured target: this particular component, re-rendering this often, taking this long, for this reason.\n\nThe sequence to internalize is: profile, find an actual, measured bottleneck, optimize that specific thing, then profile again to confirm it actually helped. Adding memoization everywhere up front, without measuring anything first, isn't optimization -- it's a guess dressed up as one, and guesses are frequently wrong about where the real cost in a React app actually lives."
+          },
+          {
+            "heading": "React.memo: Skipping Re-renders for Unchanged Props",
+            "body": "`React.memo` wraps a component so that React can skip re-rendering it when its props are the same, reference-for-reference, as they were on the previous render -- a shallow, key-by-key comparison -- even if that component's parent just re-rendered for some unrelated reason. This is useful specifically for a component that is genuinely expensive to render, and that receives the same props relatively often compared to how often its parent updates for other reasons. Wrapping a component that's cheap to render, or one whose props actually do change on nearly every parent render anyway, buys little to nothing, since there's rarely a re-render being skipped in the first place."
+          },
+          {
+            "heading": "Why memo Needs useCallback/useMemo to Actually Work",
+            "body": "Here's the gotcha that connects directly back to useCallback and useMemo: memo's props comparison is shallow, meaning a brand-new function or object *literal* created fresh on every parent render is a genuinely different reference every single time -- even if its actual behavior or content is identical to the previous render's. `<ExpensiveChild onClick={() => doThing()} />` hands ExpensiveChild a new onClick function reference on every single render of its parent, no matter how many times doThing itself stays the same underlying function. memo's shallow comparison sees 'this prop changed' every time, and ExpensiveChild re-renders anyway -- silently defeating the entire point of wrapping it in memo, with no warning or error telling you that it didn't work.\n\nThe fix is exactly what the prerequisite concept covers: wrap that callback in `useCallback` (and any object or array literal prop in `useMemo`) in the parent, so the same reference is reused across renders where its dependencies haven't actually changed. This is precisely why useMemo/useCallback and React.memo are almost always discussed together -- for props passed into a memoized component, memo is close to useless without them, in this specific, very common scenario."
+          },
+          {
+            "heading": "Code Splitting and Lazy Loading",
+            "body": "This is a genuinely different problem from re-renders: reducing how much JavaScript the browser has to download and parse before the app becomes usably interactive in the first place, rather than reducing work done on subsequent renders. `React.lazy(() => import(\"./HeavyChart\"))` combined with `<Suspense fallback={<Spinner />}>` defers actually fetching that component's code until it's genuinely needed -- for example, a route only some visitors ever go to, or a heavy charting library hidden behind a tab that most users never open -- instead of bundling it into the initial JS payload that every single visitor downloads regardless of whether they ever use it.\n\nConcretely: a 2MB charting library bundled unconditionally into the main bundle makes every visitor pay that download and parse cost on first load, including the ones who never open the tab that actually uses it. Lazy-loading that same library means only the visitors who actually navigate to that tab pay that cost -- and each of them pays it exactly once, right when it's actually needed, not upfront on every visit."
+          },
+          {
+            "heading": "The Honest Framing: Premature Optimization Has a Real Cost",
+            "body": "Memoizing everything by default -- wrapping every component in memo, every function in useCallback, every derived value in useMemo, without having measured whether any of it matters -- isn't free. Each memoization itself costs a comparison or a cache check on every render; each one adds a dependency array that has to stay correct, which is itself an easy source of subtle bugs when a dependency is missed; and each one adds a layer of indirection that makes the code genuinely harder to read, for a benefit that may be marginal or entirely nonexistent on a component that was never actually slow.\n\nIn the common case, React re-rendering a simple component is already extremely fast -- fast enough that the overhead of memoizing it defensively can, in some cases, cost more than the render it was meant to avoid ever would have, and very often makes no measurable difference either way while still making the code strictly harder to follow. The right sequence is always: profile, identify an actual bottleneck backed by real numbers, optimize that specific, measured thing, and re-measure afterward to confirm it actually helped -- not memoize defensively everywhere upfront, 'just in case' it might matter somewhere."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "React.memo Paired With useCallback",
+          "language": "jsx",
+          "code": "const ExpensiveRow = React.memo(function ExpensiveRow({ item, onSelect }) {\n  console.log(\"rendering row\", item.id); // for illustration\n  return <li onClick={() => onSelect(item.id)}>{item.name}</li>;\n});\n\nfunction ItemList({ items }) {\n  const [selectedId, setSelectedId] = useState(null);\n\n  // WITHOUT useCallback: a new function every render would defeat\n  // memo below, since every ExpensiveRow would see a \"new\" onSelect.\n  // const handleSelect = (id) => setSelectedId(id);\n\n  // WITH useCallback: a stable reference across renders, since its\n  // dependency array (empty here) never changes.\n  const handleSelect = useCallback((id) => setSelectedId(id), []);\n\n  return (\n    <ul>\n      {items.map((item) => (\n        <ExpensiveRow key={item.id} item={item} onSelect={handleSelect} />\n      ))}\n    </ul>\n  );\n}",
+          "explanation": "If handleSelect were instead recreated fresh on every render (the commented-out version), every ExpensiveRow would receive a 'new' onSelect prop every single time ItemList re-rendered for any reason at all, so React.memo's shallow comparison would report changed props every time -- and every row would re-render regardless of being wrapped in memo, completely defeating the point of wrapping ExpensiveRow in it. With useCallback (an empty dependency array here, since handleSelect doesn't close over anything that changes), the same function reference is reused across renders, so memo's comparison actually sees 'same props' for rows whose own item prop didn't change -- the console.log would only fire for rows whose item actually changed on a given update, not for every row."
+        },
+        {
+          "title": "Lazy Loading a Heavy Component",
+          "language": "jsx",
+          "code": "import { lazy, Suspense } from \"react\";\n\n// HeavyChart's code isn't fetched at all until this import actually runs.\nconst HeavyChart = lazy(() => import(\"./HeavyChart\"));\n\nfunction AnalyticsPage() {\n  const [showChart, setShowChart] = useState(false);\n\n  return (\n    <div>\n      <button onClick={() => setShowChart(true)}>Show Chart</button>\n      {showChart && (\n        <Suspense fallback={<p>Loading chart...</p>}>\n          <HeavyChart />\n        </Suspense>\n      )}\n    </div>\n  );\n}",
+          "explanation": "HeavyChart's JavaScript (and whatever heavy charting library it depends on) is split into its own separate bundle chunk by the build tool, and that chunk is only fetched over the network the moment showChart becomes true and React actually needs to render HeavyChart -- not as part of the initial bundle every visitor to AnalyticsPage downloads regardless of whether they ever click the button. Suspense's fallback covers the brief gap while that chunk is being fetched, which is the same loading-state idea already covered for data fetching, just applied to loading code itself instead of loading data."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "Wrapping a component in React.memo always makes it faster, so it's safe to wrap everything in memo by default.",
+          "clarification": "memo only actually helps when a component would otherwise re-render with genuinely unchanged props, and that skipped re-render is expensive enough to matter. For a cheap-to-render component, the shallow prop comparison memo performs on every render can cost about as much as -- or occasionally more than -- just re-rendering it would have, so wrapping everything defensively can, in some cases, make things marginally slower rather than faster, while definitely making the code more complex to read. It's a targeted tool for a measured bottleneck, not a default setting to apply everywhere."
+        },
+        {
+          "description": "Since ExpensiveChild is wrapped in React.memo, passing it a new inline arrow function or object literal as a prop is fine -- memo will handle it.",
+          "clarification": "memo's shallow prop comparison sees a new function or object literal as a genuinely different value on every render, purely because it's a different reference in memory -- regardless of whether it's wrapped in memo or not. memo does not know or care that the function's behavior is identical to last time; it only compares references, not behavior or content. Any inline () => ... or { ... } literal passed directly as a prop into a memoized component defeats that memoization for that prop, silently, with no warning -- which is exactly why such props need to be stabilized with useCallback or useMemo in the parent for memo to have any actual effect on them."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "react-performance-optimization-ex1",
+          "type": "predictOutput",
+          "prompt": "Row is wrapped in React.memo. Clicking on row 'B' calls handleSelect, which triggers a state update and causes List to re-render. handleSelect is a plain function declaration, not wrapped in useCallback. Given that, which Row components log a new 'render:' line as a result of this one click -- just B, or all three?",
+          "code": "const Row = React.memo(function Row({ item, onSelect }) {\n  console.log(\"render:\", item.name);\n  return <li onClick={() => onSelect(item.id)}>{item.name}</li>;\n});\n\nfunction List() {\n  const [selectedId, setSelectedId] = useState(null);\n  const items = [{ id: 1, name: \"A\" }, { id: 2, name: \"B\" }, { id: 3, name: \"C\" }];\n\n  function handleSelect(id) {\n    setSelectedId(id);\n  }\n\n  return (\n    <ul>\n      {items.map((item) => (\n        <Row key={item.id} item={item} onSelect={handleSelect} />\n      ))}\n    </ul>\n  );\n}",
+          "hints": [
+            "Row is wrapped in React.memo, which skips re-rendering when props are reference-equal to last time -- check every prop each Row receives, not just item.",
+            "handleSelect is defined fresh, as a new function, every single time List's function body runs -- including on this very re-render triggered by the click.",
+            "Since onSelect is a new reference every render for all three rows, not just the one that was clicked, what does memo's shallow comparison conclude about each Row's props?"
+          ],
+          "expectedAnswer": "All three Row components log a new 'render:' line, not just B. List re-declares handleSelect as a brand-new function on every render of List, so every Row's onSelect prop is a new reference after the click, regardless of which row was actually clicked. memo's shallow comparison sees changed props for A, B, and C alike (since onSelect differs from last render for all three), and all three re-render as a result.",
+          "solutionExplanation": "handleSelect is a plain function declaration inside List's body, so a new function object is created every time List's function runs -- including this re-render triggered by clicking B. That new handleSelect gets passed as onSelect to every Row, not just the one that was clicked, so all three Rows receive a prop that is a different reference than what they had last render, even though item stayed the same for A and C. React.memo's shallow comparison checks every prop, and since onSelect differs for all three, memo concludes all three have changed props and re-renders all of them -- console.log fires for A, B, and C. Wrapping handleSelect in useCallback (with an empty dependency array, since it only calls setSelectedId, which is itself stable across renders) would give every Row the same onSelect reference across renders where handleSelect's own dependencies haven't changed, letting memo correctly skip re-rendering A and C when only B's selection state is what actually changed."
+        },
+        {
+          "id": "react-performance-optimization-ex2",
+          "type": "coding",
+          "prompt": "Fix the List component from the previous exercise so that React.memo can actually skip re-rendering A and C when B is clicked, instead of all three rows re-rendering every time.",
+          "hints": [
+            "The fix is exactly the pairing already covered: stabilize the function reference being passed as a prop into the memoized component.",
+            "Wrap handleSelect in useCallback so the same function reference is reused across renders whose dependencies haven't changed.",
+            "handleSelect only calls setSelectedId, which React guarantees is stable across renders -- so its dependency array can safely be empty."
+          ],
+          "solutionCode": "function List() {\n  const [selectedId, setSelectedId] = useState(null);\n  const items = [{ id: 1, name: \"A\" }, { id: 2, name: \"B\" }, { id: 3, name: \"C\" }];\n\n  const handleSelect = useCallback((id) => {\n    setSelectedId(id);\n  }, []);\n\n  return (\n    <ul>\n      {items.map((item) => (\n        <Row key={item.id} item={item} onSelect={handleSelect} />\n      ))}\n    </ul>\n  );\n}",
+          "solutionExplanation": "Wrapping handleSelect in useCallback with an empty dependency array means the same function reference is reused across every render of List, since setSelectedId is guaranteed stable by React and nothing else is captured in the closure. Now, when B is clicked and List re-renders, every Row receives the exact same onSelect reference as before -- so for A and C, whose item prop also didn't change, memo's shallow comparison sees fully unchanged props and correctly skips re-rendering them. Only B, whose selection actually changed (visually, if Row renders something based on whether it's selected) would re-render as expected. This is the concrete fix for the exact gotcha described in the explanation: memo alone wasn't enough, because the function prop kept changing reference underneath it."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "react-performance-optimization-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "A component is wrapped in React.memo, but profiling shows it still re-renders every time its parent re-renders, even though nothing about what it looks like on screen ever changes. What's the most likely cause?",
+          "options": [
+            "React.memo doesn't work on function components, only class components.",
+            "One or more props passed to it are new object, array, or function references on every parent render (such as an inline arrow function or object literal), which defeats memo's shallow reference comparison even though their actual content is unchanged.",
+            "The component has too many hooks for memo to track correctly.",
+            "memo only works if the component has no children."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This is precisely the memo-plus-inline-prop gotcha: a new function or object literal created fresh on every parent render is a different reference every time, and memo's shallow comparison treats that as changed props, regardless of whether the content or behavior is identical. React.memo works perfectly well on function components (option A is false), has no limit related to hook count (option C is false), and has no restriction related to children (option D is false) -- none of those describe real constraints of memo."
+        },
+        {
+          "id": "react-performance-optimization-assess-scenario1",
+          "type": "scenario",
+          "prompt": "A junior developer wraps every single component in the app with React.memo and every function passed as a prop with useCallback, 'to be safe.' Explain, using the idea of measuring first, why this might not actually be a good idea, even if it doesn't break anything functionally.",
+          "modelAnswer": "Wrapping everything defensively skips the step that actually justifies reaching for memo/useCallback in the first place: measuring, with the React DevTools Profiler or similar, whether a given component's re-renders are both frequent and expensive enough to matter. Without that measurement, most of this memoization is very likely being applied to components that were already cheap to re-render, where the cost of the memoization itself (a shallow prop comparison on every render, a dependency array to maintain correctly) can be comparable to, or in some cases larger than, the cost of the re-render it's meant to prevent -- delivering no real performance benefit while making the codebase harder to read and reason about, and introducing a new class of bug (a dependency array that's wrong or goes stale) that wasn't a risk before. The productive approach is the reverse order: profile the app under realistic conditions, find components that are both re-rendering often and taking a meaningful amount of time to do so, apply memo/useCallback/useMemo specifically to those, and then profile again to confirm the change actually helped -- rather than applying it everywhere upfront on the assumption that it can only help."
+        }
+      ]
+    },
+    {
+      "id": "react-deployment-and-architecture",
+      "title": "Deployment and Architecture",
+      "description": "Most React apps ship through a build step into static assets with build-time environment configuration, benefit from a feature-based folder structure as they grow, and choose between client-side and server-side rendering as a genuine tradeoff rather than a default.",
+      "moduleId": "react-production",
+      "topicId": "react-production",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 25,
+      "prerequisites": ["react-state-management"],
+      "learningObjectives": [
+        "Explain what the build step does to source code before it's deployed.",
+        "Explain how build-time environment variables configure the same codebase differently per environment, and their limits.",
+        "Contrast feature-based folder architecture with organizing by file type, and explain why the former scales better.",
+        "Explain the real tradeoffs between client-side rendering and server-side rendering."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "The Build Step: From Source to Static Assets",
+            "body": "Most React apps are not shipped as the JSX and modern JavaScript syntax actually written in the source files -- a build tool (Vite, webpack, and similar) runs a **build step** that bundles all of an app's JavaScript, CSS, and dependencies into a smaller number of optimized files; transpiles JSX and newer JavaScript syntax down into something every target browser can run; minifies the result (stripping whitespace, shortening variable names) to reduce file size; and often splits the output into multiple chunks, which is exactly the mechanism behind the lazy-loading pattern covered in the performance concept.\n\nThe output of this process is a folder of plain, static HTML/CSS/JS files, which get deployed to a server or CDN. 'Static' here means the server just hands these pre-built files out as-is on request -- it is not running any React code itself to produce them on the fly. That distinction matters later, when contrasted with server-side rendering, where a server does run React code on each request."
+          },
+          {
+            "heading": "Environment-Specific Configuration",
+            "body": "The same codebase typically needs to behave differently depending on where it's running -- pointing at `http://localhost:3000/api` locally, a staging server's URL in staging, and the real production API's URL in production. This is commonly handled with **build-time environment variables** -- `import.meta.env.VITE_API_URL` in Vite, or `process.env.REACT_APP_API_URL` in older Create React App setups -- which get substituted directly into the built JS files at build time, not read dynamically from the server's actual runtime environment the way a backend app's environment variables typically are. In practice, this means a distinct build generally needs to be produced per environment (or per deploy target), rather than one universal build deciding its own API URL by inspecting wherever it happens to be currently running.\n\nThere's a real security-adjacent point worth being explicit about: anything baked into a frontend build this way is visible to anyone who opens their browser's dev tools and looks at the shipped JS -- 'build-time environment variable' does not mean 'hidden' for a frontend app, the way it might for server-side configuration. This mechanism is appropriate for configuration (a base API URL, a public feature flag), never for secrets that genuinely need to stay private, like an API key that must not be exposed to end users."
+          },
+          {
+            "heading": "Feature-Based Folder Architecture",
+            "body": "As an app grows, how its files are organized starts to matter. Organizing by **file type** groups files into folders like `components/`, `hooks/`, `styles/`, each containing files belonging to every feature in the app, mixed together. Organizing by **feature** instead groups everything related to one feature together: `features/checkout/{CheckoutForm.jsx, useCheckout.js, checkout.css}`, `features/profile/{...}`, and so on.\n\nThe feature-based approach tends to scale better specifically because it makes the *relationships between files* explicit in the folder structure itself. In a type-based layout with, say, 200 components, the folder structure gives you no signal about which components belong to which feature, or which ones are safe to change or delete together -- that knowledge has to live entirely in people's heads or in scattered documentation. A `features/checkout/` folder tells you the likely blast radius of a change to checkout at a glance. This isn't a universal rule that every project needs from day one -- a small app with five components gains little from this ceremony -- it's a response to a specific growth problem, in the same spirit as when Context or a dedicated state-management library start earning their keep only once an app's state actually gets complex enough to need them."
+          },
+          {
+            "heading": "CSR vs. SSR: A Brief, Honest Framing",
+            "body": "Everything covered up to this point has assumed **client-side rendering (CSR)**: the server sends a nearly-empty HTML shell (commonly just `<div id=\"root\"></div>`) plus a JS bundle, and the browser downloads and runs that JS, which then builds and inserts the actual UI. There's a real, measurable gap between 'the page arrives' and 'the page has visible content,' and a search engine crawler or a social-media link-preview bot that doesn't execute JavaScript may see nothing more than that empty shell.\n\n**Server-side rendering (SSR)** takes a different approach: the server itself runs the React components and sends back HTML that already contains real, visible content, so the browser has something meaningful to show immediately -- with the JS bundle still being sent and run afterward to 'hydrate' that markup, attaching event handlers and making it genuinely interactive. Each approach has real tradeoffs: CSR's upfront JS payload can mean slower time-to-first-visible-content, especially on slow connections or devices, but needs only simple infrastructure (a static file server or CDN is enough). SSR gives faster initial content and generally better default SEO and link-preview behavior, but requires an actual server running React on every request (or some pre-rendering/caching layer on top), rather than just handing out static files -- meaningfully more moving infrastructure to run and maintain. Next.js is the common way to get SSR (among other capabilities) in the React ecosystem, without needing to dive into its specific API here."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "The Same Source Code, Configured Differently Per Build",
+          "language": "jsx",
+          "code": "// .env.production\nVITE_API_URL=https://api.example.com\n\n// .env.development\nVITE_API_URL=http://localhost:3000/api\n\n// In application source code, used identically regardless of environment:\nconst apiUrl = import.meta.env.VITE_API_URL;\n\nfetch(`${apiUrl}/users`);",
+          "explanation": "The exact same line of source code, import.meta.env.VITE_API_URL, resolves to a different literal string depending on which build was actually run -- the build tool substitutes the real value in at build time, baking it directly into the output JS file, rather than this being read dynamically from the server at request time the way a backend app's environment variable typically works. Running a production build with the wrong .env file active would silently point the deployed app at the wrong backend, with no runtime check anywhere catching the mismatch -- the value is fixed the moment the build runs, and stays that way until a new build is produced and deployed."
+        },
+        {
+          "title": "Type-Based vs. Feature-Based Folder Structure",
+          "language": "jsx",
+          "code": "// Type-based (relationships between files are invisible in the structure):\nsrc/\n  components/\n    CheckoutForm.jsx\n    ProfileCard.jsx\n    CheckoutSummary.jsx\n    ProfileSettings.jsx\n  hooks/\n    useCheckout.js\n    useProfile.js\n  styles/\n    checkout.css\n    profile.css\n\n// Feature-based (everything one feature needs lives together):\nsrc/\n  features/\n    checkout/\n      CheckoutForm.jsx\n      CheckoutSummary.jsx\n      useCheckout.js\n      checkout.css\n    profile/\n      ProfileCard.jsx\n      ProfileSettings.jsx\n      useProfile.js\n      profile.css",
+          "explanation": "In the type-based layout, everything related to checkout is scattered across three separate top-level folders that also happen to contain unrelated profile files sitting right alongside them -- deleting or substantially changing the checkout feature means touching, or at least checking, components/, hooks/, and styles/, and nothing about the folder structure itself signals that CheckoutForm.jsx and useCheckout.js are related at all. In the feature-based layout, that relationship is explicit in the structure itself: everything checkout needs lives inside features/checkout/, so a change or a deletion has an obvious, contained blast radius, and a new contributor can see at a glance what belongs together without cross-referencing several parallel folders."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "Since API keys are read from environment variables and never appear as literal strings in the source code, they're safe to use as build-time env vars in a frontend app.",
+          "clarification": "Anything baked into a frontend build via build-time environment variables ends up embedded inside the JS files the browser downloads and runs -- literally visible to anyone who opens browser dev tools and inspects the bundled source, regardless of how it was written in the original, un-built source code. Build-time env vars in a frontend app are appropriate for non-secret configuration (a base API URL, a public feature flag) that's genuinely fine for any user to see. Real secrets that must stay private belong on a server the frontend talks to over the network -- never baked directly into a frontend build."
+        },
+        {
+          "description": "Server-side rendering means React doesn't run in the browser at all for that page.",
+          "clarification": "SSR generates the initial HTML on the server so there's real, visible content immediately, but the JS bundle is still sent to, and still runs in, the browser afterward -- a process called hydration -- to attach event handlers and make the already-rendered markup actually interactive. Without hydration, the page would look correct but nothing on it -- buttons, inputs, anything interactive -- would respond to user interaction. SSR changes where the first render happens and what the very first server response contains; it doesn't mean React never runs client-side at all for that page."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "react-deployment-and-architecture-ex1",
+          "type": "scenario",
+          "prompt": "Your team's app has grown to 40 components, and finding all the files related to the 'notifications' feature currently means checking components/, hooks/, utils/, and styles/, since the app is organized by file type. What would reorganizing by feature look like for this specific case, and what problem would it solve?",
+          "hints": [
+            "Identify every file across the current type-based folders that's actually about notifications, regardless of which folder it currently lives in.",
+            "A feature-based reorganization would gather all of those specific files into one place.",
+            "Think about what changes for someone who needs to modify, or safely delete, the notifications feature after this reorganization, compared to before."
+          ],
+          "solutionExplanation": "Reorganizing by feature would mean creating a features/notifications/ folder and moving every notifications-related component, hook, utility, and style file currently scattered across components/, hooks/, utils/, and styles/ into that single folder together. This solves the exact problem described: instead of having to know (or discover, by searching) that notifications-related code exists across four separate, otherwise-unrelated top-level folders, everything the feature needs lives in one place. Someone modifying or safely removing the notifications feature afterward can see its full footprint at a glance, in one folder, rather than having to hunt through several parallel type-based folders and hope nothing related was missed."
+        },
+        {
+          "id": "react-deployment-and-architecture-ex2",
+          "type": "scenario",
+          "prompt": "A deployed production build is making API calls to http://localhost:3000/api, which obviously doesn't exist for real users. The code uses import.meta.env.VITE_API_URL, and this worked fine locally. What's the most likely cause, and how would you actually fix it?",
+          "hints": [
+            "Environment variables like VITE_API_URL are substituted in at build time, baked directly into the output files -- not read dynamically from whatever environment the running server happens to be in.",
+            "Consider which .env file (or equivalent build configuration) was actually active at the moment the production build was run for this deployment.",
+            "If the build was produced using a development env file, or no production-specific configuration existed at all, what value would VITE_API_URL end up baked in as -- and can that be fixed without a new build?"
+          ],
+          "solutionExplanation": "The most likely cause is that the production build was actually run with the development .env file active (or no distinct production env configuration existed at all), so VITE_API_URL got baked in as the localhost value at build time. Because that substitution happens once, at build time, and is fixed permanently into the resulting JS files, there is no way to fix this by editing a config file on the already-deployed server -- the wrong value is already embedded in the shipped bundle. The actual fix is ensuring a production-specific env file (or build configuration) with the correct API URL exists and is the one active when the build is produced for that deployment target, then rebuilding and redeploying an entirely new set of build artifacts -- editing anything after the fact on the running server has no effect on values that were already baked into the JS at build time."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "react-deployment-and-architecture-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "A React app's production build makes a request to the wrong API URL because a build-time environment variable held the wrong value. Which statement correctly explains why this can't be fixed by just editing a config file on the already-deployed server?",
+          "options": [
+            "Build-time environment variables like this are substituted directly into the JS bundle's literal source at build time, so the wrong value is already baked into the deployed files -- fixing it requires rebuilding with the correct value and redeploying the new build, not editing a file after the fact.",
+            "Frontend apps don't actually support environment-specific configuration at all.",
+            "The fix just requires restarting the static file server, which re-reads environment variables automatically on restart.",
+            "Environment variables in frontend builds are read fresh from the browser's own environment on every page load, so simply refreshing the page would fix it."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "Build-time environment variables are substituted into the literal JS source at the moment the build runs, so the resulting value is permanently fixed inside the shipped files -- the only way to change it is to produce and deploy an entirely new build with the correct value active. Options B, C, and D each describe a mechanism that isn't how build-time environment variables actually work; none of them would have any effect on a value that's already baked into files that have already been built and deployed."
+        },
+        {
+          "id": "react-deployment-and-architecture-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain, to someone deciding between a purely client-side-rendered React app and a server-side-rendered one, the real tradeoff involved -- not just 'SSR is better for SEO.'",
+          "modelAnswer": "With client-side rendering, the server's initial response is a nearly empty HTML shell plus a JS bundle; the browser has to download and execute that JS before any real content appears, which creates a genuine gap between the page arriving and the page having visible content -- worse on slow connections or devices -- and a crawler or link-preview bot that doesn't execute JS may see only that empty shell, which is where the common SEO concern comes from. The upside is infrastructure simplicity: a static file server or CDN is sufficient, since nothing needs to run application code per request. With server-side rendering, the server itself runs the React components and sends back HTML that already contains real, visible content, so there's no gap between arrival and visible content, and crawlers see real content immediately without needing to execute JS at all. The cost is that an actual server (or an equivalent pre-rendering/caching layer) now needs to run React code on every request rather than just handing out static files -- meaningfully more infrastructure to run, scale, and maintain. Neither option is simply 'better' -- CSR trades initial content speed and default SEO behavior for infrastructure simplicity, and SSR trades that simplicity for faster initial content and better default SEO. Next.js is the most common way to get SSR (and related capabilities) within the React ecosystem, without needing to go into its specific API here."
+        }
+      ]
+    }
+  ]
+}

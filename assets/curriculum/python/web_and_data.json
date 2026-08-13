@@ -1,0 +1,232 @@
+{
+  "learningPathId": "python",
+  "moduleId": "web-and-data",
+  "title": "Web and Data",
+  "order": 13,
+  "concepts": [
+    {
+      "id": "python-http-rest-apis",
+      "title": "HTTP and REST APIs",
+      "description": "HTTP is a simple request/response protocol, and REST is a set of loose conventions for organizing resources by URL on top of it -- not a rigid standard with a strict rulebook.",
+      "moduleId": "web-and-data",
+      "topicId": "web-and-data",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 25,
+      "prerequisites": ["python-json-csv"],
+      "learningObjectives": [
+        "Describe the request/response cycle between an HTTP client and server in concrete terms.",
+        "Explain the conventional meaning of the GET, POST, PUT, PATCH, and DELETE verbs.",
+        "Group HTTP status codes into their meaningful categories and explain what each category signals.",
+        "Explain REST as a set of conventions for organizing resources by URL, not a strict, enforced protocol.",
+        "Make a basic HTTP request from Python and inspect its status code and JSON body."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "The Request/Response Cycle: No Magic Involved",
+            "body": "Underneath every API call, web page load, or app refresh, there's the same basic exchange: a **client** (your browser, your phone's app, a Python script) sends a **request** to a **server** somewhere on the network, and the server sends back a **response**. That's the entire mental model -- there's no hidden magic layer beyond this. A request specifies a **method** (what kind of action is being asked for), a **URL** (which resource on the server it's about), optional **headers** (metadata like what content type is being sent, or an authorization token), and sometimes a **body** (the actual data being sent, for methods like POST). A response comes back with a **status code** (a three-digit number summarizing what happened), its own headers, and usually a body (often JSON) containing the actual data or an error description. When you call `requests.get(\"https://api.example.com/users/42\")` in Python, you are triggering exactly this cycle -- constructing a request, sending it over the network, and getting back whatever the server decides to respond with."
+          },
+          {
+            "heading": "HTTP Verbs: Conventional Meanings, Not Enforced Rules",
+            "body": "HTTP defines several **methods** (commonly called verbs), and by long-standing convention -- not by any technical enforcement -- each one signals a different kind of intent:\n\n- **GET**: retrieve a resource. Should not change anything on the server (it's expected to be *safe* and *idempotent* -- calling it many times has the same effect as calling it once).\n- **POST**: create a new resource, or trigger some action that isn't naturally idempotent (e.g. \"place this order\").\n- **PUT**: replace a resource entirely with the given representation. Idempotent -- sending the same PUT twice should leave the resource in the same state as sending it once.\n- **PATCH**: apply a partial update to a resource -- change just the fields provided, leaving the rest alone.\n- **DELETE**: remove a resource.\n\nNothing about HTTP *forces* a server to actually behave this way -- a poorly designed API could delete data on a GET request, and the protocol itself wouldn't stop it. These are conventions that make APIs predictable and easier to reason about for everyone who relies on them (browsers, caches, and proxies, for instance, assume GET requests are safe to retry or cache, which breaks badly if a server violates that assumption)."
+          },
+          {
+            "heading": "Status Codes: The Categories That Matter Most",
+            "body": "A response's three-digit status code is grouped into ranges, and knowing the ranges gets you further than memorizing every individual code:\n\n- **2xx -- success**: the request was received, understood, and processed as expected (`200 OK`, `201 Created`, `204 No Content`).\n- **3xx -- redirection**: the resource has moved, and the client should look elsewhere (`301 Moved Permanently`, `304 Not Modified`).\n- **4xx -- client error**: the request itself was the problem -- something about how *you* asked was wrong (`400 Bad Request`, `401 Unauthorized`, `403 Forbidden`, `404 Not Found`).\n- **5xx -- server error**: the request was probably fine, but something went wrong on the server's end while trying to handle it (`500 Internal Server Error`, `503 Service Unavailable`).\n\nThe 4xx vs 5xx distinction is genuinely useful in practice: a 4xx generally means retrying the exact same request won't help until you change something about it (fix your auth token, correct a typo in the URL, send valid data), while a 5xx might be a transient server-side problem worth retrying, possibly with a short backoff delay."
+          },
+          {
+            "heading": "REST: Conventions, Not a Protocol With Enforcement",
+            "body": "REST (Representational State Transfer) is a *style* of API design -- a set of conventions for organizing an API around **resources**, each identified by a URL, manipulated through the standard HTTP verbs above. A REST-*ish* API for a blog might expose `/posts` (GET to list, POST to create), `/posts/42` (GET to retrieve one, PUT/PATCH to update, DELETE to remove), `/posts/42/comments` (GET to list that post's comments), and so on -- the URL structure itself communicates the resource hierarchy, and the verb communicates the action. Crucially, REST was originally described as an architectural style with several defining properties (statelessness, a uniform interface, cacheability, and others) in an academic dissertation, not as a certified standard with a compliance checker. In real-world usage, the term has drifted to mean, loosely, \"an HTTP API organized around resource URLs using conventional verbs and status codes\" -- and the overwhelming majority of APIs casually called \"REST APIs\" don't strictly satisfy every property from that original definition, and that's fine. There is no REST police, no official certifying body, and no test suite that revokes an API's right to call itself RESTful. Treat REST as a genuinely useful set of conventions to reach for, not a rigid specification to worry about violating."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "A Basic GET Request and Its Response",
+          "language": "python",
+          "code": "import requests\n\nresponse = requests.get(\"https://api.example.com/users/42\")\n\nprint(response.status_code)   # e.g. 200\nprint(response.headers[\"Content-Type\"])   # e.g. 'application/json'\n\ndata = response.json()   # parses the response body as JSON into a Python dict\nprint(data[\"name\"])",
+          "explanation": "requests.get() constructs and sends an HTTP GET request to the given URL and returns a Response object once the server replies. status_code exposes the three-digit code the server sent back, headers is a dict-like mapping of the response's metadata, and .json() parses the response body -- assumed here to be a JSON string -- into an ordinary Python dict (or list), letting you access fields like data[\"name\"] the same way you would with any other dict. Calling .json() on a response whose body isn't actually valid JSON raises an exception, which is why real code typically checks response.status_code (or calls response.raise_for_status()) before assuming the body is safe to parse."
+        },
+        {
+          "title": "Creating a Resource With POST and Handling a Client Error",
+          "language": "python",
+          "code": "import requests\n\nnew_post = {\"title\": \"Hello\", \"body\": \"My first post\"}\nresponse = requests.post(\"https://api.example.com/posts\", json=new_post)\n\nif response.status_code == 201:\n    created = response.json()\n    print(f\"Created post with id {created['id']}\")\nelif 400 <= response.status_code < 500:\n    print(f\"Request was rejected ({response.status_code}): {response.json().get('error')}\")\nelse:\n    print(f\"Unexpected server response: {response.status_code}\")",
+          "explanation": "Passing json=new_post tells requests to serialize the dict to a JSON string, send it as the request body, and set the Content-Type header to application/json automatically -- this is the conventional way a REST-style API expects to receive data for a POST. Checking specifically for 201 (Created) rather than just any 2xx reflects a real REST convention: a successful creation typically returns 201, not a generic 200, often along with the newly created resource's data (including a server-assigned id) in the response body. The 4xx branch handles a client-side mistake distinctly from an unexpected 5xx server failure -- treating them the same would obscure whether the caller needs to fix something about the request itself, or whether retrying later might just work."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "REST is a strict protocol or standard, and an API either correctly implements REST or it's 'doing it wrong.'",
+          "clarification": "REST is a descriptive architectural style from an academic dissertation, not a certified protocol with an enforcement mechanism -- there is no official body that checks compliance and no test suite that revokes an API's right to be called RESTful. In everyday practice, \"REST API\" has come to loosely mean \"an HTTP API organized around resource URLs, using conventional verbs and status codes,\" and the vast majority of APIs casually described that way don't strictly satisfy every property (statelessness, hypermedia-driven discovery, and others) from the original, stricter academic definition. That's normal, not a violation -- REST is best treated as a useful set of conventions to draw from, not a rigid specification to be graded against."
+        },
+        {
+          "description": "A 4xx and a 5xx status code both basically mean 'something went wrong' -- the distinction doesn't really matter for how you handle the response.",
+          "clarification": "The category tells you *where* the problem most likely originates, which changes what a sensible response looks like. A 4xx means the client's request itself was the issue -- bad input, missing authentication, a resource that doesn't exist -- and retrying the exact same request again, unchanged, will almost certainly fail the same way again; something about the request needs to change first. A 5xx means the server encountered a problem while trying to process what was probably a perfectly valid request -- and depending on the situation, retrying after a short delay might actually succeed, since the issue could be transient (an overloaded server, a temporary database outage). Treating both categories identically -- either always retrying, or never retrying -- throws away information the status code is specifically there to convey."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "python-http-rest-apis-ex1",
+          "type": "predictOutput",
+          "prompt": "A script makes the same GET request three times in a row. Assuming the server and network are both functioning normally and nothing about the underlying data changes, what should be true about the three status codes, and why?",
+          "code": "import requests\n\nfor _ in range(3):\n    response = requests.get(\"https://api.example.com/users/42\")\n    print(response.status_code)",
+          "hints": [
+            "GET is conventionally expected to be 'safe' -- it shouldn't change server state -- and 'idempotent' -- calling it repeatedly should behave the same way each time.",
+            "If the resource at that URL genuinely hasn't changed between calls, and nothing about the request itself is malformed, what category of status code would you expect all three times?",
+            "This is different from POST, where calling the exact same request three times might create three separate new resources rather than returning the same result each time."
+          ],
+          "expectedAnswer": "All three calls should print the same status code, most plausibly 200, assuming the resource exists and nothing about the request or server state changes between calls -- because GET is conventionally safe and idempotent, repeated identical GET requests are expected to return equivalent results each time, not accumulate side effects or vary in outcome.",
+          "solutionExplanation": "GET requests are conventionally both 'safe' (they shouldn't modify server state) and 'idempotent' (repeating the same request produces the same result as doing it once). Since nothing about the request or the underlying data changes across the loop's three iterations, each call should hit the same resource and get back an equivalent response -- most plausibly status_code 200 all three times, assuming the resource at that URL exists and is accessible. This is a direct contrast with POST: sending the same POST payload three times to a 'create a resource' endpoint would typically create three separate new resources with three different ids, since POST is not expected to be idempotent the way GET is."
+        },
+        {
+          "id": "python-http-rest-apis-ex2",
+          "type": "debugging",
+          "prompt": "This code is supposed to distinguish 'the request was malformed' from 'the server is having problems,' but it treats every non-200 response identically, losing that distinction. Fix it to branch on the status code category correctly.",
+          "code": "import requests\n\nresponse = requests.post(\"https://api.example.com/posts\", json={\"title\": \"\"})\n\nif response.status_code != 200:\n    print(\"Something went wrong, try again later\")\nelse:\n    print(\"Success:\", response.json())",
+          "hints": [
+            "A successful POST that creates a resource conventionally returns 201, not 200 -- as written, this code would treat even a genuinely successful creation as a failure.",
+            "Split the failure branch into two: one for status codes in the 400-499 range, and a separate one for 500-599.",
+            "The advice given to the user should differ by category: retrying later makes sense for a 5xx, but a 4xx (like this example's likely empty-title validation error) needs the request itself fixed, not a retry."
+          ],
+          "solutionCode": "import requests\n\nresponse = requests.post(\"https://api.example.com/posts\", json={\"title\": \"\"})\n\nif response.status_code == 201:\n    print(\"Success:\", response.json())\nelif 400 <= response.status_code < 500:\n    print(\"Request rejected -- fix the input and try again:\", response.json().get(\"error\"))\nelif 500 <= response.status_code < 600:\n    print(\"Server error -- this might be transient, consider retrying later\")\nelse:\n    print(\"Unexpected status code:\", response.status_code)",
+          "solutionExplanation": "The original code had two problems: it checked for exactly 200, when a successful resource creation via POST conventionally returns 201, meaning a genuinely successful call would have been misreported as a failure; and it collapsed every non-success status into one generic message, throwing away the meaningful difference between a 4xx (something about this specific request needs to change -- here, likely a validation error for an empty title) and a 5xx (a server-side problem where the same request might succeed if retried later). The fixed version checks for 201 specifically, then branches the 4xx and 5xx ranges separately, giving the caller (or the code handling the response) genuinely different, actionable information for each category instead of one indistinguishable 'something went wrong' message."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "python-http-rest-apis-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "A client sends a request with an expired authentication token to an API endpoint. Which category of status code should the server most appropriately respond with?",
+          "options": [
+            "2xx, since the server successfully processed the request and determined the token was expired.",
+            "3xx, since the client should be redirected to log in again.",
+            "4xx, since the problem lies with the request itself -- specifically, invalid credentials supplied by the client.",
+            "5xx, since authentication failures are always considered a server-side problem."
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "An expired or invalid token means something about the request the client sent -- its credentials -- was the actual problem, which is precisely what the 4xx category is for (specifically, 401 Unauthorized is the conventional choice). It is not a success (option A) just because the server correctly identified the problem -- the request did not accomplish what the client wanted. It is not inherently a redirection (option B) -- 3xx codes are about the resource's location, not about authentication state, even though a web *application* built on top of the API might choose to redirect a browser to a login page for its own UX reasons. It is not a server error (option D) -- the server did its job correctly by rejecting a request it should reject; nothing went wrong on the server's end."
+        },
+        {
+          "id": "python-http-rest-apis-assess-explain1",
+          "type": "explanation",
+          "prompt": "A junior developer says: \"Our API isn't RESTful because we use POST for an endpoint that just triggers a report to be re-generated, instead of creating a new resource.\" Explain why this concern is largely misplaced, and what actually matters more in practice.",
+          "modelAnswer": "REST is a descriptive architectural style, not a certified standard with an enforcement mechanism -- there's no official REST compliance checker, and the term has, in everyday practice, drifted to mean roughly \"an HTTP API organized around resource URLs using conventional verbs and status codes,\" rather than a strict checklist derived from the original academic dissertation that coined the term. Using POST for an action that isn't a textbook 'create a new resource' -- like triggering a report regeneration -- is common and reasonable: POST's conventional meaning covers any action that isn't naturally idempotent or doesn't map cleanly onto GET/PUT/PATCH/DELETE's more specific meanings, and 'trigger this side-effecting operation' fits that description fine. What actually matters more in practice is whether the API is predictable and easy for other developers to work with: does GET stay safe and idempotent so it can be cached and retried freely, do status codes accurately reflect success versus client versus server failure, is the URL structure sensible and discoverable. Worrying about whether every single endpoint maps perfectly onto strict CRUD-over-resources semantics is usually less valuable than making sure the conventions that matter for real usage -- safety of GET, meaningful status codes, predictable behavior -- are actually being followed."
+        }
+      ]
+    },
+    {
+      "id": "python-databases-sql",
+      "title": "Databases and SQL",
+      "description": "Relational databases organize data into tables of rows and columns linked by keys, and SQL is the language for querying and modifying that data -- with parameterized queries as the non-negotiable defense against SQL injection.",
+      "moduleId": "web-and-data",
+      "topicId": "web-and-data",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 35,
+      "prerequisites": ["python-dictionaries"],
+      "learningObjectives": [
+        "Describe the relational model conceptually: tables, rows, columns, and primary/foreign keys.",
+        "Write basic SQL statements using SELECT, WHERE, INSERT, UPDATE, and DELETE.",
+        "Explain what SQL injection is and construct a concrete example of how string-concatenated queries enable it.",
+        "Explain why parameterized queries prevent SQL injection, using a before/after comparison.",
+        "Use Python's sqlite3 module to create a table, insert data, and run a parameterized query."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "The Relational Model, Conceptually",
+            "body": "A relational database organizes data into **tables**, each representing one kind of thing (a table of `users`, a table of `orders`). Each table has a fixed set of **columns**, defining what attributes every entry has (a `users` table might have `id`, `name`, `email`), and each **row** is one specific record -- one particular user, with an actual value in every column. This is conceptually the same shape as a spreadsheet: columns are the headers, rows are the individual entries beneath them, except a relational database enforces structure far more strictly and lets tables reference each other.\n\nA **primary key** is a column (or combination of columns) that uniquely identifies each row in a table -- no two rows in `users` can share the same `id`. A **foreign key** is a column in one table that holds the primary key value of a row in *another* table, establishing a relationship between them -- an `orders` table might have a `user_id` column that's a foreign key referencing `users.id`, meaning each order is linked to exactly one specific user. This is how relational databases avoid duplicating a user's entire name and email on every single one of their orders: the order just stores a reference (the user's id), and looking up the full user details means following that reference back to the `users` table."
+          },
+          {
+            "heading": "Core SQL: SELECT, WHERE, INSERT, UPDATE, DELETE",
+            "body": "SQL (Structured Query Language) is how you read and modify data in a relational database. The core statements cover most day-to-day needs:\n\n```sql\n-- retrieve rows\nSELECT name, email FROM users WHERE id = 42;\n\n-- add a new row\nINSERT INTO users (name, email) VALUES ('Amy', 'amy@example.com');\n\n-- modify existing rows matching a condition\nUPDATE users SET email = 'amy.new@example.com' WHERE id = 42;\n\n-- remove rows matching a condition\nDELETE FROM users WHERE id = 42;\n```\n\n`SELECT ... FROM ... WHERE ...` is the read workhorse: `SELECT` names which columns you want back (or `*` for all of them), `FROM` names the table, and `WHERE` filters which rows qualify -- without a `WHERE` clause, `UPDATE` and `DELETE` apply to *every single row in the table*, which is a famous, genuinely destructive mistake to make once, usually by forgetting the clause entirely while testing a query interactively."
+          },
+          {
+            "heading": "SQL Injection: A Real Security Hole, Not a Theoretical One",
+            "body": "SQL injection happens when user-supplied input is directly concatenated into a SQL query string, letting an attacker's input change the *structure* of the query itself, rather than just supplying a data value within it. Here's the vulnerable pattern:\n\n```python\n# DANGEROUS -- never do this\nusername = input(\"Username: \")\nquery = f\"SELECT * FROM users WHERE username = '{username}'\"\ncursor.execute(query)\n```\n\nIf a user innocently enters `amy`, the resulting query is harmless: `SELECT * FROM users WHERE username = 'amy'`. But if an attacker enters `' OR '1'='1`, the query becomes `SELECT * FROM users WHERE username = '' OR '1'='1'` -- and since `'1'='1'` is always true, this returns *every row in the table*, not just one matching user. A more damaging input, on a database that allows it, could append a second statement entirely (`'; DROP TABLE users; --`), depending on the database driver's behavior. The core problem is that the application never intended for user input to be treated as *SQL code* -- it only meant for it to be treated as a *data value* to compare against -- but string concatenation makes no distinction between the two: whatever the user typed simply becomes part of the query's actual syntax."
+          },
+          {
+            "heading": "Parameterized Queries: The Actual Fix",
+            "body": "**Parameterized queries** (also called prepared statements) fix this by keeping the query's structure and the user-supplied data strictly separate, all the way down to the database driver itself:\n\n```python\n# SAFE -- the driver keeps the query structure and the value separate\nusername = input(\"Username: \")\ncursor.execute(\"SELECT * FROM users WHERE username = ?\", (username,))\n```\n\nHere, `?` is a placeholder, and the actual value is passed as a separate argument (a tuple, in `sqlite3`'s case) rather than being spliced into the query string. The database driver sends the query template and the value to the database as two distinct pieces, and the database treats the value strictly as data to compare against -- never as part of the query's syntax, no matter what characters it contains. An attacker entering `' OR '1'='1` this way simply searches for a username that's literally the six-character string `' OR '1'='1` -- almost certainly matching nothing, rather than reshaping the query at all. This is why parameterization is described as *the* fix, not just *a* mitigation: it removes the vulnerability at the mechanism level, rather than trying to filter or escape dangerous-looking input (an approach that's notoriously easy to get wrong, since there are many ways to encode the same dangerous input, and it's easy to miss one)."
+          },
+          {
+            "heading": "Trying It Locally: Python's sqlite3 Module",
+            "body": "Python's standard library ships `sqlite3`, which talks to SQLite -- a simple, file-based (or purely in-memory) relational database engine that requires no separate server process, making it the easiest way to try real SQL locally without installing or configuring anything extra:\n\n```python\nimport sqlite3\n\nconn = sqlite3.connect(\"example.db\")   # or \":memory:\" for a throwaway in-memory database\ncursor = conn.cursor()\n\ncursor.execute(\"CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT)\")\ncursor.execute(\"INSERT INTO users (name, email) VALUES (?, ?)\", (\"Amy\", \"amy@example.com\"))\nconn.commit()\n\ncursor.execute(\"SELECT name, email FROM users WHERE id = ?\", (1,))\nrow = cursor.fetchone()\nprint(row)   # ('Amy', 'amy@example.com')\n\nconn.close()\n```\n\n`conn.commit()` matters: without it, changes made through the connection may not actually be persisted to the database file. `cursor.fetchone()` retrieves a single matching row as a tuple (there's also `.fetchall()` for every matching row, and `.fetchmany(n)` for a batch); a `SELECT` that matches nothing simply returns `None` from `.fetchone()` rather than raising an error. For anything beyond quick local experimentation, most real projects reach for an ORM (Object-Relational Mapper) on top of raw SQL, but the underlying relational concepts -- tables, keys, and the query language itself -- are exactly the same either way."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "SQL Injection: Vulnerable vs. Parameterized",
+          "language": "python",
+          "code": "import sqlite3\n\nconn = sqlite3.connect(\":memory:\")\ncursor = conn.cursor()\ncursor.execute(\"CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, is_admin INTEGER)\")\ncursor.execute(\"INSERT INTO users (username, is_admin) VALUES ('amy', 0), ('admin_bob', 1)\")\nconn.commit()\n\nattacker_input = \"' OR '1'='1\"\n\n# VULNERABLE: string concatenation lets attacker_input reshape the query\nvulnerable_query = f\"SELECT * FROM users WHERE username = '{attacker_input}'\"\nprint(vulnerable_query)\ncursor.execute(vulnerable_query)\nprint(\"Vulnerable result:\", cursor.fetchall())   # returns ALL users, including admin_bob!\n\n# SAFE: parameterized query treats attacker_input as a plain data value\ncursor.execute(\"SELECT * FROM users WHERE username = ?\", (attacker_input,))\nprint(\"Parameterized result:\", cursor.fetchall())   # returns nothing -- no username matches that literal string",
+          "explanation": "The vulnerable query string literally becomes `SELECT * FROM users WHERE username = '' OR '1'='1'` once attacker_input is spliced in -- and because `'1'='1'` is always true, the WHERE clause matches every row in the table, leaking every user's data (including admin_bob's) to someone who only claimed to be searching for one username. The parameterized version passes the exact same attacker_input string as a bound value rather than concatenating it into the query text -- the database driver keeps the query template (`... WHERE username = ?`) and the value entirely separate, so the database searches for a username that is literally the string `' OR '1'='1`, matching nothing. Same malicious input, completely different outcome, purely because of how the value was passed to execute()."
+        },
+        {
+          "title": "A Small Users/Orders Relationship With sqlite3",
+          "language": "python",
+          "code": "import sqlite3\n\nconn = sqlite3.connect(\":memory:\")\ncursor = conn.cursor()\n\ncursor.execute(\"CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)\")\ncursor.execute(\"CREATE TABLE orders (id INTEGER PRIMARY KEY, user_id INTEGER, item TEXT)\")\n\ncursor.execute(\"INSERT INTO users (id, name) VALUES (1, 'Amy')\")\ncursor.execute(\"INSERT INTO orders (user_id, item) VALUES (?, ?)\", (1, \"Keyboard\"))\ncursor.execute(\"INSERT INTO orders (user_id, item) VALUES (?, ?)\", (1, \"Mouse\"))\nconn.commit()\n\ncursor.execute(\n    \"SELECT orders.item FROM orders WHERE orders.user_id = ?\", (1,)\n)\nprint(cursor.fetchall())   # [('Keyboard',), ('Mouse',)]\n\nconn.close()",
+          "explanation": "orders.user_id is a foreign key referencing users.id -- rather than storing 'Amy' directly on every order row, each order just stores the number 1, a reference back to the users table. This avoids duplicating Amy's full details on every order she places, and means updating her name in one place (the users table) automatically keeps every linked order correctly associated with her, since the link is by id, not by a copy of her name. The final SELECT filters orders down to just the ones belonging to user_id 1 using a parameterized placeholder, exactly the same safe pattern from the injection example -- even though there's no adversarial input here, using ? consistently, as a habit for any value that isn't a hardcoded literal, avoids ever having to remember which specific queries are 'safe enough' to concatenate."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "SQL injection is a theoretical, academic concern -- in practice, real user input rarely contains anything dangerous enough to actually matter.",
+          "clarification": "SQL injection has been one of the most consistently exploited real-world web vulnerabilities for decades precisely because the vulnerable pattern (string-concatenating user input into a query) is easy to write without realizing the danger, and attackers actively and automatically scan for it at scale. A single unparameterized query reachable from user input -- a login form, a search box, a URL parameter -- can be enough to read, modify, or delete an entire database, or bypass authentication entirely, as shown by the classic `' OR '1'='1` pattern. It doesn't require a sophisticated attacker or an unusual input; it requires exactly one overlooked f-string or % formatting inside a SQL query."
+        },
+        {
+          "description": "You can make string-concatenated queries safe by carefully escaping or sanitizing dangerous characters like single quotes before inserting user input into the query string.",
+          "clarification": "Manual escaping is a genuinely fragile approach, not a reliable fix -- there are multiple ways to encode or represent the same dangerous input (different quote characters, encoding tricks, database-specific syntax quirks), and it's easy to miss an edge case, especially across different database engines with different escaping rules. Parameterized queries avoid this whole category of problem by not relying on escaping at all: the value is sent to the database as data, through a completely separate channel from the query's structure, so there's nothing for an attacker's characters to escape out of into. Escaping is treating a symptom; parameterization removes the actual mechanism that makes injection possible in the first place."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "python-databases-sql-ex1",
+          "type": "predictOutput",
+          "prompt": "Given this table and query, what does the final print() show?",
+          "code": "import sqlite3\n\nconn = sqlite3.connect(\":memory:\")\ncursor = conn.cursor()\ncursor.execute(\"CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT, price REAL)\")\ncursor.execute(\"INSERT INTO products (name, price) VALUES ('Widget', 9.99)\")\ncursor.execute(\"INSERT INTO products (name, price) VALUES ('Gadget', 19.99)\")\nconn.commit()\n\ncursor.execute(\"SELECT name FROM products WHERE price > ?\", (10,))\nprint(cursor.fetchall())",
+          "hints": [
+            "The WHERE clause filters rows by comparing each row's price column against the parameter value, 10.",
+            "Check each row's price against the condition individually: is 9.99 greater than 10? Is 19.99?",
+            "fetchall() returns a list of tuples, one tuple per matching row, containing only the columns named in SELECT -- here, just name."
+          ],
+          "expectedAnswer": "[('Gadget',)] -- only the Gadget row has a price (19.99) greater than 10; Widget's price (9.99) does not satisfy the WHERE condition, so it's excluded from the result set.",
+          "solutionExplanation": "The WHERE price > ? clause, with 10 bound as the parameter, filters the products table down to rows whose price column exceeds 10. Widget's price is 9.99, which is not greater than 10, so it's excluded. Gadget's price is 19.99, which is greater than 10, so it's included. Since SELECT only names the name column, each row in the result is a one-element tuple containing just that column's value -- fetchall() returns a list of all such matching tuples, giving [('Gadget',)]."
+        },
+        {
+          "id": "python-databases-sql-ex2",
+          "type": "debugging",
+          "prompt": "This login check function is vulnerable to SQL injection -- a user who enters a specially crafted username can log in without knowing any valid password. Find and fix the vulnerability.",
+          "code": "import sqlite3\n\ndef check_login(cursor, username, password):\n    query = f\"SELECT * FROM users WHERE username = '{username}' AND password = '{password}'\"\n    cursor.execute(query)\n    return cursor.fetchone() is not None",
+          "hints": [
+            "Both username and password are spliced directly into the query string using an f-string -- what happens if either one contains a single quote followed by SQL syntax?",
+            "An attacker entering something like ' OR '1'='1 for either field could make the WHERE clause always evaluate to true, regardless of the actual stored password.",
+            "Replace the f-string with a query that uses ? placeholders, and pass username and password as a separate tuple argument to execute()."
+          ],
+          "solutionCode": "import sqlite3\n\ndef check_login(cursor, username, password):\n    query = \"SELECT * FROM users WHERE username = ? AND password = ?\"\n    cursor.execute(query, (username, password))\n    return cursor.fetchone() is not None",
+          "solutionExplanation": "The original code builds the query by directly interpolating username and password into an f-string, so anything either one contains becomes part of the actual SQL syntax. An attacker entering ' OR '1'='1 as the username (with any password at all) turns the WHERE clause into something that's always true, regardless of the real stored credentials, letting them log in as if authenticated. The fix uses ? placeholders for both values and passes them as a separate tuple to execute() -- the database driver keeps the query structure (\"... WHERE username = ? AND password = ?\") and the actual values completely separate, so no matter what characters username or password contain, they're only ever compared as literal data, never treated as SQL syntax."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "python-databases-sql-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "Why do parameterized queries (using placeholders like `?` and passing values separately) prevent SQL injection more reliably than manually escaping special characters in user input?",
+          "options": [
+            "Parameterized queries are faster to execute, and speed is what prevents the injection.",
+            "Parameterized queries send the query structure and the data value through separate channels to the database, so user input is never interpreted as SQL syntax, regardless of what characters it contains.",
+            "Parameterized queries automatically remove any single quote characters from user input before running the query.",
+            "Escaping and parameterization are equally reliable; parameterization is only preferred for readability."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Parameterization works by mechanism, not by filtering: the query template and the bound values are sent to the database as separate pieces, so the database always treats a bound value as literal data to compare against, never as part of the query's own syntax -- there's no escaping step to get wrong or bypass. Option A is false; performance is unrelated to the security property. Option C describes escaping, a different (and fragile) approach that parameterization specifically avoids relying on. Option D understates the real difference -- escaping is genuinely less reliable, since there are multiple ways to encode dangerous input and it's easy to miss an edge case, whereas parameterization removes the vulnerability at the mechanism level regardless of what the input contains."
+        },
+        {
+          "id": "python-databases-sql-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain what a foreign key is, using a concrete two-table example, and explain why relational databases use references between tables instead of duplicating data across them.",
+          "modelAnswer": "A foreign key is a column in one table that stores the primary key value of a row in another table, creating a link between the two. For example, an orders table might have a user_id column that's a foreign key referencing the id column of a users table -- each row in orders stores just a number (say, 1), which points back to a specific row in users (the user whose id is 1), rather than storing that user's full name and email directly on every order they've ever placed. This matters for a few concrete reasons: it avoids duplicating the same information many times over (a user with 50 orders would otherwise have their name and email repeated 50 times, once per order row), which wastes storage and, more importantly, creates a consistency problem -- if that user updates their email, every duplicated copy across 50 order rows would need to be updated too, and it's easy for some copies to be missed, leaving the data inconsistent. By storing just a reference (the foreign key) and looking up the full details from the single authoritative users row whenever needed, there's exactly one place where a user's name and email live, so updating it once keeps every linked order correctly associated with the current, accurate information."
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,391 @@
+{
+  "learningPathId": "python",
+  "moduleId": "oop",
+  "title": "Object-Oriented Python",
+  "order": 9,
+  "concepts": [
+    {
+      "id": "python-oop-fundamentals",
+      "title": "OOP Fundamentals",
+      "description": "Classes are blueprints for objects that bundle data (attributes) and behavior (methods) together, and understanding what self and __init__ actually do demystifies most early object-oriented bugs.",
+      "moduleId": "oop",
+      "topicId": "oop",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 30,
+      "prerequisites": [
+        "python-functions-basics",
+        "python-data-types"
+      ],
+      "learningObjectives": [
+        "Define a class and create instances of it, distinguishing the class itself from any particular object built from it.",
+        "Explain precisely what __init__ does, and why calling it 'the constructor' is a slightly inaccurate habit carried over from other languages.",
+        "Distinguish instance attributes from class attributes, and predict the classic bug caused by using a mutable class attribute.",
+        "Explain what self really is: the instance itself, passed as an ordinary first positional argument.",
+        "Rewrite an instance-method call as the equivalent explicit Class.method(instance, ...) call."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "Classes as Blueprints, Objects as Instances",
+            "body": "A **class** is a blueprint that describes what a category of objects looks like and how it behaves -- what data each one carries, and what it can do. An **instance** (or **object**) is one concrete thing built from that blueprint. `class Dog:` describes the general shape of 'a dog'; `Dog()` creates one actual dog, with its own independent existence, memory, and (as you'll see below) usually its own data.\n\n```python\nclass Dog:\n    def __init__(self, name, breed):\n        self.name = name\n        self.breed = breed\n\n    def bark(self):\n        return f\"{self.name} says Woof!\"\n\nfido = Dog(\"Fido\", \"Labrador\")\nrex = Dog(\"Rex\", \"Poodle\")\n\nprint(fido.bark())   # 'Fido says Woof!'\nprint(rex.bark())    # 'Rex says Woof!'\nprint(fido is rex)   # False -- two genuinely separate objects\n```\n\n`Dog` is one class, but `fido` and `rex` are two distinct objects, each with its own `name` and `breed`. This separation -- one blueprint, many independent instances -- is the entire point of a class. Without it, you'd be juggling parallel variables (`dog1_name`, `dog1_breed`, `dog2_name`, `dog2_breed`, ...) instead of a single, coherent `Dog` object per dog."
+          },
+          {
+            "heading": "__init__: An Initializer, Not Really a 'Constructor'",
+            "body": "Coming from languages like Java or C++, it's natural to call `__init__` 'the constructor,' since it's the method that runs when you write `Dog(\"Fido\", \"Labrador\")`. That habit is common enough that it's not worth fighting in casual conversation, but it's worth understanding precisely why it's not quite accurate, because the precise version explains real behavior you'll eventually run into.\n\nBy the time `__init__` starts running, **the object already exists**. Object creation is actually a two-step process: Python first calls `__new__`, a different (and rarely overridden) method whose job is to actually allocate and return a brand-new, empty object. Only *after* `__new__` has handed back that freshly-created object does Python call `__init__` *on* it, passing that already-existing object in as `self`. `__init__`'s job is to **initialize** the object's state -- set up its attributes -- not to create the object itself. That's why it's called `__init__` (initializer) and not `__new__` (the actual allocator/constructor).\n\n```python\nclass Dog:\n    def __new__(cls, *args, **kwargs):\n        print(\"__new__ runs first -- creates the object\")\n        return super().__new__(cls)\n\n    def __init__(self, name):\n        print(\"__init__ runs second -- initializes the already-created object\")\n        self.name = name\n\nfido = Dog(\"Fido\")\n# prints:\n# __new__ runs first -- creates the object\n# __init__ runs second -- initializes the already-created object\n```\n\nYou will rarely need to override `__new__` yourself -- it mostly matters for advanced cases like immutable types or singleton patterns -- but knowing it exists explains why `__init__` has no `return` value (returning anything other than `None` from `__init__` is actually a `TypeError`): its job was never to produce the object, only to configure one that already exists."
+          },
+          {
+            "heading": "Instance Attributes vs Class Attributes",
+            "body": "An **instance attribute** is set on a specific object, typically via `self.attr = value` inside `__init__` (or any other method) -- each instance gets its own independent copy. A **class attribute** is defined directly in the class body, outside any method, and is shared by the class itself and, by default, by every instance that doesn't have its own instance attribute of the same name:\n\n```python\nclass Dog:\n    species = \"Canis familiaris\"   # class attribute -- shared\n\n    def __init__(self, name):\n        self.name = name             # instance attribute -- per-object\n\nfido = Dog(\"Fido\")\nrex = Dog(\"Rex\")\n\nprint(fido.species, rex.species)   # both 'Canis familiaris' -- same shared attribute\nDog.species = \"Canis lupus familiaris\"\nprint(fido.species, rex.species)   # both updated -- they were never copies\n```\n\nThis is fine, even useful, for attributes that genuinely describe the whole category and never vary per instance. It becomes a serious bug the moment the class attribute is **mutable** (a list, dict, or set) and you expect each instance to get its own independent one:\n\n```python\nclass ShoppingCart:\n    items = []   # BUG: one shared list for every ShoppingCart ever created\n\n    def add(self, item):\n        self.items.append(item)\n\ncart_a = ShoppingCart()\ncart_b = ShoppingCart()\ncart_a.add(\"apple\")\nprint(cart_b.items)   # ['apple'] -- surprise! cart_b never called add()\n```\n\n`self.items.append(item)` doesn't create a new instance attribute -- it looks up `items`, finds no instance attribute by that name, falls back to the *class* attribute (the one shared list), and mutates that shared object in place. Every `ShoppingCart` instance is quietly sharing one cart. The fix is to make it an instance attribute instead, created fresh inside `__init__`: `self.items = []`. This is structurally the exact same trap as the mutable-default-argument bug from the Functions module -- a single mutable object gets created once and then unexpectedly shared across many things that were supposed to be independent."
+          },
+          {
+            "heading": "Methods and self: What's Really Happening",
+            "body": "A method defined inside a class is, underneath, just an ordinary function -- with one convention: its first parameter (almost always named `self`, by strong convention rather than syntax requirement) receives the specific instance the method was called on. When you write `fido.bark()`, Python doesn't pass zero arguments to `bark` -- it passes exactly one: `fido` itself, bound automatically to `self`. `fido.bark()` is syntactic sugar for the more explicit, and completely equivalent, `Dog.bark(fido)`:\n\n```python\nclass Dog:\n    def __init__(self, name):\n        self.name = name\n\n    def bark(self):\n        return f\"{self.name} says Woof!\"\n\nfido = Dog(\"Fido\")\n\nprint(fido.bark())      # 'Fido says Woof!'\nprint(Dog.bark(fido))   # 'Fido says Woof!'  -- identical result, explicit form\n```\n\nBoth calls end up running the exact same function body with the exact same `self`. The dot-call form (`fido.bark()`) just looks up `bark` through `fido`'s class, and automatically supplies `fido` as the first argument -- this lookup-and-bind behavior is sometimes called the 'descriptor protocol' under the hood, but the mental model you actually need day to day is simpler: **`self` is just the first positional parameter, and Python fills it in for you when you call through an instance.** This is also exactly why calling a method with the wrong number of *explicit* arguments produces confusing-looking counts in error messages -- if `bark` took a parameter, `fido.bark(\"loud\")` would pass `fido` as `self` and `\"loud\"` as that next parameter; Python is never silently skipping `self`, it's just supplying it automatically so you don't have to."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "The Shared Mutable Class Attribute Bug",
+          "language": "python",
+          "code": "class ShoppingCart:\n    items = []   # class attribute -- ONE list, shared by every instance\n\n    def add(self, item):\n        self.items.append(item)\n\ncart_a = ShoppingCart()\ncart_b = ShoppingCart()\n\ncart_a.add(\"apple\")\ncart_a.add(\"bread\")\ncart_b.add(\"milk\")\n\nprint(cart_a.items)   # ['apple', 'bread', 'milk'] -- includes cart_b's milk!\nprint(cart_b.items)   # ['apple', 'bread', 'milk'] -- same list, both carts see everything\n\n# The fix: make items an instance attribute\nclass FixedShoppingCart:\n    def __init__(self):\n        self.items = []   # a NEW list, created fresh for every instance\n\n    def add(self, item):\n        self.items.append(item)\n\nfixed_a = FixedShoppingCart()\nfixed_b = FixedShoppingCart()\nfixed_a.add(\"apple\")\nfixed_b.add(\"milk\")\nprint(fixed_a.items)   # ['apple']\nprint(fixed_b.items)   # ['milk']",
+          "explanation": "In `ShoppingCart`, `items = []` is evaluated exactly once, when the class body itself runs (at class-definition time, similar in spirit to how a default argument value is evaluated once at def time) -- and that single list object becomes an attribute of the class itself. Every instance that doesn't have its own `items` instance attribute falls through to that one shared class attribute when you write `self.items`. `self.items.append(item)` doesn't assign anything to `self` -- it's a *mutation* of whatever object `self.items` resolves to, and since no instance attribute exists yet, that's the shared class list every single time, for every cart. `FixedShoppingCart` fixes this by creating `self.items = []` inside `__init__`, which runs once *per instance*, giving each object a genuinely separate list from the moment it's created."
+        },
+        {
+          "title": "fido.bark() Is Sugar for Dog.bark(fido)",
+          "language": "python",
+          "code": "class Dog:\n    def __init__(self, name):\n        self.name = name\n\n    def bark(self):\n        return f\"{self.name} says Woof!\"\n\n    def greet(self, other_name):\n        return f\"{self.name} looks at {other_name} and barks.\"\n\nfido = Dog(\"Fido\")\n\n# These two lines do exactly the same thing:\nprint(fido.bark())\nprint(Dog.bark(fido))\n\n# Same for a method that takes an extra argument:\nprint(fido.greet(\"Rex\"))\nprint(Dog.greet(fido, \"Rex\"))",
+          "explanation": "`fido.bark()` looks up `bark` on `fido`'s class (`Dog`) and automatically supplies `fido` as the first argument to fill `self` -- so it behaves identically to explicitly calling `Dog.bark(fido)`. The same holds once a method takes additional parameters: `fido.greet(\"Rex\")` supplies `fido` for `self` and `\"Rex\"` for `other_name`, exactly matching `Dog.greet(fido, \"Rex\")`. This is worth internalizing because it demystifies `self`: it isn't magic syntax specific to classes, it's an ordinary parameter, and `instance.method(args)` is just a convenient shorthand for `Class.method(instance, args)` that Python provides automatically via attribute lookup on the instance."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "__init__ is Python's constructor -- it's the method that creates the object, the same way a constructor does in Java or C++.",
+          "clarification": "By the time `__init__` runs, the object already exists. Python actually creates it in an earlier step, via `__new__` (which you'll rarely need to override yourself), and only then calls `__init__` *on* that freshly-created object to set up its initial state. `__init__`'s real job is initialization, not construction -- which is exactly why it never returns anything (returning a non-None value from `__init__` raises a `TypeError`): it was never responsible for producing the object in the first place, only for configuring one that was handed to it already-created."
+        },
+        {
+          "description": "A class attribute is just a convenient way to give every instance a default value for an attribute -- each instance effectively gets its own copy to work with.",
+          "clarification": "A class attribute is one single object, shared by the class and by every instance that hasn't shadowed it with its own same-named instance attribute -- it is emphatically not copied per instance. For immutable values (numbers, strings, tuples) this distinction rarely bites you, because there's no way to mutate them in place; any assignment like `self.count = self.count + 1` actually creates a brand-new *instance* attribute that shadows the class one, rather than mutating the shared value. But for mutable values (lists, dicts, sets), calling a mutating method like `.append()` on `self.some_list` mutates the one shared class-level object directly, and that change becomes visible through every other instance too -- the classic shared-shopping-cart bug. The safe default is to create any attribute you intend to mutate inside `__init__` with `self.attr = ...`, not as a bare class-body assignment."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "python-oop-fundamentals-ex1",
+          "type": "predictOutput",
+          "prompt": "What does this print, and why?",
+          "code": "class Counter:\n    total_created = 0\n\n    def __init__(self):\n        Counter.total_created += 1\n        self.id = Counter.total_created\n\nc1 = Counter()\nc2 = Counter()\nc3 = Counter()\n\nprint(c1.id, c2.id, c3.id)\nprint(Counter.total_created)",
+          "hints": [
+            "total_created is a class attribute -- is it being read/written through `self` or through `Counter` directly in __init__?",
+            "`Counter.total_created += 1` explicitly targets the class attribute itself, not some per-instance copy -- track its value across all three calls to __init__.",
+            "Each instance's own `id` is set once, at creation time, from whatever total_created was at that exact moment -- it doesn't keep changing afterward."
+          ],
+          "expectedAnswer": "'1 2 3' then '3'. Each __init__ call increments the single shared class attribute Counter.total_created (0 -> 1 -> 2 -> 3) and stores that snapshot into the new instance's own id attribute, so c1.id=1, c2.id=2, c3.id=3, while the class attribute itself ends at 3.",
+          "solutionExplanation": "`Counter.total_created += 1` explicitly reads and writes the class attribute (not an instance attribute), so all three calls to `__init__` are incrementing the exact same shared counter: it goes 0 -> 1 during c1's creation, 1 -> 2 during c2's, 2 -> 3 during c3's. Each `__init__` call then does `self.id = Counter.total_created`, which creates a brand-new *instance* attribute `id` on that specific object, holding whatever the shared counter's value was at that precise moment. Because that assignment creates an instance attribute (via `self.id = ...`, not `Counter.id = ...`), each instance's `id` is frozen at its own creation-time snapshot and never changes afterward, even though the shared `total_created` keeps climbing for later instances. This is a legitimate, useful pattern for auto-incrementing IDs -- it works precisely because the counter itself is shared (class attribute) while each object's recorded ID is private to it (instance attribute)."
+        },
+        {
+          "id": "python-oop-fundamentals-ex2",
+          "type": "debugging",
+          "prompt": "Every Player object in this game is supposed to track its own independent inventory, but items picked up by one player are mysteriously showing up in every other player's inventory too. Find and fix the bug.",
+          "code": "class Player:\n    inventory = []\n\n    def __init__(self, name):\n        self.name = name\n\n    def pick_up(self, item):\n        self.inventory.append(item)\n\nalice = Player(\"Alice\")\nbob = Player(\"Bob\")\n\nalice.pick_up(\"sword\")\nbob.pick_up(\"shield\")\n\nprint(alice.name, alice.inventory)   # expected: Alice ['sword']\nprint(bob.name, bob.inventory)       # expected: Bob ['shield']",
+          "hints": [
+            "`inventory = []` is written directly in the class body, not inside __init__ -- what kind of attribute does that make it: instance, or class?",
+            "self.inventory.append(item) mutates whatever object self.inventory currently resolves to -- if there's no instance attribute named inventory yet, where does that lookup fall back to?",
+            "Move the creation of a fresh, empty list into __init__ using self.inventory = [], so each Player gets its own list instead of all of them sharing one from the class body."
+          ],
+          "solutionCode": "class Player:\n    def __init__(self, name):\n        self.name = name\n        self.inventory = []   # a NEW list per instance, created in __init__\n\n    def pick_up(self, item):\n        self.inventory.append(item)\n\nalice = Player(\"Alice\")\nbob = Player(\"Bob\")\n\nalice.pick_up(\"sword\")\nbob.pick_up(\"shield\")\n\nprint(alice.name, alice.inventory)   # Alice ['sword']\nprint(bob.name, bob.inventory)       # Bob ['shield']",
+          "solutionExplanation": "The original `inventory = []` sits directly in the class body, which makes it a class attribute: one single list object, shared by the class `Player` and by every instance that has no instance attribute of its own named `inventory`. `self.inventory.append(item)` never creates an instance attribute -- append is a mutation, not an assignment -- so it looks up `inventory`, finds nothing on the instance, falls back to the shared class attribute, and mutates that one shared list every single time, for every player. The fix moves `self.inventory = []` into `__init__`, which runs once per object at creation time and genuinely creates a brand-new, independent list and assigns it as that specific instance's own attribute -- from then on, `self.inventory` for Alice and for Bob refer to two entirely separate list objects."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "python-oop-fundamentals-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "Which statement most accurately describes what __init__ does?",
+          "options": [
+            "__init__ allocates and creates the new object, then returns it to the caller.",
+            "__init__ initializes an already-created object's state; the object itself was created moments earlier by __new__.",
+            "__init__ and __new__ are two names for the exact same step in object creation.",
+            "__init__ only runs if you don't define your own __new__ method."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Object creation happens in two steps: `__new__` allocates and returns a brand-new object, and only after that does Python call `__init__` on that already-existing object, passing it in as `self`, so it can set up the object's initial attributes. Option A describes what `__new__` does, not `__init__` (and is also why __init__ never returns a value -- it isn't responsible for producing the object). Option C is wrong -- they're distinct methods with distinct responsibilities. Option D is backwards: `__init__` runs regardless of whether you've overridden `__new__`; both are normally called automatically as part of `ClassName(...)`."
+        },
+        {
+          "id": "python-oop-fundamentals-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "```python\nclass Bag:\n    contents = []\n\n    def add(self, item):\n        self.contents.append(item)\n\nb1 = Bag()\nb2 = Bag()\nb1.add(\"rock\")\nprint(b2.contents)\n```\nWhat does this print, and why?",
+          "options": [
+            "[] -- b2 never called add(), so its contents should still be empty.",
+            "['rock'] -- contents is a class attribute, so b1 and b2 share the exact same list object.",
+            "It raises an AttributeError, because b2 has no contents attribute of its own.",
+            "['rock', 'rock'] -- appending through either instance appends twice to the shared list."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "`contents = []` is defined in the class body, making it a class attribute: one single list shared by every Bag instance that hasn't created its own instance attribute of that name. `b1.add(\"rock\")` calls `self.contents.append(\"rock\")`, which mutates that one shared list in place. Since b2.contents resolves to that exact same shared object (b2 has no instance attribute shadowing it), printing b2.contents shows the mutation made through b1. Option A assumes each instance got its own independent list, which is the exact misconception this pattern causes. Option C is wrong because attribute lookup successfully falls back to the class attribute. Option D misunderstands append as somehow running twice."
+        },
+        {
+          "id": "python-oop-fundamentals-assess-explain1",
+          "type": "explanation",
+          "prompt": "A teammate defines a class with a mutable class attribute (like a list) intended as a 'default' for every instance, and is confused why mutating it through one instance affects all the others. Explain what's happening and how to fix their class.",
+          "modelAnswer": "A class attribute -- one written directly in the class body, outside any method -- is a single object that belongs to the class itself, and every instance that doesn't have its own instance attribute of the same name falls back to that one shared object when you access it through self. For immutable values this is invisible in practice, because assigning to self.attr from inside a method (self.attr = new_value) always creates a fresh instance attribute rather than modifying the shared one -- there's no way to 'mutate' an int or string in place. The trouble is specifically with mutable objects like lists, dicts, and sets: calling a mutating method on them, like self.some_list.append(x), does not create an instance attribute at all. It's a mutation, not an assignment, so Python looks up some_list, finds no instance attribute by that name, falls back to the shared class attribute, and mutates that one object -- which every other instance is also looking at. The fix is to never use a mutable class attribute as a 'default value template' for something you intend to mutate per instance. Instead, create it fresh inside __init__ with self.attr = [] (or {} or set()), which runs once per instance and genuinely produces a new, independent object each time an object is created. The class attribute pattern is fine to keep for values that really are meant to be shared and constant across every instance of the class -- a species name, a configuration constant -- just never for something a method is going to append to, update, or otherwise mutate on a per-instance basis."
+        }
+      ]
+    },
+    {
+      "id": "python-oop-inheritance-polymorphism",
+      "title": "Inheritance and Polymorphism",
+      "description": "Inheritance lets a class extend and override another class's behavior, super() lets it cooperate with that class rather than replace it outright, and Python's duck-typed polymorphism means a shared base class is often a convenience, not a requirement.",
+      "moduleId": "oop",
+      "topicId": "oop",
+      "difficulty": "advanced",
+      "estimatedMinutes": 40,
+      "prerequisites": [
+        "python-oop-fundamentals"
+      ],
+      "learningObjectives": [
+        "Define a subclass that inherits from and overrides behavior from a parent class.",
+        "Use super() to call a parent class's method, and explain why this matters more once multiple inheritance is involved.",
+        "Explain composition as an alternative design to inheritance, and articulate why 'favor composition over inheritance' is common advice.",
+        "Explain duck typing and why Python code can be polymorphic without any shared base class at all.",
+        "Use the _protected and __mangled naming conventions correctly, and explain that Python has no true private attributes.",
+        "Implement __str__, __repr__, and __eq__ and explain how each is used differently."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "Inheritance and Overriding",
+            "body": "**Inheritance** lets a class (the **subclass** or **child class**) reuse and extend the attributes and methods of another class (the **superclass**, **parent class**, or **base class**), by listing it in parentheses after the class name. A subclass automatically gets everything the parent defines, and can **override** any method by simply redefining it with the same name:\n\n```python\nclass Animal:\n    def __init__(self, name):\n        self.name = name\n\n    def speak(self):\n        return f\"{self.name} makes a sound.\"\n\nclass Dog(Animal):\n    def speak(self):   # overrides Animal.speak\n        return f\"{self.name} says Woof!\"\n\nclass Cat(Animal):\n    pass   # no override -- inherits Animal.speak as-is\n\nfido = Dog(\"Fido\")\nwhiskers = Cat(\"Whiskers\")\n\nprint(fido.speak())       # 'Fido says Woof!'  -- Dog's own version\nprint(whiskers.speak())   # 'Whiskers makes a sound.'  -- inherited from Animal unchanged\n```\n\n`Dog` doesn't need to redefine `__init__` at all -- it inherits `Animal.__init__` and reuses it unchanged. `Cat` inherits `speak` unchanged too, since it never defines its own. `Dog` chooses to override `speak` with its own version, and Python's method lookup finds `Dog`'s version first for a `Dog` instance, without ever consulting `Animal`'s."
+          },
+          {
+            "heading": "super(): Cooperating With the Parent, Not Just Replacing It",
+            "body": "Overriding a method entirely -- writing a brand new body with no reference to the parent's version -- works, but it's common (and usually better) to *extend* the parent's behavior rather than fully replace it. `super()` gives you a reference to the parent class's version of a method, so you can call it explicitly and add to what it does:\n\n```python\nclass Animal:\n    def __init__(self, name):\n        self.name = name\n\nclass Dog(Animal):\n    def __init__(self, name, breed):\n        super().__init__(name)   # let Animal set up self.name\n        self.breed = breed        # then add Dog-specific setup\n\nfido = Dog(\"Fido\", \"Labrador\")\nprint(fido.name, fido.breed)   # 'Fido Labrador'\n```\n\nWithout `super().__init__(name)`, `Dog.__init__` would need to duplicate `self.name = name` itself, and any future change to how `Animal` initializes a name (extra validation, a new attribute) would silently fail to apply to `Dog` instances, since they'd never call the parent's version at all. `super()` keeps a subclass's setup logic connected to its parent's, instead of forking a separate copy of it.\n\nWhy does this matter more with **multiple inheritance** -- a class inheriting from more than one parent? Because with multiple parents, 'the parent' is no longer a single, obvious thing. Python resolves method lookups (including what `super()` refers to at each step) using the **Method Resolution Order (MRO)**: a specific, deterministic order in which the class and all its ancestors are searched, computed once per class and inspectable via `SomeClass.__mro__`. You don't need to memorize the MRO algorithm (it's a well-defined algorithm called C3 linearization) to use multiple inheritance safely -- the practical takeaway is that `super()` doesn't mean 'my one direct parent,' it means 'whatever comes next in this class's MRO,' which lets a chain of cooperating classes each call `super().method()` and have every one of them run, in a consistent, predictable order, rather than one override silently swallowing all the others."
+          },
+          {
+            "heading": "Composition vs Inheritance",
+            "body": "Inheritance models an **is-a** relationship (`Dog` is an `Animal`). **Composition** models a **has-a** relationship: instead of extending a class, an object holds a reference to another object and delegates to it. The classic advice 'favor composition over inheritance' means: before reaching for a subclass, ask whether the relationship is genuinely 'is-a,' or whether it's really 'uses' or 'has.'\n\nConsider a `Car` that needs an engine. Modeling it with inheritance (`class Car(Engine):`) is a poor fit -- a car is not a kind of engine, it *has* one:\n\n```python\n# Composition: Car HAS an Engine\nclass Engine:\n    def start(self):\n        return \"Engine roaring to life\"\n\nclass Car:\n    def __init__(self):\n        self.engine = Engine()   # Car holds an Engine, doesn't inherit from it\n\n    def start(self):\n        return self.engine.start()\n\nmy_car = Car()\nprint(my_car.start())   # 'Engine roaring to life'\n```\n\nComposition tends to age better than inheritance for a concrete reason: inheritance ties two classes together tightly and permanently, across every method the parent has -- a subclass inherits the *entire* interface of its parent, whether or not that's actually appropriate, and changes to the parent ripple automatically into every subclass whether they want them to or not (this is sometimes called the 'fragile base class' problem). Composition only exposes exactly what you choose to delegate, and swapping in a different `Engine` implementation (say, `ElectricEngine`) requires no change to `Car`'s own class hierarchy at all -- just a different object passed in or assigned. Inheritance is still the right tool when there's a genuine, stable is-a relationship and you want to share behavior widely across it (as with `Animal`/`Dog`/`Cat` above) -- the advice isn't 'never use inheritance,' it's 'don't default to it out of habit when composition would model the relationship more honestly and flexibly.'"
+          },
+          {
+            "heading": "Duck Typing: Polymorphism Without a Shared Base Class",
+            "body": "**Polymorphism** means code can work with objects of different types, as long as each one supports the operations that code actually needs. In statically-typed languages, this often requires a shared interface or base class as a contract enforced by the compiler. Python, being dynamically typed, uses **duck typing**: 'if it walks like a duck and quacks like a duck, treat it as a duck' -- an object is suitable for a given use if it has the right methods and attributes, full stop, regardless of what class it inherits from, or whether it inherits from anything shared at all.\n\n```python\nclass Dog:\n    def speak(self):\n        return \"Woof!\"\n\nclass Robot:\n    def speak(self):\n        return \"BEEP BOOP\"\n\ndef make_it_speak(thing):\n    return thing.speak()   # doesn't care what class thing is -- just calls .speak()\n\nprint(make_it_speak(Dog()))     # 'Woof!'\nprint(make_it_speak(Robot()))   # 'BEEP BOOP'\n```\n\n`Dog` and `Robot` share no common ancestor beyond `object`, and there is no shared interface declared anywhere -- `make_it_speak` simply calls `.speak()` and trusts that whatever it was handed supports that call. This is a deliberate consequence of Python's design: a shared base class *can* still be useful for organizing genuinely related types, sharing real implementation code, or as documentation of intent (and modern Python's `Protocol` from the `typing` module lets you describe a duck-typed interface explicitly for static checkers, without forcing actual inheritance) -- but it is never a *requirement* for polymorphism to work, the way it typically is in Java or C#."
+          },
+          {
+            "heading": "Encapsulation Conventions: _protected and __mangled",
+            "body": "Python has no true access modifiers like Java's `private` or `protected` -- there is no way to make an attribute genuinely inaccessible from outside a class. Instead, Python relies on **naming conventions** that programmers agree to respect:\n\n- A single leading underscore, `_balance`, signals 'this is an internal implementation detail -- treat it as protected, don't touch it directly from outside the class or its subclasses' -- but it's purely a convention. Nothing stops external code from reading or writing `some_object._balance` directly; Python enforces nothing here.\n- A double leading underscore (with at most one trailing underscore), `__balance`, triggers actual **name mangling**: Python automatically rewrites the attribute's name internally to `_ClassName__balance`. This is Python's closest thing to real privacy, but its actual purpose is narrower than 'hiding' data -- it exists mainly to prevent accidental name collisions in subclasses, so a subclass defining its own `__balance` doesn't silently clash with the parent's. It's still not true privacy: you can access it from outside as `obj._ClassName__balance` if you really want to; you're just no longer doing it by accident.\n\n```python\nclass BankAccount:\n    def __init__(self, balance):\n        self.__balance = balance   # name-mangled to _BankAccount__balance\n\n    def get_balance(self):\n        return self.__balance\n\naccount = BankAccount(100)\nprint(account.get_balance())        # 100\nprint(account._BankAccount__balance)  # 100 -- still reachable, just inconvenient and explicit about it\n```\n\nThe practical convention most Python code actually follows: use a single underscore, `_balance`, to signal 'internal, please don't touch this from outside,' and reserve double-underscore mangling for the narrower case of avoiding subclass name collisions in a class hierarchy meant to be extended. Trying to simulate Java-style strict privacy with double underscores everywhere fights against Python's culture, which leans on trust and clear naming rather than compiler-enforced access control."
+          },
+          {
+            "heading": "A Practical Look at Magic Methods: __str__, __repr__, __eq__",
+            "body": "**Magic methods** (also called dunder methods, for their double-underscore names) let your own classes hook into Python's built-in syntax and functions. Three of the most immediately useful:\n\n- **`__str__`** controls what `str(obj)` and `print(obj)` produce -- meant for a readable, user-facing description.\n- **`__repr__`** controls what `repr(obj)` produces, and is also what's shown by default in a REPL, in a list/dict's printed contents, and in tracebacks -- meant to be an unambiguous, developer-facing representation. A common convention is to write it so that, when possible, `eval(repr(obj))` could recreate an equal object (e.g. `Point(x=1, y=2)`), though this is a guideline, not a requirement.\n- **`__eq__`** controls what `==` does between two instances. Without defining it, `==` falls back to identity comparison (the same thing `is` checks) -- two separate objects with identical data are considered unequal unless you define `__eq__` to compare their actual contents.\n\n```python\nclass Point:\n    def __init__(self, x, y):\n        self.x = x\n        self.y = y\n\n    def __str__(self):\n        return f\"({self.x}, {self.y})\"\n\n    def __repr__(self):\n        return f\"Point(x={self.x}, y={self.y})\"\n\n    def __eq__(self, other):\n        if not isinstance(other, Point):\n            return NotImplemented\n        return self.x == other.x and self.y == other.y\n\np1 = Point(1, 2)\np2 = Point(1, 2)\n\nprint(p1)          # (1, 2)              -- uses __str__\nprint([p1])        # [Point(x=1, y=2)]   -- list printing uses __repr__ on elements, not __str__\nprint(p1 == p2)     # True -- __eq__ compares x and y, not identity\nprint(p1 is p2)     # False -- still two separate objects\n```\n\nIf a class defines `__str__` but not `__repr__`, Python falls back to a default `__repr__` that just shows something like `<__main__.Point object at 0x...>` -- not useful for debugging. A good habit is to always define `__repr__` (for debugging and logs), and only add `__str__` separately if you want a distinctly different, more human-friendly display for end users; if you only define one, prefer `__repr__`, since `str()` automatically falls back to `__repr__` when `__str__` isn't defined, but not the other way around."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "super() Chaining Setup Logic",
+          "language": "python",
+          "code": "class Employee:\n    def __init__(self, name, salary):\n        self.name = name\n        self.salary = salary\n\n    def describe(self):\n        return f\"{self.name} earns {self.salary}\"\n\nclass Manager(Employee):\n    def __init__(self, name, salary, team_size):\n        super().__init__(name, salary)   # reuse Employee's setup\n        self.team_size = team_size\n\n    def describe(self):\n        base = super().describe()         # reuse Employee's description...\n        return f\"{base} and manages a team of {self.team_size}\"   # ...then extend it\n\nmgr = Manager(\"Priya\", 95000, 6)\nprint(mgr.describe())\n# 'Priya earns 95000 and manages a team of 6'",
+          "explanation": "`Manager.__init__` calls `super().__init__(name, salary)` to let `Employee` handle the setup it already knows how to do, rather than duplicating `self.name = name; self.salary = salary` itself -- if `Employee.__init__` later gained extra validation, `Manager` would automatically benefit without any change. `describe` does the same trick for behavior, not just setup: it calls `super().describe()` to get Employee's base description, then builds on top of that string rather than rewriting the whole thing from scratch. This 'call super, then extend' pattern -- for both `__init__` and ordinary methods -- is the idiomatic way to specialize a parent's behavior without forking a disconnected copy of it."
+        },
+        {
+          "title": "Duck Typing: No Shared Base Class Required",
+          "language": "python",
+          "code": "class Duck:\n    def make_sound(self):\n        return \"Quack!\"\n\nclass Car:\n    def make_sound(self):\n        return \"Honk!\"\n\nclass Kettle:\n    def make_sound(self):\n        return \"Whistle!\"\n\ndef announce(thing):\n    print(thing.make_sound())\n\nfor item in [Duck(), Car(), Kettle()]:\n    announce(item)\n# Quack!\n# Honk!\n# Whistle!",
+          "explanation": "`Duck`, `Car`, and `Kettle` have no relationship to each other whatsoever -- no shared parent class beyond the implicit `object`, no declared interface. `announce` never checks what type `thing` is; it simply calls `thing.make_sound()` and trusts that whatever object it receives supports that call. This works for all three because each independently happens to define a `make_sound` method with a compatible signature (no arguments beyond self). This is duck typing in its purest form: the *shape* of the object (what methods it exposes) is what matters for this code to work, not its ancestry."
+        },
+        {
+          "title": "__repr__ vs __str__ vs __eq__ in Practice",
+          "language": "python",
+          "code": "class Money:\n    def __init__(self, cents):\n        self.cents = cents\n\n    def __repr__(self):\n        return f\"Money(cents={self.cents})\"\n\n    def __str__(self):\n        return f\"${self.cents / 100:.2f}\"\n\n    def __eq__(self, other):\n        if not isinstance(other, Money):\n            return NotImplemented\n        return self.cents == other.cents\n\nprice = Money(1999)\nprint(price)                 # $19.99          -- __str__, human-facing\nprint(repr(price))           # Money(cents=1999) -- __repr__, developer-facing\nprint([price])               # [Money(cents=1999)] -- list uses __repr__ on elements\nprint(Money(1999) == Money(1999))   # True  -- __eq__ compares cents, not identity\nprint(Money(1999) is Money(1999))   # False -- two distinct objects",
+          "explanation": "`print(price)` calls `str(price)`, which uses `__str__` to show a friendly, currency-formatted string meant for a person reading output. `repr(price)` and printing a list containing `price` both use `__repr__` instead -- Python consistently prefers `__repr__` for anything aimed at a developer (containers, the REPL, tracebacks), regardless of whether `__str__` is also defined. Without a custom `__eq__`, `Money(1999) == Money(1999)` would be `False`, because the default `==` falls back to identity (the same check `is` performs) -- two separate objects are never automatically 'equal' just because their data matches. Defining `__eq__` to compare `self.cents == other.cents` is what makes `==` reflect the values that actually matter for this class, while `is` continues to correctly report that they're two distinct objects in memory."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "For two objects to be usable interchangeably by the same function, they need to inherit from a common base class -- otherwise Python has no way to know they're compatible.",
+          "clarification": "Python does not require a shared base class for polymorphism. Because Python is dynamically typed, a function that calls `thing.some_method()` will work with *any* object that happens to define `some_method`, entirely regardless of its class hierarchy -- this is duck typing. A shared base class can still be a good design choice when types are genuinely related and you want to share real implementation code or document an intended contract, and tools like `typing.Protocol` let you describe a duck-typed shape explicitly for static type checkers -- but the language itself never requires common ancestry for polymorphic code to run correctly."
+        },
+        {
+          "description": "Prefixing an attribute with a double underscore, like __balance, makes it truly private and completely inaccessible from outside the class, similar to Java's private keyword.",
+          "clarification": "Double-underscore attributes go through name mangling -- Python rewrites `self.__balance` internally to `self._ClassName__balance` -- but this is not true privacy; it's still reachable from outside the class if you use that mangled name explicitly (`obj._ClassName__balance`). The actual purpose of name mangling is narrower than 'hiding' data: it's mainly there to prevent accidental attribute-name collisions between a base class and subclasses that happen to pick the same internal name. Python's broader philosophy is that access restrictions are conventions enforced by discipline and clear naming (a single leading underscore for 'internal, please don't touch'), not by the language itself -- there is no access modifier in Python that a determined caller cannot bypass."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "python-oop-inheritance-polymorphism-ex1",
+          "type": "predictOutput",
+          "prompt": "What does this print, and why?",
+          "code": "class Shape:\n    def __init__(self, name):\n        self.name = name\n\n    def area(self):\n        return 0\n\n    def describe(self):\n        return f\"{self.name} has area {self.area()}\"\n\nclass Square(Shape):\n    def __init__(self, side):\n        super().__init__(\"Square\")\n        self.side = side\n\n    def area(self):\n        return self.side ** 2\n\nsq = Square(4)\nprint(sq.describe())",
+          "hints": [
+            "describe() is defined only on Shape, and it calls self.area() -- but which class's area() actually runs when self is a Square instance?",
+            "Method lookup always starts from the instance's actual class, not from wherever the calling method happens to be defined -- describe() being inherited from Shape doesn't pin area() to Shape's version.",
+            "Work out self.side ** 2 for side=4, then plug that into the f-string that describe() builds."
+          ],
+          "expectedAnswer": "'Square has area 16'. describe() is inherited from Shape unchanged, but self.area() still resolves to Square's overridden area() (since self is a Square instance), giving 4 ** 2 = 16, not Shape's area() which would return 0.",
+          "solutionExplanation": "Square doesn't override describe(), so calling sq.describe() runs Shape's version of that method. Inside it, `self.area()` is called -- and because method lookup is based on the actual class of `self` (a Square instance), not on which class's code happens to be currently executing, this calls Square's overridden area(), not Shape's. Square.area() computes `self.side ** 2` = `4 ** 2` = 16. So describe() builds the string using name='Square' (set via super().__init__('Square') in Square's own __init__) and area()=16, producing 'Square has area 16'. This is exactly how polymorphism inside inheritance hierarchies works: a method defined once on a base class can call another method that gets overridden differently per subclass, and each subclass instance automatically uses its own version."
+        },
+        {
+          "id": "python-oop-inheritance-polymorphism-ex2",
+          "type": "debugging",
+          "prompt": "SavingsAccount is supposed to add interest on top of whatever Account.deposit already does (logging the transaction), but interest is never actually being added to the balance. Find and fix the bug.",
+          "code": "class Account:\n    def __init__(self, balance):\n        self.balance = balance\n        self.log = []\n\n    def deposit(self, amount):\n        self.balance += amount\n        self.log.append(f\"deposited {amount}\")\n\nclass SavingsAccount(Account):\n    def __init__(self, balance, rate):\n        super().__init__(balance)\n        self.rate = rate\n\n    def deposit(self, amount):\n        interest = amount * self.rate\n        self.balance += interest\n        self.log.append(f\"deposited {amount}\")\n\nacct = SavingsAccount(100, 0.05)\nacct.deposit(100)\nprint(acct.balance)   # expected: 100 (initial) + 100 (deposit) + 5 (interest) = 205\nprint(acct.log)       # expected: one 'deposited' entry, not two",
+          "hints": [
+            "SavingsAccount.deposit fully rewrites the deposit logic instead of reusing Account.deposit -- where did the '+= amount' part go?",
+            "Rather than duplicating (and slightly changing) what Account.deposit already does, could SavingsAccount.deposit call it directly and just add the extra interest step?",
+            "super().deposit(amount) would run Account's version (adding amount to balance and logging it) -- then SavingsAccount only needs to add the interest on top of that."
+          ],
+          "solutionCode": "class Account:\n    def __init__(self, balance):\n        self.balance = balance\n        self.log = []\n\n    def deposit(self, amount):\n        self.balance += amount\n        self.log.append(f\"deposited {amount}\")\n\nclass SavingsAccount(Account):\n    def __init__(self, balance, rate):\n        super().__init__(balance)\n        self.rate = rate\n\n    def deposit(self, amount):\n        super().deposit(amount)          # reuse Account's deposit + logging\n        interest = amount * self.rate\n        self.balance += interest         # then add the extra interest on top\n\nacct = SavingsAccount(100, 0.05)\nacct.deposit(100)\nprint(acct.balance)   # 205.0\nprint(acct.log)       # ['deposited 100']",
+          "solutionExplanation": "The original SavingsAccount.deposit completely replaces Account.deposit's logic instead of building on it -- it never actually does `self.balance += amount`, only `self.balance += interest`, so the deposited amount itself is silently dropped from the balance while only the interest gets added. The fix calls `super().deposit(amount)` first, which runs Account's original logic exactly as written (adding the deposited amount to balance and logging it), and then SavingsAccount adds its own extra behavior -- the interest -- on top of that. This is the general shape of using super() correctly: call it to reuse the parent's behavior wholesale, then add only what's genuinely new to the subclass, rather than re-deriving (and risking subtly breaking) logic the parent already handles."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "python-oop-inheritance-polymorphism-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "Which of these best explains why 'favor composition over inheritance' is common advice?",
+          "options": [
+            "Inheritance is deprecated in modern Python and will eventually be removed from the language.",
+            "Composition ties two classes together across their entire interface permanently, while inheritance only exposes what you explicitly delegate.",
+            "Inheritance couples a subclass to its parent's entire interface and makes it automatically ripple-affected by parent changes, whereas composition exposes only what's explicitly delegated and is easier to swap out.",
+            "Composition is required in order to use duck typing at all."
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "Inheritance creates a tight, permanent coupling: a subclass automatically inherits its parent's entire interface (appropriate or not), and changes to the parent can silently ripple into every subclass (the 'fragile base class' problem). Composition only exposes exactly what's deliberately delegated, and swapping in a different implementation of the composed object requires no change to the class hierarchy at all. Option A is false -- inheritance is a core, actively-used language feature. Option B has the description of inheritance's downside backwards and attributes it to composition. Option D is false -- duck typing works with or without composition; they're unrelated concerns."
+        },
+        {
+          "id": "python-oop-inheritance-polymorphism-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A class defines __repr__ but does not define __str__. What happens when you call print(obj) on an instance of it?",
+          "options": [
+            "Python raises an AttributeError, since __str__ is required for print() to work.",
+            "print(obj) falls back to using __repr__'s output, since str() defaults to __repr__ when __str__ isn't defined.",
+            "print(obj) shows the generic default like <__main__.ClassName object at 0x...>, ignoring __repr__ entirely.",
+            "print(obj) raises a TypeError because __str__ and __repr__ must both be defined together."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "print() calls str() on its argument, and str()'s default behavior, when a class hasn't defined its own __str__, is to fall back to that class's __repr__. So defining only __repr__ is a reasonable, common shortcut -- print(obj) and str(obj) will both show the __repr__ output. The fallback only goes one direction: a class that defines __str__ but not __repr__ would still get the generic <ClassName object at 0x...> for repr()/the REPL/list printing, since __repr__ does not fall back to __str__. Options A, C, and D all describe behavior Python doesn't actually have here."
+        },
+        {
+          "id": "python-oop-inheritance-polymorphism-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain what Method Resolution Order (MRO) is, at a conceptual level, and why super() becomes more important to understand once a class uses multiple inheritance.",
+          "modelAnswer": "With single inheritance, 'the parent class' is unambiguous -- there's exactly one class above the current one in the hierarchy, so super() obviously refers to it. Once a class inherits from more than one parent (multiple inheritance), that's no longer true: there could be several direct parents, each with their own parent classes, and Python needs a single, well-defined, and deterministic order in which to search those classes when looking up a method or attribute -- that search order is the Method Resolution Order, computed once per class (using an algorithm called C3 linearization) and inspectable via SomeClass.__mro__. Crucially, super() in Python does not mean 'go to my one direct parent' -- it means 'go to whatever class comes next after the current one in this instance's MRO.' This distinction matters a lot with multiple inheritance: if several classes in a hierarchy each call super().some_method() inside their own version of that method, the MRO is what ensures every one of them actually gets a turn to run, once, in a consistent order, rather than one override accidentally swallowing the others or the chain looping back on itself. You don't need to be able to compute an MRO by hand to write safe code with multiple inheritance, but you do need to understand that super() is relative to the whole MRO, not a literal pointer to 'the' parent -- especially since with multiple inheritance there may not be a single obvious 'the parent' to begin with."
+        }
+      ]
+    },
+    {
+      "id": "python-dataclasses",
+      "title": "Dataclasses",
+      "description": "The @dataclass decorator auto-generates __init__, __repr__, and __eq__ for classes whose main job is to hold data, cutting out repetitive boilerplate while still being an ordinary Python class underneath.",
+      "moduleId": "oop",
+      "topicId": "oop",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 25,
+      "prerequisites": [
+        "python-oop-fundamentals"
+      ],
+      "learningObjectives": [
+        "Use @dataclass to define a class without hand-writing __init__, __repr__, and __eq__.",
+        "Decide when a dataclass is the right tool versus when a regular class with real behavior is more appropriate.",
+        "Use frozen=True to make dataclass instances immutable, and explain what that actually prevents.",
+        "Explain the mutable-default-argument pitfall in the context of dataclass fields, and fix it with field(default_factory=...)."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "The Boilerplate @dataclass Removes",
+            "body": "A huge number of classes exist mainly to hold a fixed bundle of related values together -- a `Point` with x and y, a `Product` with name and price, a `Coordinate` with latitude and longitude. Written by hand, even a simple one of these requires repetitive boilerplate: an `__init__` that just assigns every parameter to `self`, a `__repr__` so it prints usefully instead of `<__main__.Point object at 0x...>`, and an `__eq__` so two instances with the same data actually compare equal instead of falling back to identity.\n\n`@dataclass`, from the `dataclasses` module in the standard library, generates all of that automatically from a type-annotated class body:\n\n```python\nfrom dataclasses import dataclass\n\n@dataclass\nclass Point:\n    x: int\n    y: int\n\np1 = Point(1, 2)\np2 = Point(1, 2)\n\nprint(p1)          # Point(x=1, y=2)  -- auto-generated __repr__\nprint(p1 == p2)     # True  -- auto-generated __eq__ compares field values\nprint(p1 is p2)     # False -- still two distinct objects\n```\n\nWithout `@dataclass`, this would take roughly ten lines: an `__init__` assigning `self.x = x; self.y = y`, a `__repr__` building the string manually, and an `__eq__` comparing both fields with an `isinstance` check. `@dataclass` reads the type-annotated class attributes (`x: int`, `y: int`) as field declarations and writes all of that for you. Note that the type annotations (`: int`) are not enforced at runtime at all -- `Point(\"not a number\", 2)` runs without error; they exist purely to tell `@dataclass` what fields to generate code for (and to help static type checkers and IDEs)."
+          },
+          {
+            "heading": "When a Dataclass Is the Right Tool -- and When It Isn't",
+            "body": "A dataclass is the right choice when a class's primary job really is holding a fixed set of related values with little or no behavior beyond that -- configuration objects, records read from a file or API response, simple value types like `Point` or `Money`. It's a poor fit once a class's *behavior* is the interesting part -- when most of what the class does is methods that encapsulate real logic, validation, or invariants that need protecting, rather than just exposing its fields directly.\n\nA useful litmus test: if you find yourself wanting to add `@dataclass` to a class and then writing several custom methods that do meaningful work with the fields (not just __init__/__repr__/__eq__-style plumbing), that's not a sign you're using dataclasses wrong -- `@dataclass` classes can absolutely have their own methods too, and the decorator only touches the methods it explicitly generates. The distinction is more about design intent than a hard rule: dataclasses are meant to reduce boilerplate for *data-holding* classes, and it's worth staying deliberate about whether a class's fields should be freely readable/writable from outside (which dataclasses default to) or whether they need to be protected behind methods that enforce rules -- if the latter, a regular class with more deliberate encapsulation is probably the better fit, dataclass or not."
+          },
+          {
+            "heading": "frozen=True: Immutability",
+            "body": "By default, a dataclass instance's fields can be reassigned after creation, just like any regular object's attributes. Passing `frozen=True` to the decorator makes instances immutable: attempting to assign to any field after construction raises a `FrozenInstanceError` (a subclass of `AttributeError`):\n\n```python\nfrom dataclasses import dataclass\n\n@dataclass(frozen=True)\nclass Point:\n    x: int\n    y: int\n\np = Point(1, 2)\nprint(p.x)   # 1\np.x = 99     # dataclasses.FrozenInstanceError: cannot assign to field 'x'\n```\n\nImmutability is valuable for the same reasons it's valuable anywhere else in Python: it makes objects safe to share freely without worrying that some other piece of code might mutate them out from under you, it makes reasoning about a value's lifetime simpler (it can never change after creation, so you don't need to track every place it might be modified), and -- as a direct practical bonus -- `@dataclass(frozen=True)` also automatically makes instances **hashable** (usable as dict keys or set members), which mutable dataclass instances are not, by default, allowed to be. Reach for `frozen=True` whenever a data object represents something that conceptually shouldn't change once it's created -- a coordinate, a timestamp, a configuration snapshot -- rather than something meant to be updated in place over its lifetime."
+          },
+          {
+            "heading": "The Mutable-Default Pitfall, Solved Properly with field(default_factory=...)",
+            "body": "The mutable-default-argument trap from the Functions module (a default value like `[]` being created once, at definition time, and then shared across every call that uses it) has a direct analogue in dataclasses -- and dataclasses actually detect and forbid the naive version of the mistake outright, rather than letting it silently happen:\n\n```python\nfrom dataclasses import dataclass\n\n@dataclass\nclass Team:\n    name: str\n    members: list = []   # ValueError: mutable default <class 'list'> is not allowed\n```\n\nThis raises an error immediately, at class-definition time, precisely because `@dataclass` recognizes that a bare mutable default here would be shared across every instance that doesn't explicitly supply its own `members` -- the exact same shared-mutable-object bug as a shared class attribute. Instead of a bare default, dataclasses provide `field(default_factory=...)`, which takes a zero-argument callable (like the `list` or `dict` constructors themselves, or a custom function) and calls it **fresh, once per instance**, at construction time -- genuinely giving each instance its own new list:\n\n```python\nfrom dataclasses import dataclass, field\n\n@dataclass\nclass Team:\n    name: str\n    members: list = field(default_factory=list)   # a NEW list per instance\n\nteam_a = Team(\"Alpha\")\nteam_b = Team(\"Beta\")\nteam_a.members.append(\"Amy\")\n\nprint(team_a.members)   # ['Amy']\nprint(team_b.members)   # []  -- genuinely independent, unaffected by team_a\n```\n\nThis is the dataclass equivalent of the `def f(x, items=None): items = [] if items is None else items` idiom from plain functions -- both exist to force a fresh mutable object to be created per use (per call, or per instance) rather than one shared object being reused everywhere the default applies."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "A Regular Class vs the Same Class as a Dataclass",
+          "language": "python",
+          "code": "# Written by hand\nclass ProductPlain:\n    def __init__(self, name, price):\n        self.name = name\n        self.price = price\n\n    def __repr__(self):\n        return f\"ProductPlain(name={self.name!r}, price={self.price!r})\"\n\n    def __eq__(self, other):\n        if not isinstance(other, ProductPlain):\n            return NotImplemented\n        return self.name == other.name and self.price == other.price\n\n# Equivalent, via @dataclass\nfrom dataclasses import dataclass\n\n@dataclass\nclass Product:\n    name: str\n    price: float\n\np1 = Product(\"Widget\", 9.99)\np2 = Product(\"Widget\", 9.99)\nprint(p1)             # Product(name='Widget', price=9.99)\nprint(p1 == p2)        # True",
+          "explanation": "`ProductPlain` and `Product` behave identically -- same constructor signature, same readable repr, same value-based equality -- but `Product` required zero lines of manually-written __init__, __repr__, or __eq__. `@dataclass` reads the annotated class body (`name: str`, `price: float`) and generates all three automatically. This is the core value proposition: for a class whose job really is 'hold these named values together,' @dataclass removes mechanical, error-prone boilerplate without changing what the class actually does or how it's used from the outside."
+        },
+        {
+          "title": "frozen=True and Hashability",
+          "language": "python",
+          "code": "from dataclasses import dataclass\n\n@dataclass(frozen=True)\nclass Coordinate:\n    lat: float\n    lon: float\n\norigin = Coordinate(0.0, 0.0)\nprint(origin)          # Coordinate(lat=0.0, lon=0.0)\n\ntry:\n    origin.lat = 5.0\nexcept Exception as e:\n    print(type(e).__name__, \"--\", e)   # FrozenInstanceError -- cannot assign to field 'lat'\n\n# frozen=True also makes it usable as a dict key / set member:\nvisited = {Coordinate(0.0, 0.0), Coordinate(1.5, 2.5)}\nprint(len(visited))   # 2",
+          "explanation": "Trying to reassign `origin.lat` after construction raises `FrozenInstanceError`, because `frozen=True` disables `__setattr__` for the fields entirely -- the object's data is fixed for its whole lifetime once __init__ finishes. As a direct consequence, frozen dataclass instances are hashable (an ordinary, non-frozen dataclass instance is not, by default, since mutable objects being hashable would let their hash change after being inserted into a set/dict, which breaks those data structures), so they can be placed directly into a set or used as dictionary keys, which a mutable Coordinate could not."
+        },
+        {
+          "title": "The Mutable Default Trap, Dataclass Style",
+          "language": "python",
+          "code": "from dataclasses import dataclass, field\n\n# BROKEN: raises ValueError at class-definition time\n# @dataclass\n# class Team:\n#     name: str\n#     members: list = []   # ValueError: mutable default <class 'list'> is not allowed\n\n# FIXED: field(default_factory=list) creates a NEW list per instance\n@dataclass\nclass Team:\n    name: str\n    members: list = field(default_factory=list)\n\nalpha = Team(\"Alpha\")\nbeta = Team(\"Beta\")\nalpha.members.append(\"Amy\")\n\nprint(alpha.members)   # ['Amy']\nprint(beta.members)    # []",
+          "explanation": "The commented-out version would fail immediately with a ValueError the moment the class is defined -- @dataclass specifically detects a bare mutable literal (list, dict, or set) as a default and refuses to generate code that would share one object across every instance. `field(default_factory=list)` instead tells @dataclass to call `list()` fresh, once per instance, whenever a Team is constructed without its own explicit members argument -- so alpha and beta genuinely get two separate, independent list objects, and mutating one through append() has no effect on the other."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "@dataclass adds runtime type checking -- if I annotate a field as `x: int`, passing a string for x will raise an error.",
+          "clarification": "Type annotations on a dataclass's fields are not enforced at runtime at all, exactly like ordinary function/variable type hints elsewhere in Python. `@dataclass` only reads the annotations to know which names to treat as fields (and what order to put them in for the generated __init__) -- it does not insert any type-checking code. `Point(x=\"not a number\", y=2)` will run without any error or warning; catching that kind of mistake is the job of a separate static type checker like mypy run as part of your workflow, not something @dataclass itself does at runtime."
+        },
+        {
+          "description": "You can just write `members: list = []` as a default in a dataclass field, the same way you might for a regular class attribute or function parameter -- it'll just work.",
+          "clarification": "@dataclass specifically detects a bare mutable default (a list, dict, or set literal) and raises a ValueError immediately at class-definition time, precisely because that pattern would create one single shared object reused across every instance that doesn't supply its own value -- the same bug as a shared mutable class attribute. The correct way to give a field a fresh mutable default per instance is `field(default_factory=list)` (or `dict`, `set`, or any other zero-argument callable), which @dataclass calls anew for every single instance constructed, rather than evaluating once and sharing the result."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "python-dataclasses-ex1",
+          "type": "predictOutput",
+          "prompt": "What does this print?",
+          "code": "from dataclasses import dataclass\n\n@dataclass\nclass Point:\n    x: int\n    y: int\n\np1 = Point(3, 4)\np2 = Point(3, 4)\np3 = Point(5, 6)\n\nprint(p1 == p2)\nprint(p1 == p3)\nprint(p1 is p2)",
+          "hints": [
+            "@dataclass automatically generates an __eq__ method -- what does that generated __eq__ actually compare: the objects' identities, or their field values?",
+            "p1 and p2 have identical x and y values but are two separate objects created by two separate calls to Point(...).",
+            "== and is test two different things here -- one compares field values (via the generated __eq__), the other compares whether they're literally the same object in memory."
+          ],
+          "expectedAnswer": "True, False, False. @dataclass's generated __eq__ compares field values, so p1 == p2 is True (both have x=3, y=4) and p1 == p3 is False (different values). p1 is p2 is False because they're still two distinct objects, regardless of equal field values.",
+          "solutionExplanation": "@dataclass automatically generates __eq__ that compares corresponding fields (x and y) between two instances of the same class. p1 and p2 both have x=3, y=4, so p1 == p2 evaluates to True even though they were created by two separate Point(3, 4) calls. p1 and p3 have different y values (4 vs 6), so p1 == p3 is False. p1 is p2 checks object identity, not field equality -- since p1 and p2 are genuinely two separate objects in memory (each Point(...) call creates a new one), `is` correctly reports False regardless of what __eq__ says about their field values."
+        },
+        {
+          "id": "python-dataclasses-ex2",
+          "type": "debugging",
+          "prompt": "This dataclass is supposed to let every Classroom track its own independent list of students, but adding a student to one Classroom is mysteriously adding them to every Classroom. Find and fix the bug.",
+          "code": "from dataclasses import dataclass\n\n@dataclass\nclass Classroom:\n    room_number: str\n    students: list = field(default_factory=list)\n\n    def enroll(self, student_name):\n        self.students.append(student_name)\n\nroom_a = Classroom(\"101\")\nroom_b = Classroom(\"102\")\nroom_a.enroll(\"Amy\")\n\nprint(room_a.students)   # expected: ['Amy']\nprint(room_b.students)   # expected: []",
+          "hints": [
+            "Read the import line at the top of the file very carefully -- is everything this code actually uses imported from dataclasses?",
+            "field(default_factory=list) is being called here, but where is `field` itself supposed to come from?",
+            "The dataclasses module needs both dataclass AND field imported explicitly if you're going to use field(...) in a field default."
+          ],
+          "solutionCode": "from dataclasses import dataclass, field\n\n@dataclass\nclass Classroom:\n    room_number: str\n    students: list = field(default_factory=list)\n\n    def enroll(self, student_name):\n        self.students.append(student_name)\n\nroom_a = Classroom(\"101\")\nroom_b = Classroom(\"102\")\nroom_a.enroll(\"Amy\")\n\nprint(room_a.students)   # ['Amy']\nprint(room_b.students)   # []",
+          "solutionExplanation": "The bug here isn't actually about mutable defaults at all -- the code correctly uses field(default_factory=list) as its default. The real problem is the import line only brings in `dataclass`, not `field`, from the dataclasses module, so `field(default_factory=list)` would raise a NameError as written, not silently misbehave. (If this were rewritten to skip field() entirely and just write `students: list = []`, @dataclass would immediately reject it with a ValueError for exactly the shared-mutable-default reason covered in this concept -- but that's not the bug present in this particular snippet.) The fix is simply `from dataclasses import dataclass, field`, importing both names the code actually references. With that fixed, field(default_factory=list) correctly creates a fresh, independent list for every Classroom instance, so room_a and room_b never share state."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "python-dataclasses-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "```python\nfrom dataclasses import dataclass\n\n@dataclass\nclass Item:\n    label: str\n    tags: list = []\n```\nWhat happens when this class is defined?",
+          "options": [
+            "It defines successfully, and every Item instance that doesn't supply tags shares one list.",
+            "It raises a ValueError at class-definition time, because @dataclass forbids a bare mutable literal as a field default.",
+            "It defines successfully, and each Item instance gets its own fresh empty list automatically.",
+            "It raises a TypeError only when the first Item() is actually constructed, not when the class is defined."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "@dataclass specifically inspects field defaults and raises ValueError immediately, at class-definition time, if it detects a mutable literal (list, dict, or set) as the default -- precisely to prevent the shared-mutable-object bug described in option A from ever silently happening. Option C describes what field(default_factory=list) would actually achieve, but that's not what this code uses. Option D is wrong about timing -- the error fires when the class itself is defined, before any instance is ever created."
+        },
+        {
+          "id": "python-dataclasses-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain when you would choose @dataclass for a class versus writing a regular class by hand, and what frozen=True adds on top of the default behavior.",
+          "modelAnswer": "@dataclass is the right tool when a class's primary purpose is holding a fixed bundle of related values together, with little behavior beyond exposing and comparing that data -- think config objects, simple records, small value types like a Point or a Money amount. It removes the repetitive, error-prone boilerplate of hand-writing __init__ (assigning every parameter to self), __repr__ (building a readable string), and __eq__ (comparing fields with an isinstance check) -- all generated automatically from type-annotated class attributes. It's a weaker fit once a class's behavior is the interesting part: if most of what the class does is meaningful methods that enforce validation or invariants, rather than just plumbing to expose fields, a hand-written class with more deliberate encapsulation is probably a better design choice -- though it's worth noting @dataclass classes can still have their own custom methods; the decorator only ever touches __init__/__repr__/__eq__/etc, so adding methods doesn't disqualify a class from being a dataclass. On top of the default (mutable) behavior, frozen=True makes every field read-only after construction -- attempting to reassign any field raises FrozenInstanceError. This matters for two concrete reasons: it protects against accidental mutation of a value that's meant to represent something fixed (a timestamp, a coordinate, a completed configuration snapshot), which makes reasoning about the object's lifetime simpler since it can never change after creation; and it makes the instance hashable, which lets it be used as a dictionary key or placed into a set -- something a regular, mutable dataclass instance cannot do by default, since a hashable-but-mutable object would risk its hash changing after being inserted into a hash-based collection."
+        }
+      ]
+    }
+  ]
+}

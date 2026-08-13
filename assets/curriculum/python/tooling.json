@@ -1,0 +1,459 @@
+{
+  "learningPathId": "python",
+  "moduleId": "tooling",
+  "title": "Tooling and Practices",
+  "order": 12,
+  "concepts": [
+    {
+      "id": "python-logging",
+      "title": "Logging",
+      "description": "The logging module replaces scattered print() calls with a leveled, filterable, configurable system for recording what a program is doing -- essential once code runs somewhere you can't just sit and watch it.",
+      "moduleId": "tooling",
+      "topicId": "tooling",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 25,
+      "prerequisites": [],
+      "learningObjectives": [
+        "Explain why print() debugging breaks down once code runs in production or spans multiple modules.",
+        "Order the five standard logging levels and describe what each is actually meant to communicate.",
+        "Configure basic logging output with logging.basicConfig and obtain a per-module logger with logging.getLogger(__name__).",
+        "Describe the roles of loggers, handlers, and formatters, and explain how a level acts as a filter, not a label.",
+        "Predict whether a given log call will actually produce visible output based on the configured level."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "Why print() Doesn't Scale",
+            "body": "`print()` is the natural first tool for finding out what a program is doing, and for a five-line script it's perfectly fine. The trouble starts once a codebase grows past that: `print()` has no concept of severity, so a message that just confirms normal progress looks identical to one screaming about a real failure -- both are just lines of text on stdout. It has no built-in timestamp, no indication of which module or function produced it, and no way to turn it off selectively. If you've sprinkled twenty `print()` calls across a module while chasing a bug, the only way to quiet them again is to go back and delete or comment out every single one -- and it's easy to miss one, or to need it again three days later. Worse, in a real deployed service, `print()` output usually just vanishes into whatever swallowed stdout, or mixes with everything else with no way to filter 'only show me warnings from the payment module.' Logging solves all of this by treating each message as structured data -- a level, a source, a timestamp, a payload -- rather than a raw string, and by letting you decide *later*, without touching the call sites, how verbose to be and where the output should go."
+          },
+          {
+            "heading": "The Five Levels, and What Each Is Actually For",
+            "body": "Python's logging module defines five standard severity levels, each with a numeric value that determines an ordering: `DEBUG` (10), `INFO` (20), `WARNING` (30), `ERROR` (40), `CRITICAL` (50). Knowing the ordering matters less than knowing what each one is *for*:\n\n- **DEBUG**: fine-grained diagnostic detail useful while actively developing or investigating -- variable values, which branch was taken, how many items were processed. Too noisy to leave on in normal production use.\n- **INFO**: confirmation that things are working as expected -- `\"Server started on port 8000\"`, `\"Processed 42 records\"`. The normal, healthy heartbeat of a running program.\n- **WARNING**: something unexpected happened, or a potential problem was noticed, but the program can still carry on -- a deprecated function was called, a retry was needed, a config value fell back to a default.\n- **ERROR**: a real problem -- a specific operation failed and did not complete as intended, though the program as a whole may still be running (e.g. one request out of many failed).\n- **CRITICAL**: a serious error suggesting the *program itself* may be unable to continue -- out of disk space, a corrupted essential file, an unrecoverable startup failure.\n\nThe numeric ordering is what makes filtering possible: a logger or handler configured with a minimum level only lets through messages *at or above* that level. Set the threshold to `WARNING`, and every `DEBUG` and `INFO` call is silently dropped -- not an error, just invisible, which is exactly the behavior you want in production, and exactly the thing that surprises people the first time an `info()` call they expected to see never shows up."
+          },
+          {
+            "heading": "Getting Started: basicConfig and Per-Module Loggers",
+            "body": "The fastest way to get useful output is `logging.basicConfig()`, called once, early, ideally near your program's entry point:\n\n```python\nimport logging\n\nlogging.basicConfig(\n    level=logging.INFO,\n    format=\"%(asctime)s %(levelname)s %(name)s: %(message)s\",\n)\n```\n\nThis sets up a reasonable default: a handler that writes to the console, a formatter that includes a timestamp, the level name, and the logger's name, and a minimum level of `INFO`. One sharp edge worth knowing up front: `basicConfig()` only has an effect the *first* time it's called with a handler not already configured -- calling it again later in the same process, expecting to change the level, is a no-op unless you pass `force=True`. This trips people up constantly in notebooks and test suites where `basicConfig()` might already have run once.\n\nInstead of calling module-level functions like `logging.info(...)` directly (which quietly use a shared, anonymous root logger), the standard idiom is to get a logger named after the current module: `logger = logging.getLogger(__name__)`. Passing `__name__` names the logger after the module's fully qualified dotted path (e.g. `myapp.utils.orders`), so every log record it produces reports exactly where it came from, and -- more importantly for larger projects -- lets you dial the verbosity of one specific module up or down later without touching a single call site."
+          },
+          {
+            "heading": "The Mental Model: Loggers, Handlers, and Formatters",
+            "body": "You don't need to master logging's entire configuration hierarchy to use it well -- three pieces cover almost everything you'll need day to day:\n\n- **Logger**: the object your code actually calls (`logger.debug(...)`, `logger.info(...)`, etc.). It has a name and its own minimum level, and it's the first gate a message passes through -- if the message's level is below the logger's level, processing stops right there.\n- **Handler**: decides *where* a message that made it past the logger's filter actually goes -- the console (`StreamHandler`), a file (`FileHandler`), a network service, and so on. A handler has its *own* level too, which is a second, independent gate: a message must clear both the logger's level and the handler's level to actually be emitted. This is why a message can sometimes vanish even though the logger's level looks low enough -- a stricter handler further down the pipeline can still be filtering it out.\n- **Formatter**: decides what the final output line actually looks like -- which fields (timestamp, level, logger name, message) appear and in what format.\n\n`basicConfig()` is a convenience that wires up one root-level handler and formatter for you in a single call, which is genuinely enough for most small-to-medium projects for a long time. The full hierarchy -- multiple handlers per logger, propagation to parent loggers, per-handler levels different from the logger's own level -- is there when you need it (e.g. writing DEBUG detail to a file while only showing WARNING and above on the console), but it's fine to treat as an advanced topic you'll grow into rather than something to memorize up front."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "From print() to a Configured Logger",
+          "language": "python",
+          "code": "import logging\n\nlogging.basicConfig(\n    level=logging.INFO,\n    format=\"%(asctime)s %(levelname)s %(name)s: %(message)s\",\n)\nlogger = logging.getLogger(__name__)\n\ndef process_order(order_id):\n    logger.info(\"Processing order %s\", order_id)\n    if order_id < 0:\n        logger.error(\"Invalid order id: %s\", order_id)\n        return\n    logger.debug(\"Order %s passed validation\", order_id)  # filtered out -- level is INFO\n    logger.info(\"Order %s processed successfully\", order_id)\n\nprocess_order(42)\nprocess_order(-1)",
+          "explanation": "Because `basicConfig(level=logging.INFO)` sets the threshold to INFO, the `logger.debug(...)` call is silently dropped -- DEBUG (10) is below INFO (20) -- while both `info()` and `error()` calls are shown, each with a timestamp and the logger's name (`__main__` in a script run directly) automatically prepended by the formatter. Notice the log calls use `%s` placeholders with `order_id` passed as a separate argument, rather than an f-string like `f\"Processing order {order_id}\"`. This isn't just style: logging defers building the final message string until (and unless) a handler actually needs to emit it, so a filtered-out `logger.debug(\"...%s\", expensive_computation())` call never pays the cost of formatting or computing its arguments -- an f-string version would build the string every time, whether or not it's ever shown."
+        },
+        {
+          "title": "Per-Module Verbosity and Quieting a Noisy Library",
+          "language": "python",
+          "code": "import logging\n\nlogging.basicConfig(level=logging.WARNING, format=\"%(levelname)s %(name)s: %(message)s\")\n\ndb_logger = logging.getLogger(\"myapp.database\")\napi_logger = logging.getLogger(\"myapp.api\")\n\ndb_logger.setLevel(logging.DEBUG)   # I'm actively debugging the database layer right now\n\ndb_logger.debug(\"Opening connection pool\")     # shown -- db_logger's own level is DEBUG\napi_logger.debug(\"Preparing request headers\")  # not shown -- api_logger has no override, inherits WARNING\n\n# a very common real-world move: silence a chatty third-party library\nlogging.getLogger(\"urllib3\").setLevel(logging.WARNING)",
+          "explanation": "Each call to `logging.getLogger(name)` with the same string returns the *same* logger object every time, so `db_logger.setLevel(logging.DEBUG)` genuinely changes that one named logger's threshold without touching anything else. `api_logger` never had its own level set, so it falls back to the effective level it inherits (WARNING, from the root logger configured by `basicConfig`), which is why its `debug()` call produces nothing. This per-name addressability is exactly why `logging.getLogger(__name__)` matters in real projects: you can turn up verbosity for exactly the module you're investigating, leave everything else quiet, and do it all without editing a single line of application code -- the last line shows the same trick applied to a third-party library's logger by name, a common way to quiet noisy dependencies without losing your own app's messages."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "logging.info(\"...\") is basically just a fancier print() -- the two are interchangeable, and it doesn't really matter which one you reach for.",
+          "clarification": "The two solve different problems even though both can end up printing text. logging calls carry a severity level, so the same call site can be shown during development and silenced in production (or vice versa) by changing one configuration line, with zero code changes. logging output can include timestamps and the originating module automatically, can be redirected to a file, a network service, or multiple destinations at once via handlers, and can be filtered per-module rather than all-or-nothing. print() has none of that -- it always goes to stdout, always shows, and always looks identical regardless of how important the message is. print() is fine for a quick, throwaway check in a script you're about to delete; anything that might outlive that moment, or run somewhere you can't watch it live, belongs in logging."
+        },
+        {
+          "description": "Setting a logger's level to something 'higher,' like WARNING instead of INFO, makes it produce more output, since WARNING sounds like a bigger deal.",
+          "clarification": "It's the opposite, and the numeric values make the mechanism clear: DEBUG=10, INFO=20, WARNING=30, ERROR=40, CRITICAL=50. A logger's level is a *minimum threshold* -- only messages at that level or higher pass through. Raising the threshold from INFO to WARNING means DEBUG and INFO calls now fall below the bar and get dropped, leaving *only* WARNING, ERROR, and CRITICAL -- strictly less output, not more. 'Higher level' means 'stricter filter, more severe messages only,' not 'more verbose.' The most verbose setting is the *lowest* level, DEBUG, since it lets everything through."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "python-logging-ex1",
+          "type": "predictOutput",
+          "prompt": "Given this setup, which of the four log calls actually produce visible output?",
+          "code": "import logging\n\nlogging.basicConfig(level=logging.WARNING, format=\"%(levelname)s: %(message)s\")\nlogger = logging.getLogger(__name__)\n\nlogger.debug(\"starting up\")\nlogger.info(\"connected to database\")\nlogger.warning(\"cache miss, falling back to database\")\nlogger.error(\"failed to save record\")",
+          "hints": [
+            "The level passed to basicConfig sets a minimum threshold, not a label for one specific kind of message.",
+            "Recall the numeric ordering: DEBUG=10, INFO=20, WARNING=30, ERROR=40, CRITICAL=50. Which of these four calls are at or above WARNING (30)?",
+            "Two of the four calls are below the configured threshold and are silently dropped -- not an error, just no output at all for those lines."
+          ],
+          "expectedAnswer": "Only the warning() and error() calls print anything: 'WARNING: cache miss, falling back to database' and 'ERROR: failed to save record'. The debug() and info() calls are below the configured WARNING threshold (30), so they're silently filtered out and produce no output whatsoever.",
+          "solutionExplanation": "basicConfig(level=logging.WARNING) sets the root logger's threshold to 30. logger.debug() is level 10 and logger.info() is level 20 -- both below 30, so both are dropped before any formatting or output happens. logger.warning() is exactly 30 and logger.error() is 40, both at or above the threshold, so both pass through and get formatted and printed. This is the single most common source of 'why isn't my log message showing up' confusion -- the call didn't fail, it was correctly filtered by a threshold that's stricter than that call's level."
+        },
+        {
+          "id": "python-logging-ex2",
+          "type": "debugging",
+          "prompt": "A teammate added logging calls to their script expecting to see startup and progress messages, but running it produces no output at all -- not even an error. Find and fix the bug.",
+          "code": "import logging\n\nlogger = logging.getLogger(__name__)\n\ndef main():\n    logger.info(\"Starting up\")\n    for i in range(3):\n        logger.info(\"Processing item %s\", i)\n    logger.info(\"Done\")\n\nmain()",
+          "hints": [
+            "The code never calls logging.basicConfig() anywhere -- what level does a logger have by default without any configuration?",
+            "Without any configuration, the root logger's effective level defaults to WARNING -- and every logger.info() call here is below that threshold.",
+            "You need one call, before these info() calls run, that sets up a handler and lowers the effective minimum level to INFO or below."
+          ],
+          "solutionCode": "import logging\n\nlogging.basicConfig(level=logging.INFO, format=\"%(levelname)s: %(message)s\")\nlogger = logging.getLogger(__name__)\n\ndef main():\n    logger.info(\"Starting up\")\n    for i in range(3):\n        logger.info(\"Processing item %s\", i)\n    logger.info(\"Done\")\n\nmain()",
+          "solutionExplanation": "With no call to basicConfig() (or any other handler configuration) anywhere in the process, the root logger has no handlers attached and its effective level defaults to WARNING. Every logger.info() call here is level 20, below that default threshold of 30, so each one is silently dropped -- there's no error because filtering a message below the threshold is completely normal, expected behavior, not a failure. Adding logging.basicConfig(level=logging.INFO) before any info() calls run attaches a console handler and lowers the effective minimum level to INFO, which is exactly low enough to let all of these calls through."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "python-logging-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "A logger is configured with `logger.setLevel(logging.ERROR)`, and its handler is separately configured with `handler.setLevel(logging.WARNING)`. If the code calls `logger.warning(\"low disk space\")`, what happens?",
+          "options": [
+            "It is shown, because the handler's level (WARNING) is low enough to allow it.",
+            "It is not shown, because the logger's own level (ERROR) already filters it out before the handler is ever consulted.",
+            "It is shown twice, once for each level check that passes.",
+            "It raises a ValueError because the logger and handler levels don't match."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "A message has to clear the logger's own level first -- that's the first gate. logger.warning() produces a WARNING (30) level record, but the logger's threshold is ERROR (40), so the message is filtered out immediately, before it's ever passed along to any handler. The handler's more permissive WARNING threshold is irrelevant here because the message never reaches the handler at all. This is exactly why 'the handler's level looks low enough, why isn't it showing?' is a common point of confusion -- both the logger's level and the handler's level act as independent filters, and a message must pass both, not just one."
+        },
+        {
+          "id": "python-logging-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain to a teammate who has only ever used print() why they should switch to the logging module for a project that's about to be deployed, and what logging.getLogger(__name__) buys them over calling logging.info() directly.",
+          "modelAnswer": "print() has no concept of severity, no timestamps by default, and no way to selectively silence it -- every print() call always produces output, always goes to stdout, and looks identical whether it's a routine status update or a sign of real trouble. Once code runs somewhere you can't just sit and watch (a deployed service, a scheduled job, another developer's machine), that undifferentiated stream becomes a liability: you either see everything, including noise you don't care about, or you go back and manually delete print() calls, which is easy to get wrong and annoying to undo later. logging solves this by attaching a severity level (DEBUG through CRITICAL) to every message and letting you set a threshold -- change one configuration line, and DEBUG-level noise disappears from production while WARNING and above still show, with zero changes to the call sites themselves. As for logging.getLogger(__name__) specifically: calling logging.info() directly reaches for a single shared, anonymously-named root logger, so every part of the program looks the same in the logs and you can't turn one module's verbosity up or down independently. Passing __name__ names the logger after that specific module's dotted path, so log records report exactly where they came from, and -- critically for any codebase bigger than a script -- you can later say 'set myapp.database to DEBUG, leave everything else at WARNING' while actively investigating one part of the system, without touching a single log call anywhere in the code."
+        }
+      ]
+    },
+    {
+      "id": "python-testing-pytest",
+      "title": "Testing with pytest",
+      "description": "pytest lets you write tests as plain functions with plain assert statements, then automatically discovers and runs them -- catching regressions and documenting expected behavior far more reliably than manual spot-checking.",
+      "moduleId": "tooling",
+      "topicId": "tooling",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 30,
+      "prerequisites": ["python-functions-basics"],
+      "learningObjectives": [
+        "Explain why an automated test suite catches regressions that manual testing and code review routinely miss.",
+        "Write pytest tests using plain assert statements, without any special assertion methods.",
+        "Apply pytest's discovery conventions to explain why a given test would or would not be picked up and run.",
+        "Use a pytest fixture to share setup logic across multiple tests without duplicating code.",
+        "Identify the qualities of a well-written test: one behavior per test, a descriptive name, and independence from other tests."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "Why Bother With Automated Tests?",
+            "body": "Manually re-checking every code path by hand -- click through the app, try a few inputs, eyeball the output -- works for a while, but it doesn't scale, and it doesn't scale in a specific, predictable direction: the number of code paths worth checking grows every time you add a feature, while the amount of time and patience you have for re-checking old ones by hand stays roughly flat. The result is that old behavior quietly breaks and nobody notices until a user hits it. An automated test suite is a checklist that runs itself, in seconds, every single time, and never gets bored or forgets an edge case someone once cared enough to write down. That gives you two distinct benefits: it catches **regressions** -- changes that accidentally break something that used to work -- often before a human ever sees the breakage, and it **documents expected behavior** in a form that's actually verified to be true, unlike a comment or a wiki page that can silently go stale. A good test suite is also what makes refactoring safe: with tests in place, you can restructure code with real confidence that you haven't broken anything, rather than just hoping."
+          },
+          {
+            "heading": "pytest's Philosophy: Plain assert",
+            "body": "Python's built-in `unittest` framework requires learning a family of special assertion methods -- `self.assertEqual(a, b)`, `self.assertTrue(x)`, `self.assertIn(x, y)`, and dozens more -- each producing its own particular failure message. pytest takes a different approach: you just write ordinary `assert` statements, and pytest rewrites them under the hood (via its \"assertion rewriting\" import hook) to produce a detailed, introspected failure report on its own, without you needing to reach for a special method at all:\n\n```python\ndef add(a, b):\n    return a + b\n\ndef test_add():\n    assert add(2, 3) == 5\n```\n\nIf that assertion fails -- say `add` had a bug and returned 6 -- pytest doesn't just say \"assertion failed\"; it shows you the actual values it computed on both sides of the comparison, right in the terminal output, without you having written any code to make that happen. This means you don't need to memorize a large API surface just to write a test: if you know how to write an `if` condition, you already know most of what you need to write a pytest test."
+          },
+          {
+            "heading": "Test Discovery: Conventions pytest Relies On",
+            "body": "pytest doesn't need you to register tests anywhere -- it finds them automatically by walking your project's directories and applying a small set of naming conventions: files named `test_*.py` or `*_test.py`, functions inside them named `test_*`, and (if you group tests in classes) classes named `Test*` containing methods named `test_*`. This convention-based discovery is convenient, but it has a sharp edge: a function that contains perfectly good test logic but isn't named `test_something` will simply never be run -- silently, with no warning and no error, because as far as pytest is concerned, it was never a test in the first place. This is one of the most common \"why isn't my test running\" bugs for people new to pytest: they wrote a helper-looking function, or misspelled `test_` as `tests_` or `Test_`, and pytest just skipped over it without complaint."
+          },
+          {
+            "heading": "Fixtures: Setup and Teardown Without the Boilerplate",
+            "body": "Many tests need some shared setup -- a fresh object to test against, a temporary file, a database connection -- and often the same setup across several tests. `unittest` handles this with `setUp()`/`tearDown()` methods tied to an entire test class. pytest's answer is **fixtures**: a function decorated with `@pytest.fixture` that any test can request simply by naming it as a parameter:\n\n```python\nimport pytest\n\n@pytest.fixture\ndef shopping_cart():\n    cart = []\n    yield cart          # this value is handed to the test\n    cart.clear()         # runs after the test finishes -- teardown\n\ndef test_cart_starts_empty(shopping_cart):\n    assert shopping_cart == []\n\ndef test_adding_item_increases_length(shopping_cart):\n    shopping_cart.append(\"apple\")\n    assert len(shopping_cart) == 1\n```\n\npytest matches the parameter name `shopping_cart` in each test function to the fixture of the same name, calls the fixture, and hands the test whatever value the fixture produced before its `yield`. Anything written *after* `yield` runs as teardown, once the test using it has finished -- whether it passed or failed. By default, a fixture reruns fresh for every single test that requests it, so `test_cart_starts_empty` and `test_adding_item_increases_length` each get their own independent, empty list -- appending in one test has no effect on the other. This is a first look; fixtures can also be scoped to run once per module or once per whole test session, but function-scoped (rerun per test) is the sensible default and covers most needs."
+          },
+          {
+            "heading": "What Makes a Good Test",
+            "body": "A few habits separate a genuinely useful test suite from one that's technically passing but not actually helping: **test one behavior per test** -- a test named `test_withdraw` that also happens to check deposits, error handling, and interest calculation in one giant function makes it hard to tell, from a failure, what actually broke. **Name tests descriptively, by behavior, not by number** -- `test_withdraw_raises_when_balance_insufficient` tells you immediately what broke when it fails; `test_3` tells you nothing without opening the file. **Keep tests independent of each other** -- a test shouldn't depend on another test having run first (or in a particular order), since test runners don't guarantee order and tests should be runnable individually while debugging. And **keep tests fast** -- a slow suite is a suite people stop running, which defeats the entire point; this is part of why fixtures default to lightweight, per-test setup rather than something expensive and shared by default."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "A Failing Test and pytest's Introspected Output",
+          "language": "python",
+          "code": "def calculate_discount(price, percent_off):\n    return price - (price * percent_off / 100)\n\ndef test_calculate_discount():\n    assert calculate_discount(100, 20) == 90\n\n# Running `pytest` on this file produces:\n#\n#     def test_calculate_discount():\n# >       assert calculate_discount(100, 20) == 90\n# E       assert 80.0 == 90\n#\n# pytest shows the ACTUAL computed value (80.0) right next to the\n# expected one (90) -- no assertEqual() or custom message needed.",
+          "explanation": "The bug here is a real one -- taking 20% off of 100 should leave 80, not 90, so the test itself has the wrong expected value (a good reminder that a failing test isn't always the code's fault; sometimes it's the test that's wrong). What matters for this example is the *output*: pytest's assertion rewriting inspects the failed `assert` statement and shows you both sides of the `==` comparison with their actual runtime values, entirely from a plain `assert calculate_discount(100, 20) == 90` -- no `self.assertEqual(calculate_discount(100, 20), 90, \"they should be equal\")` boilerplate, and no custom message needed to get a useful failure report."
+        },
+        {
+          "title": "A Fixture Shared Across Independent Tests",
+          "language": "python",
+          "code": "import pytest\n\n@pytest.fixture\ndef empty_cart():\n    cart = []\n    yield cart\n    cart.clear()\n\ndef test_first(empty_cart):\n    empty_cart.append(\"apple\")\n    print(len(empty_cart))   # 1\n\ndef test_second(empty_cart):\n    print(len(empty_cart))   # 0 -- NOT 1, even though test_first ran first",
+          "explanation": "Both tests request the `empty_cart` fixture by naming it as a parameter, and pytest calls the fixture function fresh for each test that requests it -- the default fixture scope is `\"function\"`, meaning one independent call per test function. `test_first` appends `\"apple\"` to *its own* list produced by that call, and when `test_first` finishes, the fixture's teardown (`cart.clear()`, after the `yield`) runs. When `test_second` starts, pytest calls the fixture function again from scratch, producing a brand-new empty list -- so `test_second` genuinely starts from zero, completely unaffected by whatever `test_first` did. This is exactly the independence property that makes tests safe to run in any order, or individually while debugging."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "pytest requires special assertion methods like unittest's assertEqual/assertTrue, and plain assert statements won't give you a useful failure message.",
+          "clarification": "This is precisely backwards from pytest's actual design goal. pytest rewrites plain assert statements at import time (its assertion rewriting hook) specifically so that ordinary Python assert expressions produce rich, introspected failure output -- showing the real runtime values on both sides of a comparison -- without you needing any special method at all. unittest's assert* method zoo exists mostly because plain assert in that older framework doesn't get this treatment; pytest deliberately removed the need for it."
+          },
+        {
+          "description": "Any function containing test-like logic, as long as it lives inside a file in a 'tests' folder, will automatically be picked up and run by pytest.",
+          "clarification": "pytest's discovery is based on naming conventions, not folder location alone: the file generally needs to match test_*.py or *_test.py, and the function itself needs to be named test_* (or be a test_* method inside a Test*-named class). A helper function sitting in a correctly-named test file, but itself named e.g. check_totals() instead of test_totals(), is silently skipped -- not an error, just never collected or run -- which is one of the most common 'why isn't this test running' surprises for people new to the framework."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "python-testing-pytest-ex1",
+          "type": "debugging",
+          "prompt": "A developer wrote this test to check that discount calculation works, and it contains a real bug in the code under test -- but running `pytest` on this file reports \"no tests ran,\" not a failure. Find and fix the bug that's preventing pytest from even running the test.",
+          "code": "def calculate_discount(price, percent_off):\n    return price - percent_off  # bug: forgot to treat percent_off as a percentage\n\ndef check_calculate_discount():\n    assert calculate_discount(100, 20) == 80",
+          "hints": [
+            "pytest discovers tests by name, not by what the function's body does -- look closely at the test function's actual name.",
+            "Functions pytest treats as tests must be named starting with test_. Does check_calculate_discount() match that pattern?",
+            "Rename the function so pytest collects it -- then you'll actually see the real assertion failure caused by the logic bug in calculate_discount."
+          ],
+          "solutionCode": "def calculate_discount(price, percent_off):\n    return price - percent_off  # still has the logic bug -- renaming just makes pytest find the test\n\ndef test_calculate_discount():\n    assert calculate_discount(100, 20) == 80",
+          "solutionExplanation": "The reason pytest reports \"no tests ran\" instead of a failure is that check_calculate_discount doesn't match pytest's test_* discovery convention, so pytest never even looks inside it -- it's invisible to the test runner, not failing. Renaming it to test_calculate_discount makes pytest collect and run it, which then reveals the actual logic bug: calculate_discount(100, 20) currently returns 80 by pure coincidence of this specific input (100 - 20 happens to equal 80), but the function is subtracting percent_off as a flat amount rather than as a percentage of price, which would be wrong for any other input (e.g. calculate_discount(200, 20) should be 160, but this buggy version returns 180). The exercise's real point is the discovery bug -- fixing the underlying percentage-math bug is a further, separate improvement once the test actually runs."
+        },
+        {
+          "id": "python-testing-pytest-ex2",
+          "type": "predictOutput",
+          "prompt": "What does each print() call output, given that both test functions request the same fixture?",
+          "code": "import pytest\n\n@pytest.fixture\ndef counter_list():\n    items = []\n    yield items\n\ndef test_one(counter_list):\n    counter_list.append(\"a\")\n    counter_list.append(\"b\")\n    print(len(counter_list))\n\ndef test_two(counter_list):\n    print(len(counter_list))",
+          "hints": [
+            "A fixture function's body runs again, fresh, every time a NEW test requests it -- unless the fixture is given a broader scope than the default.",
+            "The default fixture scope is 'function', meaning one fresh call per test function that requests it.",
+            "test_two never sees anything test_one appended -- it gets its own brand-new empty list from a fresh call to counter_list()."
+          ],
+          "expectedAnswer": "test_one prints 2 (after appending 'a' and 'b'). test_two prints 0, because it gets a completely separate, freshly-created empty list from its own independent call to the fixture -- the default function scope means the fixture reruns per test, with no shared state between them.",
+          "solutionExplanation": "@pytest.fixture with no explicit scope argument defaults to scope=\"function\", meaning pytest calls counter_list() fresh, once per test function that requests it as a parameter. test_one gets its own list, appends two items to it, and prints its length: 2. When test_two runs, pytest calls counter_list() again from scratch -- a brand new, empty items list -- completely independent of whatever test_one did to its own list. So test_two prints 0. If the two tests genuinely needed to share state, that would require an explicitly broader fixture scope (like \"module\" or \"session\"), which is an intentional, uncommon choice precisely because sharing mutable state between tests tends to make them harder to run independently or in any order."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "python-testing-pytest-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "A test suite has a file named `checkout_tests.py` containing a function named `test_total_with_tax()`. Running plain `pytest` in the project root, what happens?",
+          "options": [
+            "The test runs normally, since the function name follows the test_* convention.",
+            "The test is not discovered, since the file name doesn't match pytest's default test_*.py or *_test.py discovery pattern.",
+            "pytest raises an ImportError because the file name is invalid.",
+            "The test runs, but pytest issues a warning about the file naming."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "pytest's default discovery requires BOTH the file name and the function name to match its conventions. checkout_tests.py matches neither test_*.py nor *_test.py (it would need to be named e.g. test_checkout.py or checkout_test.py), so pytest never even opens this file looking for tests, regardless of what's inside it or how well-named the function is. Renaming the function alone (as in option A) doesn't help if the containing file itself isn't discovered. There's no ImportError or warning involved (options C and D) -- non-matching files are simply, silently, not considered at all."
+        },
+        {
+          "id": "python-testing-pytest-assess-explain1",
+          "type": "explanation",
+          "prompt": "A teammate says: \"We already review every pull request by hand, so I don't see what automated tests add.\" Explain what a test suite catches that manual code review typically does not, and why plain assert statements in pytest are enough without a special assertion API.",
+          "modelAnswer": "Code review is good at catching things a human reading the diff can reason about -- unclear logic, missing edge-case handling, style issues -- but it doesn't re-execute the rest of the codebase to confirm that a change didn't quietly break some unrelated behavior three modules away that the reviewer never looked at and has no reason to suspect. An automated test suite does exactly that, every time, in seconds: it re-verifies previously-working behavior on every change, which is specifically what catches regressions -- bugs introduced by a change to code that used to work fine. It also documents expected behavior in an executable, continuously-verified form, unlike a comment or design doc that can silently drift out of date without anyone noticing. As for plain assert: pytest deliberately rewrites assert statements at import time so that a plain `assert calculate_total(cart) == 42` produces a detailed report showing the real computed value versus the expected one, without needing a dedicated method like assertEqual(). That's a deliberate design choice to keep the barrier to writing a test as low as possible -- if you can write a boolean condition, you can write a pytest test, with no separate assertion vocabulary to learn."
+        }
+      ]
+    },
+    {
+      "id": "python-debugging",
+      "title": "Debugging",
+      "description": "Real debugging is a disciplined process, not guesswork: reading a traceback correctly, using pdb/breakpoint() to inspect live state, and knowing when print-debugging helps versus when it just wastes time.",
+      "moduleId": "tooling",
+      "topicId": "tooling",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 30,
+      "prerequisites": ["python-exception-handling"],
+      "learningObjectives": [
+        "Read a Python traceback bottom-up to identify the actual exception and trace the call stack that led to it.",
+        "Use breakpoint() and basic pdb commands to pause execution and inspect live variable state.",
+        "Judge when print-debugging is a reasonable quick tool versus when it wastes more time than it saves.",
+        "Apply a general debugging workflow: reproduce reliably, narrow down, form a hypothesis, verify.",
+        "Distinguish where an exception was raised from where the root cause of the bug actually lives."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "Reading a Traceback Bottom-Up",
+            "body": "A Python traceback lists, top to bottom, the chain of calls that led to an exception, starting from the outermost call and descending into deeper and deeper function calls, ending with the line that actually raised the error and the exception itself. The single most useful habit for reading one is to **read from the bottom up**: the very last line names the exception type and its message -- that's the actual error, and it's usually the fastest place to start understanding what went wrong. Each frame above it, read upward, is one more level out in the call stack -- the function that called the function that eventually failed, and so on, up to wherever your program's execution began. Beginners often start reading from the top, since that's the natural reading order for everything else in programming, but the top of a traceback is usually the least specific, least actionable line -- it just tells you the program started running, which you already knew."
+          },
+          {
+            "heading": "The Bottom Tells You Where, Not Always Why",
+            "body": "There's an important nuance worth internalizing once the bottom-up habit is solid: the last frame tells you exactly *where* the exception was raised, but that is not always *where the actual bug is*. A function three calls deep might raise a `TypeError` because it received `None` where it expected a number -- but the real mistake might be several frames further up the stack, in whatever code passed `None` in the first place, perhaps because an earlier lookup failed silently and returned `None` without anyone checking for it. So the practical technique is: start at the bottom to understand *what* went wrong and *where* it blew up, then walk upward through the frames above it to trace *why* -- which caller supplied the bad value, and where that value actually came from. Fixing the crash site alone sometimes just moves the same underlying problem one level over."
+          },
+          {
+            "heading": "pdb and breakpoint(): Stepping Into the Program",
+            "body": "Since Python 3.7, the built-in `breakpoint()` function drops you into an interactive debugger (`pdb` by default) at the exact line where it's called, with zero imports or setup required:\n\n```python\ndef calculate_total(items):\n    subtotal = sum(item.price for item in items)\n    breakpoint()   # execution pauses here\n    discount = apply_discount(subtotal)\n    return subtotal - discount\n```\n\nOnce paused, a handful of commands cover most needs: `n` (next line, staying in the current function), `s` (step, following execution *into* a function call), `c` (continue running until the next breakpoint or the program ends), `l` (list the surrounding source code), `p <expr>` or `pp <expr>` (print, or pretty-print, the value of any expression, including local variables), and `q` (quit the debugger). This is genuinely more powerful than print-debugging for anything beyond a trivial case: you can inspect any variable in scope on demand, including ones you didn't think to print in advance, step through conditionally-reached code exactly once instead of re-running the whole program, and explore interactively rather than committing to a guess about what to print before you even know what you're looking for."
+          },
+          {
+            "heading": "When print-Debugging Is Fine, and When It Wastes Time",
+            "body": "Print-debugging isn't a beginner's mistake to be avoided at all costs -- for a short, deterministic script where you have a specific, narrow question (\"what value does this variable actually have right here?\"), adding one `print()` and rerunning is often genuinely the fastest path to an answer, faster than the overhead of starting an interactive session. It starts wasting real time once any of these apply: the bug requires several rounds of edit-rerun-inspect, each one costing a full program restart; the interesting moment is deep inside a loop or recursive call where you'd need to print dozens of times or add conditional print logic just to catch the right iteration; or you don't yet know *which* variable is wrong, so you're guessing at what to print rather than actually exploring. In those situations, `breakpoint()` lets you pause once, at the right spot, and then look at anything you want interactively -- no more editing and rerunning the whole program just because you forgot to print one more variable."
+          },
+          {
+            "heading": "A General Debugging Workflow",
+            "body": "Beyond specific tools, a disciplined process makes debugging far less frustrating than ad hoc poking:\n\n1. **Reproduce reliably.** Before changing anything, find a way to trigger the bug consistently, ideally with the smallest input that still shows it. A bug you can't reliably trigger is a bug you can't reliably confirm you've fixed.\n2. **Narrow down.** Use bisection -- comment out or isolate pieces of the code, add strategic print/log statements, or use a debugger to localize exactly where the program's actual behavior first diverges from what you expected. The goal is to shrink \"somewhere in this 200-line module\" down to \"this one specific line or function.\"\n3. **Form a hypothesis.** Once narrowed down, make a specific, falsifiable guess about the cause -- not \"something's probably wrong with the loop,\" but \"I think `index` is going one past the end of the list on the last iteration.\" A vague hypothesis leads to vague, unproductive changes.\n4. **Verify.** Test that your fix actually addresses the hypothesis specifically, and that the original reproduction case no longer fails. Change one thing at a time -- fixing three suspected issues simultaneously means you won't know which one (if any) actually mattered, and you risk masking one bug with another."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Reading a Traceback From the Bottom Up",
+          "language": "python",
+          "code": "def get_discount_rate(customer):\n    return customer[\"discount_rate\"]\n\ndef apply_discount(price, customer):\n    rate = get_discount_rate(customer)\n    return price * (1 - rate)\n\ndef checkout(cart_total, customer):\n    return apply_discount(cart_total, customer)\n\ncheckout(100, {\"name\": \"Amy\"})\n\n# Traceback (most recent call last):\n#   File \"shop.py\", line 9, in <module>\n#     checkout(100, {\"name\": \"Amy\"})\n#   File \"shop.py\", line 7, in checkout\n#     return apply_discount(cart_total, customer)\n#   File \"shop.py\", line 4, in apply_discount\n#     rate = get_discount_rate(customer)\n#   File \"shop.py\", line 2, in get_discount_rate\n#     return customer[\"discount_rate\"]\n# KeyError: 'discount_rate'",
+          "explanation": "Reading from the bottom up: the last line, `KeyError: 'discount_rate'`, is the actual exception -- some dictionary lookup for the key `'discount_rate'` failed. The frame directly above it shows exactly where: line 2, inside get_discount_rate, on `customer[\"discount_rate\"]`. That tells you *where* it crashed. But the *why* is one level further up: apply_discount called get_discount_rate with a customer dict that simply never had a `'discount_rate'` key -- looking at the very top frame, the caller passed `{\"name\": \"Amy\"}`, a dict with no discount_rate at all. The real fix likely isn't inside get_discount_rate (e.g. defensively using `.get(\"discount_rate\", 0)` might just hide the problem) -- it's tracing further up to figure out why a customer record without a discount rate ever reached checkout() in the first place."
+        },
+        {
+          "title": "Pausing With breakpoint() Instead of Guessing With print()",
+          "language": "python",
+          "code": "def calculate_total(items):\n    subtotal = sum(item[\"price\"] for item in items)\n    breakpoint()\n    discount = subtotal * 0.1 if subtotal > 100 else 0\n    return subtotal - discount\n\ncalculate_total([{\"price\": 60}, {\"price\": 70}])\n\n# At the breakpoint, an interactive session opens:\n# (Pdb) p subtotal\n# 130\n# (Pdb) n\n# (Pdb) p discount\n# 13.0\n# (Pdb) c\n# (program continues to completion)",
+          "explanation": "Instead of guessing in advance which variables might matter and sprinkling print(subtotal) and print(discount) through the function ahead of time, breakpoint() pauses execution exactly once, at the point it's placed, and hands control to an interactive session. `p subtotal` inspects the current value of subtotal on demand -- 130, confirming the sum is correct -- then `n` steps to the next line, letting `p discount` check the computed discount (13.0) right after it's calculated, without needing to have predicted beforehand that this was the variable worth checking. `c` resumes normal execution to completion. If a value turns out to be wrong, you can also just try expressions live at the prompt (e.g. `p subtotal * 0.1`) to test a fix idea before ever touching the source file."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "The top line of a traceback tells you where the bug is, since that's where the program started running and reading top-to-bottom is the natural order.",
+          "clarification": "The top of a traceback is almost always the least specific, least actionable line -- typically just the entry point (like the line that called your main function), which you already know about. The most immediately useful information is at the bottom: the actual exception type and message, and the exact line where it was raised. That said, the bottom-most frame tells you *where* the program crashed, which is not automatically the same as *why* -- the value that caused the crash may have been handed down from a caller several frames higher up, so after starting at the bottom, you often need to walk upward through the frames above it to find the actual root cause, rather than assuming the crash site is where the real mistake lives."
+        },
+        {
+          "description": "Interactive debuggers like pdb are heavyweight tools for advanced developers or large codebases -- print statements are always simpler and faster for everyday bugs.",
+          "clarification": "breakpoint() requires no imports, no setup, and no extra tooling -- it's a built-in function you can drop into any line of any script, and it's often faster than the print-edit-rerun cycle, not slower, once a bug requires inspecting more than one or two variables or is buried inside a loop or a conditionally-reached branch. print-debugging is genuinely fine for quick, narrow, deterministic checks -- it's not being deprecated -- but it isn't automatically the faster or simpler option in every case; interactive stepping and inspection frequently save real time compared to repeatedly guessing what to print next and restarting the whole program to check."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "python-debugging-ex1",
+          "type": "debugging",
+          "prompt": "Running this code raises the traceback shown in the comment. Use the traceback to find where the bug actually needs to be fixed, and correct it.",
+          "code": "def average(numbers):\n    return sum(numbers) / len(numbers)\n\ndef summarize_scores(scores_by_student):\n    results = {}\n    for student, scores in scores_by_student.items():\n        results[student] = average(scores)\n    return results\n\nsummarize_scores({\"Amy\": [90, 85, 92], \"Ben\": []})\n\n# Traceback (most recent call last):\n#   File \"grades.py\", line 9, in <module>\n#     summarize_scores({\"Amy\": [90, 85, 92], \"Ben\": []})\n#   File \"grades.py\", line 7, in summarize_scores\n#     results[student] = average(scores)\n#   File \"grades.py\", line 2, in average\n#     return sum(numbers) / len(numbers)\n# ZeroDivisionError: division by zero",
+          "hints": [
+            "The bottom frame shows exactly where the crash happened -- but ask yourself whether average() itself is really where the bug should be fixed, or whether it's just where a bad input finally caused a visible crash.",
+            "Walk up one frame: which student's score list caused len(numbers) to be zero?",
+            "Decide what SHOULD happen for a student with no scores at all -- should average() guess, or should the caller avoid calling it that way, or both?"
+          ],
+          "solutionCode": "def average(numbers):\n    if not numbers:\n        return None  # no scores recorded -- there is no meaningful average\n    return sum(numbers) / len(numbers)\n\ndef summarize_scores(scores_by_student):\n    results = {}\n    for student, scores in scores_by_student.items():\n        results[student] = average(scores)\n    return results\n\nprint(summarize_scores({\"Amy\": [90, 85, 92], \"Ben\": []}))\n# {'Amy': 89.0, 'Ben': None}",
+          "solutionExplanation": "The traceback's bottom frame shows the crash happening inside average(), at sum(numbers) / len(numbers), which is technically accurate -- that's exactly where the ZeroDivisionError is raised, because Ben's score list is empty and len([]) is 0. But walking up one frame shows the real story: summarize_scores() is calling average() once per student with whatever list happens to be in scores_by_student, including a student with genuinely no scores recorded. The fix has to decide what an average of zero scores should even mean -- there's no mathematically correct answer, so the sensible choice is for average() to explicitly handle the empty case (returning None here, though a project might choose 0 or raise a more descriptive error depending on what callers need) rather than letting an empty list crash deep inside a division. Note that simply catching the ZeroDivisionError inside average() and returning 0 would silently hide which students actually had no scores at all, which could be a worse outcome than a clear None."
+        },
+        {
+          "id": "python-debugging-ex2",
+          "type": "coding",
+          "prompt": "You're debugging a function that computes a shopping cart's final price, and for some carts the discount comes out negative -- which should never happen. The bug seems to depend on the specific mix of items, so print statements added at the top and bottom of the function haven't pinned it down yet. Rewrite the function below to insert a breakpoint() right before the discount calculation, so you can interactively inspect `subtotal` and `member_discount_rate` at exactly the moment they're used.\n\n```python\ndef final_price(items, member_discount_rate):\n    subtotal = sum(item[\"price\"] for item in items)\n    discount = subtotal * member_discount_rate\n    return subtotal - discount\n```",
+          "hints": [
+            "breakpoint() needs no import in modern Python -- it can be placed on its own line anywhere you want execution to pause.",
+            "Place it AFTER subtotal is computed but BEFORE the discount line runs, so both subtotal and member_discount_rate are already available to inspect, but discount isn't yet computed from possibly-bad inputs.",
+            "Once paused, `p member_discount_rate` would immediately reveal if a caller passed something unexpected, like a value greater than 1 or a negative number."
+          ],
+          "solutionCode": "def final_price(items, member_discount_rate):\n    subtotal = sum(item[\"price\"] for item in items)\n    breakpoint()\n    discount = subtotal * member_discount_rate\n    return subtotal - discount",
+          "solutionExplanation": "Placing breakpoint() right after subtotal is computed, but before discount is calculated, pauses execution at exactly the moment where both suspect inputs -- subtotal and member_discount_rate -- are available to inspect, but before the (possibly buggy) calculation that uses them has run. From the interactive prompt, `p member_discount_rate` would immediately show whether a caller is passing something unexpected -- for instance, a negative rate, or a rate greater than 1 meant to be a percentage like 20 instead of 0.2 -- which is exactly the kind of thing that's tedious to catch with print statements added at the top and bottom of the function, since it requires inspecting the value at the precise point of use rather than guessing which of several print outputs corresponds to the problematic call."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "python-debugging-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "A traceback's bottom-most frame shows a TypeError raised inside a small utility function that adds two numbers together. What is the most accurate description of what that bottom frame tells you?",
+          "options": [
+            "It proves the bug is inside the utility function itself, and the fix should always be made there.",
+            "It tells you exactly where the exception was raised, but the root cause -- such as a caller passing the wrong kind of value -- may lie in a different frame further up the stack.",
+            "It is irrelevant, since only the top frame of a traceback matters for debugging.",
+            "It means the utility function should be rewritten to catch and silence all exceptions."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The bottom frame reliably tells you WHERE an exception was raised, but not necessarily WHY the bad value existed in the first place -- that often traces back to a caller further up the stack that supplied an unexpected type or value. Option A overstates what the crash site alone proves; a defensive fix inside the utility function might just hide a bug that originates elsewhere. Option C has the reading order backwards -- the bottom, not the top, is where the most specific, actionable information lives. Option D describes actively hiding failures rather than debugging them, which tends to convert a loud, traceable crash into a much harder-to-find silent bug later."
+        },
+        {
+          "id": "python-debugging-assess-scenario1",
+          "type": "scenario",
+          "prompt": "You're handed a bug report: \"the export feature sometimes produces a corrupted file, but only for some users, and I can't tell why.\" Walk through how you'd approach this using the reproduce / narrow down / hypothesize / verify workflow, and explain where breakpoint() versus print() would each be more useful.",
+          "modelAnswer": "First, reproduce reliably: try to find a specific input or user account that triggers the corruption consistently, rather than working from a vague \"sometimes\" -- this might mean asking the reporting user for their exact data, or writing a script that generates many export scenarios until one reliably fails. Without a repeatable trigger, you can't confirm a fix actually worked versus the bug just not showing up this time. Second, narrow down: isolate which stage of the export pipeline first produces bad output -- if the pipeline reads data, transforms it, and writes a file, check the data right after each stage rather than only at the very end, to figure out which specific stage is where correct data first becomes incorrect. For a straightforward, narrow check like \"is this one specific value already wrong right after step 2,\" a quick print() might be enough. But if the corruption seems to depend on a particular combination of several fields, or only shows up after many loop iterations, breakpoint() is more efficient -- you can pause once inside the loop, inspect several related variables interactively without having predicted in advance exactly which ones to print, and step forward iteration by iteration until the exact moment something goes wrong. Third, form a specific hypothesis once narrowed down -- e.g. \"I think a certain character encoding is being mishandled for names containing non-ASCII characters\" -- rather than a vague \"something about international users.\" Finally, verify: confirm the fix specifically addresses that hypothesis, and rerun the original reliable reproduction case to make sure it no longer corrupts the file, rather than assuming the bug is fixed just because the specific report stopped complaining."
+        }
+      ]
+    },
+    {
+      "id": "python-git-github",
+      "title": "Git and GitHub",
+      "description": "Git tracks snapshots of a project over time and lets you branch, commit, and merge work safely; GitHub adds a shared remote copy and a pull-request workflow on top of that same local model.",
+      "moduleId": "tooling",
+      "topicId": "tooling",
+      "difficulty": "beginner",
+      "estimatedMinutes": 25,
+      "prerequisites": [],
+      "learningObjectives": [
+        "Explain git's snapshot-based mental model, as distinct from tracking diffs.",
+        "Describe the local workflow of staging and committing changes.",
+        "Explain why a git branch is a lightweight, cheap pointer rather than a full copy of the project.",
+        "Distinguish a local repository from a remote (e.g. GitHub) one, and describe how they relate via push and pull.",
+        "Describe a typical feature workflow: branch, commit, push, pull request -- and explain what .gitignore is for."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "What Git Actually Tracks: Snapshots, Not Diffs",
+            "body": "A common assumption is that git works like a series of patches -- storing, for each commit, only what changed relative to the previous one, the way a long chain of diffs might. That's not the model git actually uses: **each commit is a complete snapshot of your entire project's tracked files at that point in time**, not a delta. Git is efficient about this internally -- unchanged files between commits aren't literally duplicated on disk, since commits that share content share the same underlying stored objects -- but conceptually, and for the purposes of reasoning about your history, it's genuinely useful to think of every commit as \"here's exactly what the whole project looked like, all at once, right here.\" This mental model explains a lot of git's behavior that feels confusing if you're still thinking in diffs: checking out an old commit gives you the *entire* project exactly as it was, not a stack of patches to mentally reconstruct; and comparing two arbitrary commits, even ones far apart in history, is just comparing two complete snapshots directly against each other."
+          },
+          {
+            "heading": "The Local Workflow: Stage, Then Commit",
+            "body": "Day-to-day git work happens in two deliberate steps. `git add <file>` (or `git add .` for everything) moves changes into the **staging area** (also called the index) -- a holding area where you assemble exactly the set of changes you want to bundle into the next commit. `git commit -m \"message\"` then takes whatever is currently staged and seals it into a permanent snapshot in the project's history, with that message attached. This two-step design exists specifically so you can be deliberate: if you've been working on two unrelated things in the same working directory, you can stage and commit just one of them first, leaving the other unstaged for a later, separate commit -- rather than being forced to commit everything you've touched all at once. `git status` at any point shows you what's staged, what's changed but not staged, and what git isn't tracking at all yet."
+          },
+          {
+            "heading": "Branches Are Lightweight Pointers, Not Copies",
+            "body": "It's easy to picture a branch as a separate, full copy of the entire project -- something heavy, that takes real time and disk space to create. In git, a branch is nothing more than a small, movable pointer (technically, a reference stored as a tiny file containing a commit's identifying hash) that says \"this branch currently points at this specific commit.\" Creating a new branch (`git branch feature-x` or `git switch -c feature-x`) is close to instantaneous precisely because it isn't copying anything -- it's just writing one new pointer that happens to point at the same commit your current branch is already pointing at. As you commit new work while on that branch, only that branch's pointer moves forward to follow the new commits; other branches' pointers stay exactly where they were. This is also why git branching is so central to normal workflow, rather than something to avoid for being \"expensive\" -- creating a branch to try something out, and deleting it if it doesn't pan out, costs almost nothing."
+          },
+          {
+            "heading": "Local Repository vs. Remote (GitHub)",
+            "body": "A git repository -- the full commit history, all branches, everything -- lives, complete, on your own machine the moment you run `git init` or `git clone`; git is fundamentally a *distributed* version control system, meaning there's no requirement to talk to a server for most operations. GitHub (and similar services like GitLab or Bitbucket) is a **remote**: another copy of that same repository, hosted elsewhere, that your local repository can be configured to talk to. `git push` sends commits from your local branch up to the corresponding branch on the remote; `git pull` (roughly, fetch + merge) brings commits that exist on the remote down into your local repository. This separation matters: you can commit, branch, view history, and undo changes entirely offline, with zero network access, because all of that only touches your local repository -- pushing and pulling are the only operations that actually need to reach GitHub."
+          },
+          {
+            "heading": "A Typical Feature Workflow, and .gitignore",
+            "body": "Putting the pieces together, a common day-to-day flow for adding a feature looks like: create a new branch off of the main branch (`git switch -c add-login-page`), make changes and commit them locally as you go, `git push` that branch up to GitHub, then open a **pull request** -- a GitHub-specific concept, not a git one -- proposing that your branch's changes be reviewed and merged into `main`. Once approved, the pull request is merged, folding your branch's commits into `main` on the remote, and everyone else's local repositories can then `git pull` to catch up.\n\nSeparately, a `.gitignore` file tells git which files or patterns to never track at all -- build artifacts (compiled output, `__pycache__/`), editor and OS clutter (`.DS_Store`, `.vscode/`), and anything containing secrets (API keys, passwords, `.env` files with real credentials). This last category is worth taking seriously: once a secret is committed, it exists in your project's history permanently, on every clone, even if you delete the file and commit that deletion afterward -- removing it from history for real requires actively rewriting history (and, more importantly, rotating/revoking the leaked credential itself, since you should assume anything ever committed and pushed may have been seen). Setting up `.gitignore` correctly *before* you start committing is far cheaper than cleaning up after a secret has already leaked into a shared remote."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Staging Selectively Before Committing",
+          "language": "python",
+          "code": "# working directory has two unrelated changes:\n#   - a bug fix in auth.py\n#   - unrelated, half-finished experimentation in scratch.py\n\n# $ git status\n# Changes not staged for commit:\n#   modified:   auth.py\n#   modified:   scratch.py\n\n# stage and commit ONLY the finished, related change:\n# $ git add auth.py\n# $ git commit -m \"Fix session timeout bug in login flow\"\n\n# $ git status\n# Changes not staged for commit:\n#   modified:   scratch.py",
+          "explanation": "Even though both files were modified in the working directory, `git add auth.py` stages only that one file into the index, and the subsequent `git commit` seals a snapshot containing only the staged change -- scratch.py's modifications are left completely untouched, still sitting as unstaged changes afterward. This is the staging area doing its job: it lets you construct a commit that represents one coherent, describable change (\"fix session timeout bug\"), even when your actual working directory, at that moment, contains other, unrelated in-progress edits you're not ready to commit yet."
+        },
+        {
+          "title": "Creating a Branch Doesn't Copy Anything",
+          "language": "python",
+          "code": "# $ git log --oneline\n# a1b2c3d (HEAD -> main) Add user profile page\n\n# $ git switch -c add-search-feature\n# Switched to a new branch 'add-search-feature'\n\n# $ git log --oneline\n# a1b2c3d (HEAD -> add-search-feature, main) Add user profile page\n\n# both 'main' and 'add-search-feature' point at the SAME commit right now\n\n# $ echo 'def search(): pass' >> search.py\n# $ git add search.py\n# $ git commit -m \"Add search stub\"\n\n# $ git log --oneline\n# 9f8e7d6 (HEAD -> add-search-feature) Add search stub\n# a1b2c3d (main) Add user profile page\n\n# only add-search-feature's pointer moved forward; main is untouched",
+          "explanation": "Right after `git switch -c add-search-feature`, both branch names point at the exact same commit (a1b2c3d) -- creating the branch didn't duplicate any files or history, it just added a second named pointer alongside the existing one. Committing new work while on add-search-feature moves only that branch's pointer forward to the new commit (9f8e7d6); main's pointer is left exactly where it was, still pointing at a1b2c3d. This is why switching back to main at this point would show the project without the search stub at all -- main's snapshot genuinely hasn't changed, since nothing has been done to move its pointer."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "Creating a new git branch makes a full copy of the entire project, so having many branches around uses a lot of extra disk space and takes real time to set up.",
+          "clarification": "A branch is a small pointer (a reference to a specific commit), not a copy of the project's files. Creating one is close to instantaneous and takes essentially no extra disk space, because it isn't duplicating any content -- it's just recording \"this name points at this commit,\" initially the same commit your current branch already points at. The illusion of a full copy comes from the fact that switching to a branch does update your actual working directory's files to match that branch's snapshot, but that's git checking out (writing to disk) a snapshot it already has stored efficiently, not creating a brand-new, separate copy of history for that branch."
+          },
+        {
+          "description": "A local git repository and its GitHub remote are essentially the same thing -- as long as you've pushed at some point, they're always in sync automatically.",
+          "clarification": "They are two separate, independent copies of the repository's history that only synchronize when you explicitly run `git push` or `git pull` (or `git fetch`). Committing locally does not automatically appear on GitHub, and someone else's commits pushed to GitHub do not automatically appear in your local repository -- you can commit many times locally, entirely offline, and GitHub won't reflect any of it until you push. This is exactly why two collaborators can end up with diverging histories that need an explicit pull (and possibly a merge) to reconcile -- there's no invisible background syncing happening on your behalf."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "python-git-github-ex1",
+          "type": "predictOutput",
+          "prompt": "Given this sequence of commands, what will `git status` report right before the last line runs, and why?",
+          "code": "$ git init\n$ echo \"print('hello')\" > app.py\n$ git add app.py\n$ git commit -m \"Initial commit\"\n$ echo \"print('goodbye')\" >> app.py\n$ git status",
+          "hints": [
+            "The commit already happened before app.py was changed again -- does committing 'freeze' a file against all future edits, or just record its state at that moment?",
+            "The second echo command appends a new line to app.py AFTER the commit -- has that new change been staged with git add yet?",
+            "git status distinguishes three states: untracked, modified-but-unstaged, and staged -- which one applies to a tracked file that's been edited again since its last commit, but not yet re-added?"
+          ],
+          "expectedAnswer": "git status will report app.py as modified but not staged for commit. The commit captured app.py's content at that moment; the later append to the file changes its content again, and since git add was never run a second time, that new change sits as an unstaged modification -- it is not automatically included in any commit.",
+          "solutionExplanation": "git commit only ever seals whatever is currently staged -- it has no ongoing effect on the file afterward. Once \"Initial commit\" is made, app.py is committed as it existed at that moment. The next line appends a new print statement to app.py, which changes the file's content on disk, but since git add app.py is never run again after that edit, the change is not staged. git status therefore reports app.py under 'Changes not staged for commit' -- git has noticed the file differs from its last committed snapshot, but the new content hasn't been added to the index yet, so a git commit run at this point would not include it."
+        },
+        {
+          "id": "python-git-github-ex2",
+          "type": "debugging",
+          "prompt": "A developer accidentally committed and pushed a file containing a real API key because their project had no .gitignore. Given the commands below that led to the mistake, identify what should have been done differently and fix the setup going forward.",
+          "code": "$ git init\n$ echo \"API_KEY=sk-real-secret-value-123\" > .env\n$ git add .\n$ git commit -m \"Initial commit\"\n$ git push origin main",
+          "hints": [
+            "The root problem happened at `git add .` -- it staged EVERY file in the directory, including one that should never have been tracked in the first place.",
+            "A .gitignore file, created and committed before ever running git add on a secret-containing file, would have excluded it from being staged at all.",
+            "Fixing the setup for next time is not the same as fully undoing a leak that already happened -- once pushed, the secret should also be treated as compromised and rotated, not just removed from future commits."
+          ],
+          "solutionCode": "$ git init\n$ echo \".env\" > .gitignore\n$ git add .gitignore\n$ git commit -m \"Add .gitignore\"\n\n# now .env is safely ignored going forward:\n$ echo \"API_KEY=sk-real-secret-value-123\" > .env\n$ git add .\n$ git status\n# .env does NOT appear -- git ignores it entirely, so it's never staged or committed\n\n# NOTE: this only prevents FUTURE leaks. Since the real key was already\n# pushed in the scenario above, it must also be revoked/rotated at the\n# provider -- removing it from a later commit does not erase it from history\n# that's already been pushed and potentially cloned or cached elsewhere.",
+          "solutionExplanation": "The mistake happened at `git add .`, which stages every file in the working directory indiscriminately, including .env -- there was nothing telling git to treat that file specially. Creating a .gitignore file listing .env, and committing that .gitignore before ever staging the secret file, means a later `git add .` will skip .env entirely -- git status won't even list it as untracked, because .gitignore tells git to ignore it outright. Crucially, this fix only protects against future leaks in this repository; it does nothing to erase the secret that was already committed and pushed in the original scenario, since that commit already exists in history and may already have been fetched by anyone with access to the remote. The only fully safe response to an already-leaked credential is to treat it as compromised and rotate/revoke it at the source (e.g. generate a new API key and invalidate the old one) -- deleting the file in a new commit leaves the old value fully readable in the repository's history."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "python-git-github-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "What is the most accurate description of what a git branch actually is?",
+          "options": [
+            "A full, separate copy of every file in the project at the time the branch was created.",
+            "A lightweight, movable pointer to a specific commit, which moves forward as new commits are made while that branch is checked out.",
+            "A folder inside the .git directory containing a duplicate of the project's entire history.",
+            "A remote-only concept that doesn't exist until you push to GitHub."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "A branch is a small reference -- essentially a name pointing at a commit's hash -- not a copy of files or history. Creating one is cheap specifically because it involves no duplication: it just adds a new pointer, initially aimed at the same commit as whatever branch you created it from. As you commit while that branch is checked out, only its pointer advances to follow the new commits. Options A and C describe a copying behavior that git specifically avoids for performance and simplicity. Option D is wrong because branches are a core local git concept -- they exist and work fully offline, entirely independent of GitHub or any remote."
+        },
+        {
+          "id": "python-git-github-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain, to someone who has only used a tool like Google Docs' version history, how git's local-repository-plus-remote model differs from a single shared online document, and why that difference matters for collaboration.",
+          "modelAnswer": "In something like Google Docs, there's essentially one authoritative copy of the document living on a server, and every edit you make is sent there more or less immediately -- there isn't really a meaningful separate 'your own copy' that exists independently. Git works differently: a full, complete repository -- every commit, every branch, the entire history -- lives on your own machine the moment you clone or initialize it, and you can commit, create branches, inspect history, and even undo changes entirely offline, because none of that touches any server at all. GitHub (or another host) holds a separate copy of that same repository, and the two only synchronize when you explicitly push (send your local commits up) or pull (bring the remote's commits down) -- there's no automatic, continuous syncing happening in the background. This matters for collaboration because it means multiple people can work independently, each accumulating their own local commits, without needing constant connectivity or fear of instantly overwriting each other's in-progress work the way simultaneous edits to a single live document might collide. The tradeoff is that reconciling everyone's independent work requires a deliberate step -- pushing, pulling, and sometimes merging -- rather than it happening automatically and invisibly, which is exactly what pull requests are designed to manage in a structured, reviewable way before changes land on a shared branch like main."
+        }
+      ]
+    }
+  ]
+}
