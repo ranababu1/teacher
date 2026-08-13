@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/services.dart' show AssetBundle;
 
 import '../../../core/errors/app_exception.dart';
+import '../../../core/services/app_logger.dart';
 import '../domain/curriculum_repository.dart';
 import '../domain/models/concept.dart';
 import '../domain/models/curriculum_module.dart';
@@ -71,8 +72,19 @@ class CurriculumRepositoryImpl implements CurriculumRepository {
     for (final entry in entries) {
       final modules = <CurriculumModule>[];
       for (final moduleFile in entry.moduleFiles) {
-        final moduleJson = await _readJson('assets/curriculum/$moduleFile');
-        modules.add(CurriculumModule.fromJson(moduleJson));
+        try {
+          final moduleJson = await _readJson('assets/curriculum/$moduleFile');
+          modules.add(CurriculumModule.fromJson(moduleJson));
+        } catch (e) {
+          // A single malformed module shouldn't take down the whole path —
+          // skip it and keep going so the rest of the curriculum still
+          // loads. See instructions.md rule 10 (handle error states) —
+          // this is the content-loading equivalent: partial content beats
+          // no content. Catches everything, not just Exception: a schema
+          // mismatch surfaces as a TypeError (an Error, not an Exception)
+          // from a failed `as String`/`as int` cast during parsing.
+          AppLogger.error('Skipping unreadable module $moduleFile', e);
+        }
       }
       modules.sort((a, b) => a.order.compareTo(b.order));
 
@@ -95,7 +107,7 @@ class CurriculumRepositoryImpl implements CurriculumRepository {
     try {
       final raw = await _assetBundle.loadString(assetPath);
       return jsonDecode(raw) as Map<String, dynamic>;
-    } on Exception catch (e) {
+    } catch (e) {
       throw ContentNotFoundException('Failed to load/parse $assetPath: $e');
     }
   }

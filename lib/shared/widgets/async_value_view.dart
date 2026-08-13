@@ -19,19 +19,26 @@ class AsyncValueView<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return value.when(
-      data: data,
-      loading: () => const Center(
-        child: Padding(
-          padding: EdgeInsets.all(32),
-          child: CircularProgressIndicator(),
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 250),
+      child: value.when(
+        data: (d) => KeyedSubtree(key: const ValueKey('data'), child: data(d)),
+        loading: () => const Center(
+          key: ValueKey('loading'),
+          child: Padding(
+            padding: EdgeInsets.all(32),
+            child: CircularProgressIndicator(),
+          ),
         ),
-      ),
-      error: (error, stackTrace) => ErrorState(
-        message: error is AppException
-            ? error.userMessage
-            : 'Something went wrong.',
-        onRetry: onRetry,
+        error: (error, stackTrace) => KeyedSubtree(
+          key: const ValueKey('error'),
+          child: ErrorState(
+            message: error is AppException
+                ? error.userMessage
+                : 'Something went wrong.',
+            onRetry: onRetry,
+          ),
+        ),
       ),
     );
   }

@@ -20,6 +20,19 @@ class TeacherApp extends ConsumerWidget {
       darkTheme: AppTheme.dark(),
       themeMode: themeMode,
       routerConfig: router,
+      builder: (context, child) {
+        final theme = Theme.of(context);
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          decoration: BoxDecoration(
+            gradient: AppGradients.scaffold(
+              theme.colorScheme,
+              theme.brightness == Brightness.dark,
+            ),
+          ),
+          child: child,
+        );
+      },
     );
   }
 }

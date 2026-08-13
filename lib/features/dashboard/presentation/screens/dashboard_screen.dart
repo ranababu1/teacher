@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../app/theme.dart';
 import '../../../../core/constants/routes.dart';
+import '../../../../shared/widgets/fade_slide_in.dart';
 import '../../../../shared/widgets/labeled_progress_bar.dart';
 import '../../../curriculum/presentation/curriculum_providers.dart';
 import '../../../progress/domain/models/path_progress_summary.dart';
@@ -15,24 +17,24 @@ class DashboardScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    const sections = [
+      _Greeting(),
+      _ContinueLearningCard(),
+      _LearningProgressSection(),
+      _ReviewQueueCard(),
+      _RecommendedNextStepCard(),
+      _RecentActivitySection(),
+    ];
+
     return Scaffold(
       appBar: AppBar(title: const Text('Teacher')),
       body: SafeArea(
-        child: ListView(
+        child: ListView.separated(
           padding: const EdgeInsets.all(16),
-          children: [
-            _Greeting(),
-            const SizedBox(height: 24),
-            _ContinueLearningCard(),
-            const SizedBox(height: 24),
-            _LearningProgressSection(),
-            const SizedBox(height: 24),
-            _ReviewQueueCard(),
-            const SizedBox(height: 24),
-            _RecommendedNextStepCard(),
-            const SizedBox(height: 24),
-            _RecentActivitySection(),
-          ],
+          itemCount: sections.length,
+          separatorBuilder: (_, _) => const SizedBox(height: 24),
+          itemBuilder: (context, index) =>
+              FadeSlideIn(index: index, child: sections[index]),
         ),
       ),
     );
@@ -40,6 +42,8 @@ class DashboardScreen extends ConsumerWidget {
 }
 
 class _Greeting extends StatelessWidget {
+  const _Greeting();
+
   @override
   Widget build(BuildContext context) {
     final hour = DateTime.now().hour;
@@ -60,6 +64,8 @@ class _Greeting extends StatelessWidget {
 }
 
 class _ContinueLearningCard extends ConsumerWidget {
+  const _ContinueLearningCard();
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final conceptValue = ref.watch(continueLearningProvider);
@@ -69,49 +75,117 @@ class _ContinueLearningCard extends ConsumerWidget {
       return const SizedBox.shrink();
     }
     if (concept == null) {
-      return _EmptyContinueCard();
+      return const _EmptyContinueCard();
     }
 
-    return Card(
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: () => context.go(
-          Routes.lesson(concept.learningPathId, concept.moduleId, concept.id),
+    return _HeroGradientCard(
+      onTap: () => context.go(
+        Routes.lesson(concept.learningPathId, concept.moduleId, concept.id),
+      ),
+      children: [
+        const Text(
+          'Continue Learning',
+          style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600),
         ),
-        child: Padding(
+        const SizedBox(height: 8),
+        Text(
+          concept.title,
+          style: Theme.of(context).textTheme.titleLarge
+              ?.copyWith(color: Colors.white),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          concept.description,
+          style: Theme.of(context).textTheme.bodyMedium
+              ?.copyWith(color: Colors.white70),
+        ),
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerRight,
+          child: FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: Theme.of(context).colorScheme.primary,
+            ),
+            onPressed: () => context.go(
+              Routes.lesson(
+                concept.learningPathId,
+                concept.moduleId,
+                concept.id,
+              ),
+            ),
+            child: const Text('Continue'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _EmptyContinueCard extends StatelessWidget {
+  const _EmptyContinueCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return _HeroGradientCard(
+      onTap: () => context.go(Routes.learn),
+      children: [
+        const Text(
+          "Let's learn Python.",
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 22,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Pick a learning path to get started.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerRight,
+          child: FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: Theme.of(context).colorScheme.primary,
+            ),
+            onPressed: () => context.go(Routes.learn),
+            child: const Text('Browse Learning Paths'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Shared visual treatment for the dashboard's single "hero" moment — a
+/// subtle brand gradient, reserved for exactly one card per screen so it
+/// reads as a highlight rather than visual noise. See instructions.md
+/// section 7 ("keep subtle gradients").
+class _HeroGradientCard extends StatelessWidget {
+  const _HeroGradientCard({required this.children, this.onTap});
+
+  final List<Widget> children;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Material(
+      borderRadius: BorderRadius.circular(16),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: AppGradients.primary(colorScheme),
+          ),
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Continue Learning',
-                style: Theme.of(context).textTheme.labelLarge,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                concept.title,
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                concept.description,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerRight,
-                child: FilledButton(
-                  onPressed: () => context.go(
-                    Routes.lesson(
-                      concept.learningPathId,
-                      concept.moduleId,
-                      concept.id,
-                    ),
-                  ),
-                  child: const Text('Continue'),
-                ),
-              ),
-            ],
+            children: children,
           ),
         ),
       ),
@@ -119,37 +193,9 @@ class _ContinueLearningCard extends ConsumerWidget {
   }
 }
 
-class _EmptyContinueCard extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              "Let's learn Python.",
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 8),
-            const Text('Pick a learning path to get started.'),
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerRight,
-              child: FilledButton(
-                onPressed: () => context.go(Routes.learn),
-                child: const Text('Browse Learning Paths'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _LearningProgressSection extends ConsumerWidget {
+  const _LearningProgressSection();
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final summariesValue = ref.watch(pathProgressSummariesProvider);
@@ -187,6 +233,8 @@ class _LearningProgressSection extends ConsumerWidget {
 }
 
 class _ReviewQueueCard extends ConsumerWidget {
+  const _ReviewQueueCard();
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final dueValue = ref.watch(dueSchedulesProvider);
@@ -205,44 +253,63 @@ class _ReviewQueueCard extends ConsumerWidget {
 }
 
 class _RecommendedNextStepCard extends ConsumerWidget {
+  const _RecommendedNextStepCard();
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final recommendationValue = ref.watch(dashboardRecommendationProvider);
     final recommendation = recommendationValue.valueOrNull;
     if (recommendation == null) return const SizedBox.shrink();
 
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Card(
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: () => context.go(
-          Routes.lesson(
-            recommendation.concept.learningPathId,
-            recommendation.concept.moduleId,
-            recommendation.concept.id,
-          ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Recommended Next',
-                style: Theme.of(context).textTheme.labelLarge,
+      clipBehavior: Clip.antiAlias,
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              width: 4,
+              decoration: BoxDecoration(
+                gradient: AppGradients.primary(colorScheme),
               ),
-              const SizedBox(height: 8),
-              Text(
-                '${recommendation.learningPathTitle} → ${recommendation.moduleTitle} → '
-                '${recommendation.concept.title}',
-                style: Theme.of(context).textTheme.titleMedium,
+            ),
+            Expanded(
+              child: InkWell(
+                onTap: () => context.go(
+                  Routes.lesson(
+                    recommendation.concept.learningPathId,
+                    recommendation.concept.moduleId,
+                    recommendation.concept.id,
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Recommended Next',
+                        style: Theme.of(context).textTheme.labelLarge,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '${recommendation.learningPathTitle} → ${recommendation.moduleTitle} → '
+                        '${recommendation.concept.title}',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        recommendation.reason,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              const SizedBox(height: 6),
-              Text(
-                recommendation.reason,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -250,6 +317,8 @@ class _RecommendedNextStepCard extends ConsumerWidget {
 }
 
 class _RecentActivitySection extends ConsumerWidget {
+  const _RecentActivitySection();
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final completedValue = ref.watch(recentlyCompletedProvider);

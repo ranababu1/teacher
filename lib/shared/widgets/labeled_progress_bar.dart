@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../app/theme.dart';
+
 /// A labeled horizontal progress bar, e.g. "Python  72%".
+///
+/// Fills with a subtle brand gradient and animates from its previous value
+/// whenever [progress] changes, instead of snapping instantly.
 class LabeledProgressBar extends StatelessWidget {
   const LabeledProgressBar({
     super.key,
@@ -18,7 +23,8 @@ class LabeledProgressBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final percentLabel = trailing ?? '${(progress.clamp(0, 1) * 100).round()}%';
+    final clamped = progress.clamp(0, 1).toDouble();
+    final percentLabel = trailing ?? '${(clamped * 100).round()}%';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -37,10 +43,23 @@ class LabeledProgressBar extends StatelessWidget {
         const SizedBox(height: 6),
         ClipRRect(
           borderRadius: BorderRadius.circular(6),
-          child: LinearProgressIndicator(
-            value: progress.clamp(0, 1),
-            minHeight: 8,
-            backgroundColor: theme.colorScheme.surfaceContainerHigh,
+          child: Container(
+            height: 8,
+            color: theme.colorScheme.surfaceContainerHigh,
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: clamped),
+              duration: const Duration(milliseconds: 700),
+              curve: Curves.easeOutCubic,
+              builder: (context, value, _) => FractionallySizedBox(
+                alignment: Alignment.centerLeft,
+                widthFactor: value,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: AppGradients.progress(theme.colorScheme),
+                  ),
+                ),
+              ),
+            ),
           ),
         ),
       ],
