@@ -1,0 +1,476 @@
+{
+  "learningPathId": "python",
+  "moduleId": "files-and-data",
+  "title": "Files and Data",
+  "order": 11,
+  "concepts": [
+    {
+      "id": "python-file-handling",
+      "title": "File Handling",
+      "description": "open() with the right mode and explicit encoding, wrapped in a with statement, is the idiomatic way to read and write files safely -- guaranteeing the file closes even when something goes wrong midway through.",
+      "moduleId": "files-and-data",
+      "topicId": "files-and-data",
+      "difficulty": "beginner",
+      "estimatedMinutes": 25,
+      "prerequisites": [
+        "python-context-managers"
+      ],
+      "learningObjectives": [
+        "Choose the correct open() mode for a given task (r, w, a, rb, and friends).",
+        "Read a file's contents as a whole, line by line, or in fixed-size chunks, and explain when each is appropriate.",
+        "Explain why with open(...) as f: is the idiomatic pattern, tying it directly back to the context manager guarantee.",
+        "Identify the bug of forgetting to close a file opened without with, and explain its consequences.",
+        "Explain why specifying encoding=\"utf-8\" explicitly is safer than relying on the platform default."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "open() and Its Modes",
+            "body": "`open(filename, mode)` is how Python obtains a file object to read from or write to. The `mode` argument -- a short string -- controls both *what kind of access* you get and *what happens to the file's existing content*:\n\n- `\"r\"` (read, the default if omitted): opens an existing file for reading; raises `FileNotFoundError` if it doesn't exist.\n- `\"w\"` (write): opens a file for writing, **truncating it to empty first** if it already exists (destroying any prior content), or creating it fresh if it doesn't exist yet.\n- `\"a\"` (append): opens a file for writing, but new writes are added to the **end** of the existing content instead of erasing it -- creates the file if it doesn't exist.\n- `\"x\"` (exclusive creation): like `\"w\"`, but raises `FileExistsError` instead of silently overwriting if the file already exists -- a useful safety net when you specifically want to avoid clobbering something.\n- Appending `\"b\"` to any of the above (`\"rb\"`, `\"wb\"`, `\"ab\"`) switches to **binary mode**, where you read/write raw `bytes` instead of decoded `str` text -- necessary for non-text files (images, audio, zip archives, arbitrary binary formats).\n\n```python\nwith open(\"notes.txt\", \"w\", encoding=\"utf-8\") as f:\n    f.write(\"first line\\n\")\n\nwith open(\"notes.txt\", \"a\", encoding=\"utf-8\") as f:\n    f.write(\"second line\\n\")   # appended, doesn't erase 'first line'\n\nwith open(\"notes.txt\", \"r\", encoding=\"utf-8\") as f:\n    print(f.read())\n# first line\n# second line\n```\n\nThe single most consequential mistake here is confusing `\"w\"` with `\"a\"`: opening an existing file you meant to add to with `\"w\"` silently wipes its previous contents the instant `open()` succeeds -- before you've written a single byte of new data -- which is an unpleasant, sometimes unrecoverable surprise if that file held anything you needed."
+          },
+          {
+            "heading": "Reading: Whole File, Line by Line, or in Chunks",
+            "body": "Once a file is open for reading, there are three common ways to pull data out of it, each suited to a different situation. `f.read()` reads the **entire remaining content** into one string, all at once -- simple and fine for small files, but risky for anything large enough that loading it all into memory is wasteful or impossible. `f.readlines()` reads the entire file too, but splits it into a list of lines (each still ending in `\\n`) -- same memory tradeoff as `read()`, just pre-split.\n\nIterating the file object directly with a `for` loop -- `for line in f:` -- reads **one line at a time, lazily**, without ever holding the whole file in memory (this connects directly to the Iterators and Generators concept: a file object is itself a lazy iterator over its own lines). This is almost always the right default for line-oriented text files, especially large ones:\n\n```python\nwith open(\"huge_log.txt\", encoding=\"utf-8\") as f:\n    for line in f:\n        if \"ERROR\" in line:\n            print(line.rstrip(\"\\n\"))\n```\n\nFor files that aren't naturally line-oriented (binary data, or text you want to process in fixed-size pieces regardless of line breaks), `f.read(size)` reads up to `size` bytes/characters at a time and can be called repeatedly in a loop until it returns an empty string/bytes object (signaling end of file) -- useful for streaming large binary files without loading them wholesale, such as copying a file in chunks or computing a hash over it incrementally."
+          },
+          {
+            "heading": "with open(...) as f: -- Why It's the Idiom",
+            "body": "As covered in the Context Managers concept, a file object implements `__enter__`/`__exit__`, and `with open(filename) as f:` guarantees `f.close()` runs when the block ends -- **whether it ends normally or via an exception** -- exactly the same guarantee a `try/finally` provides, just without needing to write one by hand every time you touch a file:\n\n```python\nwith open(\"data.txt\", encoding=\"utf-8\") as f:\n    data = f.read()\n    process(data)   # if this raises, f.close() STILL runs on the way out\n\n# f is guaranteed closed here, regardless of what happened inside the block\n```\n\nThis matters because an unclosed file isn't just a theoretical concern -- open file handles are a limited operating-system resource, and a program that opens many files without closing them can eventually hit an OS-level limit (`OSError: too many open files`). Closing also matters for correctness with writes specifically: many writes are **buffered** in memory rather than immediately flushed to disk, and `close()` (called automatically by `__exit__`) is what guarantees any buffered data is actually flushed out. Skip `with`, and an exception raised between `open()` and a manual `f.close()` call skips that close entirely -- the exact same 'exception skips subsequent lines' problem the Context Managers concept covered in general, just applied specifically to files here."
+          },
+          {
+            "heading": "The Common Bug: Forgetting to Close a File Opened Without with",
+            "body": "```python\nf = open(\"data.txt\", encoding=\"utf-8\")\ndata = f.read()\nprocess(data)     # if this raises an exception, the line below never runs\nf.close()\n```\n\nIf `process(data)` raises, execution jumps straight past `f.close()` and out of this code entirely -- the file is left open for as long as that file object happens to stay alive (which, thanks to CPython's garbage collector, is often *eventually*, but with no defined guarantee of exactly when, and definitely not immediately). Even without an exception, simply forgetting the `f.close()` line -- an easy mistake in a large function with many exit paths -- has the same effect. This is precisely the failure mode `with` is designed to eliminate structurally: there's no `f.close()` line to forget, and no exit path (normal, early return, or exception) that can skip it, because closing isn't something the programmer has to remember to do correctly every single time -- it's guaranteed by the protocol itself."
+          },
+          {
+            "heading": "Text Encoding: Why encoding=\"utf-8\" Should Be Explicit",
+            "body": "Text files are stored as raw bytes on disk; **encoding** is the scheme that maps those bytes to actual characters (and back, when writing). If you call `open(filename)` for text without specifying `encoding=`, Python uses a **platform-dependent default** -- historically, this is UTF-8 on most modern Linux and macOS systems, but has historically been something like `cp1252` (a Windows-specific single-byte encoding) on many Windows configurations. Code that works perfectly on the machine it was written on can fail -- or worse, silently produce **wrong** decoded text with no error at all -- on a different machine, or when the file itself was written by a program using a different encoding.\n\n```python\n# Risky: relies on whatever the current platform's default happens to be\nwith open(\"notes.txt\") as f:\n    text = f.read()\n\n# Robust: explicit, consistent regardless of platform\nwith open(\"notes.txt\", encoding=\"utf-8\") as f:\n    text = f.read()\n```\n\nThe failure mode here is genuinely nasty because it's often silent or delayed: a file containing, say, an em-dash or an accented character, written as UTF-8, might decode into the *wrong* characters (mojibake) under a different default encoding without necessarily raising any exception at all -- or it might raise a `UnicodeDecodeError` partway through reading, on a byte sequence that happens to be invalid under the assumed encoding. Explicitly passing `encoding=\"utf-8\"` (UTF-8 being, by a wide margin, the dominant encoding for text interchange today, and capable of representing virtually any character from any language) removes this platform-dependence entirely -- the same code behaves identically no matter what machine or OS it runs on, as long as the file itself is genuinely UTF-8. Writing files should specify the encoding explicitly for the same reason, so a file you write is decodable predictably by anything that later reads it with the same explicit encoding."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "w vs a: The Silent Truncation Trap",
+          "language": "python",
+          "code": "# Suppose log.txt already contains: 'previous run: success\\n'\n\nwith open(\"log.txt\", \"w\", encoding=\"utf-8\") as f:\n    f.write(\"new run: success\\n\")\n\nwith open(\"log.txt\", encoding=\"utf-8\") as f:\n    print(f.read())\n# new run: success\n# ('previous run: success' is GONE -- \"w\" truncated the file the instant open() succeeded)\n\n# Using \"a\" instead preserves prior content:\nwith open(\"log2.txt\", \"a\", encoding=\"utf-8\") as f:\n    f.write(\"new run: success\\n\")\n# whatever log2.txt had before is still there, with the new line appended after it",
+          "explanation": "Opening log.txt with mode \"w\" truncates it to zero bytes immediately, as a side effect of open() succeeding -- before a single call to f.write() has even happened. Whatever was previously in the file is unrecoverably gone at that point, whether or not you actually go on to write anything new. \"a\" (append) mode, in contrast, preserves the file's existing content and only adds new writes onto the end of it. The choice between \"w\" and \"a\" isn't a minor stylistic detail -- for a log file, or any file meant to accumulate entries over multiple runs of a program, choosing \"w\" by mistake silently discards everything written on every previous run."
+        },
+        {
+          "title": "Reading Strategies: Whole File vs Line by Line",
+          "language": "python",
+          "code": "# Whole file at once -- fine for small files\nwith open(\"small_config.txt\", encoding=\"utf-8\") as f:\n    contents = f.read()\nprint(len(contents))\n\n# Line by line -- lazy, safe even for a huge file\nline_count = 0\nwith open(\"maybe_huge.txt\", encoding=\"utf-8\") as f:\n    for line in f:\n        line_count += 1\nprint(f\"{line_count} lines\")\n\n# All lines as a list -- convenient when you need to index or reorder them,\n# but loads everything into memory just like read() does\nwith open(\"small_config.txt\", encoding=\"utf-8\") as f:\n    lines = f.readlines()\nprint(lines[0])",
+          "explanation": "f.read() and f.readlines() both load the entire file into memory before returning anything -- appropriate when the file is small, or when you genuinely need the whole content (or need to index into specific lines, as readlines() enables). The `for line in f:` loop never holds more than the current line in memory, since the file object lazily produces one line at a time as the loop asks for the next one -- this is the right default whenever you're processing a file sequentially and don't need random access to arbitrary lines, and it's the only one of the three approaches here that would remain safe if maybe_huge.txt turned out to be far larger than available memory."
+        },
+        {
+          "title": "The Unclosed-File Bug and Its with-Statement Fix",
+          "language": "python",
+          "code": "def risky_read_no_with(filename):\n    f = open(filename, encoding=\"utf-8\")\n    data = f.read()\n    if \"bad\" in data:\n        raise ValueError(\"file contains 'bad'\")   # f.close() below is never reached\n    f.close()\n    return data\n\ndef safe_read_with_with(filename):\n    with open(filename, encoding=\"utf-8\") as f:\n        data = f.read()\n        if \"bad\" in data:\n            raise ValueError(\"file contains 'bad'\")   # f still closes automatically\n    return data\n\n# risky_read_no_with(\"has_bad_word.txt\") leaves the file open when it raises\n# safe_read_with_with(\"has_bad_word.txt\") closes the file cleanly even though it also raises",
+          "explanation": "In risky_read_no_with, raising ValueError jumps straight out of the function, skipping the f.close() line entirely -- the file object f is left open (its eventual closure, if any, depends on unpredictable garbage collection timing, not a guarantee). In safe_read_with_with, the exact same exception is raised inside the with block, but the with statement guarantees __exit__ (which calls close() internally) runs on the way out regardless -- the file is reliably closed before the ValueError continues propagating out of the function. Both functions raise the same exception with the same message; the only difference, invisible unless you specifically check for it, is whether the file handle was left open."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "open(filename, \"w\") only erases the file's previous content if you actually write something new to it -- if you never call f.write(), the old content is untouched.",
+          "clarification": "Opening a file with mode \"w\" truncates it to empty as an immediate side effect of the open() call succeeding -- not as a side effect of any subsequent f.write() call. Even `with open(\"data.txt\", \"w\"): pass`, which writes absolutely nothing, still leaves data.txt empty afterward, because the truncation happens at open time, before the with block's body (empty or not) even runs. If you only intend to add to a file's existing content, \"a\" (append) is the correct mode -- \"w\" always means 'start this file over from empty,' regardless of what you go on to do with it."
+        },
+        {
+          "description": "Not specifying encoding= when opening a text file is fine as long as your code works correctly when you test it -- encoding issues would show up as an obvious error immediately.",
+          "clarification": "Omitting encoding= makes Python fall back to a platform-dependent default, which can differ between operating systems (and even between configurations of the same OS) -- code that works fine on the machine and locale it was written on can behave differently elsewhere, and the failure mode is not reliably a loud, obvious error. Some encoding mismatches do raise UnicodeDecodeError, but others silently decode bytes into the wrong characters (mojibake) with no error or warning at all, meaning a program can run to completion while quietly corrupting non-ASCII text -- a bug that's easy to miss in casual testing on your own machine and painful to diagnose later on someone else's. Explicitly passing encoding=\"utf-8\" (or whatever encoding the file actually uses) removes this platform-dependence and makes behavior predictable and portable."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "python-file-handling-ex1",
+          "type": "predictOutput",
+          "prompt": "Assume greeting.txt does not exist yet. What does greeting.txt contain after this code runs, and what does the final print show?",
+          "code": "with open(\"greeting.txt\", \"w\", encoding=\"utf-8\") as f:\n    f.write(\"Hello\\n\")\n\nwith open(\"greeting.txt\", \"a\", encoding=\"utf-8\") as f:\n    f.write(\"World\\n\")\n\nwith open(\"greeting.txt\", \"w\", encoding=\"utf-8\") as f:\n    f.write(\"Restarted\\n\")\n\nwith open(\"greeting.txt\", encoding=\"utf-8\") as f:\n    print(f.read())",
+          "hints": [
+            "Track the file's content after each block individually, in order -- each 'w' and 'a' has a specific, different effect on whatever is already there.",
+            "The first 'w' creates the file fresh since it didn't exist; the 'a' after it adds on top rather than erasing.",
+            "The SECOND 'w' call is the one to watch closely -- what does opening in 'w' mode do to content that's already there, regardless of what that content is?"
+          ],
+          "expectedAnswer": "'Restarted' (just that one line). The first 'w' creates the file with 'Hello'; 'a' appends 'World' after it; but the second 'w' truncates the file back to empty before writing 'Restarted', erasing both prior lines.",
+          "solutionExplanation": "The first `with open(..., \"w\")` creates greeting.txt (it didn't exist) and writes 'Hello\\n' -- content is now 'Hello\\n'. The `with open(..., \"a\")` appends 'World\\n' without erasing anything -- content is now 'Hello\\nWorld\\n'. The second `with open(..., \"w\")` truncates the file to empty the moment it opens successfully, regardless of what was there before, and then writes 'Restarted\\n' -- content is now just 'Restarted\\n', with 'Hello' and 'World' both gone permanently. The final read confirms this: the printed output is 'Restarted' (plus the trailing newline from print itself, since f.read() includes the '\\n' already in the file)."
+        },
+        {
+          "id": "python-file-handling-ex2",
+          "type": "debugging",
+          "prompt": "This function is supposed to append a new score to a running scores file and return all scores read back, but calling it a second time in the same run sometimes returns incomplete or missing data intermittently, and occasionally the program crashes with 'too many open files' after being called thousands of times in a loop. Find and fix the bug(s).",
+          "code": "def record_score(score):\n    f = open(\"scores.txt\", \"a\", encoding=\"utf-8\")\n    f.write(f\"{score}\\n\")\n    f2 = open(\"scores.txt\", \"r\", encoding=\"utf-8\")\n    all_scores = [int(line.strip()) for line in f2]\n    return all_scores",
+          "hints": [
+            "Count how many open() calls happen in this function, and how many matching close() calls (or with statements) exist for them.",
+            "Neither f nor f2 is ever explicitly closed, and there's no with statement guaranteeing it either -- what happens to open file handles that are never closed, especially across thousands of calls?",
+            "Beyond the resource leak, there's a subtler issue too: writes can be buffered in memory and not actually flushed to disk until close() runs -- could f2 sometimes be reading scores.txt before f's new write has actually been flushed to it?"
+          ],
+          "solutionCode": "def record_score(score):\n    with open(\"scores.txt\", \"a\", encoding=\"utf-8\") as f:\n        f.write(f\"{score}\\n\")\n    with open(\"scores.txt\", \"r\", encoding=\"utf-8\") as f2:\n        all_scores = [int(line.strip()) for line in f2]\n    return all_scores",
+          "solutionExplanation": "The original code opens two file objects (f and f2) and never closes either one -- there's no f.close(), f2.close(), or with statement anywhere. Across thousands of calls, this leaks a file handle every single time, eventually exhausting the operating system's limit on open files and crashing with an OSError. There's also a subtler correctness bug: because f is never closed (or flushed), the write to it may still be sitting in an in-memory buffer rather than actually written out to disk when f2 immediately opens the same file to read it back -- so f2 can intermittently miss the just-written score, depending on buffering behavior. Wrapping each file in its own with block fixes both problems at once: each with block guarantees its file is closed (and therefore flushed) as soon as that block ends, so f's write is reliably on disk before f2 ever opens the file, and no file handle is ever left dangling regardless of how many times record_score is called."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "python-file-handling-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "A script needs to add new entries to an existing log file every time it runs, without ever losing previously logged entries. Which open() mode should it use?",
+          "options": [
+            "\"w\", since it opens the file for writing.",
+            "\"r\", since the file already exists.",
+            "\"a\", since it appends new writes after existing content instead of erasing it.",
+            "\"x\", since it's meant for adding new content safely."
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "\"a\" (append) is specifically designed for this exact case: it opens the file for writing while preserving everything already in it, adding new writes strictly after the existing content. \"w\" (option A) would truncate the file to empty every single run, destroying all previously logged entries -- the opposite of what's needed here. \"r\" (option B) opens for reading only; writing to a file opened in \"r\" mode raises an error. \"x\" (option D) is for exclusive creation and specifically raises FileExistsError if the file already exists, which is the wrong behavior for a log file meant to be reused and added to across many runs."
+        },
+        {
+          "id": "python-file-handling-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain why relying on Python's default text encoding (by omitting encoding= from open()) is considered risky, and what explicitly passing encoding=\"utf-8\" actually fixes.",
+          "modelAnswer": "Text files are stored as raw bytes; encoding is the rule that maps those bytes to actual characters when reading, and characters back to bytes when writing. When open() is called for text mode without an explicit encoding= argument, Python falls back to a platform-dependent default encoding -- which is not the same across every operating system and configuration; historically this has commonly been UTF-8 on Linux/macOS but something like a Windows code page on many Windows setups. This becomes risky specifically because code that behaves correctly on the machine and locale it was developed and tested on can behave differently -- and the difference is not guaranteed to be a loud, obvious error -- on a different machine, or when reading a file that was written with a different encoding than the one the current default happens to be. Some mismatches raise UnicodeDecodeError, which is at least noticeable, but others silently decode the bytes into the wrong characters entirely (a phenomenon often called mojibake) with no exception raised at all, meaning a program can run to completion while quietly corrupting text data, especially anything beyond plain ASCII (accented letters, em-dashes, non-Latin scripts, emoji). Explicitly writing encoding=\"utf-8\" fixes this by removing the platform-dependence entirely: the exact same code will decode (or encode) text the exact same way regardless of what machine, OS, or locale settings it happens to run under, as long as the file itself is genuinely UTF-8 -- which, given UTF-8's dominance as the standard encoding for text interchange today, is true or achievable for the overwhelming majority of real-world text files, including ones written by Python code that also explicitly specifies encoding=\"utf-8\" when writing."
+        }
+      ]
+    },
+    {
+      "id": "python-json-csv",
+      "title": "JSON and CSV",
+      "description": "The json and csv modules convert between in-memory Python objects and portable text formats, but JSON's data model doesn't perfectly match Python's -- tuples, sets, and non-string dict keys all get quietly transformed on the way through.",
+      "moduleId": "files-and-data",
+      "topicId": "files-and-data",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 30,
+      "prerequisites": [
+        "python-file-handling",
+        "python-dictionaries"
+      ],
+      "learningObjectives": [
+        "Use json.load/json.dump to read and write JSON files, and json.loads/json.dumps for JSON strings in memory.",
+        "Explain serialization: converting an in-memory object into a storable/transmittable text format, and back.",
+        "Identify the specific mismatches between JSON's data model and Python's (tuples, sets, non-string dict keys) and predict what happens to each when round-tripped through JSON.",
+        "Use the csv module's reader, writer, and DictReader for tabular data."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "Serialization: Turning Objects Into Text and Back",
+            "body": "**Serialization** is the general term for converting an in-memory data structure (objects living in your program's memory, as Python values) into a format that can be stored on disk, sent over a network, or otherwise exist outside your running program -- and **deserialization** is the reverse: reconstructing that in-memory structure from the stored/transmitted form. JSON (JavaScript Object Notation) is one of the most widely used serialization formats for structured data, precisely because it's simple, human-readable, and supported natively or via a library in essentially every programming language, making it a natural choice for APIs, config files, and data interchange between different systems.\n\n```python\nimport json\n\ndata = {\"name\": \"Amy\", \"age\": 30, \"is_admin\": False, \"tags\": [\"user\", \"beta\"]}\n\ntext = json.dumps(data)   # serialize: Python dict -> JSON string\nprint(text)\n# '{\"name\": \"Amy\", \"age\": 30, \"is_admin\": false, \"tags\": [\"user\", \"beta\"]}'\n\nrestored = json.loads(text)   # deserialize: JSON string -> Python dict\nprint(restored == data)         # True\n```\n\nThe four functions worth knowing map cleanly onto 'strings' vs 'files': `json.dumps` (dump **s**tring) serializes an object to a JSON-formatted `str`; `json.loads` (load **s**tring) deserializes a JSON `str` back into Python objects. `json.dump` (no 's') writes serialized JSON directly to an open file object; `json.load` reads and deserializes directly from one. In practice, working with files usually means combining `json.dump`/`json.load` with `with open(...)`:\n\n```python\nwith open(\"data.json\", \"w\", encoding=\"utf-8\") as f:\n    json.dump(data, f, indent=2)   # indent=2 makes the file human-readable\n\nwith open(\"data.json\", encoding=\"utf-8\") as f:\n    loaded = json.load(f)\n```"
+          },
+          {
+            "heading": "Where JSON's Data Model Doesn't Match Python's",
+            "body": "JSON supports exactly six kinds of values: objects (like Python dicts), arrays (like Python lists), strings, numbers, booleans (`true`/`false`), and `null`. Python's richer type system doesn't map onto that one-to-one, and the gaps matter specifically when data goes through a **round trip** -- serialized, then deserialized back -- because what comes back is not always the same *type* as what went in, even if it looks identical when printed.\n\n**Tuples become lists.** JSON has no concept of an immutable, fixed-length sequence distinct from a general array -- `json.dumps` serializes a tuple exactly like a list, and `json.loads` always deserializes arrays back as lists, never tuples:\n\n```python\nimport json\noriginal = (\"x\", \"y\", \"z\")\nrestored = json.loads(json.dumps(original))\nprint(restored)              # ['x', 'y', 'z']\nprint(type(restored))         # <class 'list'>  -- NOT tuple, even though the data 'looks' the same\n```\n\n**Sets aren't supported at all.** JSON has no set type, and, unlike tuples, `json.dumps` doesn't quietly convert a set into something else -- it raises `TypeError: Object of type set is not JSON serializable` immediately. If you need to serialize a set, you must explicitly convert it to a list first (`list(my_set)`) and, if order or uniqueness matters on the way back, convert it back to a set yourself after loading (`set(json.loads(...))`) -- JSON has no way to remember, on its own, that a given array 'used to be' a set.\n\n**Dict keys must be strings.** JSON object keys are always strings, by the format's own specification -- there's no way to represent a JSON object with a number, tuple, or any other type as a key. `json.dumps` handles this by silently *converting* non-string keys to their string representation:\n\n```python\nimport json\noriginal = {1: \"one\", 2: \"two\"}\ntext = json.dumps(original)\nprint(text)                    # '{\"1\": \"one\", \"2\": \"two\"}'  -- keys are now strings in the JSON text\n\nrestored = json.loads(text)\nprint(restored)                 # {'1': 'one', '2': 'two'}  -- keys are strings, NOT the original ints\nprint(restored == original)      # False!  {1: ...} != {'1': ...} -- 1 and '1' are different dict keys\n```\n\nThis is a genuinely common gotcha: code that builds a dict keyed by integers (say, user IDs), serializes it to JSON, and later deserializes it, will get back a dict keyed by the *string* representations of those same integers -- `restored[1]` raises `KeyError`, while `restored[\"1\"]` succeeds. Anyone consuming JSON-round-tripped data with non-string-original keys needs to explicitly convert keys back to their intended type after loading, since JSON itself has no memory of what they originally were."
+          },
+          {
+            "heading": "The csv Module: reader, writer, and DictReader",
+            "body": "CSV (comma-separated values) is a much simpler, purely tabular format -- rows of comma-separated fields, no nested structure -- commonly used for spreadsheet exports and simple tabular data interchange. Python's built-in `csv` module handles it directly, and crucially takes care of edge cases you'd get wrong writing your own naive `line.split(\",\")` (like commas or newlines embedded *inside* a quoted field).\n\n`csv.reader` gives you each row as a plain list of strings:\n\n```python\nimport csv\n\nwith open(\"people.csv\", encoding=\"utf-8\") as f:\n    reader = csv.reader(f)\n    header = next(reader)          # ['name', 'age', 'city']\n    for row in reader:\n        print(row)                  # e.g. ['Amy', '30', 'Boston']\n```\n\nNotice every field comes back as a `str` -- CSV has no type information at all, unlike JSON's numbers/booleans/nulls; `row[1]` above is the string `\"30\"`, not the integer `30`, and converting it (`int(row[1])`) is entirely your own responsibility.\n\n`csv.DictReader` is usually more convenient: it automatically uses the first row as field names and yields each subsequent row as a `dict` mapping those names to values, which is both more readable and more robust against column reordering than indexing into a plain list by position:\n\n```python\nwith open(\"people.csv\", encoding=\"utf-8\") as f:\n    reader = csv.DictReader(f)\n    for row in reader:\n        print(row[\"name\"], row[\"age\"])   # Amy 30\n```\n\nWriting works symmetrically: `csv.writer` takes lists of values via `writerow`/`writerows`, and `csv.DictWriter` takes dicts (matched against a `fieldnames` list you provide up front):\n\n```python\nwith open(\"out.csv\", \"w\", newline=\"\", encoding=\"utf-8\") as f:\n    writer = csv.DictWriter(f, fieldnames=[\"name\", \"age\"])\n    writer.writeheader()\n    writer.writerow({\"name\": \"Amy\", \"age\": 30})\n```\n\nThat `newline=\"\"` when opening a file for CSV *writing* is a specific, well-known quirk worth remembering: without it, on Windows, the `csv` module's own line-ending handling can interact badly with the file object's own newline translation, resulting in extra blank lines between rows -- passing `newline=\"\"` to `open()` disables Python's own newline translation and lets the `csv` module handle line endings itself, which is what its documentation specifically recommends."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Round-Tripping a Tuple and a Set Through JSON",
+          "language": "python",
+          "code": "import json\n\ndata = {\n    \"coordinates\": (10, 20),      # a tuple\n    \"tags\": {\"python\", \"json\"},    # a set\n}\n\n# Sets aren't JSON-serializable at all -- must convert first\nserializable = {\n    \"coordinates\": data[\"coordinates\"],\n    \"tags\": list(data[\"tags\"]),\n}\n\ntext = json.dumps(serializable)\nrestored = json.loads(text)\n\nprint(type(restored[\"coordinates\"]))   # <class 'list'> -- the tuple became a list\nprint(type(restored[\"tags\"]))           # <class 'list'> -- was already converted before dumping\n\n# If you need coordinates back as a tuple, or tags back as a set, YOU must convert them:\nfixed_coordinates = tuple(restored[\"coordinates\"])\nfixed_tags = set(restored[\"tags\"])\nprint(type(fixed_coordinates), type(fixed_tags))   # <class 'tuple'> <class 'set'>",
+          "explanation": "json.dumps(data) directly would raise TypeError on the set, since JSON has no set representation at all and json doesn't silently convert it the way it does tuples -- it must be explicitly converted to a list (list(data['tags'])) before serializing. The tuple, in contrast, serializes without error, but comes back as a list after the round trip -- JSON's array type doesn't distinguish 'this used to be a tuple' from 'this was always a list.' In both cases, if the original type actually matters to your program, you have to convert it back explicitly after loading -- json.loads has no way to know, and no mechanism to remember, what Python type a given JSON array or object was built from originally."
+        },
+        {
+          "title": "The Integer-Dict-Key Gotcha",
+          "language": "python",
+          "code": "import json\n\nuser_scores = {101: 95, 102: 88, 103: 76}   # dict keyed by integer user IDs\n\ntext = json.dumps(user_scores)\nprint(text)   # '{\"101\": 95, \"102\": 88, \"103\": 76}'\n\nrestored = json.loads(text)\nprint(restored)   # {'101': 95, '102': 88, '103': 76}\n\ntry:\n    print(restored[101])   # KeyError! keys are now strings, not ints\nexcept KeyError as e:\n    print(f\"KeyError: {e}\")\n\nprint(restored[\"101\"])   # 95 -- works, because the key really is the string '101' now\n\n# To use it as originally intended, convert keys back explicitly:\nfixed = {int(key): value for key, value in restored.items()}\nprint(fixed[101])   # 95",
+          "explanation": "json.dumps silently converts the integer keys 101, 102, 103 into the strings \"101\", \"102\", \"103\" in the JSON text, because JSON object keys must be strings by the format's specification -- there's no error or warning about this conversion happening. After json.loads, restored[101] raises KeyError because there is no integer key 101 in the dict anymore; only the string key \"101\" exists. This is a common, genuinely surprising source of bugs specifically when a dict's keys are meant to be looked up using the same type they were originally built with -- the fix is a deliberate dict comprehension converting each key back to its intended type (int(key), here) after loading, since json.loads itself never does this conversion automatically."
+        },
+        {
+          "title": "csv.DictReader and csv.DictWriter Together",
+          "language": "python",
+          "code": "import csv\n\n# Suppose people.csv contains:\n# name,age,city\n# Amy,30,Boston\n# Ben,25,Chicago\n\nwith open(\"people.csv\", encoding=\"utf-8\") as f:\n    reader = csv.DictReader(f)\n    rows = list(reader)\n\nprint(rows[0])              # {'name': 'Amy', 'age': '30', 'city': 'Boston'}\nprint(type(rows[0][\"age\"]))  # <class 'str'> -- CSV has no numeric type, everything is text\n\n# Add a computed field and write out a new CSV\nfor row in rows:\n    row[\"age_next_year\"] = str(int(row[\"age\"]) + 1)\n\nwith open(\"people_updated.csv\", \"w\", newline=\"\", encoding=\"utf-8\") as f:\n    writer = csv.DictWriter(f, fieldnames=[\"name\", \"age\", \"city\", \"age_next_year\"])\n    writer.writeheader()\n    writer.writerows(rows)",
+          "explanation": "csv.DictReader turns each data row into a dict keyed by the header row's column names, which is more robust and readable than indexing into a plain list by position (row[1] vs row['age']). Every value comes back as a plain str -- row['age'] is the string '30', not the integer 30 -- so int(row['age']) + 1 is necessary before doing arithmetic on it, and the result is converted back to a string before storing it, since csv.DictWriter, like the format itself, writes everything as text. newline=\"\" in the write-mode open() call is the standard, documented way to avoid the csv module producing extra blank lines between rows on Windows, where the file object's own newline translation can otherwise conflict with the csv module's own line-ending handling."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "Since JSON supports arrays and Python tuples are just 'immutable lists', serializing a tuple and deserializing it back should give you back a tuple.",
+          "clarification": "JSON's array type doesn't distinguish between what Python calls a list and what Python calls a tuple -- there is only one sequence type in JSON. json.dumps serializes a tuple exactly the same way it serializes a list (as a JSON array), and json.loads always deserializes any JSON array back into a Python list, never a tuple, because there's no marker in the JSON text indicating which one it originally was. If preserving tuple-ness through a round trip genuinely matters, you must convert it back explicitly after loading (`tuple(loaded_value)`) -- JSON itself provides no mechanism to remember or restore that information automatically."
+        },
+        {
+          "description": "A dict that was serialized to JSON and then deserialized back should be == equal to the original dict, since JSON just stores 'the same data'.",
+          "clarification": "This holds only when every key in the original dict was already a string. JSON requires all object keys to be strings, so json.dumps silently converts any non-string key (an int, for example) to its string representation on the way out, and json.loads never converts keys back to a non-string type on the way in -- it has no way to know what type they 'should' be. A dict like {1: 'a'} round-trips to {'1': 'a'}, which is NOT equal to the original ({1: 'a'} == {'1': 'a'} is False, since 1 and '1' are different dict keys despite looking similar) -- code that depends on non-string dict keys surviving a JSON round trip unchanged will silently get different keys back and needs to explicitly convert them after loading."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "python-json-csv-ex1",
+          "type": "predictOutput",
+          "prompt": "What does this print?",
+          "code": "import json\n\noriginal = {\n    \"scores\": (10, 20, 30),\n    3: \"three\",\n}\n\ntext = json.dumps(original)\nrestored = json.loads(text)\n\nprint(type(restored[\"scores\"]))\nprint(restored)\nprint(3 in restored)\nprint(\"3\" in restored)",
+          "hints": [
+            "There are two separate JSON data model mismatches happening in this one dict -- one involving the tuple value, one involving the integer key.",
+            "Tuples always come back as lists after a JSON round trip -- there's no way for JSON to preserve 'this used to be a tuple'.",
+            "The key 3 gets converted to the string \"3\" during json.dumps -- so which one of 3 in restored / \"3\" in restored actually finds a matching key?"
+          ],
+          "expectedAnswer": "<class 'list'>, then {'scores': [10, 20, 30], '3': 'three'}, then False, then True. The tuple becomes a list, and the integer key 3 becomes the string key '3', so only the string-key membership check succeeds.",
+          "solutionExplanation": "json.dumps serializes the tuple (10, 20, 30) as a JSON array indistinguishable from a list, and serializes the integer key 3 as the JSON string key \"3\" (since JSON object keys must be strings). json.loads then deserializes that array back as a Python list (never a tuple -- JSON has no way to signal it should be one), giving type(restored['scores']) as list. The dict's key also comes back as the string '3', not the integer 3, so restored looks like {'scores': [10, 20, 30], '3': 'three'}. Because of that, `3 in restored` checks for the integer key 3, which no longer exists in the dict (False), while `\"3\" in restored` checks for the string key '3', which does exist (True) -- a direct illustration of the non-string-dict-key gotcha."
+        },
+        {
+          "id": "python-json-csv-ex2",
+          "type": "coding",
+          "prompt": "Write a function `csv_to_json(csv_path, json_path)` that reads a CSV file (with a header row) using csv.DictReader and writes its rows as a JSON array of objects to json_path, using json.dump. Each row should end up as one JSON object in the array, matching the structure csv.DictReader naturally produces (all values remain strings -- no numeric conversion is required for this exercise).",
+          "hints": [
+            "csv.DictReader gives you each row as a dict already -- collecting all of them into a single list gives you exactly the structure json.dump needs to write out as a JSON array of objects.",
+            "You'll need two separate with open(...) blocks: one for reading the CSV (mode 'r', the default), one for writing the JSON (mode 'w').",
+            "Remember to specify encoding='utf-8' on both open() calls, following the practice from the File Handling concept."
+          ],
+          "solutionCode": "import csv\nimport json\n\ndef csv_to_json(csv_path, json_path):\n    with open(csv_path, encoding=\"utf-8\") as csv_file:\n        reader = csv.DictReader(csv_file)\n        rows = list(reader)\n\n    with open(json_path, \"w\", encoding=\"utf-8\") as json_file:\n        json.dump(rows, json_file, indent=2)\n\n# Example: people.csv with header 'name,age,city' and two data rows\n# produces people.json containing:\n# [\n#   {\"name\": \"Amy\", \"age\": \"30\", \"city\": \"Boston\"},\n#   {\"name\": \"Ben\", \"age\": \"25\", \"city\": \"Chicago\"}\n# ]",
+          "solutionExplanation": "csv.DictReader turns every data row into a dict keyed by the CSV's header row, and list(reader) collects every one of those row-dicts into a single list -- which is exactly the shape json.dump needs (a list of JSON-serializable objects) to write out a JSON array of objects. Each dict's values remain plain strings throughout, since csv.DictReader never converts them and the exercise doesn't ask for numeric conversion, so the resulting JSON has every field as a JSON string (e.g. \"age\": \"30\", not \"age\": 30) -- a faithful, if type-naive, conversion straight from CSV's all-text data model into JSON's richer one without adding any conversion logic beyond what was asked for."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "python-json-csv-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "```python\nimport json\ndata = {\"ids\": {1, 2, 3}}\njson.dumps(data)\n```\nWhat happens when this runs?",
+          "options": [
+            "It succeeds, producing '{\"ids\": [1, 2, 3]}', silently converting the set to a JSON array.",
+            "It raises TypeError, because sets are not JSON serializable and json.dumps does not automatically convert them.",
+            "It succeeds, producing '{\"ids\": {1, 2, 3}}', preserving set-like syntax in the JSON text.",
+            "It succeeds but silently drops the 'ids' key entirely, since JSON has no matching type for it."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Unlike tuples (which json.dumps happily serializes as JSON arrays without complaint), sets have no automatic conversion at all -- json.dumps raises TypeError: Object of type set is not JSON serializable immediately. To serialize set data, you must explicitly convert it first, typically with list(my_set), before passing it to json.dumps. Option A describes what WOULD happen if you converted the set to a list yourself first, but that conversion doesn't happen automatically the way it does for tuples. Option C is invalid -- JSON has no set/curly-brace-for-a-collection-of-values syntax at all. Option D is not how json.dumps behaves -- it raises an error rather than silently dropping data."
+        },
+        {
+          "id": "python-json-csv-assess-explain1",
+          "type": "explanation",
+          "prompt": "A developer builds a Python dict keyed by integer product IDs, serializes it to a JSON file with json.dump, and later loads it back with json.load. Explain what actually happens to the keys, why, and what they need to do to use the loaded dict the way they originally intended.",
+          "modelAnswer": "JSON's specification requires that every key in a JSON object be a string -- there is no way to represent a JSON object with a numeric, tuple, or any other non-string key. Because of this, when json.dump serializes a Python dict with integer keys, it doesn't raise an error (the way it would for an unserializable value like a set) -- instead, it silently converts each integer key to its string representation in the resulting JSON text, so a key like 1024 becomes the JSON string key \"1024\". When that file is later loaded with json.load, the keys come back exactly as they were written in the JSON text: strings. json.load has no way to know, and makes no attempt to guess, that these string keys were originally integers in the Python program that wrote them -- there's no metadata in JSON preserving that information. So the developer's loaded dict looks similar when printed but is meaningfully different: looking up a product by its original integer ID, like loaded_dict[1024], will raise KeyError, because the actual key present is the string \"1024\", not the integer 1024. To use the dict the way it was originally intended, the developer needs to explicitly convert the keys back to integers themselves after loading -- typically with a dict comprehension like `{int(key): value for key, value in loaded_dict.items()}` -- since this conversion is entirely the caller's responsibility; neither json.dump nor json.load does it automatically in either direction."
+        }
+      ]
+    },
+    {
+      "id": "python-dates-time",
+      "title": "Dates and Time",
+      "description": "The datetime module models points in time as either naive or timezone-aware, and mixing the two in a comparison raises an error rather than silently guessing -- a real and common bug worth understanding precisely.",
+      "moduleId": "files-and-data",
+      "topicId": "files-and-data",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 30,
+      "prerequisites": [
+        "python-data-types"
+      ],
+      "learningObjectives": [
+        "Create and manipulate datetime, date, and timedelta objects from the datetime module.",
+        "Distinguish naive datetimes from timezone-aware ones, and explain why comparing a naive and an aware datetime raises a TypeError.",
+        "Use strftime to format a datetime as a string and strptime to parse a string into a datetime.",
+        "Use timedelta to perform date/time arithmetic, such as computing a deadline or an elapsed duration."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "The datetime Module: date, time, datetime, timedelta",
+            "body": "The standard library's `datetime` module provides several related types for representing points and spans of time. `date` represents a calendar date with no time component (`date(2026, 8, 14)`); `time` represents a time of day with no date (`time(14, 30)`); `datetime` combines both into a single point in time (`datetime(2026, 8, 14, 14, 30)`); and `timedelta` represents a *duration* -- a difference between two points in time, or an amount of time to add or subtract.\n\n```python\nfrom datetime import datetime, date, timedelta\n\nnow = datetime.now()                    # the current local date and time\ntoday = date.today()                     # just today's date, no time\nspecific = datetime(2026, 8, 14, 9, 0)   # August 14, 2026, 9:00 AM\n\nprint(now)\nprint(today)\nprint(specific)\nprint(specific.year, specific.month, specific.day, specific.hour)   # 2026 8 14 9\n```\n\nIn practice, `datetime` (the combined date-and-time type) is what you'll reach for most often, since most real-world 'when did this happen' or 'when should this happen' questions care about both the date and the time of day."
+          },
+          {
+            "heading": "Naive vs Timezone-Aware Datetimes",
+            "body": "Every `datetime` object in Python is either **naive** or **aware**, and this distinction is arguably the single most important thing to understand correctly about this module. A **naive** datetime has no attached timezone information at all -- it's just a bundle of numbers (year, month, day, hour, minute, ...) with no indication of *which* timezone those numbers are relative to. `datetime.now()` and `datetime(2026, 8, 14, 9, 0)`, as written above, are both naive. An **aware** datetime additionally carries timezone information (via its `tzinfo` attribute), so it unambiguously represents one specific, universal instant, not just 'some clock reading in some unspecified timezone.'\n\n```python\nfrom datetime import datetime, timezone\n\nnaive = datetime(2026, 8, 14, 9, 0)                          # no timezone attached\naware = datetime(2026, 8, 14, 9, 0, tzinfo=timezone.utc)     # explicitly UTC\n\nprint(naive.tzinfo)   # None\nprint(aware.tzinfo)    # UTC\n```\n\nThe problem naive datetimes create is exactly the ambiguity their name implies: `datetime(2026, 8, 14, 9, 0)` alone doesn't tell you whether that's 9 AM in New York, 9 AM in Tokyo, or 9 AM UTC -- and if two different naive datetimes came from two different systems in two different timezones, comparing or subtracting them produces a number that's simply *wrong*, silently, with no indication anything is amiss. Python's designers made a deliberate choice here that's worth appreciating: rather than silently guessing (and risking exactly that kind of wrong-but-plausible-looking result), **comparing a naive datetime to an aware one raises `TypeError`** outright:\n\n```python\ntry:\n    print(naive < aware)\nexcept TypeError as e:\n    print(f\"TypeError: {e}\")\n# TypeError: can't compare naive and aware datetimes\n```\n\nThis is a genuinely common real bug, especially in codebases that mix data from different sources -- one function returning `datetime.now()` (naive, local time) and another parsing a timestamp from an API response that includes explicit timezone info (aware) -- and it surfaces as a `TypeError` the moment the two are compared or subtracted, rather than as a subtly wrong number. The fix is to be deliberate and consistent: pick one approach (most commonly, working in UTC-aware datetimes throughout, converting to local time only at the point of display) and stick to it, using `datetime.now(timezone.utc)` (aware) rather than the bare, timezone-less `datetime.now()` (naive) when you need the current time for anything that might ever be compared against another source."
+          },
+          {
+            "heading": "Formatting and Parsing: strftime and strptime",
+            "body": "`strftime` (**string format time**) converts a `datetime` object into a string, following a **format code** you specify. `strptime` (**string parse time**) does the reverse: given a string and the format it's expected to match, it parses that string into a `datetime` object.\n\n```python\nfrom datetime import datetime\n\nmoment = datetime(2026, 8, 14, 9, 30)\n\nformatted = moment.strftime(\"%Y-%m-%d %H:%M\")\nprint(formatted)   # '2026-08-14 09:30'\n\nformatted2 = moment.strftime(\"%B %d, %Y\")\nprint(formatted2)   # 'August 14, 2026'\n\nparsed = datetime.strptime(\"2026-08-14 09:30\", \"%Y-%m-%d %H:%M\")\nprint(parsed)         # datetime.datetime(2026, 8, 14, 9, 30)\nprint(parsed == moment)   # True\n```\n\nA handful of format codes cover the overwhelming majority of real usage: `%Y` (4-digit year), `%m` (2-digit month), `%d` (2-digit day), `%H` (2-digit 24-hour), `%M` (2-digit minute), `%S` (2-digit second), `%B` (full month name). The critical thing with `strptime` is that the format string given to it must **exactly match the structure of the input string**, character for character (aside from the format codes themselves) -- `strptime(\"2026-08-14\", \"%Y/%m/%d\")` raises `ValueError` because the input uses hyphens where the format string expects slashes. This makes `strptime` unforgiving but predictable: it will not guess at a date's format the way some other tools try to; you must tell it exactly what to expect."
+          },
+          {
+            "heading": "timedelta: Doing Arithmetic on Dates and Times",
+            "body": "`timedelta` represents a **duration** -- a span of time, independent of any specific starting point -- and datetimes support arithmetic directly with them via `+` and `-`. This is how you compute a deadline, a reminder time, or an elapsed duration, without manually handling the varying lengths of months, leap years, or daylight saving transitions yourself:\n\n```python\nfrom datetime import datetime, timedelta\n\nnow = datetime(2026, 8, 14, 9, 0)\n\nin_three_days = now + timedelta(days=3)\nprint(in_three_days)   # 2026-08-17 09:00:00\n\ntwo_hours_ago = now - timedelta(hours=2)\nprint(two_hours_ago)     # 2026-08-14 07:00:00\n\ndeadline = datetime(2026, 8, 20, 17, 0)\ntime_remaining = deadline - now\nprint(time_remaining)                    # 6 days, 8:00:00 -- a timedelta object\nprint(time_remaining.days)                # 6\nprint(time_remaining.total_seconds())      # 561600.0\n```\n\n`timedelta` accepts keyword arguments for `days`, `seconds`, `microseconds`, `milliseconds`, `minutes`, `hours`, and `weeks` (all of which internally normalize to just days/seconds/microseconds -- `timedelta(hours=25)` is stored equivalently to `timedelta(days=1, hours=1)`). Subtracting two `datetime` objects (as with `deadline - now` above) naturally produces a `timedelta` representing the gap between them -- and just like the comparison operators, subtracting an aware datetime from a naive one raises the same `TypeError`, for the same underlying reason: Python refuses to guess which timezone the naive one 'really' means."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "The Naive/Aware TypeError in Practice",
+          "language": "python",
+          "code": "from datetime import datetime, timezone\n\ndef get_local_deadline():\n    return datetime(2026, 8, 20, 17, 0)   # naive -- no timezone attached\n\ndef get_server_event_time():\n    return datetime(2026, 8, 18, 12, 0, tzinfo=timezone.utc)   # aware -- explicitly UTC\n\ndeadline = get_local_deadline()\nevent_time = get_server_event_time()\n\ntry:\n    if event_time < deadline:\n        print(\"Event happens before the deadline\")\nexcept TypeError as e:\n    print(f\"Comparison failed: {e}\")\n\n# Fix: make both aware (or both naive) before comparing\nfrom datetime import timezone as tz\naware_deadline = deadline.replace(tzinfo=tz.utc)   # explicitly declare it as UTC\nprint(event_time < aware_deadline)   # now this works: True",
+          "explanation": "get_local_deadline returns a naive datetime; get_server_event_time returns an aware one. Comparing them directly with < raises TypeError, because Python cannot know what timezone the naive deadline is actually meant to represent, and refuses to guess (silently assuming it matches the aware one's timezone would risk being wrong exactly when it matters most -- near a deadline). The fix shown uses .replace(tzinfo=...) to explicitly attach a timezone to the previously-naive datetime -- but note this only works correctly if the naive value genuinely was already in that timezone; .replace() does not convert a wall-clock time between timezones, it simply attaches timezone information to whatever numbers were already there. The deeper, more robust fix in real code is usually to avoid ever creating naive datetimes for values that might need comparing against timezone-aware ones -- consistently using datetime.now(timezone.utc) instead of datetime.now(), for instance."
+        },
+        {
+          "title": "Formatting for Display, Parsing From User Input",
+          "language": "python",
+          "code": "from datetime import datetime\n\nevent = datetime(2026, 12, 25, 18, 30)\n\nprint(event.strftime(\"%A, %B %d, %Y at %I:%M %p\"))\n# 'Friday, December 25, 2026 at 06:30 PM'\n\nuser_input = \"2026-12-25\"\nparsed_date = datetime.strptime(user_input, \"%Y-%m-%d\")\nprint(parsed_date)   # 2026-12-25 00:00:00 -- time defaults to midnight since none was in the string\n\ntry:\n    datetime.strptime(\"12/25/2026\", \"%Y-%m-%d\")   # format string doesn't match input's structure\nexcept ValueError as e:\n    print(f\"ValueError: {e}\")",
+          "explanation": "strftime's format string (%A for full weekday name, %I for 12-hour clock, %p for AM/PM, alongside the more common codes) produces a nicely human-readable string entirely independent of how the datetime was originally created. strptime does the inverse, but strictly: it expects the input string to match the given format's structure exactly, position by position. Since \"2026-12-25\" has no time component at all, strptime with \"%Y-%m-%d\" fills in a default time of midnight (00:00:00) for the fields the format string didn't account for. The final call deliberately mismatches the input's actual structure (\"12/25/2026\", month/day/year with slashes) against a format string written for a different structure (\"%Y-%m-%d\", year-month-day with hyphens) -- strptime does not try to be flexible or guess the intended format; it raises ValueError rather than silently misparsing the date."
+        },
+        {
+          "title": "timedelta for Deadlines and Elapsed Time",
+          "language": "python",
+          "code": "from datetime import datetime, timedelta\n\ntask_started = datetime(2026, 8, 14, 9, 0)\ntask_finished = datetime(2026, 8, 14, 11, 45)\n\nelapsed = task_finished - task_started\nprint(elapsed)                     # 2:45:00\nprint(elapsed.total_seconds())      # 9900.0\n\nreminder_lead_time = timedelta(hours=1)\nmeeting_time = datetime(2026, 8, 14, 15, 0)\nreminder_time = meeting_time - reminder_lead_time\nprint(reminder_time)   # 2026-08-14 14:00:00\n\none_week_from_now = datetime.now() + timedelta(weeks=1)\nprint(one_week_from_now.strftime(\"%Y-%m-%d\"))",
+          "explanation": "Subtracting two datetime objects (task_finished - task_started) produces a timedelta representing the actual elapsed duration between them -- 2 hours and 45 minutes, or 9900.0 seconds via total_seconds(), which is the most reliable way to get a duration as a single plain number for further calculation (rather than trying to parse the '2:45:00' string form). Adding or subtracting a timedelta from a datetime shifts it by exactly that duration -- meeting_time - reminder_lead_time computes 'one hour before the meeting' without needing to manually handle hour/minute rollover. timedelta(weeks=1) demonstrates that timedelta handles unit conversion internally -- you never need to manually compute '7 * 24 hours' yourself."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "datetime.now() gives you the current time along with its timezone, since the computer obviously knows what timezone it's in.",
+          "clarification": "datetime.now() returns a naive datetime by default -- it has no tzinfo attached at all, even though the numbers it returns do happen to reflect the system's local time. Python does not automatically attach the system's timezone to it. If you need an aware datetime representing 'right now,' you have to ask for one explicitly, typically with datetime.now(timezone.utc) (giving the current time in UTC, aware) or datetime.now(some_specific_tzinfo). This distinction matters specifically because a naive value returned by datetime.now() cannot be safely compared against an aware datetime from another source without first resolving that mismatch -- Python raises TypeError rather than guessing that the naive value 'must' share the aware one's timezone."
+        },
+        {
+          "description": "If comparing two datetimes ever gives a wrong-looking result, it's a bug in the datetime module -- Python should be smart enough to figure out what timezone a naive datetime is in.",
+          "clarification": "This is precisely backwards from how the module is deliberately designed: Python refuses to guess a naive datetime's timezone specifically because guessing wrong would produce a plausible-looking but silently incorrect result -- arguably far worse than an explicit error, especially for anything time-sensitive like a deadline or a scheduled event. Comparing (or subtracting) a naive and an aware datetime raises TypeError on purpose, forcing the developer to resolve the ambiguity explicitly, rather than letting the comparison quietly succeed with an assumption that might be wrong. The actual fix for 'a wrong-looking datetime comparison' is almost always to make the naive/aware status of both values consistent and deliberate -- not to expect the language to infer intent it has no way to actually know."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "python-dates-time-ex1",
+          "type": "predictOutput",
+          "prompt": "What does this print, or does it raise an error? If it raises, what kind?",
+          "code": "from datetime import datetime, timezone\n\nlocal_meeting = datetime(2026, 9, 1, 14, 0)\nutc_deadline = datetime(2026, 9, 1, 20, 0, tzinfo=timezone.utc)\n\nprint(local_meeting.tzinfo)\nprint(utc_deadline.tzinfo)\nprint(local_meeting < utc_deadline)",
+          "hints": [
+            "Check whether each datetime was constructed with a tzinfo argument -- that alone determines naive vs aware, nothing else does it automatically.",
+            "One of these two datetimes is naive (no tzinfo) and the other is aware (tzinfo=timezone.utc) -- what does Python do when you try to compare one of each kind?",
+            "Recall that Python deliberately raises an error here rather than guessing which timezone the naive one is in."
+          ],
+          "expectedAnswer": "None, then UTC, then a TypeError (\"can't compare naive and aware datetimes\") on the final comparison -- local_meeting has no tzinfo (naive), utc_deadline does (aware), and comparing one of each raises TypeError rather than producing a result.",
+          "solutionExplanation": "local_meeting is constructed without a tzinfo argument, so local_meeting.tzinfo is None -- it's naive. utc_deadline is explicitly constructed with tzinfo=timezone.utc, so utc_deadline.tzinfo prints UTC -- it's aware. The final line attempts to compare a naive datetime with an aware one using <, which Python deliberately does not allow: rather than guessing that local_meeting 'must' also be UTC (a guess that could easily be wrong -- it might represent a different timezone entirely), Python raises TypeError: can't compare naive and aware datetimes, forcing the mismatch to be resolved explicitly rather than silently producing a comparison result that might be based on a wrong assumption."
+        },
+        {
+          "id": "python-dates-time-ex2",
+          "type": "coding",
+          "prompt": "Write a function `days_until(deadline_str)` that takes a date string in \"YYYY-MM-DD\" format, parses it with strptime, and returns the number of whole days between today (use date.today()) and that deadline as an int. Assume deadline_str always represents a date on or after today.",
+          "hints": [
+            "datetime.strptime gives you a datetime, but date.today() gives you a date -- you'll need to convert one to match the other before subtracting (a datetime's .date() method returns just its date portion).",
+            "Subtracting two date objects (or two datetime objects) gives you a timedelta -- which attribute of a timedelta gives you a whole number of days directly?",
+            "timedelta has a .days attribute that's already an int representing whole days -- no need to compute anything from total_seconds() for this particular exercise."
+          ],
+          "solutionCode": "from datetime import datetime, date\n\ndef days_until(deadline_str):\n    deadline = datetime.strptime(deadline_str, \"%Y-%m-%d\").date()\n    today = date.today()\n    remaining = deadline - today\n    return remaining.days\n\nprint(days_until(\"2026-12-31\"))   # however many whole days remain until Dec 31, 2026, from today",
+          "solutionExplanation": "datetime.strptime(deadline_str, \"%Y-%m-%d\") parses the string into a full datetime (with a default time of midnight), and .date() extracts just the date portion, matching the type returned by date.today() -- subtracting two mismatched types (a datetime and a date) would raise a TypeError, so this alignment matters. deadline - today produces a timedelta representing the gap between the two dates, and its .days attribute gives that gap as a whole integer number of days directly, without needing to convert from total_seconds() or handle any remainder -- because both operands here are date objects (with no time-of-day component at all), the difference is always a whole number of days with no leftover hours/minutes to account for."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "python-dates-time-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "What happens when you compare a naive datetime and a timezone-aware datetime using < or ==?",
+          "options": [
+            "Python assumes the naive datetime is in the local system timezone and compares them correctly.",
+            "Python assumes the naive datetime is in UTC and compares them correctly.",
+            "Python raises TypeError, refusing to guess what timezone the naive datetime represents.",
+            "Python treats the aware datetime as naive by silently discarding its timezone before comparing."
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "Python deliberately raises TypeError when comparing a naive and an aware datetime, rather than guessing which timezone the naive one represents -- any such guess (local time, UTC, or anything else) could easily be wrong, and a wrong guess would produce a plausible-looking but silently incorrect comparison result, which is worse than an explicit, catchable error. Options A, B, and D all describe some form of silent guessing or coercion that Python specifically does not perform -- resolving the mismatch (typically by making both datetimes aware, in a consistent timezone) is left entirely to the developer."
+        },
+        {
+          "id": "python-dates-time-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain the difference between a naive and a timezone-aware datetime, and why a bug involving this distinction is a common, realistic thing to encounter in real codebases rather than an obscure edge case.",
+          "modelAnswer": "A naive datetime is just a bundle of numbers -- year, month, day, hour, minute, second -- with no attached information about which timezone those numbers are relative to; its tzinfo attribute is None. A timezone-aware datetime carries that information explicitly via its tzinfo attribute, so it represents one specific, unambiguous instant in universal time, not just a clock reading whose context is unknown. This distinction becomes a realistic, common source of bugs specifically because different parts of a real system often produce datetimes in different ways: datetime.now() (naive, by default, reflecting local system time with no timezone attached) might be used in one part of a codebase to timestamp something, while a different part parses timestamps from an external API response or database that includes explicit timezone information (aware). Neither of these is unusual or wrong in isolation, but the moment code tries to compare, subtract, or otherwise combine one of each, Python raises TypeError rather than silently producing a result -- and because this often happens across module or team boundaries (one function's author didn't necessarily know another function's datetimes were naive, or aware, or from a different source entirely), it's exactly the kind of mismatch that's easy to introduce without noticing at the time it's written, and that only surfaces once two different code paths' datetimes actually meet at a comparison or subtraction. The practical fix is to be deliberate and consistent throughout a codebase -- commonly, working in UTC-aware datetimes everywhere internally, and converting to naive local time only at the boundary where something is actually displayed to a user -- rather than to expect Python to resolve the ambiguity automatically, since it deliberately never will."
+        }
+      ]
+    },
+    {
+      "id": "python-regular-expressions",
+      "title": "Regular Expressions",
+      "description": "The re module matches text against patterns, but match, search, and findall behave differently in a way that trips people up constantly, and raw strings are almost always the right way to write the patterns themselves.",
+      "moduleId": "files-and-data",
+      "topicId": "files-and-data",
+      "difficulty": "advanced",
+      "estimatedMinutes": 35,
+      "prerequisites": [
+        "python-strings"
+      ],
+      "learningObjectives": [
+        "Distinguish re.match, re.search, and re.findall, and explain precisely why match only succeeds when a pattern matches at the very start of the string.",
+        "Read and write common regex building blocks: character classes, quantifiers, anchors, and groups.",
+        "Explain why raw strings (r\"...\") are almost always used for regex patterns, and predict what goes wrong without them.",
+        "Evaluate when a regex is the right tool for a text-matching problem versus when it hurts readability more than it helps."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "match vs search vs findall: The Recurring Point of Confusion",
+            "body": "Python's `re` module offers several functions for applying a pattern to a string, and three of them are confused constantly, specifically because their names all sound like they should do roughly the same thing:\n\n- **`re.match(pattern, string)`** checks for a match **only at the very beginning** of the string. If the pattern would match somewhere in the *middle* of the string but not starting at position 0, `match` returns `None` -- it does not search further in.\n- **`re.search(pattern, string)`** scans through the *entire* string, looking for the *first* location anywhere where the pattern matches -- this is what most people intuitively expect 'find a match' to mean.\n- **`re.findall(pattern, string)`** finds **every non-overlapping** occurrence of the pattern anywhere in the string, and returns them all as a list.\n\n```python\nimport re\n\ntext = \"The year 2026 was great, and 2027 looks good too.\"\n\nprint(re.match(r\"\\d+\", text))     # None -- the string doesn't START with digits\nprint(re.search(r\"\\d+\", text))    # <re.Match object; span=(9, 13), match='2026'> -- found it, mid-string\nprint(re.findall(r\"\\d+\", text))   # ['2026', '2027'] -- every match, as plain strings\n```\n\n`re.match` returning `None` here is not a bug or a surprise once you know the rule -- the string literally does not begin with a digit (it begins with `\"The year...\"`), so a pattern anchored implicitly to the start correctly fails to match. The single most common mistake with this module is reaching for `re.match` when you actually mean 'does this pattern appear anywhere in the string,' getting an unexpected `None`, and not realizing `match`'s start-anchoring is the reason. If you want 'somewhere in the string,' `search` (for the first match) or `findall` (for all matches) is almost always what you actually want; reach for `match` specifically when you genuinely need to validate that a string *starts with* a particular pattern (parsing a fixed-format prefix, for instance)."
+          },
+          {
+            "heading": "Common Building Blocks",
+            "body": "A working vocabulary of a handful of regex building blocks covers most everyday pattern-matching needs:\n\n- **Character classes**: `\\d` (any digit, equivalent to `[0-9]`), `\\w` (any 'word' character: letters, digits, underscore), `\\s` (any whitespace), and their uppercase negations `\\D`, `\\W`, `\\S` (anything *not* matching the lowercase version). `[abc]` matches any one of `a`, `b`, or `c`; `[^abc]` matches any character *except* those.\n- **Quantifiers**: `*` (zero or more), `+` (one or more), `?` (zero or one -- 'optional'), `{n}` (exactly n), `{n,m}` (between n and m, inclusive).\n- **Anchors**: `^` (start of string, or start of line in multiline mode), `$` (end of string, or end of line in multiline mode).\n- **Groups**: parentheses `(...)` capture a sub-part of the match for later extraction (via `.group(1)`, etc.), and `|` inside or around a group means 'or' (alternation).\n\n```python\nimport re\n\nmatch = re.search(r\"(\\w+)@(\\w+)\\.com\", \"Contact: amy@example.com for help\")\nif match:\n    print(match.group(0))   # 'amy@example.com' -- the whole match\n    print(match.group(1))   # 'amy'              -- first parenthesized group\n    print(match.group(2))   # 'example'           -- second parenthesized group\n```\n\nThis pattern reads as: one-or-more word characters (captured), literal `@`, one-or-more word characters (captured), a literal dot, then `com`. Groups let you pull out the specific pieces you care about (the username, the domain) rather than just knowing *that* something matched."
+          },
+          {
+            "heading": "Raw Strings: Why You Almost Always Want r\"...\"",
+            "body": "Regex patterns use backslash (`\\`) heavily as an escape character for its own special sequences (`\\d`, `\\w`, `\\s`, `\\.`  for a literal dot, and so on). Python's *own* string literals also use backslash as an escape character, for entirely different purposes (`\\n` for newline, `\\t` for tab). When these two backslash-escaping systems collide inside an ordinary string literal, the result is confusing, and sometimes silently wrong rather than a clean error:\n\n```python\nimport re\n\n# Without a raw string: '\\d' isn't a recognized Python escape sequence,\n# so Python leaves it as a literal backslash + d (with a DeprecationWarning in modern Python) --\n# this particular case happens to still work, but it's fragile and relies on a coincidence\npattern_risky = \"\\d+\"\n\n# '\\b' IS a recognized Python escape sequence (backspace, \\x08) -- a genuine collision\npattern_broken = \"\\bfoo\"   # NOT the regex 'word boundary + foo' -- this is a literal backspace character + 'foo'\n\n# The fix: raw strings disable Python's own backslash escaping entirely,\n# so what you write is exactly what the regex engine sees\npattern_correct = r\"\\bfoo\"   # a literal backslash, then 'b', then 'foo' -- exactly what regex \\b means\n\nprint(re.search(pattern_broken, \"a footnote\"))    # None -- looking for an actual backspace character!\nprint(re.search(pattern_correct, \"a footnote\"))   # None too, actually -- but for the RIGHT reason (see below)\nprint(re.search(pattern_correct, \"a foo bar\"))    # matches 'foo' -- \\b (word boundary) works correctly here\n```\n\nA **raw string**, written with an `r` prefix (`r\"...\"`), tells Python's parser to treat every backslash inside it literally -- `\\b` inside a raw string is genuinely the two characters backslash-then-b, with none of Python's own escape processing applied, and it's the regex engine, not Python's string parser, that then interprets `\\b` as 'word boundary.' Without the raw string, you're at the mercy of a coincidence: some regex escape sequences (like `\\d`) happen to not collide with any Python string escape, so they pass through unchanged (though modern Python versions emit a `DeprecationWarning` for this, since it's fragile and unintended), while others (like `\\b`, `\\n`, `\\t`) collide directly with a real Python escape sequence and get silently transformed into something completely different before the regex engine ever sees them. The practical rule: **always** write regex patterns as raw strings, `r\"...\"` -- there is essentially never a good reason not to, and it eliminates an entire category of confusing, sometimes-silent bugs at zero cost."
+          },
+          {
+            "heading": "An Honest Note on Readability",
+            "body": "Regular expressions are genuinely powerful -- a single pattern can express matching logic that would otherwise take many lines of manual string manipulation. That power comes at a real cost: a sufficiently complex regex is famously difficult to read back later, including by the person who wrote it a few weeks prior. `^(?:[a-zA-Z0-9_.+-]+)@(?:[a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,}$` is a plausible-looking, largely-functional email-matching pattern, and it is close to unreadable at a glance.\n\nThe practical, honest guidance: reach for a regex when the problem genuinely calls for pattern matching (validating a format, extracting structured pieces from semi-structured text, splitting on a pattern rather than a fixed delimiter) rather than for problems better solved by plain string methods (`.split()`, `.startswith()`, `\"x\" in s`) -- if a plain string method solves the problem clearly, prefer it; it's more readable and usually faster. And when a regex genuinely is the right tool, especially for anything beyond the simplest patterns, **write a comment explaining what it matches and why**, in plain language -- future readers (including future you) should not need to mentally re-derive a non-trivial pattern character by character just to understand what a piece of code is checking for. Python's `re.VERBOSE` flag, which lets you write a pattern spread across multiple lines with inline comments and ignored whitespace, is also worth knowing about specifically for this reason -- it turns an otherwise-dense one-liner into something considerably more maintainable."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "match's Start-Anchoring vs search's Full Scan",
+          "language": "python",
+          "code": "import re\n\nlog_line = \"[INFO] Server started successfully\"\n\n# match fails: the string doesn't START with 'Server'\nprint(re.match(r\"Server\", log_line))    # None\n\n# search succeeds: 'Server' appears somewhere in the string\nprint(re.search(r\"Server\", log_line))    # <re.Match object; span=(7, 13), match='Server'>\n\n# match succeeds here: the string DOES start with '[INFO]'\nprint(re.match(r\"\\[INFO\\]\", log_line))    # <re.Match object; span=(0, 6), match='[INFO]'>\n\n# Using match correctly: validating that a log line starts with a recognized level tag\nfor level in [\"INFO\", \"WARN\", \"ERROR\"]:\n    if re.match(rf\"\\[{level}\\]\", log_line):\n        print(f\"This line's level is: {level}\")\n        break",
+          "explanation": "re.match(r\"Server\", log_line) returns None specifically because 'Server' appears starting at index 7, not index 0 -- match only ever considers a match starting exactly at the beginning of the string, so it never gets a chance to look further in, no matter how obviously present the pattern is elsewhere. re.search finds it because search scans the whole string for the first place the pattern matches, regardless of position. The final loop shows match used appropriately: since log lines in this format genuinely are expected to start with a bracketed level tag, checking 'does this line start with [INFO]' is precisely what match is suited for -- it's a validation of the string's beginning, not a general 'is this pattern present somewhere' search."
+        },
+        {
+          "title": "The Raw String Collision, Concretely",
+          "language": "python",
+          "code": "import re\n\ntext = \"Section 1\\tTitle\\nSection 2\\tIntro\"\n\n# Intending to match a tab character between a number and the following word\npattern_no_raw = \"\\tTitle\"      # Python turns \\t into an actual TAB character before regex even sees it\npattern_raw = r\"\\tTitle\"         # regex engine sees the two characters \\ and t, and interprets THAT as tab too\n\nprint(re.search(pattern_no_raw, text))   # matches -- \\t means tab to BOTH Python strings and regex, so this coincidentally works\nprint(re.search(pattern_raw, text))       # also matches -- r\"\\t\" is interpreted by the regex engine's OWN \\t handling\n\n# Where it actually breaks: \\b means something completely different to Python strings (backspace) vs regex (word boundary)\nprint(re.search(\"\\bTitle\", text))    # None -- Python already turned \\b into a literal backspace char before regex ran\nprint(re.search(r\"\\bTitle\", text))    # matches -- regex correctly sees \\b as 'word boundary', then 'Title'",
+          "explanation": "\\t happens to mean 'tab' to both Python's string literal parser AND to the regex engine, so pattern_no_raw and pattern_raw behave identically here purely by coincidence -- this is exactly the trap, because it can make it look like raw strings 'don't matter' until you hit an escape sequence where the two systems disagree. \\b is exactly that case: to Python's own string parser, \\b is the backspace control character (\\x08), so \"\\bTitle\" has already been silently transformed into an actual backspace character followed by 'Title' before the regex engine ever sees it -- there's no 'word boundary' left in the pattern by the time re.search runs, hence the failed match. r\"\\bTitle\", by contrast, is passed to the regex engine as the literal two characters backslash-b followed by 'Title', which is exactly what the regex engine's own \\b (word boundary) syntax expects, so it matches correctly."
+        },
+        {
+          "title": "When findall and Groups Do the Real Work",
+          "language": "python",
+          "code": "import re\n\nlog = \"\"\"\n2026-08-14 09:15 ERROR Connection timeout\n2026-08-14 09:16 INFO Retry succeeded\n2026-08-14 09:20 ERROR Connection timeout\n\"\"\"\n\n# Extract just the timestamps of every ERROR line\nerror_times = re.findall(r\"(\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}) ERROR\", log)\nprint(error_times)   # ['2026-08-14 09:15', '2026-08-14 09:20']",
+          "explanation": "The pattern breaks down as: a date (\\d{4}-\\d{2}-\\d{2}), a space, a time (\\d{2}:\\d{2}), all wrapped in one capturing group, followed by a literal space and the word ERROR (not itself captured, since it's outside the parentheses). findall returns exactly the captured group's content for every match -- not the full match including 'ERROR' -- because when a pattern contains exactly one group, findall returns a list of just that group's matches rather than full match strings. This is a realistic, common regex use case: pulling structured pieces of information (here, just the timestamps of a specific category of log line) out of semi-structured text, which would be considerably more verbose to do with manual string splitting and conditionals."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "re.match(pattern, text) checks whether the pattern appears anywhere in text -- the same as re.search.",
+          "clarification": "re.match only ever considers a match that starts at position 0 of the string -- if the pattern would match starting anywhere else, match returns None regardless of how clearly present the pattern is elsewhere in the string. re.search is the function that scans the entire string for the first position, anywhere, where the pattern matches. This is the single most common source of confusion with the re module -- reaching for match when search (or findall, for multiple matches) is what's actually needed, and getting an unexpected None as a result with no indication of why."
+        },
+        {
+          "description": "Writing regex patterns as raw strings (r\"...\") is just a stylistic convention -- it doesn't change what the pattern actually matches.",
+          "clarification": "Raw strings can and do change behavior, not just style, whenever a pattern includes a backslash sequence that Python's own string literal syntax also recognizes as something else. \\b is the clearest example: inside an ordinary (non-raw) string, Python's parser converts \\b into an actual backspace control character before the regex engine ever runs, silently destroying the intended 'word boundary' meaning -- the pattern still runs without any error, it just matches something different (or nothing at all) than intended. \\n and \\t behave similarly. Some regex escapes, like \\d, happen to not collide with any Python string escape and pass through unchanged either way (though modern Python emits a DeprecationWarning for relying on this), which is exactly what makes the misconception plausible -- it works by coincidence often enough to seem harmless, right up until a pattern includes one of the escapes that actually collides."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "python-regular-expressions-ex1",
+          "type": "predictOutput",
+          "prompt": "What does each of these three calls print?",
+          "code": "import re\n\ntext = \"Order #4471 shipped, then order #8823 shipped too.\"\n\nresult1 = re.match(r\"#\\d+\", text)\nresult2 = re.search(r\"#\\d+\", text)\nresult3 = re.findall(r\"#\\d+\", text)\n\nprint(result1)\nprint(result2.group() if result2 else None)\nprint(result3)",
+          "hints": [
+            "Check whether the string text literally BEGINS with the character '#' -- that's the only thing that determines whether re.match can possibly succeed here.",
+            "re.search doesn't care where in the string the match is -- it just needs to find the FIRST occurrence, anywhere.",
+            "re.findall collects every non-overlapping match in the whole string into a list -- count how many '#digits' patterns actually appear in the text."
+          ],
+          "expectedAnswer": "None, then '#4471', then ['#4471', '#8823']. The string doesn't start with '#' so match fails; search finds the first occurrence anywhere ('#4471'); findall collects all occurrences.",
+          "solutionExplanation": "text begins with 'Order #4471...', not '#', so re.match(r\"#\\d+\", text) fails immediately -- it only ever checks for a match starting at index 0, and index 0 is 'O', not '#'. re.search scans the whole string and finds the first '#' followed by digits at '#4471', returning a Match object whose .group() is the string '#4471'. re.findall scans the entire string for every non-overlapping occurrence of the pattern and returns them all as a list -- both '#4471' and '#8823' match the pattern (# followed by one or more digits), so both appear in the resulting list, in the order they occur in the text."
+        },
+        {
+          "id": "python-regular-expressions-ex2",
+          "type": "debugging",
+          "prompt": "This function is supposed to check whether a string looks like a simple US phone number in the form 555-123-4567 (3 digits, hyphen, 3 digits, hyphen, 4 digits), but it's failing to match phone numbers that clearly fit that exact format. Find and fix the bug.",
+          "code": "import re\n\ndef is_phone_number(text):\n    pattern = \"\\d{3}-\\d{3}-\\d{4}\"\n    return re.match(pattern, text) is not None\n\nprint(is_phone_number(\"555-123-4567\"))   # expected: True\nprint(is_phone_number(\"call 555-123-4567 now\"))   # expected: False (doesn't START with the number)",
+          "hints": [
+            "Look very closely at how the pattern string is written -- is it a raw string, or a regular Python string literal?",
+            "\\d happens to survive being written in a non-raw string unharmed in current Python versions, but is it guaranteed that EVERY escape sequence in this pattern would survive the same way?",
+            "Actually, check this specific pattern character by character against Python's own list of recognized string escape sequences -- is \\d one of them, or does Python leave unrecognized backslash sequences alone (with a warning)? Compare that to what would happen with a genuinely colliding sequence like \\b."
+          ],
+          "solutionCode": "import re\n\ndef is_phone_number(text):\n    pattern = r\"\\d{3}-\\d{3}-\\d{4}\"   # raw string -- avoids relying on \\d not colliding with a Python escape\n    return re.match(pattern, text) is not None\n\nprint(is_phone_number(\"555-123-4567\"))            # True\nprint(is_phone_number(\"call 555-123-4567 now\"))    # False -- correctly, since match requires it at the START",
+          "solutionExplanation": "This is a bit of a trick question: as written, \\d is not one of Python's recognized string escape sequences, so Python leaves \\d in the non-raw string unchanged (in modern Python versions, with a DeprecationWarning, since relying on this is fragile) -- meaning the pattern \"\\d{3}-\\d{3}-\\d{4}\" actually already works correctly for this specific exercise, and is_phone_number(\"555-123-4567\") already returns True even without the fix. The real bug this exercise is testing understanding of is the fragility itself: relying on non-raw strings for regex patterns only works by coincidence, for the specific escape sequences that happen not to collide with Python's own -- \\d, in this pattern, is one of the lucky ones. Prefixing the pattern with r fixes the underlying fragility regardless of which escape sequences are used, and is the correct habit to build regardless of whether a specific pattern's escapes happen to survive unharmed today; a pattern that later gets extended to include \\b (word boundary) or a literal \\n, without also being made raw, would silently break in a way this specific pattern does not."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "python-regular-expressions-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "```python\nimport re\ntext = \"Reference number: ABC123\"\nresult = re.match(r\"ABC\\d+\", text)\nprint(result)\n```\nWhat does this print, and why?",
+          "options": [
+            "A Match object for 'ABC123', because the pattern appears in the string.",
+            "None, because re.match only succeeds when the pattern matches starting at position 0, and text does not start with 'ABC'.",
+            "None, because \\d needs to be written inside a raw string to work at all.",
+            "A SyntaxError, because ABC123 contains both letters and digits."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "re.match only ever checks for a match beginning at index 0 of the string. text begins with 'Reference number: ...', not 'ABC', so even though the pattern ABC\\d+ clearly appears later in the string, match returns None because it never looks anywhere except the very start. Option A incorrectly assumes match behaves like search. Option C is wrong -- the pattern IS already written as a raw string here (note the r prefix), and even without it, \\d specifically happens to work fine in a non-raw string since it isn't a recognized Python escape sequence; that's not the reason for the None result regardless. Option D is nonsensical -- there's no syntax error involved in matching mixed letters and digits."
+        },
+        {
+          "id": "python-regular-expressions-assess-explain1",
+          "type": "explanation",
+          "prompt": "A teammate submits a pull request with the regex pattern \"\\d{3}\\b\\w+\" (not a raw string) to validate part number formats, and asks you to review it. Explain the risk in how the pattern is written, and how you'd advise them to fix it -- even if it happens to work correctly on their test cases today.",
+          "modelAnswer": "The core risk is that the pattern is written as an ordinary Python string literal rather than a raw string, which means Python's own string parser processes any backslash escape sequences in it BEFORE the regex engine ever sees the pattern. Some regex escapes, like \\d, happen to not correspond to any recognized Python string escape sequence, so Python leaves them alone (with a DeprecationWarning in modern versions, since this reliance is considered fragile) -- which is exactly why this pattern might appear to work fine on their test cases today. But \\b is a real, recognized Python string escape sequence, meaning to the string literal, not to the regex engine: it represents the backspace control character (\\x08). By the time this string reaches re.match or re.search, the \\b the teammate intended as a regex 'word boundary' has already been silently converted into a literal backspace character -- the pattern no longer contains a word boundary assertion at all, it contains an actual backspace byte, which will essentially never appear in real input text, meaning this part of the pattern will likely never match anything as intended, probably causing this regex to fail to match cases it should. Passing their existing test cases doesn't rule this out -- it just means their tests happen not to exercise the specific situation where the word-boundary behavior actually matters. The fix is straightforward and should always be applied to regex patterns as a blanket habit, not just when a bug is suspected: write the pattern as a raw string, r\"\\d{3}\\b\\w+\", which disables Python's own backslash processing entirely, so \\b (and every other escape in the pattern) reaches the regex engine exactly as written and is interpreted purely by regex's own rules."
+        }
+      ]
+    }
+  ]
+}

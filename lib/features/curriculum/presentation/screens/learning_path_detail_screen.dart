@@ -59,14 +59,18 @@ class LearningPathDetailScreen extends ConsumerWidget {
                     if (path.modules.isEmpty)
                       Chip(
                         label: const Text('Coming Soon'),
-                        backgroundColor: Theme.of(context).colorScheme.surfaceContainerHigh,
+                        backgroundColor: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHigh,
                         labelStyle: Theme.of(context).textTheme.labelMedium,
                         visualDensity: VisualDensity.compact,
                       )
                     else ...[
                       DifficultyChip(difficulty: path.difficulty),
                       const SizedBox(width: 8),
-                      Text('${path.conceptCount} concepts · ~${path.estimatedHours}h'),
+                      Text(
+                        '${path.conceptCount} concepts · ~${path.estimatedHours}h',
+                      ),
                     ],
                   ],
                 ),
