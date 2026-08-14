@@ -1,0 +1,364 @@
+{
+  "learningPathId": "docker",
+  "moduleId": "debugging_and_observability",
+  "title": "Debugging & Observability",
+  "order": 5,
+  "concepts": [
+    {
+      "id": "docker-logs-and-log-drivers",
+      "title": "docker logs and Following Container Output",
+      "description": "Docker only ever captures a container's stdout and stderr streams by default -- everything docker logs shows, follows, or filters comes from that one captured stream, routed through a configurable logging driver that decides where it actually ends up and how much of it survives.",
+      "moduleId": "debugging_and_observability",
+      "topicId": "debugging_and_observability",
+      "difficulty": "beginner",
+      "estimatedMinutes": 30,
+      "prerequisites": ["docker-images-and-layers"],
+      "learningObjectives": [
+        "Explain precisely what docker logs shows: the container's captured stdout and stderr, and nothing an application writes anywhere else.",
+        "Use docker logs -f, --tail, and --since/--until to inspect a running container's output without drowning in its full history.",
+        "Explain what the default json-file logging driver actually stores, where, and why it can silently fill a host's disk if left unconfigured.",
+        "Configure log rotation with --log-opt max-size and max-file, and explain precisely what each option limits.",
+        "Explain why docker logs stops being useful once a container is switched to a driver like journald, syslog, or awslogs, and where that output goes instead."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "stdout/stderr Is the Contract -- Not Wherever the App Feels Like Writing",
+            "body": "Docker's logging story is narrower than most people assume the first time docker logs shows nothing for an application they know is running and producing output. The daemon captures exactly two things from a container: whatever its PID 1 process writes to its own stdout and stderr file descriptors. That's the entire contract. If an application opens its own file inside the container and writes log lines there with a logging framework's FileHandler, or shells out to a process that writes to a rotating file under /var/log, none of that is stdout or stderr from the daemon's point of view -- it's just ordinary file I/O landing in the container's writable layer, and docker logs has no visibility into it whatsoever, not because of a bug or a missing flag, but because it was never plumbed to look there.\n\nThis is exactly why the widely-cited advice for containerized applications is to log to stdout/stderr directly and let the platform decide what happens to that stream next, rather than have the application manage its own log files, rotation, and shipping. A container is meant to be a single, disposable, observable unit; baking file-based logging into the application reintroduces exactly the kind of host-specific, easy-to-forget-about state that the rest of this curriculum has been steering you away from. If a legacy application insists on writing to a file, the common workaround is to symlink that file's path to /dev/stdout inside the image, so the writes still land in the one place Docker actually watches."
+          },
+          {
+            "heading": "docker logs, -f, --tail, and --since/--until",
+            "body": "docker logs <container> with no flags dumps the entire captured history for that container from the beginning, which is rarely what you want once a long-running service has been up for days. -f (--follow) keeps the command attached and streams new lines as they're written, exactly like tail -f on a plain file -- useful for watching a service react to a request in real time, and terminated with Ctrl+C without affecting the container itself in any way, since -f only detaches the log reader, not anything running inside the container.\n\n--tail N limits the initial output to the last N lines before any following begins, which combined with -f (docker logs -f --tail 100) is the single most common invocation: show me recent context, then keep streaming. --since and --until accept either a relative duration (10m, 2h) or an RFC3339 timestamp, letting you slice out exactly the window around an incident -- docker logs --since 2026-08-14T09:00:00 --until 2026-08-14T09:15:00 mycontainer pulls precisely that fifteen-minute window without you needing to eyeball timestamps in a scrollback buffer."
+          },
+          {
+            "heading": "Where 'the Logs' Actually Live: the json-file Driver",
+            "body": "By default, Docker uses the json-file logging driver, which writes every captured line as its own small JSON object -- containing the log text, which stream it came from (stdout or stderr), and a timestamp -- appended to a file on the host at /var/lib/docker/containers/<container-id>/<container-id>-json.log. docker logs, when using this driver, is doing nothing more mysterious than reading and parsing that file back for you; the command is a convenience wrapper around data that already physically exists on the host filesystem, tied to that specific container object.\n\nThat detail matters for two reasons worth internalizing together. First, because the file lives on the host and is keyed to the container, it survives docker stop/start exactly like the writable layer does, but is discarded when the container is removed with docker rm -- there is no separate 'keep the logs after removal' switch for the default driver, which is precisely why anything you actually need to retain past a container's lifetime belongs in a shipped-elsewhere log pipeline, not in reliance on this file. Second, since it's an ordinary file growing with every line the container ever writes to stdout/stderr, nothing about it is bounded unless you explicitly bound it -- which is exactly the next section's subject."
+          },
+          {
+            "heading": "The Disk-Filling Footgun: Rotation Isn't Automatic Unless You Ask For It",
+            "body": "Left at their defaults, json-file logs have no size cap and no rotation at all. A perfectly healthy, chatty service logging a few lines per request can accumulate gigabytes over weeks; a genuinely broken service stuck in a crash-restart loop, printing the same stack trace hundreds of times a second, can fill a host's disk in minutes -- and a full disk on a Docker host doesn't just affect that one container, it can prevent every other container on the same host from writing anything at all, including their own logs, and can even prevent the Docker daemon itself from functioning correctly.\n\nThe fix is --log-opt max-size and --log-opt max-file, set either per-container at docker run time or as a daemon-wide default in /etc/docker/daemon.json:\n\n```bash\ndocker run -d --log-opt max-size=10m --log-opt max-file=3 myapp\n```\n\nmax-size caps how large a single log file is allowed to grow before Docker rotates it out and starts a fresh one; max-file caps how many of those rotated files are kept before the oldest is deleted outright. Here, that's a hard ceiling of roughly 30MB of retained log history for this one container (3 files x 10MB), no matter how long it runs or how much it logs. Skipping this configuration isn't a subtle oversight -- it's the difference between 'logging is on' and 'logging has an actual, bounded cost,' and it's easy to forget precisely because everything works fine in a short-lived dev container that never lives long enough to accumulate enough log volume to notice."
+          },
+          {
+            "heading": "Switching Log Drivers: docker logs Isn't Guaranteed to Work Afterward",
+            "body": "--log-driver lets you swap json-file for something else entirely: syslog, journald, gelf, fluentd, awslogs, and several others, each shipping the captured stdout/stderr stream to a different destination -- the host's syslog daemon, systemd's journal, a Fluentd collector, CloudWatch Logs, and so on. Production setups very often deliberately choose one of these specifically so log data survives the container being removed, or even the host itself being replaced, which the default json-file driver's host-local file cannot offer on its own.\n\nThe trade-off is that docker logs' usefulness depends on the chosen driver actually supporting local read-back. json-file and the local driver do; most of the others don't, and running docker logs against a container using one of them typically returns an explicit error along the lines of 'configured logging driver does not support reading' rather than any container output at all -- which is not a bug, it's an accurate statement that the daemon genuinely kept no locally readable copy to show you. In that setup, docker logs stops being your debugging tool of choice entirely, and you reach for whatever system the driver actually shipped the logs to instead -- journalctl, your syslog viewer, CloudWatch's console, Fluentd's own storage backend."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Following Logs Live With --tail and -f",
+          "language": "bash",
+          "code": "$ docker logs --tail 50 -f web\n2026-08-14T09:12:03Z [INFO] handling GET /health\n2026-08-14T09:12:03Z [INFO] 200 OK in 4ms\n# ... stays attached, printing new lines as they're written ...\n# Ctrl+C detaches the log reader only -- \"web\" keeps running untouched\n\n$ docker logs --since 10m web | grep ERROR",
+          "explanation": "--tail 50 shows only the most recent 50 lines instead of replaying the container's entire captured history, which matters enormously once a container has been running long enough to accumulate thousands of lines you don't care about right now. Combined with -f, it gives you recent context immediately and then streams anything new -- exactly the pattern you want while reproducing a bug live. Pressing Ctrl+C only stops this particular docker logs invocation from reading further; it has no effect on the container's own process, which was never aware a log reader was attached in the first place. The second command shows --since accepting a relative duration (10m = the last ten minutes) piped into grep, a common way to narrow a large log stream down to just the lines that actually matter for the incident you're chasing."
+        },
+        {
+          "title": "An App Logging to a File Instead of stdout -- Invisible to docker logs",
+          "language": "bash",
+          "code": "# The app inside this container writes to /var/log/app.log via a FileHandler,\n# and never touches stdout at all.\n$ docker run -d --name quiet myapp:with-file-logging\n$ docker logs quiet\n# (nothing -- empty output, even though the app is actively running and logging)\n\n$ docker exec quiet tail -n 5 /var/log/app.log\n2026-08-14T09:20:11Z INFO Handling request id=8841\n2026-08-14T09:20:11Z INFO Responded 200 in 6ms",
+          "explanation": "The application is not broken -- it's actively writing real log lines, at the expected rate, to the expected file. docker logs comes back completely empty because it only ever reads captured stdout/stderr, and this particular app never writes to either; every line goes straight into a file sitting in the container's own writable layer instead, a place docker logs has no mechanism to look. docker exec confirms the data genuinely exists (exec is covered fully in the next concept). The fix, if you want docker logs to actually work for this app without rewriting its logging code, is typically to symlink /var/log/app.log to /dev/stdout inside the image (RUN ln -sf /dev/stdout /var/log/app.log) so the exact same file-write calls end up landing on the stream Docker actually watches -- or, better long-term, to configure the logging framework itself to write to stdout/stderr directly rather than a file at all."
+        },
+        {
+          "title": "Rotating json-file Logs to Stop Disk Exhaustion",
+          "language": "bash",
+          "code": "# Per-container override at run time:\n$ docker run -d --log-opt max-size=10m --log-opt max-file=3 --name web myapp\n\n# Daemon-wide default so every future container gets this unless it overrides it:\n# /etc/docker/daemon.json\n{\n  \"log-driver\": \"json-file\",\n  \"log-opts\": {\n    \"max-size\": \"10m\",\n    \"max-file\": \"3\"\n  }\n}\n# then: sudo systemctl restart docker",
+          "explanation": "The per-container flags cap this one container's log retention at 3 rotated files of at most 10MB each -- once the active log file hits 10MB, Docker closes it, starts a new one, and once there are more than 3 files total for this container, the oldest is deleted. Nothing about this affects log content or ordering within the retained window; it purely bounds how much history, and therefore how much disk, any single container's logging can consume. The daemon.json version sets the same behavior as the default for every container that doesn't explicitly override it with its own --log-opt flags at run time -- the sensible choice for a host running many containers, so that forgetting to set per-container limits on any one of them doesn't reopen the disk-exhaustion risk. Restarting the daemon is required for a daemon.json change to take effect; already-running containers keep whatever logging configuration they were started with."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "docker logs shows everything my application has logged, no matter where inside the container it actually wrote that output.",
+          "clarification": "docker logs only ever shows captured stdout and stderr. An application that writes to its own log file, pipes output to a separate process, or uses a logging framework configured to write to disk produces output that is completely invisible to docker logs, regardless of how much of it there is or how recently it was written -- not because of a missing flag, but because Docker never captures anything beyond those two specific streams. Making that output visible to docker logs requires either changing the application's logging target to stdout/stderr directly, or symlinking its log file's path to /dev/stdout inside the image."
+        },
+        {
+          "description": "Docker automatically rotates and caps container log files by default, so a runaway or crash-looping container can't fill up the host's disk with logs.",
+          "clarification": "The default json-file logging driver has no size limit and no rotation at all unless max-size and max-file are explicitly configured, either per-container via --log-opt at docker run time or as a host-wide default in /etc/docker/daemon.json. Left unconfigured, a container's captured stdout/stderr can grow completely unbounded on the host disk for as long as the container keeps running and producing output -- which is exactly the scenario that makes a crash-restart loop printing the same stack trace repeatedly a genuine disk-exhaustion risk, not just a noisy annoyance."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "docker-logs-and-log-drivers-ex1",
+          "type": "predictOutput",
+          "prompt": "A container runs an application that exclusively writes its logs to /var/log/service.log using a file-based logging library, and never writes anything to stdout or stderr. What does docker logs show for this container, and why?",
+          "code": "$ docker run -d --name svc myservice:1.0\n$ docker logs svc",
+          "hints": [
+            "docker logs only ever reads from one specific pair of sources -- what are they, exactly?",
+            "The application is genuinely running and genuinely producing log output somewhere -- the question is whether that somewhere is one of the two sources Docker actually captures.",
+            "Writing to a file inside the container lands in the container's own writable layer, not in any stream the daemon watches."
+          ],
+          "expectedAnswer": "docker logs svc prints nothing at all -- completely empty output -- even though the application is actively running and genuinely writing log lines to /var/log/service.log. Docker only captures stdout and stderr, and this application writes to neither.",
+          "solutionExplanation": "docker logs is a thin read wrapper around whatever the container's logging driver captured from the container's stdout and stderr file descriptors specifically -- it has no visibility into arbitrary files written inside the container's own filesystem. Because this application's logging library was configured to write exclusively to /var/log/service.log, and never touches stdout or stderr at all, there is nothing for the json-file (or any other) logging driver to capture in the first place, so docker logs returns empty output. This is not an error state or a sign the container is misbehaving -- confirming the app is actually working would require a different tool, such as docker exec svc tail /var/log/service.log, which reads the file directly rather than relying on captured streams."
+        },
+        {
+          "id": "docker-logs-and-log-drivers-ex2",
+          "type": "debugging",
+          "prompt": "A host is running low on disk space. Investigation shows one specific container, stuck in a restart loop for the past two days, has a json-file log at /var/lib/docker/containers/<id>/<id>-json.log that has grown to over 40GB. The container was started with a plain docker run and no logging-related flags at all. Identify the Docker-side configuration gap and fix it (the application's own crash-loop root cause is a separate, already-tracked issue).",
+          "code": "$ docker run -d --name flaky-worker myworker:2.1\n# ... two days later ...\n$ du -sh /var/lib/docker/containers/*/*-json.log\n42G   /var/lib/docker/containers/a1b2.../a1b2...-json.log",
+          "hints": [
+            "The default json-file driver has no built-in cap on log file size -- what flags exist specifically to bound it?",
+            "The fix here is about limiting the CONSEQUENCE of the crash loop's log volume, not about fixing why the app is crash-looping in the first place.",
+            "Consider whether this should be a per-container fix, a host-wide daemon.json default, or both, so this can't recur on a different container later."
+          ],
+          "solutionCode": "# Stop and remove the current container, then restart it with bounded logging:\n$ docker rm -f flaky-worker\n$ docker run -d --name flaky-worker --log-opt max-size=10m --log-opt max-file=3 myworker:2.1\n\n# And, to prevent any OTHER container on this host from doing the same thing,\n# set a host-wide default in /etc/docker/daemon.json:\n{\n  \"log-driver\": \"json-file\",\n  \"log-opts\": { \"max-size\": \"10m\", \"max-file\": \"3\" }\n}\n# then: sudo systemctl restart docker",
+          "solutionExplanation": "flaky-worker was started with no --log-opt flags at all, so it used the json-file driver's unbounded default -- every single line of every restart's crash output over two full days was captured and appended, with nothing ever rotated out or capped, which is exactly how one container reached 42GB. The immediate fix is recreating the container with --log-opt max-size and max-file set, which caps this specific container's retained log history going forward (it does not retroactively shrink the already-huge existing file, which needs to be cleaned up separately, typically by removing the old container entirely as shown). The durable fix is setting the same limits as a daemon-wide default in daemon.json, so that no future container on this host -- flaky or not -- can silently repeat the exact same disk-exhaustion pattern just because nobody remembered to pass --log-opt at its own docker run time. The crash loop itself is a legitimate, separate bug to chase down in the application, but it's worth noting that bounded logging is what keeps a crash loop from becoming a host-wide outage while that root cause is being fixed."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "docker-logs-and-log-drivers-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "A container's application writes detailed request logs to /var/log/access.log using its own file-based logger, and separately prints only startup and fatal-error messages to stdout. What will docker logs show for this container?",
+          "options": [
+            "Every line from both /var/log/access.log and stdout, merged in chronological order.",
+            "Only the startup and fatal-error messages that were written to stdout -- nothing from /var/log/access.log.",
+            "Nothing at all, because the application uses a mix of file logging and stdout logging, which Docker doesn't support.",
+            "Only /var/log/access.log, since Docker prioritizes file-based logs as more complete."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 is correct: docker logs captures and shows only stdout and stderr, so exactly and only the startup/fatal-error messages this application actually writes there will appear -- the detailed request logs written to a separate file are entirely invisible to docker logs, regardless of how much other output the container is producing elsewhere. Option 1 is wrong because Docker never merges arbitrary files into the captured log stream. Option 3 is wrong -- there's no rule against an application splitting its output between a file and stdout; docker logs simply only reflects the stdout/stderr half of that split. Option 4 inverts the actual priority and invents a 'more complete' heuristic Docker has no concept of -- Docker doesn't evaluate file logs at all, favorably or otherwise."
+        },
+        {
+          "id": "docker-logs-and-log-drivers-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain what the default json-file logging driver actually does -- where the data lives, what happens to it across docker stop/start versus docker rm, and why an operator would deliberately configure log rotation even for an application they consider well-behaved.",
+          "modelAnswer": "The json-file driver captures every line a container writes to stdout or stderr and appends it, as a small JSON object carrying the text, the originating stream, and a timestamp, to a file on the host at /var/lib/docker/containers/<container-id>/<container-id>-json.log. docker logs is essentially just a convenience command that reads and formats that same file back for you -- there's no separate, more authoritative source of truth being consulted underneath it. Because this file is tied to the container object rather than the image, it behaves exactly like the container's writable layer with respect to lifecycle: docker stop leaves it completely untouched, and docker start resumes appending to it, so a container's full log history survives being stopped and restarted any number of times. docker rm, however, discards the container object entirely, including this log file, permanently -- there is no separate flag to keep just the logs while removing everything else about the container. An operator should configure rotation, via --log-opt max-size and max-file (or the equivalent daemon.json defaults), even for an application they trust to behave well, for a simple reason: 'well-behaved under normal conditions' is not the same guarantee as 'will never log unusually heavily under some future, unanticipated condition' -- a traffic spike, a misbehaving downstream dependency causing verbose retry logging, or an actual bug none of that testing anticipated can all cause even a normally quiet application to log far more than expected, and with no cap configured, that unexpected volume has an unbounded claim on the host's disk, which can degrade or take down every other container sharing that same host, not just the one logging heavily. Rotation limits turn an open-ended risk into a small, known, accepted cost, which is precisely the kind of defensive default worth setting before there's ever a concrete reason to think it's needed."
+        }
+      ]
+    },
+    {
+      "id": "docker-exec-shells",
+      "title": "docker exec: Getting a Shell Inside a Running Container",
+      "description": "docker exec starts a brand-new process inside a container's existing namespaces -- it does not attach to the container's own PID 1 -- which is exactly what makes it safe for poking around a live container, and exactly why it can't help you at all once the image has no shell binary to start in the first place.",
+      "moduleId": "debugging_and_observability",
+      "topicId": "debugging_and_observability",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 35,
+      "prerequisites": ["docker-images-and-layers", "docker-namespaces-and-cgroups"],
+      "learningObjectives": [
+        "Explain what docker exec actually does: start a brand-new process inside the target container's existing namespaces, distinct from attaching to PID 1's own stdio.",
+        "Use docker exec -it <container> sh (or bash) to get a working interactive shell, and explain what -i and -t each individually contribute.",
+        "Explain why docker exec fails outright on minimal, scratch-based, or distroless images with no shell binary at all, and describe at least one way to debug those images anyway.",
+        "Explain why a process started via docker exec is not part of the container's normal lifecycle: it doesn't restart with the container and doesn't count as 'the container's command.'",
+        "Debug a scenario where someone mistakenly assumes a fix applied via docker exec will still be present after the container is recreated."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "exec Starts a New Process; It Doesn't Attach to the Old One",
+            "body": "docker exec <container> <command> tells the Docker daemon to start an entirely new process inside a container's already-running set of namespaces -- the same pid, net, mnt, and other namespaces the container's original PID 1 process was placed into when the container started. This is a genuinely different operation from docker attach, which connects your terminal directly to the stdin/stdout/stderr of the container's existing PID 1 process, with no new process created at all. Attach lets you watch (and, if PID 1 reads stdin, interact with) the one process that's already there; exec spins up an independent second (or third, or fourth) process that happens to share the same isolated environment.\n\nThis distinction is exactly why exec is the practical tool for interactive debugging: you can run a shell inside a container without any risk of disturbing whatever the container's main application process is doing, because that shell is a completely separate process from it. Killing the exec'd shell, or exiting it normally, has zero effect on the main application -- it's not 'a window into' that process the way attach's terminal is; it's its own, independent thing sharing the same fenced-off namespace neighborhood."
+          },
+          {
+            "heading": "-it, and Why Both Flags Matter for an Interactive Shell",
+            "body": "docker exec -it <container> sh is the standard invocation for an interactive shell, and both flags in -it are doing distinct, necessary work. -i (--interactive) keeps stdin open so you can actually type input to the process; without it, the exec'd shell starts but has no connected input, making it useless for anything beyond a single one-shot command. -t (--tty) allocates a pseudo-terminal and attaches it to the process, which is what makes the shell behave like a normal terminal session -- a proper prompt, working arrow-key history navigation, and correctly-rendered interactive tools like less or vim, rather than a raw, unbuffered pipe that looks visually broken the moment you try to do anything beyond simple line input.\n\n```bash\ndocker exec -it web sh\n/ # ls\n/ # whoami\nroot\n/ # exit\n```\n\nDropping either flag changes behavior in specific, predictable ways: -t without -i gives you a terminal with no way to send it input; -i without -t works fine for piping a single command's output but produces a shell that doesn't behave like an interactive session (no proper prompt rendering, awkward line editing). For a genuinely interactive debugging session, you want both, together, essentially always."
+          },
+          {
+            "heading": "When There's No Shell At All: Minimal, Distroless, and scratch Images",
+            "body": "Multi-stage builds, covered in the previous module, routinely produce final images that contain nothing but a compiled binary and maybe a CA certificate bundle -- no shell, no coreutils, sometimes not even a C library. docker exec -it <container> sh against one of those fails immediately and unambiguously:\n\n```bash\n$ docker exec -it tiny-service sh\nOCI runtime exec failed: exec failed: unable to start container process: exec: \"sh\": executable file not found in $PATH: unknown\n```\n\nThis is not a Docker bug or a missing flag -- there is genuinely no shell binary anywhere in that image for exec to start, and exec can only ever start something that already exists inside the target container's filesystem. Reaching for bash instead of sh produces the identical class of error if bash isn't there either.\n\nA few real options exist for debugging these images without permanently changing them: build and keep around a debug variant of the image with a shell and basic tools added (a common pattern is tagging it myapp:2.1-debug, built from the same sources but FROM a base with a shell, specifically for troubleshooting, never deployed to production); or attach a separate, throwaway container into the target's namespaces from the outside, for example docker run --rm -it --pid=container:tiny-service --network=container:tiny-service alpine sh, which gives you a fully-featured shell that can see the target's processes and network namespace without needing the target image itself to contain anything extra; or use newer tooling purpose-built for exactly this, such as docker debug, which automates roughly that same 'attach a toolbox container' idea behind a single command. None of these require rebuilding or modifying the actual running image -- which matters, because adding a shell permanently to a production image just to make debugging easier defeats a real chunk of the size and attack-surface benefit multi-stage builds were adopted for in the first place."
+          },
+          {
+            "heading": "exec'd Processes Are Not Part of the Container's Lifecycle",
+            "body": "A process started via docker exec is not the container's designated command, is not tracked by any restart policy, and does not survive the container being stopped and restarted. If you exec into a container and start a background process by hand -- say, a one-off script left running in a detached shell session -- that process disappears the moment the container is stopped, and does not come back when the container is started again, unlike the container's actual CMD/ENTRYPOINT process, which the restart policy and lifecycle machinery genuinely manage.\n\nThis makes exec a fine tool for quick, disposable checks -- inspecting a config file, checking an environment variable's actual runtime value, running a one-off diagnostic query against a database the container talks to -- and a poor tool for anything meant to persist or be relied upon later. Someone who execs in, manually starts a second worker process 'temporarily' to relieve some load, and then walks away has created something that will vanish on the next restart with zero record that it ever existed, which is a much narrower, immediate-session version of the exact same durability problem the earlier curriculum module covered about editing a running container's writable layer and expecting the fix to survive a redeploy: exec'd state and writable-layer edits are both scoped to this one specific container instance's current lifetime, nothing more."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "A Basic Interactive Shell Session",
+          "language": "bash",
+          "code": "$ docker run -d --name web nginx\n$ docker exec -it web sh\n# whoami\nroot\n# ps aux\nPID   USER     TIME  COMMAND\n    1 root      0:00 nginx: master process nginx -g daemon off;\n    8 root      0:00 nginx: worker process\n   15 root      0:00 sh\n# exit\n$ docker ps --filter name=web\n# web is still Up -- exiting the exec'd shell did not stop the container",
+          "explanation": "ps aux run from inside the exec'd shell shows the container's original nginx processes (PID 1 and its worker) alongside the shell itself (PID 15 here) -- three genuinely separate processes sharing one pid namespace, exactly as the namespaces concept from the first module described. Exiting the shell with exit simply ends that one process; nginx's master and worker processes were never touched by it and keep running exactly as before, which is why docker ps still reports the container as Up immediately afterward. This is the concrete, observable version of 'exec starts a new process, it doesn't attach to the existing one.'"
+        },
+        {
+          "title": "exec Failing on a Minimal Image, and a Toolbox Workaround",
+          "language": "bash",
+          "code": "$ docker exec -it tiny-service sh\nOCI runtime exec failed: exec failed: unable to start container process: exec: \"sh\": executable file not found in $PATH: unknown\n\n# Attach a fully-featured throwaway container into tiny-service's namespaces instead:\n$ docker run --rm -it --pid=container:tiny-service --network=container:tiny-service alpine sh\n/ # ps aux   # can see tiny-service's own process(es), because we're sharing its pid namespace\n/ # wget -qO- http://localhost:8080/health   # reaches tiny-service's port directly, sharing its net namespace",
+          "explanation": "The first command fails because tiny-service's image genuinely contains no sh binary anywhere -- a common, deliberate property of distroless or scratch-based final images from multi-stage builds. The second command sidesteps that entirely by starting a brand-new alpine container, which does have a shell, and explicitly telling Docker to place it inside tiny-service's existing pid and network namespaces instead of giving it fresh ones of its own (--pid=container:<name>, --network=container:<name>). From inside that alpine shell, ps aux shows tiny-service's real process, and a request to localhost:8080 reaches tiny-service's own listening port directly, because 'localhost' inside this toolbox container is the same network namespace tiny-service itself is using. Nothing about tiny-service's own image or running container was modified to make this possible -- the toolbox container is entirely separate and disposable, and --rm cleans it up the moment you exit."
+        },
+        {
+          "title": "Why an exec'd Background Process Doesn't Survive a Restart",
+          "language": "bash",
+          "code": "$ docker exec -d worker sh -c \"while true; do echo tick; sleep 5; done\"\n$ docker exec worker ps aux | grep tick\n   42 root      0:00 sh -c while true; do echo tick; sleep 5; done\n\n$ docker restart worker\n$ docker exec worker ps aux | grep tick\n# (nothing -- the manually-started loop is gone; only the container's real CMD process came back)",
+          "explanation": "docker exec -d starts a detached background process inside worker -- here, an infinite loop printing 'tick' every five seconds -- and it genuinely runs, visible in ps aux with its own PID. But this process was never registered anywhere as part of worker's actual startup command; it exists purely because someone manually asked for it, once, in this exec session. docker restart stops and restarts worker's real process (whatever CMD/ENTRYPOINT defined), and only that process is restarted -- the manually-exec'd loop has no lifecycle hook telling Docker to bring it back, so it simply doesn't exist anymore after the restart, with no error, warning, or trace that it was ever there in the first place."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "docker exec -it <container> bash lets me interact directly with the container's actual running application process (PID 1).",
+          "clarification": "docker exec always starts a brand-new, independent process inside the container's existing namespaces -- it never attaches to or takes over the container's existing PID 1. The shell you get is a separate process running alongside PID 1, not a window directly into it; exiting that shell, or even killing it, has no effect on PID 1 or the container's overall running state. docker attach is the different command that connects to PID 1's own stdio directly, without creating any new process."
+        },
+        {
+          "description": "If a container's image has no shell installed, there's no practical way to debug what's happening inside it.",
+          "clarification": "A missing shell only rules out docker exec starting one inside that specific image -- it doesn't rule out debugging entirely. Attaching a separate, throwaway container into the target's pid and network namespaces (docker run --pid=container:<name> --network=container:<name> ... sh), building a temporary debug-tagged variant of the image with a shell added, or using purpose-built tooling like docker debug all provide a real interactive shell with visibility into the target container, without requiring the target image itself to contain a shell or ever be modified."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "docker-exec-shells-ex1",
+          "type": "predictOutput",
+          "prompt": "You exec into a running container, start a shell, run a command that crashes the shell process itself (not the container's own application), and the exec session ends. What is the state of the container afterward?",
+          "code": "$ docker exec -it api sh\n# kill -9 $$\n# (session ends)\n$ docker ps --filter name=api",
+          "hints": [
+            "kill -9 $$ inside the exec'd shell targets the shell's own PID -- what process is that, relative to the container's actual main process?",
+            "The exec'd shell and the container's PID 1 are two separate processes sharing the same namespaces, not one process wearing two hats.",
+            "Compare this to docker attach, where killing the attached session's process WOULD be killing the container's real PID 1."
+          ],
+          "expectedAnswer": "The container ('api') is still running normally afterward, with STATUS showing Up. Killing the exec'd shell only terminated that one, separate process -- it had no relationship to the container's actual PID 1 process, which was never touched.",
+          "solutionExplanation": "kill -9 $$ sends SIGKILL to $$, the current shell's own PID -- which is the exec'd shell process itself, not the container's original PID 1. Because docker exec always starts a genuinely new, independent process rather than attaching to the existing one, killing that new process has no more effect on the container's real application than killing any other unrelated process on the same host would. docker ps immediately afterward shows api still Up, with whatever its actual CMD/ENTRYPOINT process was continuing to run exactly as before -- the entire incident was scoped to the one throwaway shell process created for this debugging session."
+        },
+        {
+          "id": "docker-exec-shells-ex2",
+          "type": "debugging",
+          "prompt": "A teammate execs into a production container, edits a config file by hand to work around a bug, confirms the workaround works, and closes their terminal. During the next scheduled deploy, the orchestrator replaces the container with a fresh one from the same image, and the bug reappears immediately. Explain what happened and what they should have done instead.",
+          "code": "$ docker exec -it api sh\n# vi /app/config/settings.json    # manually edits a value, saves, exits\n# exit\n$ docker exec api cat /app/config/settings.json   # shows the edited value -- \"fixed\"\n# ... next scheduled deploy ...\n$ docker ps   # a brand-new \"api\" container, replacing the old one\n$ docker exec api cat /app/config/settings.json   # shows the ORIGINAL, unedited value -- bug is back",
+          "hints": [
+            "The edit happened inside a running container's own writable layer -- what happens to that layer specifically when the container is replaced, not just restarted?",
+            "A deploy that 'replaces the container' is not the same operation as docker restart -- think about which one actually discards the writable layer.",
+            "The durable fix has to live in something that gets rebuilt and repulled on every deploy -- what artifact is that?"
+          ],
+          "solutionCode": "# The fix needs to be baked into the image/config source, not applied by hand to a live container:\n# e.g. update the actual config file (or template) in version control,\n# rebuild the image, and let the normal deploy pipeline ship the corrected file.\n$ git commit -am \"fix: correct settings.json value that was causing <bug>\"\n$ docker build -t api:2.5 .\n# deploy api:2.5 through the normal pipeline",
+          "solutionExplanation": "vi editing the file inside the running container writes the change into that specific container's own writable layer -- exactly the same mechanism covered in the images-and-layers module, just reached via docker exec instead of any other route. A scheduled deploy that replaces the container starts a brand-new container instance from the same, unmodified image, with its own brand-new, empty writable layer; none of the previous container's writable-layer edits exist anywhere near it, so the config file reverts to whatever the image itself actually contains. The confirmation that the edit 'worked' was real, but it was only ever true for that one specific, soon-to-be-replaced container instance -- not a property of the image at all. The durable fix has to change the actual source that produces the image: correct the config file (or its generating template) in version control, rebuild, and let every future deploy pull the corrected version automatically, the same discipline the earlier curriculum module argued for when discussing why docker commit is a trap rather than a shortcut."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "docker-exec-shells-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "What does docker exec -it mycontainer bash actually do?",
+          "options": [
+            "It attaches your terminal directly to the container's existing PID 1 process, letting you interact with the application itself.",
+            "It starts a brand-new bash process inside the container's existing namespaces, running alongside whatever PID 1 already is.",
+            "It restarts the container using bash as its new entrypoint.",
+            "It pauses the container's main process and temporarily replaces it with bash until you exit."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 is correct: exec creates a genuinely new, independent process inside the target container's existing set of namespaces -- it never attaches to, restarts, pauses, or replaces PID 1. Option 1 describes docker attach, a different command entirely. Option 3 is wrong -- exec does not restart anything or change the container's configured entrypoint; the container's original command keeps running throughout. Option 4 is also wrong and describes behavior Docker doesn't have -- PID 1 is never paused or swapped out by an exec session; it continues running completely independently of whatever the exec'd process is doing."
+        },
+        {
+          "id": "docker-exec-shells-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain why docker exec is a safe, low-risk tool for interactively debugging a live production container, and also explain its real limits -- what it can't do, and what mistakes people make by relying on it for more than quick, disposable inspection.",
+          "modelAnswer": "docker exec is low-risk for live debugging specifically because it starts an entirely new, independent process inside the container's already-running namespaces rather than attaching to or interfering with the container's actual PID 1 in any way. You can run a shell, inspect files, check environment variables, or run one-off diagnostic commands, and none of it can accidentally kill, pause, or otherwise disturb the real application process, because the exec'd process and PID 1 are simply two separate things sharing the same isolated pid/net/mnt namespace neighborhood -- closing the exec session, or even having it crash outright, leaves the actual service running exactly as it was. That safety comes with real limits, though. First, exec can only start something that already exists in the target image's filesystem -- against a minimal, distroless, or scratch-based image with no shell binary at all, exec simply fails outright with an 'executable file not found' error, and debugging such an image requires a different approach entirely, like attaching a separate toolbox container into the target's namespaces from the outside. Second, and more subtly, anything created via exec -- a manually started background process, a hand-edited config file, a temporarily installed package -- lives entirely within that one specific container instance's current life: it is not tracked by the container's restart policy, does not come back after a restart the way the container's real command does, and disappears completely and silently the moment the container is stopped, removed, or replaced by a fresh deploy. The common mistake this leads to is treating an exec-applied fix as durable -- confirming it 'works' in the moment and walking away, only to have the exact same problem resurface on the very next deploy or restart, because the fix was never captured anywhere that actually gets rebuilt and shipped again. exec is genuinely excellent for quick, disposable inspection and diagnosis; anything meant to persist has to be pushed back into the image's actual source -- the Dockerfile, the application's config, or its source code -- and rebuilt properly."
+        }
+      ]
+    },
+    {
+      "id": "docker-healthchecks",
+      "title": "HEALTHCHECK: Why 'Running' Isn't the Same as 'Working'",
+      "description": "docker ps reporting a container as Up only means its PID 1 process is still alive -- it says nothing about whether that process is actually doing its job; the HEALTHCHECK instruction lets an image define its own application-aware probe, giving Docker (and anything orchestrating it) a genuinely meaningful notion of 'healthy' versus merely 'running.'",
+      "moduleId": "debugging_and_observability",
+      "topicId": "debugging_and_observability",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 40,
+      "prerequisites": ["docker-dockerfile-layer-caching"],
+      "learningObjectives": [
+        "Explain precisely why a container can show status Up in docker ps and yet be completely unable to serve real traffic, and what gap the HEALTHCHECK instruction closes.",
+        "Write a HEALTHCHECK instruction using CMD plus --interval, --timeout, --retries, and --start-period, and explain exactly what each option controls.",
+        "Explain the starting, healthy, and unhealthy states and precisely what triggers a transition between them.",
+        "Explain how docker compose's depends_on: condition: service_healthy uses HEALTHCHECK to sequence startup between dependent services, and why a plain depends_on without that condition doesn't wait for readiness at all.",
+        "Explain why a naively written healthcheck command can produce false positives or false negatives, and design a healthcheck that avoids the most common versions of that mistake."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "'Up' Means the Process Launched -- Not That It's Doing Its Job",
+            "body": "docker ps's STATUS column, and the underlying container state Docker tracks, reflects exactly one thing by default: whether the container's PID 1 process is still alive. That's a genuinely useful signal, but it's a much narrower one than it sounds. A web server that's deadlocked on a mutex, an application stuck in an infinite retry loop against a database it can never reach, a process that's alive but has exhausted its connection pool and is silently rejecting every request, or a service that completed its startup sequence incorrectly and is quietly serving 500 errors to everything -- every one of these looks identical to Docker's own liveness check: the process is still running, so the container is still Up.\n\nDocker, at the level of the daemon, has no built-in concept of what 'actually working' means for your specific application, because that's inherently application-specific -- only your application (or something that understands it) can meaningfully answer 'am I ready to serve real traffic right now?' The HEALTHCHECK instruction exists precisely to let an image supply that answer itself, turning an otherwise opaque 'the process object still exists' signal into something considerably closer to 'this specific application says it's fine.'"
+          },
+          {
+            "heading": "The HEALTHCHECK Instruction",
+            "body": "HEALTHCHECK is written into the Dockerfile (or overridden at docker run time with --health-cmd and related flags) and names a command to run periodically inside the container's own filesystem and network namespace -- exit code 0 means healthy, exit code 1 means unhealthy:\n\n```dockerfile\nHEALTHCHECK --interval=30s --timeout=3s --retries=3 --start-period=15s \\\n  CMD curl -f http://localhost:8080/health || exit 1\n```\n\n--interval controls how often the check runs (every 30 seconds here); --timeout caps how long a single check attempt is allowed to run before it's counted as a failure on its own, regardless of what the command would eventually have returned; --retries sets how many consecutive failures in a row are required before the container is actually marked unhealthy, rather than flipping to unhealthy on the very first blip; --start-period, covered fully in the next section, gives a new container a grace window during which failures don't count toward that retry total at all. The health-check command itself is application-specific -- hitting a real HTTP endpoint that the application only returns 200 from once it's genuinely ready is the common pattern, though it can be any command at all: a database client running a trivial query, a script checking a file's existence, anything that exits 0 or 1 meaningfully."
+          },
+          {
+            "heading": "Health States and Their Transitions",
+            "body": "A container with a HEALTHCHECK defined moves through distinct states, visible via docker ps (which appends (healthy) or (unhealthy) to the status) or precisely via docker inspect --format='{{.State.Health.Status}}' <container>. Immediately after starting, a container is starting -- the very first check hasn't necessarily even run yet, and critically, any failures that do occur during the start-period window don't count toward the retries threshold at all, which is the entire reason start-period exists (covered next). Once the start-period elapses, the state becomes healthy the moment a check succeeds, and stays healthy through any single isolated failure -- it only flips to unhealthy once retries consecutive checks in a row have failed. A single transient blip, a request that happened to time out once under load, does not by itself flip a healthy container to unhealthy; only a sustained run of failures does, which is a deliberate design choice to avoid flapping on ordinary, momentary noise.\n\n```bash\n$ docker inspect --format='{{json .State.Health}}' api | jq\n{\n  \"Status\": \"healthy\",\n  \"FailingStreak\": 0,\n  \"Log\": [ { \"Start\": \"...\", \"End\": \"...\", \"ExitCode\": 0, \"Output\": \"\" } ]\n}\n```\n\nAn unhealthy container is not automatically restarted or killed by Docker itself just because of that status -- HEALTHCHECK reports state; it doesn't by itself enforce any policy on top of that state. Reacting to unhealthy -- restarting the container, alerting a human, removing it from a load balancer's rotation -- is left to whatever is orchestrating the container, which is exactly the next section's subject."
+          },
+          {
+            "heading": "Why This Matters for Orchestration: depends_on and condition: service_healthy",
+            "body": "A docker-compose.yml with a plain depends_on: - db only guarantees ordering of container starts -- Compose waits for the db container's process to start, and only then starts the dependent service. It does not wait for the database inside that container to actually be ready to accept connections, which for something like Postgres or MySQL can be a real, non-trivial number of seconds after the container's own process starts, particularly on first initialization. A service that connects to its database immediately on startup, with no retry logic of its own, can easily race this gap and fail its very first connection attempt, sometimes crashing outright depending on how it's written.\n\ncondition: service_healthy closes exactly this gap, provided db has a HEALTHCHECK defined:\n\n```yaml\nservices:\n  db:\n    image: postgres:16\n    healthcheck:\n      test: [\"CMD-SHELL\", \"pg_isready -U postgres\"]\n      interval: 5s\n      timeout: 3s\n      retries: 5\n  api:\n    image: myapi:1.0\n    depends_on:\n      db:\n        condition: service_healthy\n```\n\nWith this configuration, Compose doesn't start api until db's own HEALTHCHECK reports healthy -- meaning pg_isready has actually confirmed Postgres is accepting connections, not merely that the container's process launched. This turns a race condition that might work fine on a fast laptop and fail intermittently in CI or production into something deterministically sequenced, entirely through the health-check mechanism rather than any change to api's own connection-retry code (though writing resilient retry logic in the application itself remains good practice regardless, as a defense against the database becoming unhealthy again later, after startup)."
+          },
+          {
+            "heading": "Designing a Good Health Check -- and Its Common Failure Modes",
+            "body": "A weak health check can be actively worse than no health check at all, because it creates false confidence. Checking only that a port is open, for instance, can report healthy for a process that accepted the TCP connection but is completely stuck internally and never actually responds to a real request -- the check passes, but the application genuinely isn't working. A meaningfully better check hits an actual application-level endpoint that only returns success once real, relevant preconditions are met -- database connectivity, required caches warmed, critical config loaded -- not just 'a socket exists.'\n\nStart-period deserves particular care: setting it too short for a service with a genuinely slow startup -- a JVM warming up, an application running migrations before it can serve anything -- causes failures during legitimate, expected startup time to count toward the unhealthy threshold, potentially flipping a container to unhealthy (and getting it killed/restarted by an orchestrator that reacts to that) while it was still in the middle of an entirely normal boot sequence. The opposite mistake, setting the check itself too aggressive -- for example, having a service's healthcheck also verify every downstream dependency it talks to, rather than just its own readiness -- can cause a single unrelated downstream blip to cascade into marking an otherwise perfectly functional service unhealthy, potentially triggering unnecessary restarts or removal from load-balancer rotation for a problem the check target had no actual role in. The general principle: a health check should answer 'am I, specifically, ready to do my job right now,' calibrated with a start-period that matches this specific service's real startup time -- not a generic, copy-pasted probe borrowed from an unrelated service with very different startup and dependency characteristics."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "A Realistic HTTP HEALTHCHECK in a Dockerfile",
+          "language": "dockerfile",
+          "code": "FROM python:3.11.8-slim-bookworm\nWORKDIR /app\nCOPY . .\nRUN pip install --no-cache-dir -r requirements.txt\nHEALTHCHECK --interval=30s --timeout=3s --retries=3 --start-period=20s \\\n  CMD python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)\" || exit 1\nCMD [\"python\", \"app.py\"]",
+          "explanation": "This uses Python itself, already present in the image, to make an HTTP request to the application's own /health endpoint, rather than assuming a curl binary is installed -- a genuinely common gotcha, since many minimal Python images don't include curl by default, and adding it purely for the healthcheck is unnecessary weight when the runtime already has an HTTP client available. --start-period=20s gives the application 20 seconds after container start before failures count toward the retries threshold, accommodating whatever startup work app.py does (loading models, warming a cache, establishing initial connections) before it's genuinely ready to answer requests. --timeout=3s ensures a single hung check attempt is capped and counted as a failure quickly, rather than blocking indefinitely waiting for a response that may never come."
+        },
+        {
+          "title": "Watching a Container Move Through starting, healthy, and unhealthy",
+          "language": "bash",
+          "code": "$ docker run -d --name api myapi:1.0\n$ docker ps --filter name=api\nSTATUS: Up 5 seconds (health: starting)\n\n$ sleep 25 && docker ps --filter name=api\nSTATUS: Up 30 seconds (healthy)\n\n# ... later, the app's database connection breaks internally ...\n$ docker ps --filter name=api\nSTATUS: Up 6 minutes (unhealthy)\n\n$ docker inspect --format='{{.State.Health.FailingStreak}}' api\n3",
+          "explanation": "Immediately after starting, the container reports (health: starting) -- it's within its configured start-period, and no failures during this window count toward anything. Once that window passes and the application's own /health endpoint has started returning success, the status flips to (healthy). Later, once something breaks internally and enough consecutive checks fail to reach the configured retries count, the status flips to (unhealthy) -- FailingStreak: 3 confirms exactly how many consecutive checks have failed at that moment, matching a --retries=3 configuration. Docker itself takes no automatic action purely from this status change -- it's information for humans watching docker ps, or for an orchestrator (like Compose's depends_on or a Swarm/Kubernetes-equivalent mechanism) that's specifically configured to react to it."
+        },
+        {
+          "title": "depends_on Without a Health Condition vs With One",
+          "language": "yaml",
+          "code": "# WITHOUT a health condition -- api can start before db is actually ready to accept connections\nservices:\n  db:\n    image: postgres:16\n  api:\n    image: myapi:1.0\n    depends_on:\n      - db\n\n# WITH a health condition -- api waits for db's own HEALTHCHECK to report healthy\nservices:\n  db:\n    image: postgres:16\n    healthcheck:\n      test: [\"CMD-SHELL\", \"pg_isready -U postgres\"]\n      interval: 5s\n      retries: 5\n  api:\n    image: myapi:1.0\n    depends_on:\n      db:\n        condition: service_healthy",
+          "explanation": "In the first version, depends_on: - db is shorthand for condition: service_started, which only waits for db's container process to launch -- Compose starts api the moment that happens, with zero awareness of whether Postgres inside db has finished its own startup and initialization well enough to accept connections yet, which routinely takes a few extra seconds beyond the container process itself starting. In the second version, api's depends_on explicitly requires db to reach the healthy state first, which db's own healthcheck (pg_isready, a tool built specifically to check Postgres readiness) only reports once real connections actually succeed. This reliably eliminates the exact 'database container started but isn't ready yet' race condition, without requiring any change to api's own code -- the sequencing guarantee comes entirely from Compose consulting db's health status before starting api at all."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "docker ps showing a container as 'Up' means the application inside it is functioning correctly and ready to serve traffic.",
+          "clarification": "'Up' only reflects that the container's PID 1 process is still alive -- it says nothing about whether that process is actually doing useful work. A deadlocked process, one stuck in an infinite retry loop, or one silently failing every request it receives all still show as Up, because the process object itself hasn't exited. Only an explicitly configured HEALTHCHECK, which runs an application-aware probe and reports healthy/unhealthy separately from basic process liveness, can distinguish 'running' from 'actually working.'"
+        },
+        {
+          "description": "depends_on in a docker-compose.yml file automatically waits for a dependency to be fully ready before starting the dependent service, with no extra configuration needed.",
+          "clarification": "A plain depends_on: - servicename only waits for that dependency's container process to start -- it does not wait for whatever that dependency is doing internally to finish initializing. Actually waiting for readiness requires the dependency to define its own HEALTHCHECK and the dependent service to specify depends_on: <name>: condition: service_healthy explicitly; without both pieces in place, depends_on only sequences container starts, not application-level readiness, leaving a real race-condition window a dependent service can hit on startup."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "docker-healthchecks-ex1",
+          "type": "predictOutput",
+          "prompt": "A container is started with HEALTHCHECK --interval=5s --timeout=2s --retries=3 --start-period=20s CMD curl -f http://localhost:8080/health || exit 1. The application takes 12 seconds to finish starting up, during which every health check attempt fails, and then begins passing every check reliably afterward. What health status does the container end up in, and does it ever become unhealthy along the way?",
+          "code": "# t=0s: container starts\n# checks at t=5s, t=10s: FAIL (app still starting)\n# app finishes starting at t=12s\n# checks at t=15s, t=20s, t=25s, ...: PASS",
+          "hints": [
+            "start-period=20s means failures during the FIRST 20 seconds after container start don't count toward the retries threshold at all.",
+            "Every failing check in this scenario happens at t=5s and t=10s -- compare those timestamps to the 20-second start-period window.",
+            "The container never accumulates 3 CONSECUTIVE counted failures, because none of the failures that occurred were ever counted in the first place."
+          ],
+          "expectedAnswer": "The container never becomes unhealthy. Both failing checks (at t=5s and t=10s) occur within the 20-second start-period window, so neither counts toward the retries=3 threshold. Once the start-period ends at t=20s, the app is already passing checks reliably, so the container transitions from starting directly to healthy, with FailingStreak staying at 0 the entire time.",
+          "solutionExplanation": "start-period=20s specifically exempts any check failures that happen within the first 20 seconds after the container starts from counting toward the retries total -- they're recorded, but they don't advance a failing streak that could flip the container to unhealthy. Since both actual failures here (t=5s, t=10s) fall entirely inside that 20-second window, neither one counts, and by the time the start-period ends at t=20s, the application has already been passing checks since t=12s. So the container simply moves from starting to healthy once the grace period elapses and a passing check has been observed, having never accumulated any counted failures, let alone the 3 consecutive ones retries=3 would require to ever become unhealthy."
+        },
+        {
+          "id": "docker-healthchecks-ex2",
+          "type": "debugging",
+          "prompt": "A docker-compose.yml starts a database and an API service. On a fast machine it works fine; in CI, the api service intermittently crashes on startup with a database connection error, even though db shows as Up in the compose logs before api starts. Find the gap and fix it.",
+          "code": "services:\n  db:\n    image: postgres:16\n    environment:\n      POSTGRES_PASSWORD: secret\n  api:\n    image: myapi:1.0\n    depends_on:\n      - db\n    environment:\n      DATABASE_URL: postgres://postgres:secret@db:5432/postgres",
+          "hints": [
+            "depends_on: - db is shorthand for a specific condition -- what does that condition actually wait for, and is it the same thing as 'Postgres is ready to accept connections'?",
+            "CI runners are frequently slower/more resource-constrained than a fast laptop -- what real, if brief, initialization window does Postgres go through after its process starts, and would that window plausibly be longer under CI's resource constraints?",
+            "Add a healthcheck to db using a Postgres-readiness tool, and change api's depends_on to require that healthy state before starting."
+          ],
+          "solutionCode": "services:\n  db:\n    image: postgres:16\n    environment:\n      POSTGRES_PASSWORD: secret\n    healthcheck:\n      test: [\"CMD-SHELL\", \"pg_isready -U postgres\"]\n      interval: 3s\n      timeout: 3s\n      retries: 10\n  api:\n    image: myapi:1.0\n    depends_on:\n      db:\n        condition: service_healthy\n    environment:\n      DATABASE_URL: postgres://postgres:secret@db:5432/postgres",
+          "solutionExplanation": "depends_on: - db is shorthand for condition: service_started, which only waits for db's container process to launch -- it says nothing about whether Postgres inside that container has finished its own initialization and is actually accepting connections, a step that takes a real, if usually short, amount of time after the process starts and can plausibly take longer on a slower or more resource-constrained CI runner than on a fast local machine, which matches the 'works on a fast machine, intermittent in CI' symptom precisely. Adding a healthcheck to db using pg_isready, a tool built specifically to report genuine Postgres readiness, and changing api's dependency to depends_on: db: condition: service_healthy makes Compose wait for that healthcheck to actually pass before starting api at all -- turning an intermittent timing race into a deterministically sequenced startup, regardless of how fast or slow db's own initialization happens to be on any given run."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "docker-healthchecks-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "A container's HEALTHCHECK has --retries=3. Its check has failed twice in a row so far. What is the container's current health status?",
+          "options": [
+            "unhealthy, because any failures at all immediately flip the status.",
+            "healthy, because the failing streak (2) has not yet reached the configured retries threshold (3).",
+            "starting, regardless of how many checks have run, until the container is manually marked healthy.",
+            "There is no way to know without also knowing the --interval value."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 is correct: a container only transitions to unhealthy once the number of CONSECUTIVE failed checks reaches the configured --retries threshold -- with 2 failures against a threshold of 3, the container is still considered healthy (assuming it was healthy or past its start-period already), and a single subsequent passing check would reset the failing streak back to 0 without ever reaching unhealthy at all. Option 1 is wrong because Docker deliberately does not flip status on the very first failure, specifically to avoid flapping on transient, one-off blips. Option 3 is wrong -- starting only applies during the configured start-period window immediately after container start, not indefinitely, and there's no 'manually mark healthy' mechanism gating that transition. Option 4 is wrong -- --interval affects how frequently checks run and therefore how quickly a failing streak accumulates over wall-clock time, but it doesn't change how the failing-streak-versus-retries comparison itself works at any given point."
+        },
+        {
+          "id": "docker-healthchecks-assess-explain1",
+          "type": "explanation",
+          "prompt": "A teammate wants to add a HEALTHCHECK to a service and proposes: 'let's just check that the process is still running -- if it crashed, the container would already be Down anyway, so let's check that our main dependency, a third-party payment API, is reachable, since that's the thing that actually breaks.' Explain what's wrong with this specific health check design and propose a better one.",
+          "modelAnswer": "The proposal conflates two different things a health check could verify, and picks the less useful one while adding a genuinely harmful one. Checking that the process is 'still running' duplicates exactly what Docker's own basic liveness tracking (reflected in whether the container is Up at all) already tells you for free -- a HEALTHCHECK that just confirms the process object exists adds no new information, since a crashed process would already show the container as Exited, with no health check needed to reveal that. The actually useful thing a HEALTHCHECK can add is confirming the service is doing its own job correctly -- serving real requests successfully, having necessary internal state ready -- which basic process liveness cannot distinguish from a hung, deadlocked, or silently-broken-but-still-running process. Checking a third-party payment API's reachability, on the other hand, is actively the wrong thing to gate this service's own health on: if that external payment API has a brief outage or slow response for reasons entirely outside this service's control, the health check would flip this service to unhealthy even though the service itself is functioning perfectly and could still correctly serve every other kind of request that doesn't depend on payments. If something orchestrating this container reacts to unhealthy by restarting it or pulling it out of a load balancer's rotation, a downstream provider's unrelated blip would now unnecessarily disrupt this service's own availability, cascading a problem that wasn't this service's fault into one that looks like it was. A better health check verifies this service's own internal readiness -- an HTTP endpoint the application serves itself, returning success once its own required internal state (its own database connection, any caches it needs, config it needs loaded) is in place -- without reaching out to reachability-check an external third-party dependency as part of the probe. If payment-provider reachability genuinely needs monitoring, that belongs in a separate, dedicated check or alert, not baked into this service's own container health status, precisely so that an unrelated third party's problems don't get misattributed as this service being unhealthy."
+        }
+      ]
+    }
+  ]
+}

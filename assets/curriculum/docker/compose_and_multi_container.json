@@ -1,0 +1,356 @@
+{
+  "learningPathId": "docker",
+  "moduleId": "compose_and_multi_container",
+  "title": "Docker Compose & Multi-Container Apps",
+  "order": 3,
+  "concepts": [
+    {
+      "id": "docker-compose-multi-container-apps",
+      "title": "Why Real Applications Need Multiple Coordinated Containers",
+      "description": "A production application is rarely just \"the app\" -- it's an app process, a database, and usually a cache, each with different lifecycles, scaling needs, and failure modes, and cramming them into one container trades those differences away for a false simplicity.",
+      "moduleId": "compose_and_multi_container",
+      "topicId": "compose_and_multi_container",
+      "difficulty": "beginner",
+      "estimatedMinutes": 35,
+      "prerequisites": ["docker-volumes-and-networking"],
+      "learningObjectives": [
+        "Explain the \"one main process per container\" convention and why it's an operational convention rather than a hard technical rule enforced by Docker.",
+        "Give at least three concrete reasons a typical web app is modeled as separate app, database, and cache containers rather than one container running everything.",
+        "Explain how splitting a system into multiple containers affects independent scaling, upgrading, and restarting compared to a monolithic container.",
+        "Explain the operational cost multi-container architectures introduce -- networking, startup ordering, more moving parts to monitor -- and why that cost is usually still worth paying.",
+        "Predict what breaks when a stateful service like a database is mixed into the same container as a stateless application process."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "The One-Process-Per-Container Convention, and Why It Exists",
+            "body": "Nothing in Docker itself prevents you from starting a process manager like supervisord as a container's single command and having it, in turn, launch nginx, your app server, and a local Postgres, all inside one container. It works. It also throws away almost everything that makes containers useful in the first place, which is why \"one main process per container\" became the strong default convention rather than a rule anyone had to invent from nothing.\n\n```dockerfile\n# The anti-pattern: one container, three unrelated processes\nFROM ubuntu:22.04\nRUN apt-get update && apt-get install -y nginx postgresql redis-server supervisor\nCOPY supervisord.conf /etc/supervisor/conf.d/app.conf\nCMD [\"supervisord\", \"-n\"]\n```\n\nA container's lifecycle -- its health, its restart policy, its exit code -- is tied to its PID 1. When PID 1 here is supervisord, Docker has no idea whether nginx is fine, the app server crashed, or Postgres is silently down; from the container runtime's point of view, everything is \"Up\" as long as supervisord itself hasn't exited, which it often won't even when a child it's supervising has died and stayed dead. `docker restart` restarts the entire bundle -- there's no way to bounce just the crashed piece without taking down the other two along with it, and no way to scale the app process without also spinning up redundant, wasted copies of the database and cache sitting right next to it."
+          },
+          {
+            "heading": "Matching Container Boundaries to Real Operational Boundaries",
+            "body": "An application process, a database, and a cache aren't just different pieces of code -- they have genuinely different operational rhythms, and a good container boundary tracks those rhythms rather than ignoring them. The app image typically gets rebuilt and redeployed on nearly every commit; the database image is usually pulled once, at a specific pinned version, and left alone for months except for deliberate, carefully-planned upgrades. The app is usually stateless and safe to kill and restart, or to run as five identical replicas behind a load balancer; the database is stateful, generally runs as one primary instance (or a carefully managed cluster, well beyond the scope of a single container), and needs its data to survive container recreation via a volume, exactly as covered in the previous module.\n\nWhen these are separate containers, each of those differences is free to exist: you redeploy the app image ten times a day without ever touching the database container, you scale the app to three replicas while the database and cache each stay at one, and a security patch to the Redis image doesn't require rebuilding or even restarting your application code at all. Mixed into one container, none of that is possible -- every deploy of the app also means restarting the database and cache, whether or not either one has changed, and \"scale the app\" has no meaning at all, because scaling that one container multiplies the database and cache right along with it."
+          },
+          {
+            "heading": "The Real Cost: Networking, Startup Ordering, and More Moving Parts",
+            "body": "Splitting into multiple containers isn't free, and it's worth being honest about the cost side of the trade rather than pretending multi-container architectures are strictly better in every dimension. Three containers now need a way to find each other over the network (the next concept in this module covers exactly how a shared Docker network and DNS-based service discovery make that automatic), there's a real question of which container needs to be minimally ready before another one starts making requests to it (the concept after that digs into `depends_on` and its sharp limits), and you now have three separate things to monitor, log, and reason about failing independently instead of one.\n\nThat cost is real, but it's a fixed, one-time cost you pay once per project in your Compose file or orchestration config -- not a cost that scales with how often you deploy. The monolithic alternative's cost -- coupled restarts, coupled scaling, a security patch to any one component forcing a rebuild of the whole bundle, an OOM in the cache process taking down the app and database processes that happen to share its container -- recurs on every single deploy and every single incident, for the entire lifetime of the system. That asymmetry is exactly why the industry converged on multi-container architectures for anything beyond a quick throwaway demo, despite the real upfront coordination cost."
+          },
+          {
+            "heading": "Enter Docker Compose: Declaring the Whole System Instead of Typing It By Hand",
+            "body": "Once you accept that a real app needs several coordinated containers, running them by hand gets unwieldy fast: three separate `docker network create` and `docker run` invocations, each with its own volume flags, port mappings, and environment variables, none of it written down anywhere except in your shell history, and no single command to bring the whole system up or tear it back down cleanly.\n\nDocker Compose exists to replace that sequence of ad hoc commands with one declarative file -- `docker-compose.yml` -- that lists every service, the network they share, and the volumes they need, and a single command, `docker compose up`, that reads it and creates everything described, wiring up the shared network and DNS-based service discovery from the previous module automatically. The next concept in this module is entirely about that file's actual structure; the point to take away here is narrower but important: Compose doesn't change *why* you'd split an app into multiple containers -- that decision, and its trade-offs, are exactly what this concept has been about -- it just makes *acting* on that decision reproducible, reviewable, and checked into version control instead of scattered across whoever's terminal history happened to run the right commands first."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Cramming Everything Into One Container With supervisord",
+          "language": "dockerfile",
+          "code": "FROM ubuntu:22.04\nRUN apt-get update && apt-get install -y nginx postgresql redis-server python3 python3-pip supervisor\nCOPY app/ /app\nCOPY supervisord.conf /etc/supervisor/conf.d/app.conf\nCMD [\"supervisord\", \"-n\"]\n\n# supervisord.conf (excerpt)\n# [program:app]\n# command=python3 /app/server.py\n# [program:postgres]\n# command=/usr/lib/postgresql/16/bin/postgres -D /var/lib/postgresql/data\n# [program:redis]\n# command=redis-server",
+          "explanation": "This image builds and runs, and to a beginner it looks like a convenient shortcut -- one image, one `docker run`, everything included. In practice it forfeits almost every benefit covered in this concept: `docker restart myapp` bounces the app, the database, and the cache together, even if only Redis needed a bump; scaling the app process to handle more traffic scales the embedded Postgres and Redis right along with it, which makes no sense for either; and Docker's own health/restart machinery only sees supervisord's PID 1, so a crashed Postgres child process inside can sit dead indefinitely while `docker ps` cheerfully reports the container as healthy and running. None of these problems are about anything being technically broken -- the anti-pattern is entirely about throwing away independent lifecycles that the application's own components genuinely have."
+        },
+        {
+          "title": "The Same System, Split Into Three Coordinated Containers",
+          "language": "yaml",
+          "code": "# A preview of the shape the next concept covers in full detail\nservices:\n  app:\n    build: ./app\n    ports:\n      - \"8000:8000\"\n  db:\n    image: postgres:16\n    volumes:\n      - pgdata:/var/lib/postgresql/data\n  cache:\n    image: redis:7-alpine\n\nvolumes:\n  pgdata:",
+          "explanation": "Three services, three independent lifecycles. `app` gets rebuilt from local source on nearly every commit; `db` and `cache` pull fixed, pinned upstream images that change on a much slower, deliberate cadence. `docker compose restart cache` bounces only Redis, leaving the app's in-flight requests and the database's open connections completely undisturbed. If traffic grows, `docker compose up --scale app=3` adds two more app replicas without touching the database or cache at all -- something that has no equivalent, no meaning even, in the single-container version from the previous example."
+        },
+        {
+          "title": "What Independent Restart Actually Buys You, Concretely",
+          "language": "bash",
+          "code": "# Multi-container: bouncing the cache doesn't touch the app or database\n$ docker restart cache\ncache\n$ docker exec app curl -s http://localhost:8000/health\n{\"status\": \"ok\"}   # never went down\n\n# Monolith container: any restart takes down everything inside it\n$ docker restart myapp\nmyapp\n# nginx, the app process, AND postgres all restarted together --\n# any in-flight request to any of the three was dropped, including ones that had\n# nothing to do with whatever needed the restart in the first place",
+          "explanation": "In the split architecture, restarting `cache` is a scoped, low-risk operation -- exactly the kind of routine maintenance (clearing a memory leak, picking up a config change) you want to be cheap and boring. In the monolith, there is no such thing as a scoped restart: every restart is an all-or-nothing event for the entire bundle, so even a trivial, unrelated fix to one piece carries the blast radius of restarting all of them, including components that were working perfectly fine and had nothing to do with the change being made."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "Docker containers must always be split as granularly as possible -- strictly one OS process per container, no exceptions, or you're \"doing Docker wrong.\"",
+          "clarification": "\"One process per container\" is shorthand for a more precise underlying principle: one *independent reason to restart, scale, or deploy* per container. It's a convention that follows from the operational benefits described in this concept, not a rule Docker enforces or that applies with zero exceptions. A tightly coupled helper process that only ever makes sense running alongside a specific main process -- a lightweight log-shipping sidecar with no independent lifecycle of its own, for instance -- can reasonably share a container in some setups. The test isn't literally counting OS processes; it's asking whether the pieces you're considering bundling together actually have different restart, scaling, or upgrade needs. App, database, and cache clearly do -- which is why this concept argues for splitting those three specifically, not for splitting everything down to the last individual process on principle."
+        },
+        {
+          "description": "Running the app, database, and cache in separate containers means they're running on separate machines, or at least more physically isolated hardware, than if they were bundled together.",
+          "clarification": "Separate containers on a single host, which is exactly what a typical `docker-compose up` produces, still run on that one same machine, sharing its one kernel, its CPU, and its memory, exactly as described in the very first concept of this subject. Splitting into multiple containers is entirely about separating *lifecycles* -- independent restart, independent scaling, independent versioning -- not about separating hardware. Getting genuine physical or infrastructure-level isolation between services is a completely different, later concern (multiple hosts, an orchestrator scheduling containers across a cluster) that container boundaries alone don't provide, on a single Docker host, by themselves."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "docker-compose-multi-container-apps-ex1",
+          "type": "predictOutput",
+          "prompt": "A container runs supervisord as PID 1, supervising nginx, an app process, and Postgres. The Postgres child process gets OOM-killed by the kernel and does not restart (supervisord isn't configured to restart it). What does `docker ps` show for this container, and what does that tell you about relying on Docker's own health/restart machinery in this setup?",
+          "code": "$ docker run -d --name bundle mybundle:latest\n# ...some time later, postgres inside is OOM-killed and stays dead...\n$ docker ps --filter name=bundle",
+          "hints": [
+            "Docker's container-level health signal is tied to PID 1's status, not to the status of every process PID 1 happens to be supervising.",
+            "supervisord itself hasn't crashed or exited -- only one of the processes it's managing has.",
+            "Think about whether `docker ps` reporting \"Up\" tells you anything at all about nginx, the app, and Postgres individually."
+          ],
+          "expectedAnswer": "docker ps still shows the container as \"Up\" (healthy from Docker's point of view), because supervisord (PID 1) is still running fine -- it just has one dead child it isn't restarting. This demonstrates that Docker's restart-policy and health-status machinery only ever observes PID 1; it has no visibility into, and cannot react to, the individual health of nginx, the app, or Postgres running underneath a process manager.",
+          "solutionExplanation": "Docker only tracks the lifecycle of a container's PID 1. supervisord, as PID 1, is still alive and running -- it simply has a dead Postgres child it never restarted -- so from Docker's perspective nothing is wrong at all, and `docker ps` reports the container as \"Up\" with no indication that a core piece of the running system is silently gone. This is exactly the failure mode the one-process-per-container convention avoids: if Postgres ran as its own container's PID 1 instead, its own crash would be Docker's restart policy's problem directly, and `docker ps` would accurately reflect that this specific piece had exited, rather than that fact being invisible, masked by an unrelated supervisor process still technically running."
+        },
+        {
+          "id": "docker-compose-multi-container-apps-ex2",
+          "type": "debugging",
+          "prompt": "A team's app image bundles the application server and a Redis cache in one container so that \"there's only one thing to deploy.\" Traffic grows and they want to run three replicas of the app to handle load, but this breaks things badly -- find the design bug and describe the fix.",
+          "code": "FROM node:20.11.1-bookworm-slim\nRUN apt-get update && apt-get install -y redis-server\nCOPY . /app\nWORKDIR /app\nRUN npm ci\nCMD [\"sh\", \"-c\", \"redis-server --daemonize yes && node server.js\"]\n\n# Scaling attempt:\n$ docker run -d --name app1 myapp:1.0\n$ docker run -d --name app2 myapp:1.0\n$ docker run -d --name app3 myapp:1.0\n# each replica now has its OWN independent, empty Redis cache --\n# cache hits in app1 are invisible to app2 and app3",
+          "hints": [
+            "Ask what \"scaling the app\" is actually supposed to mean here, and what got scaled instead once Redis was bundled inside the same image.",
+            "Redis is meant to be a single shared cache all app replicas read from and write to -- does that design survive being duplicated once per app replica?",
+            "The fix isn't a code change inside the app -- it's separating the cache into its own container/service that every app replica connects to over the network."
+          ],
+          "solutionCode": "# Split into two independent services (conceptually -- covered fully as YAML in the next concept)\n# Service \"cache\": one shared instance\n$ docker network create appnet\n$ docker run -d --network appnet --name cache redis:7-alpine\n\n# Service \"app\": scale freely, all replicas point at the SAME shared cache over the network\n$ docker run -d --network appnet --name app1 -e REDIS_HOST=cache myapp:2.0\n$ docker run -d --network appnet --name app2 -e REDIS_HOST=cache myapp:2.0\n$ docker run -d --network appnet --name app3 -e REDIS_HOST=cache myapp:2.0",
+          "solutionExplanation": "Bundling Redis into the app image meant that \"scaling the app\" to three replicas actually created three completely independent, empty Redis instances -- one per container -- rather than three app processes sharing one cache, which defeats the entire purpose of caching (a cache hit in one replica should be visible to the others, not siloed per replica). The fix removes Redis from the app image entirely and runs it as its own single, shared container/service on a common Docker network, exactly the shape the multi-container split argued for: the app image now only contains the app, connects to the cache over the network by hostname (`cache`, resolvable via the DNS mechanism from the previous module's networking concept), and can be scaled to any number of replicas, all of which correctly share the one real cache instance."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "docker-compose-multi-container-apps-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "Which of the following is the strongest, most fundamental reason to run an application's web server, database, and cache as three separate containers rather than bundling all three into one?",
+          "options": [
+            "Separate containers are required because Docker enforces a hard limit of one process per container.",
+            "They have genuinely different operational lifecycles -- different deploy cadence, different scaling needs, different restart/upgrade risk -- and separate containers let each of those differences actually exist instead of being forced to move in lockstep.",
+            "Separate containers always use less total disk space than one bundled container.",
+            "It's required so that each service can run a different Linux distribution as its base image."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 is the real, substantive reason: app, database, and cache differ in how often they change, how they scale, and how disruptive a restart is, and separate containers let each component's lifecycle be managed on its own terms -- redeploying the app ten times a day without touching the database, scaling the app without multiplying the cache, patching Redis without rebuilding the app image. Option 1 is false -- Docker places no such technical limit; the convention is a best practice, not an enforced rule. Option 3 is not reliably true and isn't the motivating reason even when it happens to be true. Option 4 confuses a side effect (different services often do end up on different base images) with a requirement -- nothing forces different base images, and it isn't the reason for the split in the first place."
+        },
+        {
+          "id": "docker-compose-multi-container-apps-assess-explain1",
+          "type": "explanation",
+          "prompt": "A colleague argues: \"Bundling the app, database, and cache into one container is simpler -- one image, one docker run, one thing to think about. Why would I want three containers and all the extra networking complexity instead?\" Give a full, honest answer, including what the one-container approach genuinely does make simpler.",
+          "modelAnswer": "The one-container approach is genuinely simpler along exactly one axis: at the moment you first run it, there's only one `docker run` command and one image to think about. Everything else about it trades that momentary simplicity for recurring costs that show up on every single deploy and every single incident afterward. Because Docker's restart policy and health tracking only observe PID 1, wrapping nginx, the app, and Postgres under a process manager means Docker has no visibility into which of the three is actually healthy -- a crashed database child can sit dead while `docker ps` reports everything as fine. Because the three components are welded into one image, redeploying the app after a routine code change also means restarting the database and cache, whether or not either changed, and there is no way to scale just the app process to handle more traffic without absurdly multiplying the database and cache right along with it, which makes no sense for either. Splitting them into separate containers costs something real -- they now need a shared network so they can find each other by name, and there's a genuine question of what order they should start in and how to make sure one doesn't start hammering another before it's actually ready, which is exactly what the rest of this module covers. But that cost is paid once, in a Compose file, and then amortized across every future deploy; the one-container approach's costs are paid fresh on every deploy and every incident, for as long as the system exists. For anything beyond a five-minute throwaway demo, that asymmetry strongly favors the split, extra networking complexity included."
+        }
+      ]
+    },
+    {
+      "id": "docker-compose-file-structure",
+      "title": "The docker-compose.yml File: Services, Networks, and Volumes",
+      "description": "A Compose file is a declarative description of the exact same things you'd otherwise type by hand into a sequence of docker run, docker network create, and docker volume create commands -- services map to containers, one shared network is created automatically, and named volumes are declared right alongside the services that use them.",
+      "moduleId": "compose_and_multi_container",
+      "topicId": "compose_and_multi_container",
+      "difficulty": "beginner",
+      "estimatedMinutes": 40,
+      "prerequisites": ["docker-compose-multi-container-apps"],
+      "learningObjectives": [
+        "Write a docker-compose.yml with multiple services using image, build, ports, environment, and volumes correctly.",
+        "Explain what docker compose up actually creates on your behalf: one shared network, named volumes, and one container per service.",
+        "Explain why services on the same Compose file can reach each other by service name with zero manual network configuration, connecting this back to the DNS mechanism covered in the networking concept.",
+        "Distinguish the top-level volumes: section (declaring a named volume) from a service's own volumes: list (mounting it into that service).",
+        "Debug a Compose file where a service can't reach another service due to a typo in the hostname or a missing port."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "The Big Picture: One File Replaces a Sequence of Commands",
+            "body": "Everything a Compose file describes is something you could type by hand with `docker network create`, `docker volume create`, and a series of `docker run` invocations -- Compose doesn't introduce new underlying capability, it gives a declarative, reviewable, version-controlled name to a system you'd otherwise have to reconstruct correctly from memory or shell history every time. A minimal, complete example:\n\n```yaml\nservices:\n  app:\n    build: ./app\n    ports:\n      - \"8000:8000\"\n    environment:\n      - DATABASE_URL=postgresql://db:5432/mydb\n    depends_on:\n      - db\n  db:\n    image: postgres:16\n    environment:\n      - POSTGRES_PASSWORD=devpassword\n    volumes:\n      - pgdata:/var/lib/postgresql/data\n\nvolumes:\n  pgdata:\n```\n\n`docker compose up` reads this file and, roughly: creates a project-scoped user-defined network (naming it after the directory the Compose file lives in, unless told otherwise), creates the `pgdata` named volume if it doesn't already exist, builds the `app` image from `./app`'s Dockerfile (or pulls `postgres:16` for `db`), and starts one container per service, all attached to that same shared network. Tearing it all down is `docker compose down` -- by default that removes the containers and the network, but deliberately leaves named volumes alone, exactly mirroring the persistence behavior from the volumes concept in the previous module; you need the explicit `docker compose down -v` to also remove volumes, an opt-in, not a default."
+          },
+          {
+            "heading": "services: -- Each Entry Is (Roughly) a docker run Invocation",
+            "body": "Every key under `services:` becomes a container, and most of the fields map directly onto flags you'd otherwise pass to `docker run`. `image:` names a pre-built image to pull, exactly like the trailing argument to `docker run`; `build:` instead points at a directory containing a Dockerfile and tells Compose to build an image from source before running it -- the two are mutually exclusive in the common case, though `build:` can also specify a resulting `image:` tag to give the built image a name. `ports:` maps to `-p`, host-port-colon-container-port; `environment:` maps to a series of `-e` flags; `volumes:` (at the service level) maps to `-v` flags, mounting either a named volume or a bind mount into that specific container; `depends_on:` records a startup-order relationship, covered in full, including its real limits, in the next concept.\n\nOne detail worth calling out explicitly: a service's *name* under `services:` -- `app`, `db` in the example above -- is also exactly the hostname every other service on the same Compose file can use to reach it, because Compose automatically places every service on one shared, project-scoped, user-defined network, which is precisely the kind of network the previous module's networking concept showed gives every container on it free, automatic DNS-based name resolution of every other container's name. That's the entire reason `DATABASE_URL` above can say `db` instead of some manually looked-up IP address -- no networking code, no manual `--network` flag anywhere in this file at all; Compose sets it up implicitly, for every service, every time."
+          },
+          {
+            "heading": "networks: and volumes: -- Usually Implicit, Sometimes Explicit",
+            "body": "You never *have* to write a top-level `networks:` section -- Compose creates a default one automatically and attaches every service to it, which is exactly why the example above works with no networking configuration visible at all. You reach for an explicit `networks:` section when the default single-network behavior isn't quite what you want: isolating a database on its own internal-only network that a public-facing reverse proxy service can't reach directly, for instance, or attaching a service to a pre-existing external network created outside this Compose file.\n\n```yaml\nservices:\n  app:\n    networks: [frontend, backend]\n  db:\n    networks: [backend]   # unreachable from anything only on \"frontend\"\n\nnetworks:\n  frontend:\n  backend:\n```\n\nThe top-level `volumes:` section works differently from `networks:` in one important way: it's not optional metadata Compose fills in for you -- it's where you *declare* a named volume's existence at all, exactly once, so that Compose knows `pgdata` in the earlier example is meant to be a durable, Docker-managed volume rather than, say, a typo. A service's own `volumes:` list is a separate thing: it's where that specific service *mounts* a volume (or a bind mount) at a specific container path. Confusing the two is a common early mistake: writing `pgdata:/var/lib/postgresql/data` under a service's own `volumes:` list without ever declaring `pgdata:` under the file's top-level `volumes:` section still generally works in modern Compose (it gets auto-declared), but explicit top-level declaration is what lets you attach real configuration to the volume -- an external volume, a specific driver -- and is the clearer, more intentional habit to build."
+          },
+          {
+            "heading": "Common Mistakes: Indentation, Hostnames, and Confusing Build-Time With Run-Time",
+            "body": "YAML's indentation-is-meaning syntax causes a specific, recurring class of Compose bugs that have nothing to do with Docker itself: a `volumes:` list accidentally indented one level too shallow silently attaches to the wrong service, or worse, becomes a sibling of `services:` instead of a child of one particular service, changing its meaning entirely from \"mount this into that container\" to \"declare a volume with this exact, almost certainly wrong, structure.\" Always double-check a Compose file's indentation with a linter or your editor's YAML mode rather than eyeballing it, especially after copy-pasting a snippet from a different file's nesting depth.\n\nA second common mistake is reaching for `localhost` inside one service's configuration when trying to reach another service -- `DATABASE_URL=postgresql://localhost:5432/mydb` inside the `app` service looks plausible but is wrong, because `localhost` from inside the `app` container's own network namespace refers to that container itself, not to the separate `db` container sitting on the shared network next to it; the correct hostname is the *service name*, `db`, exactly as the DNS mechanism from the networking concept describes. A third, subtler mistake conflates `ports:` with inter-service reachability: `ports:` only matters for reaching a service from *outside* the Compose network entirely -- your host's browser, an external client -- because every service on the shared Compose network can already reach every other service's listening port directly by service name and container port, with no `ports:` entry needed for that internal traffic at all. A `db` service with no `ports:` section is still completely reachable from `app` at `db:5432`; `ports:` would only become relevant if you wanted to run `psql` directly from your host machine against that same database."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "A Full Three-Service Compose File: App, Database, and Cache",
+          "language": "yaml",
+          "code": "services:\n  app:\n    build: ./app\n    ports:\n      - \"8000:8000\"\n    environment:\n      - DATABASE_URL=postgresql://db:5432/mydb\n      - REDIS_URL=redis://cache:6379\n    depends_on:\n      - db\n      - cache\n\n  db:\n    image: postgres:16\n    environment:\n      - POSTGRES_PASSWORD=devpassword\n      - POSTGRES_DB=mydb\n    volumes:\n      - pgdata:/var/lib/postgresql/data\n\n  cache:\n    image: redis:7-alpine\n\nvolumes:\n  pgdata:",
+          "explanation": "`app` is built from local source (`./app`'s Dockerfile) rather than pulled, and publishes port 8000 to the host so a browser can reach it -- `db` and `cache` have no `ports:` entry at all, and don't need one, because `app` reaches both of them internally over the Compose-managed shared network, by service name, on their container-internal ports (5432 and 6379 respectively). `pgdata` is declared once at the top level and mounted into `db` specifically, so Postgres's actual data directory survives `docker compose down` (which removes containers and the network, but not volumes by default) and would even survive `db`'s image being upgraded to a newer Postgres version later, as long as the volume itself isn't explicitly removed."
+        },
+        {
+          "title": "What docker compose up Actually Creates, Made Visible",
+          "language": "bash",
+          "code": "$ docker compose up -d\n$ docker network ls | grep myproject\nmyproject_default   bridge\n\n$ docker volume ls | grep pgdata\nmyproject_pgdata\n\n$ docker ps --format \"table {{.Names}}\\t{{.Networks}}\"\nmyproject-app-1     myproject_default\nmyproject-db-1      myproject_default\nmyproject-cache-1   myproject_default",
+          "explanation": "Nothing here is Compose-specific magic -- `docker network ls` and `docker volume ls` show perfectly ordinary Docker objects, just named and prefixed automatically based on the project's directory name (`myproject`, in this case) so multiple Compose projects on the same host don't collide by using identical resource names. All three containers land on the same `myproject_default` network, which is exactly the user-defined bridge network that gives them free DNS-based name resolution of each other -- confirming, concretely, that `app` reaching `db` by the hostname `db` isn't a special Compose feature, it's the same networking mechanism from the previous module, just wired up automatically instead of requiring a manual `docker network create` and three `--network` flags."
+        },
+        {
+          "title": "The localhost Mistake, and the Fix",
+          "language": "yaml",
+          "code": "# WRONG -- \"localhost\" inside app's own container refers to app itself, not db\nservices:\n  app:\n    build: ./app\n    environment:\n      - DATABASE_URL=postgresql://localhost:5432/mydb   # connection refused\n  db:\n    image: postgres:16\n\n# RIGHT -- the service name IS the hostname, resolved via Compose's shared network DNS\nservices:\n  app:\n    build: ./app\n    environment:\n      - DATABASE_URL=postgresql://db:5432/mydb\n  db:\n    image: postgres:16",
+          "explanation": "Each container has its own private network namespace, so `localhost` inside `app`'s container refers to `app`'s own loopback interface -- there is no Postgres process listening on port 5432 there, so the connection is refused, even though a real Postgres instance genuinely is running and listening on 5432 a few feet away, inside a sibling container. Swapping `localhost` for the service name `db` fixes it, because Compose's shared network gives every service automatic DNS resolution of every other service's name -- `db` resolves to the `db` container's actual IP address on that shared network, and the connection succeeds against the real database."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "You must declare a top-level networks: section for services in a Compose file to be able to reach each other -- without one, they're isolated from each other by default.",
+          "clarification": "Compose creates a default network automatically and attaches every service in the file to it unless you specify otherwise -- an explicit `networks:` section is only needed when you want something *other* than \"every service shares one default network,\" such as isolating one service onto its own separate network, or attaching to a pre-existing network created outside this file. A Compose file with no `networks:` section at all, like the very first example in this concept, still gives every one of its services free DNS-based name resolution of every other service, with zero explicit network configuration required."
+        },
+        {
+          "description": "Listing a volume under a service's own volumes: (e.g. pgdata:/var/lib/postgresql/data) and declaring it under the top-level volumes: section are two different, competing ways to create a volume -- you only need one or the other.",
+          "clarification": "They're not alternatives to each other -- they do two different jobs that normally appear together. The top-level `volumes:` section is where a named volume is declared to exist at all, as a project-scoped resource independent of any one service; a service's own `volumes:` list is where that specific service mounts a volume (named or bind) at a specific path inside its own container. A service can reference a named volume in its own `volumes:` list without that volume being explicitly declared at the top level (modern Compose will auto-create it), but skipping the top-level declaration means you lose the ability to attach real configuration to it later -- marking it `external: true` to point at a volume created outside this Compose file, for instance -- which is why explicit top-level declaration, even for a volume with no extra configuration, is the clearer habit."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "docker-compose-file-structure-ex1",
+          "type": "predictOutput",
+          "prompt": "Given this Compose file, what hostname and port should the app service use to reach the cache service internally, and does the cache service need a ports: entry for that internal connection to work?",
+          "code": "services:\n  app:\n    build: ./app\n  cache:\n    image: redis:7-alpine",
+          "hints": [
+            "Recall what the service name itself becomes, thanks to Compose's automatic shared network and DNS resolution.",
+            "ports: is about reachability from OUTSIDE the Compose network (your host, an external client) -- is app \"outside\" relative to cache here?",
+            "Redis's own default listening port inside its container doesn't change just because Compose is involved."
+          ],
+          "expectedAnswer": "app should connect to cache:6379 -- the hostname is the service name \"cache\", and the port is Redis's normal container-internal port, 6379. No ports: entry is needed on the cache service for this to work, because app and cache are both already on the same Compose-managed network and can reach each other's container-internal ports directly by service name; ports: would only matter if something outside the Compose network (like a client on your host machine) needed to reach cache directly.",
+          "solutionExplanation": "Compose places every service in this file onto one shared, automatically created network and gives each one DNS resolution of every other service's name -- so `cache` is directly resolvable as a hostname from inside `app`'s container, with zero extra configuration. Redis's own process inside its container listens on its default port, 6379, regardless of Compose -- that's just what the redis:7-alpine image's process does by default, unrelated to any Compose-specific setting. Because both containers already share one network, `app` can reach `cache:6379` directly; a `ports:` entry on `cache` is a completely separate, opt-in mechanism for exposing a port to entities outside that shared network (your host's own browser or CLI tools, for example) and has no bearing on whether services within the file can already reach each other."
+        },
+        {
+          "id": "docker-compose-file-structure-ex2",
+          "type": "debugging",
+          "prompt": "A teammate's app container keeps crashing on startup with a database connection error, even though `docker compose ps` shows the db service running. Find the bug in this Compose file.",
+          "code": "services:\n  app:\n    build: ./app\n    environment:\n      - DATABASE_URL=postgresql://localhost:5432/mydb\n  db:\n    image: postgres:16\n    environment:\n      - POSTGRES_PASSWORD=secret\n    volumes:\n      - pgdata:/var/lib/postgresql/data\n\nvolumes:\n  pgdata:",
+          "hints": [
+            "app and db are two separate containers, each with its own private network namespace -- what does \"localhost\" mean from inside app's own namespace specifically?",
+            "Is there anything actually listening on port 5432 inside the app container itself?",
+            "The correct hostname for reaching another Compose service is the service's own name, resolved via the shared network's DNS, not \"localhost.\""
+          ],
+          "solutionCode": "services:\n  app:\n    build: ./app\n    environment:\n      - DATABASE_URL=postgresql://db:5432/mydb\n  db:\n    image: postgres:16\n    environment:\n      - POSTGRES_PASSWORD=secret\n    volumes:\n      - pgdata:/var/lib/postgresql/data\n\nvolumes:\n  pgdata:",
+          "solutionExplanation": "DATABASE_URL points at `localhost`, which inside the `app` container's own network namespace refers to `app` itself, not to the separate `db` container -- there is no Postgres process listening on port 5432 inside `app`'s own namespace, so every connection attempt is refused, regardless of the fact that Postgres really is running fine inside `db`, exactly as `docker compose ps` reports. The fix replaces `localhost` with the service name `db`, which Compose's shared network resolves via DNS to the actual `db` container's address -- at that point the same port, 5432, correctly reaches the real Postgres process running in the sibling container instead of nothing at all inside app's own namespace."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "docker-compose-file-structure-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "In a Compose file with services named app and db and no explicit networks: section, what hostname should app use to reach db, and why does that work with no manual network setup?",
+          "options": [
+            "app must use db's IP address, looked up manually with docker inspect, since Compose doesn't set up any automatic name resolution.",
+            "app should use the hostname \"db\", because Compose automatically places both services on one shared, project-scoped network that provides DNS resolution of service names to each other.",
+            "app must use \"localhost\", because Compose merges all services into a single shared network namespace.",
+            "app needs a ports: entry on the db service specifically for app to be able to reach it at all."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 is correct: Compose automatically creates a default network and attaches every service in the file to it, and that shared network provides exactly the DNS-based name resolution described in the prior module's networking concept -- the service's own name (\"db\") is directly usable as a hostname by any other service on that same file. Option 1 is wrong because manual IP lookup is unnecessary; DNS resolution is automatic. Option 3 is wrong -- each service still gets its own private network namespace, not a merged one; \"localhost\" inside app refers to app itself. Option 4 is wrong -- ports: only governs reachability from outside the Compose network (the host, external clients); services already on the same shared network can reach each other's container-internal ports directly, with no ports: entry required for that internal traffic."
+        },
+        {
+          "id": "docker-compose-file-structure-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain the difference between what a service's build: or image: key does, what its own volumes: list does, and what the top-level volumes: section does, using a concrete example that includes all three.",
+          "modelAnswer": "A service's `image:` or `build:` key determines what container that service actually runs: `image:` names an existing, pre-built image to pull (e.g. `postgres:16`), while `build:` points at a directory containing a Dockerfile and tells Compose to build an image from local source before running it -- this is the same choice you'd make between `docker run somepulled:tag` and `docker build && docker run` by hand, just declared in the file instead of typed at the command line. A service's own `volumes:` list, like `- pgdata:/var/lib/postgresql/data` under the `db` service, is where that specific service mounts a piece of storage at a specific path inside its own container -- functionally equivalent to a `-v pgdata:/var/lib/postgresql/data` flag on a `docker run` for that one container, and it's scoped entirely to that service; nothing about writing it there affects any other service. The top-level `volumes:` section, appearing once at the bottom of the file, sibling to `services:` rather than nested under any particular service, is where a named volume like `pgdata` is declared to exist as a project-scoped resource in the first place, independent of which service or services reference it -- it's the equivalent of running `docker volume create pgdata` once, up front, rather than something any individual service does on its own. Put together in one example: `db: image: postgres:16` says \"run this pre-built Postgres image\"; `db`'s own `volumes: - pgdata:/var/lib/postgresql/data` says \"mount the volume named pgdata into this container at this specific path\"; and a top-level `volumes: pgdata:` says \"a volume by that name is a real thing this project manages,\" which is what lets Compose create it if it doesn't exist yet and lets you later attach configuration to it, such as marking it `external: true` to point at a volume that already exists outside this file entirely."
+        }
+      ]
+    },
+    {
+      "id": "docker-compose-depends-on-ordering",
+      "title": "Service Dependencies and Startup Ordering: depends_on and Its Real Limits",
+      "description": "depends_on controls the ORDER containers start in, not whether the service inside one is actually ready to accept work -- Compose starts a dependency's container and moves on the instant that container process has started, which is a much weaker guarantee than most people assume, and closing that gap requires healthchecks or retry logic in the application itself.",
+      "moduleId": "compose_and_multi_container",
+      "topicId": "compose_and_multi_container",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 40,
+      "prerequisites": ["docker-compose-file-structure"],
+      "learningObjectives": [
+        "Explain exactly what depends_on guarantees by default: container start order, not application readiness.",
+        "Predict and reproduce the classic 'app crashes on startup because the database isn't accepting connections yet' bug caused by relying on plain depends_on.",
+        "Use depends_on's condition: service_healthy form together with a healthcheck: to actually wait for a dependency to be ready, not just started.",
+        "Explain why an application-level retry/backoff loop on the connection itself is still valuable even when healthchecks are used, especially across a restart of the dependency later in the container's life.",
+        "Debug a Compose file where a healthcheck is defined but depends_on isn't configured to actually wait on it."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "What depends_on Actually Promises: Started, Not Ready",
+            "body": "`depends_on` looks like it should mean \"don't start this service until the thing it depends on is ready\" -- that reading is the single most common misunderstanding beginners bring to Compose, and it's wrong in a way that causes real, intermittent production bugs. In its default form, `depends_on` only guarantees *container start order*: Compose will start the `db` container before it starts the `app` container. That's it. It says nothing whatsoever about whether the process inside `db` has actually finished initializing and is ready to accept connections by the time `app`'s own process starts running.\n\n```yaml\nservices:\n  app:\n    build: ./app\n    depends_on:\n      - db      # only guarantees db's CONTAINER starts before app's does\n  db:\n    image: postgres:16\n```\n\nPostgres, in particular, has a real, sometimes multi-second initialization sequence on its very first startup -- creating its data directory structure, running initial setup scripts -- during which its container is absolutely running (Docker considers it \"started\" the moment its main process begins executing), but the database itself isn't yet accepting connections on port 5432. An `app` container that starts immediately after, and tries to connect right away, frequently hits this exact window and gets a connection refused error, crashing on startup -- not because anything is actually broken, but because `depends_on` did precisely what it promises (ordered the container starts) and nothing more (it made no promise about readiness)."
+          },
+          {
+            "heading": "Closing the Gap: healthcheck: and condition: service_healthy",
+            "body": "Compose does have a real mechanism for waiting on actual readiness, not just container start -- it's just not the default behavior of a plain `depends_on` list. A `healthcheck:` on the dependency defines a command Docker runs periodically inside that container to decide whether it's genuinely healthy, and `depends_on`'s longer, explicit form can be told to wait specifically for that healthy status rather than merely for the container to have started:\n\n```yaml\nservices:\n  app:\n    build: ./app\n    depends_on:\n      db:\n        condition: service_healthy   # now actually waits for db's healthcheck to pass\n  db:\n    image: postgres:16\n    healthcheck:\n      test: [\"CMD-SHELL\", \"pg_isready -U postgres\"]\n      interval: 5s\n      timeout: 3s\n      retries: 5\n```\n\nWith this in place, Compose starts `db`'s container, then repeatedly runs `pg_isready` inside it every 5 seconds until it reports success (or exhausts its retries and marks the container unhealthy), and only *then* starts `app`. This genuinely closes the specific gap from the previous section -- `app` no longer races Postgres's own startup sequence. It's worth being precise about what `pg_isready` itself is actually checking, though: it confirms Postgres is accepting connections at all, which is usually the right bar for \"ready enough for another service to start talking to it\" -- it is not a guarantee that every table, migration, or seed script your specific application expects has already been applied; that's a separate readiness concern, usually handled by the application's own migration step, not by the database's own generic healthcheck."
+          },
+          {
+            "heading": "Why Even a Correct Healthcheck Doesn't Make Retry Logic Optional",
+            "body": "It's tempting to treat `condition: service_healthy` as the complete fix and stop there, but it only ever covers the moment the whole stack is first brought up together with `docker compose up`. It says nothing about what happens *afterward*, over the running lifetime of the system, which is exactly when some of the most disruptive versions of this same underlying problem actually occur: the database container gets restarted for a routine upgrade while the app container keeps running the entire time, or a network blip causes a connection to silently drop, or the database is temporarily overloaded and briefly stops accepting new connections. In every one of these cases, `depends_on` and its healthcheck condition have already done their one job, once, at initial startup, and have nothing left to say about a dependency that becomes temporarily unavailable well after the system has been running fine for hours or days.\n\nThis is exactly why a well-built application talking to a database or another service should implement its own connection retry with backoff -- catching a connection failure, waiting a short, increasing interval, and trying again a bounded number of times -- as a property of the application's own connection logic, independent of whatever startup-ordering guarantees Compose or an orchestrator provides. `depends_on` plus a healthcheck reduces how *often* your application needs to fall back on that retry logic, particularly at first boot, which is a genuinely valuable reduction in noisy, easily-mistaken-for-a-real-bug startup failures -- but it does not, and structurally cannot, eliminate the need for the application itself to be resilient to a dependency that's temporarily unavailable at some later point in its life, which is a categorically different, ongoing concern that startup ordering alone was never going to solve."
+          },
+          {
+            "heading": "Common Mistakes: Healthchecks Defined but Not Actually Waited On",
+            "body": "A specific, easy-to-make mistake is adding a perfectly correct `healthcheck:` block to a service, and then leaving the dependent service's `depends_on` in its short, list form -- `depends_on: [db]` -- rather than the explicit `condition: service_healthy` form. Compose will happily accept this combination with no error or warning at all: the healthcheck genuinely runs, and `docker compose ps` will genuinely show `db` transitioning through starting/healthy states -- but `app`'s startup ordering is completely unaffected by any of it, because a plain list-form `depends_on` entry only ever waits for `service_started` (the default condition), never automatically upgrading itself to also respect a healthcheck just because one happens to exist on the target service.\n\n```yaml\n# BROKEN: healthcheck exists but nothing actually waits on it\nservices:\n  app:\n    depends_on:\n      - db          # implicitly condition: service_started -- healthcheck is irrelevant here\n  db:\n    image: postgres:16\n    healthcheck:\n      test: [\"CMD-SHELL\", \"pg_isready -U postgres\"]\n```\n\nThe fix is exactly the explicit map form shown in the previous section -- `depends_on: db: condition: service_healthy` -- which is the only form that actually ties the two together. It's worth internalizing this as a specific thing to check for in review: a `healthcheck:` block existing on a service, by itself, guarantees nothing about anyone else's startup behavior; it only becomes load-bearing for ordering purposes when something else's `depends_on` explicitly asks to wait for `service_healthy`."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Reproducing the Race: depends_on Alone Isn't Enough",
+          "language": "bash",
+          "code": "$ docker compose up\ndb-1    | ... database system is ready to accept connections ...\napp-1   | Traceback (most recent call last):\napp-1   |   psycopg2.OperationalError: connection refused\napp-1 exited with code 1\n# NOTE the ordering of the log lines: db actually became ready\n# only slightly AFTER app already tried and failed to connect",
+          "explanation": "The interleaved log output makes the race condition visible directly: `db`'s own log line confirming it's ready to accept connections appears only slightly after `app` already crashed trying to connect. Both containers started in the order `depends_on` promised -- `db`'s container process genuinely did start before `app`'s did -- but Postgres's own internal initialization took a bit longer than the brief window before `app`'s code made its first connection attempt. This is exactly the gap between \"container started\" (what plain `depends_on` guarantees) and \"application inside is ready\" (what it does not), and it's a classic source of a build or deploy that \"sometimes works, sometimes doesn't\" depending purely on how fast Postgres's initialization happens to run on a given machine that day."
+        },
+        {
+          "title": "The Fix: condition: service_healthy Closes the Gap",
+          "language": "yaml",
+          "code": "services:\n  app:\n    build: ./app\n    depends_on:\n      db:\n        condition: service_healthy\n  db:\n    image: postgres:16\n    environment:\n      - POSTGRES_PASSWORD=devpassword\n    healthcheck:\n      test: [\"CMD-SHELL\", \"pg_isready -U postgres\"]\n      interval: 5s\n      timeout: 3s\n      retries: 5\n      start_period: 10s",
+          "explanation": "`start_period: 10s` gives Postgres's first-time initialization a grace window during which failing healthchecks don't count toward the `retries` budget that would otherwise mark the container unhealthy -- appropriate here specifically because first-ever startup (creating the data directory, running setup) is slower than routine restarts later. With `condition: service_healthy` on `app`'s `depends_on` entry, Compose now genuinely waits for `pg_isready` to succeed before starting `app` at all, closing exactly the race shown in the previous example -- `app`'s first connection attempt now lands after Postgres has already confirmed it's accepting connections, not before."
+          },
+        {
+          "title": "What a Healthcheck Doesn't Cover: A Later Restart Mid-Flight",
+          "language": "bash",
+          "code": "$ docker compose up -d\n# ... hours later, a routine maintenance restart of the database ...\n$ docker compose restart db\n$ docker logs app --tail 5\nERROR: connection to db failed: connection refused\nWARNING: retrying in 1s...\nWARNING: retrying in 2s...\nWARNING: retrying in 4s...\nINFO: reconnected to db successfully",
+          "explanation": "depends_on's service_healthy condition already did its one job hours earlier, at initial `docker compose up` -- it has nothing further to say about `db` being unavailable for the few seconds it takes to restart later, well after the whole stack has been running normally. What actually recovers this situation is the application's own retry-with-backoff logic inside `app`, reconnecting on its own after a few short, increasing waits, entirely independent of Compose's startup-ordering machinery. This is exactly the point of the concept's third section: a healthcheck-aware depends_on reduces how often you hit a connection failure, especially at first boot, but the application still needs to be resilient to a dependency going away temporarily at any later point, because nothing about depends_on's guarantee extends past the very first startup sequence."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "depends_on: [db] means Compose will wait until the database inside the db container is actually ready to accept connections before starting the app service.",
+          "clarification": "By default, depends_on only guarantees that the db container's process has STARTED before the app container's process starts -- it says nothing about whether the application inside db has finished its own initialization and is actually ready to do useful work. Getting an actual readiness wait requires the longer, explicit depends_on map form with condition: service_healthy, paired with a real healthcheck: defined on the dependency; the short list form (- db) never waits on anything beyond the container process itself having begun executing."
+        },
+        {
+          "description": "Adding a healthcheck: block to a service is enough by itself to make other services wait for it to become healthy before they start.",
+          "clarification": "A healthcheck: block only affects how Docker/Compose reports and tracks that one service's own health status (visible via docker compose ps and docker inspect) -- it does not automatically change any other service's startup behavior. A dependent service's depends_on entry must explicitly opt in with condition: service_healthy for that service's startup to actually be gated on the dependency's healthcheck; leaving depends_on in its plain list form alongside an otherwise-correct healthcheck silently keeps the default service_started behavior, and the healthcheck, while genuinely running and genuinely accurate, has no effect on anyone else's startup ordering at all."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "docker-compose-depends-on-ordering-ex1",
+          "type": "predictOutput",
+          "prompt": "Given this Compose file, predict whether app is guaranteed to successfully connect to db on the very first docker compose up, and explain why or why not.",
+          "code": "services:\n  app:\n    build: ./app\n    depends_on:\n      - db\n  db:\n    image: postgres:16\n    environment:\n      - POSTGRES_PASSWORD=devpassword",
+          "hints": [
+            "There's no healthcheck: on db at all here -- what condition does a plain list-form depends_on entry default to?",
+            "\"db's container has started\" and \"Postgres inside is ready to accept connections\" are two different points in time -- which one does this depends_on form actually wait for?",
+            "Think specifically about Postgres's first-ever startup, which includes a real initialization sequence that takes some nonzero time."
+          ],
+          "expectedAnswer": "No, it's not guaranteed. depends_on: [db] with no condition: only waits for db's container process to start, not for Postgres inside it to finish its own initialization and start accepting connections. On a first-time startup, Postgres's setup sequence can easily still be running when app's own code makes its first connection attempt, causing an intermittent connection-refused failure that has nothing to do with a bug in the app's code.",
+          "solutionExplanation": "The list-form `depends_on: - db` implicitly uses the default condition, `service_started`, which is satisfied the instant `db`'s container process begins executing -- it does not check, and has no way to check, whether Postgres itself has finished creating its data directory and started actually listening for connections. Because that initialization sequence takes real, nonzero time, especially on a fresh database with no existing data directory, there's a genuine race: on some runs, by pure luck, Postgres finishes just before `app` tries to connect and everything works; on others, `app`'s connection attempt lands first and fails. Fixing this reliably requires the explicit map-form depends_on with `condition: service_healthy`, paired with an actual `healthcheck:` on `db` (e.g. using `pg_isready`), which is the only combination that genuinely waits for readiness rather than mere container start."
+        },
+        {
+          "id": "docker-compose-depends-on-ordering-ex2",
+          "type": "debugging",
+          "prompt": "A teammate added a healthcheck to the db service, confirmed with docker compose ps that db correctly shows as \"healthy,\" but app is still occasionally crashing on startup with a connection error. Find the bug in this Compose file.",
+          "code": "services:\n  app:\n    build: ./app\n    depends_on:\n      - db\n  db:\n    image: postgres:16\n    environment:\n      - POSTGRES_PASSWORD=devpassword\n    healthcheck:\n      test: [\"CMD-SHELL\", \"pg_isready -U postgres\"]\n      interval: 5s\n      timeout: 3s\n      retries: 5",
+          "hints": [
+            "The healthcheck itself is correctly defined and genuinely working, per docker compose ps -- so the bug isn't in the healthcheck's own test command.",
+            "Look specifically at app's depends_on entry -- is it the short list form, or the longer map form with an explicit condition?",
+            "A healthcheck existing on a service doesn't automatically change anyone else's startup behavior -- something else has to explicitly ask to wait on it."
+          ],
+          "solutionCode": "services:\n  app:\n    build: ./app\n    depends_on:\n      db:\n        condition: service_healthy\n  db:\n    image: postgres:16\n    environment:\n      - POSTGRES_PASSWORD=devpassword\n    healthcheck:\n      test: [\"CMD-SHELL\", \"pg_isready -U postgres\"]\n      interval: 5s\n      timeout: 3s\n      retries: 5",
+          "solutionExplanation": "The healthcheck on `db` is correctly defined and correctly reports healthy status -- the bug is that `app`'s `depends_on` is still in the short list form (`- db`), which implicitly uses the default `service_started` condition and never looks at `db`'s health status at all, healthcheck or no healthcheck. The fix switches `app`'s `depends_on` to the explicit map form, `db: condition: service_healthy`, which is the only syntax that actually ties `app`'s startup to `db`'s healthcheck outcome. Without that explicit condition, the healthcheck runs, genuinely reports accurate health information visible via `docker compose ps`, and has precisely zero effect on when `app` is allowed to start -- it's purely observational unless something else's `depends_on` explicitly opts into respecting it."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "docker-compose-depends-on-ordering-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "By default (a plain list-form depends_on entry, with no condition specified), what does depends_on actually guarantee about the order two services start in?",
+          "options": [
+            "That the dependency's application process has fully initialized and is ready to accept requests before the dependent service starts.",
+            "That the dependency's container process has started before the dependent service's container starts -- nothing about whether the application inside is actually ready yet.",
+            "That the dependency's healthcheck, if one exists, has passed at least once before the dependent service starts.",
+            "Nothing at all -- depends_on only affects the order services are listed in docker compose ps output."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 is the accurate, default behavior: depends_on's implicit condition is service_started, satisfied the moment the dependency's container process begins executing, with no check at all on the readiness of whatever is running inside it. Option 1 describes what condition: service_healthy, combined with an actual healthcheck:, would provide -- not the default. Option 3 is wrong for the same reason as option 1 -- a healthcheck existing doesn't get consulted unless condition: service_healthy is explicitly set. Option 4 understates it -- depends_on genuinely does affect real startup order, just not readiness."
+        },
+        {
+          "id": "docker-compose-depends-on-ordering-assess-explain1",
+          "type": "explanation",
+          "prompt": "A colleague says: \"I added depends_on so my app waits for the database to be ready -- why is it still occasionally crashing with connection errors on startup?\" Explain precisely what depends_on does and doesn't guarantee by default, how to actually fix the readiness problem, and why even that fix doesn't make connection-retry logic in the app unnecessary.",
+          "modelAnswer": "By default, depends_on only orders CONTAINER starts -- it guarantees the dependency's container process begins executing before the dependent service's container starts, and nothing more. It does not check, and structurally cannot check on its own, whether the application running inside that container -- Postgres, in a typical case -- has finished its own initialization and is actually ready to accept connections. Especially on a database's very first startup, which can involve creating a data directory and running setup scripts, there's a real window where the container is technically \"started\" from Docker's point of view while the database inside it genuinely isn't ready yet, and an app that tries to connect immediately can lose that race and crash, intermittently, depending on exactly how long that initialization happens to take on a given run. The actual fix is the explicit, longer form of depends_on -- specifying condition: service_healthy for that dependency -- combined with a real healthcheck: block on the dependency itself, using a command like pg_isready that genuinely tests whether it's accepting connections. With both pieces in place, Compose repeatedly runs that healthcheck and only starts the dependent service once it reports healthy, correctly closing the specific startup-race gap. But this fix only ever covers the very first `docker compose up` of the whole stack together -- it says nothing about a dependency becoming briefly unavailable later, during a routine restart for a database upgrade, a network blip, or a temporary overload, all of which can happen well after the stack has been running fine for hours. depends_on and its healthcheck condition have already done their one job by then and have no further say in it. That's exactly why the application itself should still implement its own connection retry with backoff as a property of its own connection-handling code -- a correct healthcheck-gated depends_on meaningfully reduces how often that retry logic needs to kick in, especially at first boot, but it doesn't eliminate the need for the application to gracefully handle a dependency being briefly unreachable at some later point in its running life."
+        }
+      ]
+    }
+  ]
+}
