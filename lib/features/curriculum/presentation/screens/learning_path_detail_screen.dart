@@ -165,17 +165,26 @@ class _ModuleCard extends StatelessWidget {
                 runSpacing: 4,
                 children: module.concepts
                     .map(
-                      (c) => Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          MasteryStatusIcon(
-                            status:
-                                masteryByConceptId[c.id]?.status ??
-                                MasteryStatus.notStarted,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(c.title),
-                        ],
+                      (c) => ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 280),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            MasteryStatusIcon(
+                              status:
+                                  masteryByConceptId[c.id]?.status ??
+                                  MasteryStatus.notStarted,
+                            ),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                c.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     )
                     .toList(),
