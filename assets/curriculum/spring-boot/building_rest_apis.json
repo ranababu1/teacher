@@ -1,0 +1,371 @@
+{
+  "learningPathId": "spring-boot",
+  "moduleId": "building_rest_apis",
+  "title": "Building REST APIs",
+  "order": 2,
+  "concepts": [
+    {
+      "id": "spring-boot-restcontroller-and-request-mapping",
+      "title": "@RestController and Request Mapping",
+      "description": "@RestController marks a class as a web endpoint whose methods write their return values directly to the HTTP response body instead of resolving a view, and the @xMapping family of annotations declares which URL paths, HTTP methods, and parameters each handler method actually responds to.",
+      "moduleId": "building_rest_apis",
+      "topicId": "building_rest_apis",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 35,
+      "prerequisites": ["spring-boot-autoconfiguration-and-starters"],
+      "learningObjectives": [
+        "Explain what @RestController does and how it differs from plain @Controller.",
+        "Explain how DispatcherServlet and its HandlerMapping route an incoming HTTP request to a specific handler method.",
+        "Use @GetMapping, @PostMapping, @PutMapping, and @DeleteMapping and explain their relationship to the generic @RequestMapping.",
+        "Extract path segments and query parameters using @PathVariable and @RequestParam, including required vs. optional handling.",
+        "Explain what HTTP status results when no handler matches a request's path or method.",
+        "Predict why two handler methods with overlapping mappings cause a startup-time failure rather than a runtime routing decision."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "@Controller vs. @RestController",
+            "body": "`@Controller` is Spring MVC's base stereotype for a class that handles web requests. Historically, a `@Controller` method returns a *logical view name* -- a string like `\"orders/list\"` -- which a `ViewResolver` then maps to an actual template (JSP, Thymeleaf, etc.) to render as HTML. That model makes complete sense for a server-rendered web application, but it is the wrong default for a JSON REST API, where you want a method's return value serialized directly into the response body, not interpreted as a template name.\n\n`@RestController` is a meta-annotation that combines `@Controller` with `@ResponseBody`. `@ResponseBody`, applied to a method (or, via `@RestController`, implicitly to every method in the class), tells Spring MVC: 'do not treat this return value as a view name -- write it directly to the HTTP response body, running it through the appropriate `HttpMessageConverter` first.' Before `@RestController` existed (it arrived in Spring 4.0), building a REST endpoint meant writing `@Controller` plus `@ResponseBody` on every single handler method -- functional, but repetitive. `@RestController` exists purely to remove that repetition for classes where *every* method is meant to produce a body, which describes the overwhelming majority of REST controllers."
+          },
+          {
+            "heading": "How Requests Get Routed: DispatcherServlet and HandlerMapping",
+            "body": "Spring MVC follows the *front controller* pattern: a single servlet, `DispatcherServlet` (registered automatically by Spring Boot's web autoconfiguration, tying back to the previous module), receives every single HTTP request that reaches the application. At startup, Spring builds an index -- a `HandlerMapping` -- of every `@RequestMapping`-family-annotated method across every `@Controller`/`@RestController` bean in the context, recording each one's path pattern, HTTP method, and any additional conditions (headers, params, `consumes`, `produces`).\n\nWhen a request arrives, `DispatcherServlet` consults this index to find the single best-matching handler method, based on the request's path and HTTP method (and those additional conditions, when specified), and dispatches to it. This lookup happens against a data structure built once at startup, not by scanning your source code live -- which is exactly why a routing conflict between two handler methods is detected once, at startup, rather than only surfacing the first time a request happens to hit that path (covered further down)."
+          },
+          {
+            "heading": "@RequestMapping and Its HTTP-Method-Specific Shortcuts",
+            "body": "`@RequestMapping` is the general-purpose mapping annotation; you can write `@RequestMapping(path = \"/orders\", method = RequestMethod.GET)` and it works. In practice, almost nobody writes it that way for a single HTTP method, because Spring provides pre-specialized shortcuts -- `@GetMapping`, `@PostMapping`, `@PutMapping`, `@DeleteMapping`, `@PatchMapping` -- which are themselves meta-annotated with `@RequestMapping` and a fixed `method` value. They exist purely for readability; `@GetMapping(\"/orders/{id}\")` says exactly what it does at a glance, in a way `@RequestMapping(value = \"/orders/{id}\", method = RequestMethod.GET)` does not.\n\nA very common, useful pattern is to put a base path on the *class* with `@RequestMapping(\"/api/orders\")`, and then let each method's mapping supply only the sub-path relative to that base -- `@GetMapping(\"/{id}\")` on a method inside that class resolves to the full path `/api/orders/{id}`. This keeps a whole resource's routes visually grouped and avoids repeating the shared prefix on every method."
+          },
+          {
+            "heading": "Extracting Data From the Request: @PathVariable and @RequestParam",
+            "body": "`@PathVariable` binds a segment of the URI template to a method parameter -- given a mapping of `@GetMapping(\"/orders/{id}\")`, a parameter `@PathVariable Long id` receives whatever value appeared in that position of the actual request path, converted to a `Long`. `@RequestParam` binds a query-string parameter (or a form field on certain request types) -- `@GetMapping(\"/orders\")` with `@RequestParam(required = false) String status` reads `?status=SHIPPED` off the URL, and, because `required` is explicitly set to `false`, leaves the parameter `null` rather than rejecting the request if `status` is omitted entirely (the default for `required` is `true`, which causes a `400 Bad Request` if the parameter is missing and no `defaultValue` is supplied).\n\nBy default, Spring matches a `@PathVariable`/`@RequestParam` parameter to the URI template variable or query parameter with the *same name* as the Java parameter itself -- which relies on the compiled bytecode retaining parameter names (enabled by the `-parameters` compiler flag, which Spring Boot's default Maven/Gradle build plugins turn on for you). It is nonetheless considered good, defensive practice to name the binding explicitly -- `@PathVariable(\"id\") Long orderId` -- especially in any codebase where you can't be fully certain that flag is set, or where the Java parameter name and the URL segment name are meant to differ."
+          },
+          {
+            "heading": "What Happens When Nothing Matches",
+            "body": "If no registered handler's path pattern matches the incoming request path at all, the client receives `404 Not Found`. If a path pattern *does* match, but no handler registered for that path accepts the request's HTTP method, the client receives `405 Method Not Allowed` instead -- a more specific, more useful signal than a bare 404, since it tells the caller the resource exists but this particular verb isn't supported on it.\n\nA subtler case is two handler methods whose mappings genuinely overlap -- for example, two `@GetMapping` methods in the same controller that both resolve to the exact same path pattern shape. Because the `HandlerMapping` index is built once, when the `ApplicationContext` starts, Spring detects this kind of conflict during that build step and fails application startup immediately with `IllegalStateException: Ambiguous mapping`, rather than silently picking one handler and leaving the other unreachable, or deferring the decision to whenever a matching request happens to arrive. This is the same fail-fast philosophy you've already seen with unresolvable dependency injection: a structural configuration problem is caught immediately, at startup, not discovered later in production by whichever request happens to trigger it first."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "A Minimal REST Controller",
+          "language": "java",
+          "code": "@RestController\n@RequestMapping(\"/api/orders\")\npublic class OrderController {\n\n    private final OrderService orderService;\n\n    public OrderController(OrderService orderService) {\n        this.orderService = orderService;\n    }\n\n    @GetMapping(\"/{id}\")\n    public Order getOrder(@PathVariable Long id) {\n        return orderService.findById(id);\n    }\n\n    @GetMapping\n    public List<Order> listOrders(@RequestParam(required = false) String status) {\n        return orderService.findAll(status);\n    }\n}",
+          "explanation": "OrderController receives its OrderService dependency through the constructor, exactly as covered in the Core Concepts module -- controllers are beans too, and are wired the same way as any other. The class-level @RequestMapping(\"/api/orders\") establishes a shared base path; getOrder's @GetMapping(\"/{id}\") resolves to the full route GET /api/orders/{id}, with the {id} segment bound to the id parameter via @PathVariable. listOrders's bare @GetMapping resolves to GET /api/orders itself, and its status parameter is bound from an optional query string parameter (required = false), so a request to GET /api/orders with no query string at all still matches this method, just with status equal to null -- it's OrderService's own job, not Spring's, to decide what a null status filter means."
+        },
+        {
+          "title": "An Ambiguous Mapping Failure at Startup",
+          "language": "java",
+          "code": "@RestController\npublic class ProductController {\n\n    @GetMapping(\"/products/{id}\")\n    public Product getProduct(@PathVariable Long id) {\n        return productService.findById(id);\n    }\n\n    @GetMapping(\"/products/{productId}\")\n    public Product getProductDetails(@PathVariable Long productId) {\n        return productService.findByIdWithDetails(productId);\n    }\n}\n\n// Application fails to start:\n// IllegalStateException: Ambiguous mapping. Cannot map 'productController' method\n// getProductDetails to {GET /products/{productId}}: There is already 'productController'\n// bean method getProduct mapped.",
+          "explanation": "Both methods map to a GET request against a single path segment under /products/ -- the fact that the placeholder is named {id} in one and {productId} in the other is completely irrelevant to Spring's matching, because request mapping matches on path pattern SHAPE and HTTP method, never on the names chosen for path variables (those names are only used afterward, to bind a value to a parameter, once a single handler has already been selected). Since both mappings describe the identical pattern -- GET on /products/<one segment> -- for the same controller, Spring detects the conflict while building its handler index at startup and refuses to start the application, rather than silently letting one method shadow the other and only exposing the bug the first time someone requests /products/42."
+        },
+        {
+          "title": "Explicit Binding When Names Don't Match",
+          "language": "java",
+          "code": "@GetMapping(\"/orders/{id}\")\npublic Order getOrder(@PathVariable(\"id\") Long orderId) {\n    return orderService.findById(orderId);\n}\n\n@GetMapping(\"/orders/search\")\npublic List<Order> search(@RequestParam(name = \"q\", defaultValue = \"\") String query) {\n    return orderService.search(query);\n}",
+          "explanation": "getOrder's URI template variable is named id, but the Java method parameter is named orderId -- without the explicit @PathVariable(\"id\"), Spring would have no way to connect the two, since the names differ. Passing the URI variable's name explicitly makes the binding correct regardless of what the Java parameter happens to be called, and reads clearly to anyone unfamiliar with the -parameters compiler flag nuance. search's @RequestParam similarly renames the bound query parameter to q (so the actual URL is /orders/search?q=...) while giving it a defaultValue of an empty string, meaning a request with no q parameter at all still succeeds, with query bound to \"\" rather than null -- letting search's own logic treat 'no query' and 'empty query' identically without an explicit null check."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "@RestController writes a method's return value to the response exactly as-is, similar to a raw servlet writing text directly -- there's no real conversion step happening.",
+          "clarification": "Every return value from a @RestController method passes through Spring MVC's HttpMessageConverter chain before it becomes bytes on the wire. For a domain object, that typically means MappingJackson2HttpMessageConverter serializing it to JSON; for a bare String, a different converter (StringHttpMessageConverter) writes it as literal text. Which converter gets used depends on the request's Accept header and the mapping's declared produces value, matched against which converters are actually registered (Jackson's, specifically, only exists because it was autoconfigured onto the classpath -- see the Core Concepts module). It is real, inspectable conversion work, not a bypass of any processing."
+        },
+        {
+          "description": "Two handler methods with different parameter types or different parameter names can share the exact same path and HTTP method without conflicting, because Spring can tell them apart by their Java signatures.",
+          "clarification": "Request mapping matches purely on path pattern shape, HTTP method, and any explicitly declared conditions (headers, params, consumes, produces) -- it has no visibility into a handler method's parameter types or parameter names at all when deciding whether two mappings conflict. Two GET methods mapped to what is structurally the same path pattern (even with differently NAMED path variables, like {id} vs {productId}) are ambiguous to Spring regardless of how different their Java signatures look, and will fail application startup with an Ambiguous mapping error rather than being silently disambiguated by argument types the way Java method overloading works."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "spring-boot-restcontroller-and-request-mapping-ex1",
+          "type": "debugging",
+          "prompt": "This application fails to start with an 'Ambiguous mapping' error involving ProductController. Find and fix the conflict so both endpoints can coexist and behave distinctly.",
+          "code": "@RestController\npublic class ProductController {\n\n    @GetMapping(\"/products/{id}\")\n    public Product getProduct(@PathVariable Long id) {\n        return productService.findById(id);\n    }\n\n    @GetMapping(\"/products/{productId}\")\n    public Product getProductDetails(@PathVariable Long productId) {\n        return productService.findByIdWithDetails(productId);\n    }\n}",
+          "hints": [
+            "Spring matches mappings on path pattern shape and HTTP method -- the names of the {placeholders} play no role in telling two mappings apart.",
+            "Both methods currently describe exactly the same thing: GET on /products/<one path segment>. What could make them describe genuinely different routes instead?",
+            "Give the second endpoint a distinguishing, literal path segment (like /products/{id}/details) rather than another single variable segment at the same position."
+          ],
+          "solutionCode": "@RestController\npublic class ProductController {\n\n    @GetMapping(\"/products/{id}\")\n    public Product getProduct(@PathVariable Long id) {\n        return productService.findById(id);\n    }\n\n    @GetMapping(\"/products/{id}/details\")\n    public Product getProductDetails(@PathVariable Long id) {\n        return productService.findByIdWithDetails(id);\n    }\n}",
+          "solutionExplanation": "The original two mappings both describe GET requests against /products/<single segment>, and Spring's mapping matcher only looks at the pattern's structure and HTTP method -- the placeholder names {id} and {productId} are irrelevant to matching, so the two are genuinely identical from the router's point of view, causing the ambiguous-mapping startup failure. Adding a distinguishing literal segment, /products/{id}/details, changes the actual pattern shape (two segments instead of one after /products/), so the two mappings are no longer ambiguous -- GET /products/42 routes to getProduct, and GET /products/42/details routes to getProductDetails, each unambiguously."
+        },
+        {
+          "id": "spring-boot-restcontroller-and-request-mapping-ex2",
+          "type": "predictOutput",
+          "prompt": "Given this handler method, what does calling GET /search (no query string) return, and what does calling GET /search?category=shoes return?",
+          "code": "@GetMapping(\"/search\")\npublic List<Product> search(@RequestParam(required = false) String category) {\n    if (category == null) {\n        return productService.findAll();\n    }\n    return productService.findByCategory(category);\n}",
+          "hints": [
+            "required = false means the request is NOT rejected when the category query parameter is absent -- but what value does the parameter get bound to in that case?",
+            "For an object type like String (as opposed to a primitive like int), an absent, non-required @RequestParam binds to null, not to an empty string.",
+            "Trace which branch of the if statement executes for each call, based on whether category is null or has a real value."
+          ],
+          "expectedAnswer": "GET /search with no query string calls productService.findAll(), because category is not provided and required=false lets the request through with category bound to null, taking the if-branch. GET /search?category=shoes calls productService.findByCategory(\"shoes\"), because category is now bound to the string \"shoes\", which is not null, so the if-branch is skipped.",
+          "solutionExplanation": "Because category is declared @RequestParam(required = false) and there is no defaultValue, an omitted category query parameter does not cause a 400 error -- it simply leaves category bound to null (String is a reference type, so 'absent' naturally maps to null rather than a primitive default). The method's own if (category == null) check then explicitly branches to productService.findAll() for that case. When category=shoes is supplied in the query string, Spring binds the literal string \"shoes\" to the parameter, category is no longer null, and the method falls through to productService.findByCategory(\"shoes\") instead -- the routing itself is identical in both calls (both hit the same search method); only the bound parameter's value, and therefore the method's own internal branching, differs."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "spring-boot-restcontroller-and-request-mapping-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "Two handler methods in the same controller are both mapped with @PostMapping(\"/items/{id}\") -- identical path pattern and identical HTTP method, but different parameter types. What happens when the application starts?",
+          "options": [
+            "Spring disambiguates the two methods based on their different parameter types, similar to Java method overload resolution.",
+            "The application fails to start with an ambiguous mapping error, because request mapping matches only on path pattern and HTTP method, not on Java method signatures.",
+            "The first-defined method silently wins and the second is ignored at runtime.",
+            "Both methods run in sequence for every matching request, and their return values are merged."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Spring's request mapping matches based on path pattern shape, HTTP method, and any explicitly declared conditions like headers/params/consumes/produces -- it has no concept of Java method overload resolution and does not consider parameter types or names when deciding whether two mappings conflict. Because both mappings here are identical in every dimension Spring actually checks, this is detected as a genuine conflict while the handler index is built at startup, and the application fails to start with an Ambiguous mapping error. Options A, C, and D each describe behavior Spring MVC does not implement -- there's no overload-style disambiguation, no silent 'first one wins,' and no fan-out to multiple handlers for one request."
+        },
+        {
+          "id": "spring-boot-restcontroller-and-request-mapping-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain, step by step, how DispatcherServlet decides which method handles a given incoming HTTP request in a Spring Boot REST application.",
+          "modelAnswer": "Spring MVC follows the front controller pattern: a single DispatcherServlet, registered automatically by Spring Boot's web autoconfiguration once a web starter is on the classpath, is the one servlet that receives every incoming HTTP request for the application, rather than each controller registering its own separate servlet. At application startup, before any request has been handled, Spring inspects every @Controller/@RestController bean in the context and indexes each of its @RequestMapping-family-annotated methods (including the @GetMapping/@PostMapping/etc. shortcuts, which are just @RequestMapping specialized to one HTTP method) into a HandlerMapping, recording each method's path pattern, HTTP method, and any additional declared conditions such as consumes, produces, headers, or params. When an actual HTTP request arrives, DispatcherServlet asks this HandlerMapping to find the single best match for the request's path and method (and any other conditions that were specified), and dispatches control to exactly that one handler method, later passing the return value through the registered HttpMessageConverter chain to produce the response body. If no mapping's path matches at all, the client gets a 404; if the path matches but no handler there accepts the request's HTTP method, the client gets a 405. Because this entire index is built once, at startup, from the complete set of annotated methods, any structural conflict between two mappings -- like two methods describing what is effectively the identical path-and-method combination -- is detected immediately during that startup-time indexing step, causing the whole application to fail to start with an ambiguous-mapping error, rather than only surfacing the very first time a real request happens to hit that particular route."
+        }
+      ]
+    },
+    {
+      "id": "spring-boot-request-response-json-binding",
+      "title": "Request and Response Bodies: JSON Binding",
+      "description": "@RequestBody and the @ResponseBody behavior already implied by @RestController delegate the actual work of converting between JSON on the wire and Java objects in memory to Jackson's HttpMessageConverter, and understanding exactly how that conversion works explains a large share of the 400 and 500 errors you'll encounter building REST APIs.",
+      "moduleId": "building_rest_apis",
+      "topicId": "building_rest_apis",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 40,
+      "prerequisites": ["spring-boot-restcontroller-and-request-mapping"],
+      "learningObjectives": [
+        "Explain the role of HttpMessageConverter and how Jackson's converter becomes available via autoconfiguration.",
+        "Use @RequestBody to deserialize an incoming JSON body into a Java object, and explain what determines field mapping.",
+        "Explain what happens, and what happens NOT to happen, when incoming JSON has extra or missing fields relative to the target class.",
+        "Explain why a malformed or type-mismatched JSON body causes a 400 error before the controller method body ever executes.",
+        "Use @JsonProperty to decouple a wire-format field name from the Java field name.",
+        "Explain the role of the Content-Type and Accept headers in selecting which HttpMessageConverter handles a request or response."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "HttpMessageConverter: The Thing That Actually Converts JSON",
+            "body": "`@RequestBody` (for reading) and `@ResponseBody` (for writing, already implied by `@RestController` on every method) are instructions to Spring MVC: 'do not treat this as a plain request parameter or a view name -- run it through the registered `HttpMessageConverter` chain instead.' `HttpMessageConverter` is the abstraction responsible for the actual conversion between raw HTTP bytes and a Java object. `MappingJackson2HttpMessageConverter` -- the one that handles JSON -- is registered automatically the moment Jackson's classes are present on the classpath, which, as covered in the Core Concepts module, happens because `spring-boot-starter-web` transitively brings in `jackson-databind` and `JacksonAutoConfiguration`'s `@ConditionalOnClass` check for Jackson's classes passes.\n\nWhich converter actually gets used for a given request is not arbitrary: for reading a `@RequestBody`, Spring picks a converter that can handle the request's declared `Content-Type` header; for writing a response, it picks one based on the request's `Accept` header (and any `produces` value declared on the mapping). This matters in practice, not just in theory -- covered fully in the content-negotiation section below."
+          },
+          {
+            "heading": "Deserializing @RequestBody: How Jackson Maps JSON to Java",
+            "body": "By default, Jackson constructs the target object via its no-argument constructor and then populates it via setters (or direct field access via reflection, depending on configuration), matching each JSON key to a Java property of the same name, case-sensitively. Two behaviors here are extremely common sources of confusion, and both matter more than they first appear: first, an unrecognized JSON key -- one that doesn't correspond to any property on the target class -- is silently *ignored* by default, because Spring Boot's Jackson autoconfiguration explicitly disables Jackson's `FAIL_ON_UNKNOWN_PROPERTIES` feature (which, note, is actually *enabled* in plain, non-Boot Jackson -- this is one of the deliberate leniency defaults Spring Boot applies on top of vanilla Jackson). Second, and separately, a JSON key that is simply *missing* from the payload leaves the corresponding Java field at whatever its default value would be -- `null` for objects, `0`/`false` for primitives -- because that's just normal object construction; nothing about a missing key is treated as special or invalid on its own.\n\n```java\npublic class CreateOrderRequest {\n    private String customerName;\n    private List<String> items;\n    // getters and setters\n}\n```\n\nPOSTing `{\"customerName\": \"Amy\", \"items\": [\"mug\"]}` against a `@RequestBody CreateOrderRequest` parameter populates both fields correctly. POSTing `{\"custName\": \"Amy\", \"items\": [\"mug\"]}` -- a typo -- deserializes *successfully*, with no exception at all: `custName` is an unrecognized property and gets ignored, and `customerName` simply stays `null`, because nothing in the payload ever set it."
+          },
+          {
+            "heading": "When Deserialization Genuinely Fails: 400 via HttpMessageNotReadableException",
+            "body": "Not every problem with an incoming body is silently tolerated. If the JSON itself is not syntactically valid, or if a JSON value cannot be coerced into the type the target field declares -- a JSON string `\"yes\"` where the target field is a `boolean`, for instance, since Jackson's boolean coercion only accepts the literals `true`/`false` (case-insensitively) -- Jackson throws a mapping/parsing exception, which Spring MVC catches and wraps into `HttpMessageNotReadableException`, automatically translated into an HTTP `400 Bad Request` response, before your controller method's body ever runs.\n\nThis distinction matters a great deal once you get to the next concept: a body that fails to even become a valid object (bad JSON syntax, an incompatible type) fails at the *conversion* layer, via `HttpMessageNotReadableException`, and your controller method never executes at all -- there is no object yet for it to receive. A body that parses and converts successfully, but violates a *business* rule (a blank required name, a negative price) is an entirely different kind of failure, caught by Bean Validation on an object that DOES exist, which is exactly what the next concept covers."
+          },
+          {
+            "heading": "Decoupling Wire Format From Java Naming With @JsonProperty",
+            "body": "A REST API's JSON field names do not have to match your Java field names verbatim, and in fact usually shouldn't be forced to -- API consumers might reasonably expect `snake_case` (a common convention in many ecosystems) while idiomatic Java uses `camelCase`. `@JsonProperty(\"customer_name\")` on a `customerName` field tells Jackson to use `customer_name` as the logical property name on the wire, in *both* directions -- deserializing an incoming `customer_name` key correctly populates the Java field, and serializing that field for an outgoing response emits `customer_name`, not `customerName`. This gives you a stable, deliberately-chosen public contract for API consumers that is decoupled from whatever your Java code happens to be named internally, so a Java-side rename doesn't silently become a breaking API change (and vice versa). Other common Jackson annotations follow the same spirit: `@JsonIgnore` excludes a field (like a password hash) from ever being serialized out, and `@JsonFormat` controls exactly how a date/time value is rendered on the wire."
+          },
+          {
+            "heading": "Content Negotiation: Accept, Content-Type, and produces/consumes",
+            "body": "The request's `Content-Type` header tells Spring MVC what format the *incoming* body is in, which determines which `HttpMessageConverter` is even considered capable of reading it -- a request declaring `Content-Type: application/json` is read by the Jackson converter; a mapping restricted with `consumes = \"application/json\"` will reject any other content type outright with `415 Unsupported Media Type`, before deserialization is even attempted. Separately, the request's `Accept` header (and any `produces` value declared on the mapping) governs which converter is used to *write* the response, and therefore what `Content-Type` the response itself carries. If a client sends `Accept: application/xml` and the application has no XML converter registered (the common case, unless an XML library is explicitly added), Spring MVC cannot satisfy that request and responds with `406 Not Acceptable` -- a distinct failure from a routing 404, since the path and method DID match; it's specifically the *representation* the client demanded that nothing on the server side can produce."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "A Basic @RequestBody / Response Round-Trip",
+          "language": "java",
+          "code": "public class CreateOrderRequest {\n    private String customerName;\n    private List<String> items;\n    // getters and setters omitted for brevity\n}\n\n@PostMapping\npublic Order createOrder(@RequestBody CreateOrderRequest request) {\n    return orderService.create(request.getCustomerName(), request.getItems());\n}\n\n// POST /api/orders\n// Content-Type: application/json\n// { \"customerName\": \"Amy\", \"items\": [\"mug\", \"notebook\"] }",
+          "explanation": "Because the request declares Content-Type: application/json, Spring MVC selects MappingJackson2HttpMessageConverter to read the body. Jackson constructs a CreateOrderRequest via its no-argument constructor, then calls setCustomerName(\"Amy\") and setItems([...]) via reflection, matching each JSON key to a same-named Java property. By the time createOrder's body runs, request is a fully populated, ordinary Java object -- the controller method itself never touches JSON directly. The Order object it returns goes back out through the same converter machinery in reverse, serialized to JSON for the response body, with its own Content-Type chosen based on the incoming request's Accept header."
+        },
+        {
+          "title": "Silent Data Loss From a Typo'd JSON Key",
+          "language": "java",
+          "code": "// Same CreateOrderRequest class as above\n\n@PostMapping\npublic String createOrder(@RequestBody CreateOrderRequest request) {\n    return \"Order for: \" + request.getCustomerName();\n}\n\n// POST /api/orders\n// Content-Type: application/json\n// { \"custName\": \"Amy\", \"items\": [\"mug\"] }\n//\n// Response: 200 OK\n// \"Order for: null\"",
+          "explanation": "The JSON key is custName, not customerName -- a typo. Nothing about this payload is invalid JSON, and Jackson does not reject unrecognized keys by default (Spring Boot's Jackson autoconfiguration disables FAIL_ON_UNKNOWN_PROPERTIES), so custName is simply ignored. Because no JSON key ever matched customerName, that field is left at its default value, null, exactly as it would be for any newly constructed object whose setter was never called. The request succeeds completely -- 200 OK, no exception anywhere -- while silently producing an incomplete object. This is precisely the gap that Bean Validation (the next concept) is designed to close: a @NotBlank constraint on customerName would catch this null value and reject the request with a clear 400, where plain deserialization alone sees nothing wrong at all."
+        },
+        {
+          "title": "Renaming Fields for the Wire With @JsonProperty",
+          "language": "java",
+          "code": "public class CustomerDto {\n\n    @JsonProperty(\"customer_name\")\n    private String customerName;\n\n    @JsonProperty(\"loyalty_tier\")\n    private String loyaltyTier;\n\n    // getters and setters\n}\n\n// Incoming: { \"customer_name\": \"Amy\", \"loyalty_tier\": \"gold\" }\n// -> customerName = \"Amy\", loyaltyTier = \"gold\"\n//\n// Outgoing (serialized back to JSON):\n// { \"customer_name\": \"Amy\", \"loyalty_tier\": \"gold\" }",
+          "explanation": "@JsonProperty configures the logical wire-format name for a property in both directions at once: deserialization recognizes customer_name as the key for the customerName field (rather than expecting a literal customerName key), and serialization emits customer_name rather than customerName when writing this object back out as a response. The Java field names stay idiomatic camelCase throughout the codebase -- refactoring the Java field name later has zero effect on the API's public JSON contract, as long as the @JsonProperty value itself is left unchanged, which is exactly the decoupling this annotation exists to provide."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "If the incoming JSON doesn't exactly match the target Java class's fields, Spring will reject the request with an error -- extra or missing fields are treated as invalid input.",
+          "clarification": "By default, Spring Boot's Jackson configuration disables FAIL_ON_UNKNOWN_PROPERTIES, so JSON keys with no matching Java property are simply ignored, and any Java field with no corresponding JSON value is left at its ordinary default (null, 0, false) -- neither situation raises an exception or a 400 response on its own. This leniency is convenient for API evolution (older clients sending fewer fields, or newer clients sending extra ones, don't break), but it also means a typo'd key produces a silently incomplete object rather than a helpful error -- which is precisely why validation (covered in the next concept) matters: it operates on the object AFTER deserialization and can catch exactly this kind of silently-null field."
+        },
+        {
+          "description": "A malformed JSON body and a body that violates a business validation rule (like a blank required field) both fail for essentially the same reason and produce the same kind of error.",
+          "clarification": "They are genuinely different failures from different layers. A body that is not valid JSON, or that can't be coerced into the target type's declared field types (a string where a boolean is expected, for example), fails during CONVERSION -- Jackson throws a mapping exception, Spring wraps it as HttpMessageNotReadableException, and your controller method's body never runs at all, because the target object was never successfully constructed in the first place. A body that IS valid JSON and DOES convert successfully, but leaves a field blank that a business rule requires to be non-blank, fails during VALIDATION -- Bean Validation runs against a fully-constructed object and throws MethodArgumentNotValidException. Both commonly map to a 400 status by default, but understanding which layer actually failed is essential once you're the one writing the centralized error handling that reports these differently, which is the subject of the next concept."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "spring-boot-request-response-json-binding-ex1",
+          "type": "debugging",
+          "prompt": "A POST request to create a product fails with a 400 error before ProductController's method body ever executes, even though the Java class below compiles fine and looks correctly annotated. Given the request body shown, explain why deserialization fails and fix the JSON payload so the request succeeds.",
+          "code": "public class ProductRequest {\n    private String name;\n    private BigDecimal price;\n    private boolean inStock;\n    // getters and setters\n}\n\n@PostMapping(\"/products\")\npublic Product createProduct(@RequestBody ProductRequest request) {\n    return productService.create(request);\n}\n\n// Request body sent by the client:\n// {\n//   \"name\": \"Desk Lamp\",\n//   \"price\": 29.99,\n//   \"inStock\": \"yes\"\n// }",
+          "hints": [
+            "Look specifically at the inStock field's declared Java type versus the JSON value supplied for it.",
+            "Jackson's boolean coercion from a JSON string only recognizes the literal words \"true\" and \"false\" (case-insensitively) -- what happens when the string is neither?",
+            "This failure happens during @RequestBody conversion, before createProduct's body runs at all -- fixing it means fixing the JSON value's type, not anything inside the controller method."
+          ],
+          "solutionCode": "// Corrected request body:\n// {\n//   \"name\": \"Desk Lamp\",\n//   \"price\": 29.99,\n//   \"inStock\": true\n// }",
+          "solutionExplanation": "inStock is declared as a Java boolean, but the client sent the JSON string \"yes\" for it. Jackson's boolean deserializer only accepts the literal JSON values true/false, or the strings \"true\"/\"false\" (case-insensitively) -- \"yes\" is not a recognized boolean representation, so Jackson throws InvalidFormatException while trying to convert the request body into a ProductRequest object. Spring MVC wraps that into HttpMessageNotReadableException, which is automatically translated into a 400 Bad Request response -- and because the ProductRequest object was never successfully constructed, createProduct's method body never runs at all; the failure happens entirely during argument resolution, one layer before the controller code learners often go looking for the bug in. Sending the JSON boolean literal true (not the string \"yes\") for inStock resolves the type mismatch and lets deserialization -- and the request -- succeed."
+        },
+        {
+          "id": "spring-boot-request-response-json-binding-ex2",
+          "type": "predictOutput",
+          "prompt": "Given this class, controller method, and request body, what does the HTTP response's status and body say, and why doesn't Spring reject the request even though 'custName' doesn't match any field on CreateOrderRequest?",
+          "code": "public class CreateOrderRequest {\n    private String customerName;\n    private List<String> items;\n    // getters and setters\n}\n\n@PostMapping\npublic String createOrder(@RequestBody CreateOrderRequest request) {\n    return \"Order for: \" + request.getCustomerName();\n}\n\n// Request body:\n// { \"custName\": \"Priya\", \"items\": [\"mug\", \"notebook\"] }",
+          "hints": [
+            "Is \"custName\" valid JSON syntax? Does it fail to convert into any type at all, or does it just fail to MATCH anything on the target class?",
+            "Recall that Spring Boot's Jackson configuration disables FAIL_ON_UNKNOWN_PROPERTIES by default -- what does Jackson do with a JSON key it doesn't recognize?",
+            "If customerName is never set by any key in the payload, what value does that field hold by the time createOrder's body runs?"
+          ],
+          "expectedAnswer": "200 OK, with the response body 'Order for: null'. The JSON is syntactically valid and 'custName' doesn't cause an error because Spring Boot's Jackson autoconfiguration disables FAIL_ON_UNKNOWN_PROPERTIES by default -- an unrecognized key is simply ignored rather than rejected. Since no key in the payload matches customerName, that field is never set and defaults to null, so request.getCustomerName() returns null and the concatenated string is 'Order for: null'.",
+          "solutionExplanation": "\"custName\" is valid JSON and doesn't correspond to any declared property on CreateOrderRequest, but Spring Boot's Jackson configuration explicitly disables the FAIL_ON_UNKNOWN_PROPERTIES feature (unlike plain, non-Boot Jackson, which enables it by default), so an unrecognized key like this is silently ignored rather than causing an exception. Because customerName was never populated by any key in this particular payload, it keeps its default value of null once the object is constructed -- there is no error at any point, deserialization succeeds completely, and createOrder's body runs normally, concatenating null into the returned string. The response is a perfectly ordinary 200 OK with the body \"Order for: null\", which is exactly the kind of silent, hard-to-notice bug that field-level validation (@NotBlank, in the next concept) is designed to catch."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "spring-boot-request-response-json-binding-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "A POST request's JSON body contains \"quantity\": \"abc\" for a field declared as `private int quantity;` on the target @RequestBody class. What is the most accurate description of what happens?",
+          "options": [
+            "The request fails with a 400 Bad Request via HttpMessageNotReadableException, and the controller method body never executes.",
+            "quantity is set to 0 (int's default value), and the controller method runs normally.",
+            "A NumberFormatException is thrown inside the controller method when quantity is first used.",
+            "The server returns a 500 Internal Server Error because this is an unhandled server-side bug."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "Jackson cannot coerce the JSON string \"abc\" into an int -- there's no valid numeric interpretation -- so it throws a mapping exception during deserialization, which Spring MVC wraps as HttpMessageNotReadableException and automatically translates into a 400 Bad Request. This happens during argument resolution, before the controller method's body ever runs, so option C is wrong (the method body never gets a chance to touch quantity at all) and option B is wrong (there's no silent fallback to a default value for a type mismatch like this -- that only happens for OMITTED fields, not mismatched ones). Option D is wrong because this is a client input problem, correctly surfaced as a 4xx client error, not a 5xx server fault."
+        },
+        {
+          "id": "spring-boot-request-response-json-binding-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain, step by step, what happens from the moment an HTTP POST request with a JSON body arrives at a Spring Boot application to the moment a @RequestBody-annotated parameter is a fully populated Java object -- and explain what happens instead if the JSON can't be mapped onto the target type.",
+          "modelAnswer": "When a POST request arrives, DispatcherServlet routes it to the matching handler method based on path and HTTP method, exactly as with any other request. Once a handler method is selected, Spring MVC inspects its parameters and finds one annotated @RequestBody, which tells it not to treat that parameter as a plain request parameter but instead to resolve it by reading the raw request body through the registered HttpMessageConverter chain. It selects a converter capable of handling the request's declared Content-Type -- for application/json, that's MappingJackson2HttpMessageConverter, present because Jackson was autoconfigured onto the classpath by the web starter. That converter delegates to Jackson's ObjectMapper, which parses the JSON text and attempts to construct an instance of the target class, typically via its no-argument constructor, then populates it by matching each JSON key to a same-named Java property and calling the corresponding setter (or field, depending on configuration) -- keys with no matching property are ignored by default under Spring Boot's Jackson settings, and any property with no matching key is simply left at its default value. If every step of this succeeds, the fully populated object is handed to the controller method as the value of its @RequestBody parameter, and the method body executes normally. If, instead, the JSON is not syntactically valid, or a value can't be coerced into its target field's type (a string where a number or boolean is expected, for instance), Jackson throws a parsing or mapping exception partway through this process; Spring MVC catches that and wraps it as HttpMessageNotReadableException, which by default is translated automatically into an HTTP 400 Bad Request response -- and critically, because the object was never successfully constructed, the controller method's body is never invoked at all in that case."
+        }
+      ]
+    },
+    {
+      "id": "spring-boot-validation-and-exception-handling",
+      "title": "Request Validation and Centralized Exception Handling",
+      "description": "@Valid triggers Bean Validation against constraint annotations like @NotBlank and @Min on an already-deserialized request object, and @ExceptionHandler / @ControllerAdvice let you translate both those validation failures and any other exception into one consistent, centralized error response instead of scattering try/catch blocks across every controller method.",
+      "moduleId": "building_rest_apis",
+      "topicId": "building_rest_apis",
+      "difficulty": "advanced",
+      "estimatedMinutes": 45,
+      "prerequisites": ["spring-boot-request-response-json-binding"],
+      "learningObjectives": [
+        "Explain what triggers Bean Validation on a @RequestBody parameter and what exception a failed validation throws.",
+        "Apply constraint annotations (@NotBlank, @NotNull, @NotEmpty, @Size, @Min/@Max) to a request DTO and correctly distinguish between them.",
+        "Explain Spring Boot's default, uncentralized error response and why it's unsuitable for a real API's clients.",
+        "Write an @ExceptionHandler method and explain how @ControllerAdvice scopes it globally instead of to a single controller.",
+        "Explain the precedence rule Spring uses when multiple @ExceptionHandler methods could apply to a thrown exception.",
+        "Design a consistent error response shape and justify why consistency across every endpoint matters for API consumers."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "Triggering Validation: @Valid and MethodArgumentNotValidException",
+            "body": "Placing `@Valid` on a `@RequestBody` parameter tells Spring MVC to run Bean Validation (the JSR/Jakarta Bean Validation specification, implemented by Hibernate Validator) against that object's declared constraint annotations -- but only *after* Jackson has already successfully deserialized the JSON into that object. This ordering matters, and it connects directly back to the previous concept: a body that Jackson can't even parse or coerce into the target type fails earlier, during conversion, as `HttpMessageNotReadableException` -- validation never even gets a chance to run, because there's no valid object yet to validate. `@Valid` only ever inspects an object that already exists and is already correctly typed; it checks *business* correctness, not structural correctness.\n\nOne practical detail worth knowing precisely: since Spring Boot 2.3, Bean Validation support (Hibernate Validator) is no longer pulled in transitively by `spring-boot-starter-web` -- you need to add `spring-boot-starter-validation` explicitly, or `@Valid` has nothing to actually execute against. When validation does run and finds one or more violated constraints, Spring throws `MethodArgumentNotValidException`, which carries a `BindingResult` containing *every* violated field and its message -- not just the first failure encountered -- so a client can, in principle, be told about every problem with their request in a single response instead of fixing one field at a time through repeated round trips."
+          },
+          {
+            "heading": "Common Constraint Annotations, and a Genuinely Common Point of Confusion",
+            "body": "```java\npublic class CreateOrderRequest {\n\n    @NotBlank(message = \"Customer name is required\")\n    private String customerName;\n\n    @Email(message = \"A valid email address is required\")\n    private String customerEmail;\n\n    @NotEmpty(message = \"Order must contain at least one item\")\n    private List<@NotBlank String> items;\n\n    @Min(value = 1, message = \"Quantity must be at least 1\")\n    private int quantity;\n}\n```\n\n`@NotNull`, `@NotEmpty`, and `@NotBlank` sound similar but check progressively stricter conditions, and mixing them up is a genuinely common mistake worth memorizing precisely: `@NotNull` only rejects an actual `null` reference -- an empty string `\"\"` passes. `@NotEmpty` additionally requires a collection or string to have a size/length greater than zero -- `null` fails, and so does `\"\"`, but `\"   \"` (all whitespace) passes, because it technically has a non-zero length. `@NotBlank`, applicable to strings specifically, is the strictest of the three: it requires a trimmed length greater than zero, so `null`, `\"\"`, and `\"   \"` all fail. For a required name field, `@NotBlank` is almost always the correct choice; `@NotEmpty` is more appropriate for a required collection like `items`, where 'blank' doesn't really apply."
+          },
+          {
+            "heading": "Default Error Behavior Without Any Centralized Handling",
+            "body": "Without any custom exception handling at all, an uncaught exception -- whether it's `MethodArgumentNotValidException` from a failed `@Valid` check, or an ordinary `RuntimeException` thrown from deep inside a service -- is caught by Spring Boot's own built-in default error handling (`BasicErrorController`, backing the `/error` path every Spring Boot web app registers automatically), which produces a generic JSON body containing fields like `timestamp`, `status`, `error`, and `path`. This default is functional, but it's a poor fit for a real API: its shape is generic and largely the same regardless of what actually went wrong, it doesn't expose field-level validation detail in a consistently structured, easily-parseable way by default, and different exception types end up producing subtly different response shapes depending on internal framework behavior you don't control -- none of which gives an API consumer anything reliable to branch their own client-side logic on. This is the concrete motivation for centralizing error handling yourself, covered next."
+          },
+          {
+            "heading": "@ExceptionHandler and @ControllerAdvice",
+            "body": "An `@ExceptionHandler(SomeException.class)` method, declared inside a controller class, catches any exception of that type (or a subtype) thrown by *any handler method within that same controller*, and its return value becomes the response -- typically wrapped in a `ResponseEntity` so you can control the HTTP status explicitly rather than relying on a default. Declaring it inside a controller works, but it only covers that one controller.\n\n`@ControllerAdvice` (or `@RestControllerAdvice`, which is `@ControllerAdvice` plus `@ResponseBody` bundled together, exactly mirroring the relationship between `@Controller` and `@RestController`) applied to its own, separate class makes every `@ExceptionHandler` method inside it apply *globally* -- across every controller in the entire application. This is the standard place to centralize error handling, rather than duplicating near-identical handler methods inside every controller:\n\n```java\n@RestControllerAdvice\npublic class ApiExceptionHandler {\n\n    @ExceptionHandler(MethodArgumentNotValidException.class)\n    public ResponseEntity<Map<String, Object>> handleValidation(MethodArgumentNotValidException ex) {\n        Map<String, String> fieldErrors = new HashMap<>();\n        for (FieldError error : ex.getBindingResult().getFieldErrors()) {\n            fieldErrors.put(error.getField(), error.getDefaultMessage());\n        }\n        Map<String, Object> body = new HashMap<>();\n        body.put(\"status\", HttpStatus.BAD_REQUEST.value());\n        body.put(\"errors\", fieldErrors);\n        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);\n    }\n\n    @ExceptionHandler(OrderNotFoundException.class)\n    public ResponseEntity<Map<String, Object>> handleNotFound(OrderNotFoundException ex) {\n        return ResponseEntity.status(HttpStatus.NOT_FOUND)\n                .body(Map.of(\"status\", 404, \"message\", ex.getMessage()));\n    }\n\n    @ExceptionHandler(Exception.class)\n    public ResponseEntity<Map<String, Object>> handleGeneric(Exception ex) {\n        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)\n                .body(Map.of(\"status\", 500, \"message\", \"An unexpected error occurred\"));\n    }\n}\n```\n\nOne class, three tiers of specificity, now governs error responses for the entire application: a precise, field-level response for validation failures, a domain-specific response for a not-found business error, and a deliberately vague catch-all for anything genuinely unexpected -- vague on purpose, so an unanticipated internal error never leaks stack-trace-adjacent implementation details to a client, even though you'd still want to log the real exception server-side inside that same handler method before returning the generic body."
+          },
+          {
+            "heading": "Matching Precedence Among Multiple Handlers",
+            "body": "When more than one `@ExceptionHandler` method could technically apply to a thrown exception -- because the exception's class hierarchy matches more than one declared handler type -- Spring does not pick arbitrarily or run every matching handler in sequence. It selects the handler whose declared exception type is the *closest* match in the thrown exception's type hierarchy. In the example above, a thrown `MethodArgumentNotValidException` technically matches both `handleValidation` (declared for that exact type) and `handleGeneric` (declared for `Exception`, an ancestor of everything) -- but `handleValidation` wins, because `MethodArgumentNotValidException` is a far closer match than the generic `Exception` ancestor. The generic handler only ever actually runs for exceptions that don't match any more specific handler you've registered -- which is exactly the role a catch-all is meant to play, and exactly why you don't need to worry that adding a broad `Exception` handler will accidentally swallow validation errors away from a more specific handler that's also registered."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "A Validated Request DTO",
+          "language": "java",
+          "code": "public class CreateOrderRequest {\n\n    @NotBlank(message = \"Customer name is required\")\n    private String customerName;\n\n    @NotEmpty(message = \"Order must contain at least one item\")\n    private List<@NotBlank String> items;\n\n    @Min(value = 1, message = \"Quantity must be at least 1\")\n    private int quantity;\n\n    // getters and setters\n}\n\n@PostMapping\npublic Order createOrder(@Valid @RequestBody CreateOrderRequest request) {\n    return orderService.create(request);\n}",
+          "explanation": "@Valid on the parameter tells Spring to run Bean Validation against the CreateOrderRequest instance immediately after Jackson has successfully built it -- if customerName is blank, items is empty (or contains a blank string, thanks to the container-element constraint List<@NotBlank String>), or quantity is less than 1, Spring throws MethodArgumentNotValidException carrying every one of those violations at once, and createOrder's body never executes at all. Only when every constraint passes does the method body run, at which point request is guaranteed to satisfy all of these business rules -- the controller method itself never needs to write a single defensive if-check for any of them."
+        },
+        {
+          "title": "Centralizing Error Handling With @RestControllerAdvice",
+          "language": "java",
+          "code": "@RestControllerAdvice\npublic class ApiExceptionHandler {\n\n    @ExceptionHandler(MethodArgumentNotValidException.class)\n    public ResponseEntity<Map<String, Object>> handleValidation(MethodArgumentNotValidException ex) {\n        Map<String, String> fieldErrors = new HashMap<>();\n        for (FieldError error : ex.getBindingResult().getFieldErrors()) {\n            fieldErrors.put(error.getField(), error.getDefaultMessage());\n        }\n        return ResponseEntity.badRequest()\n                .body(Map.of(\"status\", 400, \"errors\", fieldErrors));\n    }\n\n    @ExceptionHandler(OrderNotFoundException.class)\n    public ResponseEntity<Map<String, Object>> handleNotFound(OrderNotFoundException ex) {\n        return ResponseEntity.status(HttpStatus.NOT_FOUND)\n                .body(Map.of(\"status\", 404, \"message\", ex.getMessage()));\n    }\n}",
+          "explanation": "This single class now governs error responses for EVERY controller in the application, not just one -- @RestControllerAdvice's global scope is exactly the point. handleValidation walks the BindingResult's field errors and assembles a map of field name to message, giving API consumers a structured, machine-parseable object to branch on (e.g., to highlight the exact form fields that failed) rather than a single generic error string. handleNotFound handles a custom domain exception the same way, with its own appropriate status code and message. Neither handler method needed to be duplicated into every single controller class -- writing them once, here, is enough for them to apply everywhere in the app."
+        },
+        {
+          "title": "The Default Error Response vs. a Centralized One",
+          "language": "json",
+          "code": "// Spring Boot's default error response (no custom handling):\n{\n  \"timestamp\": \"2026-08-14T10:15:30.00Z\",\n  \"status\": 400,\n  \"error\": \"Bad Request\",\n  \"path\": \"/api/orders\"\n}\n\n// A centralized, structured response for the same validation failure:\n{\n  \"status\": 400,\n  \"errors\": {\n    \"customerName\": \"Customer name is required\",\n    \"quantity\": \"Quantity must be at least 1\"\n  }\n}",
+          "explanation": "The default response tells a client almost nothing actionable: it confirms something was wrong and roughly when, but not WHICH fields failed or why -- a client that wants to show 'Customer name is required' next to the right form field has no way to get that information out of this shape at all. The centralized version, built from the same MethodArgumentNotValidException's BindingResult, exposes exactly which fields failed and with what message, in a shape that stays identical across every endpoint in the API -- which is the real payoff of centralizing error handling: not just less duplicated code, but a single, predictable contract that every client integrating against the API can rely on, rather than a different ad hoc shape depending on which corner of the codebase happened to throw."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "An @ExceptionHandler method only catches exceptions thrown inside the exact same method it's declared alongside, similar to a try/catch wrapped tightly around one specific call.",
+          "clarification": "An @ExceptionHandler method declared inside a controller class applies to every handler method within that ENTIRE controller class, not just one. Declared inside a @ControllerAdvice (or @RestControllerAdvice) class instead, it applies GLOBALLY, to any matching exception thrown anywhere during request handling across the whole application -- including exceptions Spring itself throws internally, like MethodArgumentNotValidException during argument resolution, not only exceptions your own business logic explicitly throws. The scope is the whole class (controller-level) or the whole application (@ControllerAdvice-level), never a single method call."
+        },
+        {
+          "description": "As long as there's a generic @ExceptionHandler(Exception.class) registered somewhere, it doesn't matter whether you also add a more specific handler for MethodArgumentNotValidException -- the generic one will catch it too, so the specific one is redundant.",
+          "clarification": "It's true that a generic Exception handler WOULD technically match a thrown MethodArgumentNotValidException, since it's a subtype of Exception -- but Spring's handler resolution always prefers the MOST SPECIFIC applicable handler when more than one is registered, so a dedicated MethodArgumentNotValidException handler, if present, wins over the generic one every time, not merely 'sometimes' or 'depending on order.' This isn't redundant at all: only the specific handler has convenient, correctly-typed access to ex.getBindingResult() and its structured field errors -- the generic Exception-typed handler would need an unsafe, easily-forgotten cast to get the same information, which is exactly why relying solely on the generic handler produces a worse, less specific error response for validation failures."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "spring-boot-validation-and-exception-handling-ex1",
+          "type": "coding",
+          "prompt": "Add validation constraints to this DTO so that a request is rejected -- before the controller method body runs -- if email is blank or not a valid email address, or if quantity is less than 1. Then wire @Valid into the controller method so those constraints actually get enforced.",
+          "code": "public class SubscriptionRequest {\n    private String email;\n    private int quantity;\n    // getters and setters\n}\n\n@PostMapping(\"/subscriptions\")\npublic Subscription subscribe(@RequestBody SubscriptionRequest request) {\n    return subscriptionService.create(request);\n}",
+          "hints": [
+            "You'll need constraint annotations from jakarta.validation.constraints -- specifically something for 'must not be blank', something for 'must look like an email', and something for 'must be at least a given number'.",
+            "Field-level constraint annotations alone do nothing on their own -- Spring only actually runs Bean Validation against an object if the method parameter using it is explicitly marked to trigger validation.",
+            "The annotation that triggers validation goes on the @RequestBody parameter itself, not on the class definition."
+          ],
+          "solutionCode": "public class SubscriptionRequest {\n\n    @NotBlank(message = \"Email is required\")\n    @Email(message = \"Email must be a valid email address\")\n    private String email;\n\n    @Min(value = 1, message = \"Quantity must be at least 1\")\n    private int quantity;\n\n    // getters and setters\n}\n\n@PostMapping(\"/subscriptions\")\npublic Subscription subscribe(@Valid @RequestBody SubscriptionRequest request) {\n    return subscriptionService.create(request);\n}",
+          "solutionExplanation": "@NotBlank rejects a null, empty, or all-whitespace email, and @Email additionally checks that whatever non-blank value IS supplied actually looks like a valid email address -- the two are complementary, not redundant, since @Email alone would not reject a blank string outright in every validator configuration, and @NotBlank alone says nothing about the value's shape. @Min(1) on quantity rejects zero, negative values, and (implicitly, since it's a primitive int) never has to worry about null. None of these annotations do anything by themselves, though -- Bean Validation only actually runs against the constructed SubscriptionRequest object because @Valid was added to the @RequestBody parameter in the controller method; without it, the constraints would sit there, fully valid Java, and simply never be checked, letting invalid requests reach subscribe's body unfiltered."
+        },
+        {
+          "id": "spring-boot-validation-and-exception-handling-ex2",
+          "type": "debugging",
+          "prompt": "A team centralizes error handling with the class below. When OrderNotFoundException is thrown, clients report NOT getting the clean JSON error body the team expected. Explain what's actually going wrong and fix the class.",
+          "code": "@ControllerAdvice\npublic class ApiExceptionHandler {\n\n    @ExceptionHandler(OrderNotFoundException.class)\n    public Map<String, Object> handleNotFound(OrderNotFoundException ex) {\n        return Map.of(\"status\", 404, \"message\", ex.getMessage());\n    }\n}",
+          "hints": [
+            "@ControllerAdvice by itself does NOT imply @ResponseBody -- compare this to the difference between plain @Controller and @RestController.",
+            "Without @ResponseBody in effect, Spring MVC treats a handler method's return value the same way it would for any ordinary @Controller method -- built around producing a view, not a REST body.",
+            "There are two valid fixes: add @ResponseBody to the handler method itself, or change the class-level annotation to @RestControllerAdvice, which already bundles @ResponseBody in."
+          ],
+          "solutionCode": "@RestControllerAdvice\npublic class ApiExceptionHandler {\n\n    @ExceptionHandler(OrderNotFoundException.class)\n    public Map<String, Object> handleNotFound(OrderNotFoundException ex) {\n        return Map.of(\"status\", 404, \"message\", ex.getMessage());\n    }\n}",
+          "solutionExplanation": "Plain @ControllerAdvice does not carry @ResponseBody the way @RestControllerAdvice does -- it is built on the same base as plain @Controller, whose return-value handling is oriented around resolving views, not writing a body directly. A return type like Map that isn't a recognized view-related type and isn't explicitly told to be treated as a response body doesn't automatically get serialized to JSON the way it would from an @RestController -- clients end up NOT receiving the clean structured error body the team intended, instead of a helpful error response, undermining the whole point of centralizing error handling in the first place. Switching the class annotation to @RestControllerAdvice (or, equivalently, keeping @ControllerAdvice but adding @ResponseBody directly on handleNotFound) tells Spring MVC to treat this method's return value exactly like an @RestController method would: write it straight to the response body through the registered HttpMessageConverter chain, producing the intended JSON error response."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "spring-boot-validation-and-exception-handling-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "A @RestControllerAdvice class defines an @ExceptionHandler(IllegalArgumentException.class) and also an @ExceptionHandler(Exception.class). A controller method throws a NumberFormatException, which is a subclass of IllegalArgumentException. Which handler method actually runs?",
+          "options": [
+            "The IllegalArgumentException handler, because Spring selects the most specific matching handler in the exception's type hierarchy.",
+            "The Exception handler, because it was declared to catch every possible exception type.",
+            "Both handlers run in sequence, with the more specific one running first.",
+            "The application fails to start because two handlers can both technically match the same exception."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "Spring's exception-handler resolution picks the closest matching type in the thrown exception's class hierarchy, not the first one declared or the most general one available. NumberFormatException is a subclass of IllegalArgumentException, which is a far closer match than the generic Exception ancestor, so the IllegalArgumentException-specific handler runs. Option B misunderstands the resolution rule -- a generic handler only runs when nothing more specific matches. Option C is wrong because exactly one handler runs per exception, never a chained sequence of matching handlers. Option D is wrong -- having a general handler alongside a more specific one for a related type is completely valid and does not create ambiguity the way two handlers for the EXACT same exception type would."
+        },
+        {
+          "id": "spring-boot-validation-and-exception-handling-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain to a developer who currently handles errors with a try/catch block inside every controller method why moving to @Valid plus a centralized @RestControllerAdvice is a better approach, and describe specifically what changes in the flow of a request that fails validation.",
+          "modelAnswer": "With try/catch scattered across every controller method, each method is individually responsible for deciding what counts as invalid input, checking for it manually, and formatting its own error response -- which means the actual shape of an error (which fields appear, what a client can rely on) can silently drift between endpoints depending on which developer wrote which method and when, and every single method carries repetitive validation and error-formatting code that has nothing to do with its actual business logic. Moving validation into declarative constraint annotations (@NotBlank, @Min, and so on) on the request DTO, combined with @Valid on the @RequestBody parameter, removes that manual checking entirely: Spring runs Bean Validation automatically, immediately after the object is deserialized and before the controller method body executes at all. If any constraint fails, Spring throws MethodArgumentNotValidException carrying every violated field and its message, and -- critically -- the controller method's body never runs in that case, so there's no need for the method itself to contain any defensive checks for conditions @Valid already guarantees have been satisfied by the time it does run. That exception then propagates up to a single @RestControllerAdvice class's @ExceptionHandler(MethodArgumentNotValidException.class) method, which is the ONE place in the entire application responsible for turning that exception into a response body -- meaning every endpoint in the API, no matter which controller or which developer wrote it, produces an error response in exactly the same shape, because they're all funneled through this one handler rather than each rolling their own. The net effect is less code, written once instead of duplicated per method, and a consistent, predictable contract that API consumers can build reliable client-side error handling against."
+        }
+      ]
+    }
+  ]
+}

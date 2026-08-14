@@ -1,0 +1,360 @@
+{
+  "learningPathId": "kubernetes",
+  "moduleId": "deployments_and_services",
+  "title": "Deployments & Services",
+  "order": 2,
+  "concepts": [
+    {
+      "id": "kubernetes-deployments-replicasets",
+      "title": "Deployments, ReplicaSets, and Rolling Updates",
+      "description": "A Deployment never runs Pods directly -- it manages a ReplicaSet, which manages Pods -- and it's specifically this layering of two separate controllers that makes zero-downtime rolling updates and instant rollbacks possible without you writing any orchestration logic yourself.",
+      "moduleId": "deployments_and_services",
+      "topicId": "deployments_and_services",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 40,
+      "prerequisites": ["kubernetes-pods"],
+      "learningObjectives": [
+        "Explain the layered relationship Deployment -> ReplicaSet -> Pod and what each layer is specifically responsible for.",
+        "Explain why Deployments create a new ReplicaSet on every change to the Pod template, rather than mutating the existing one in place.",
+        "Describe the default rolling update strategy (maxSurge/maxUnavailable) and explain what problem it solves compared to deleting all old Pods before creating new ones.",
+        "Use kubectl rollout status/history/undo to inspect and control a rollout.",
+        "Predict how a rolling update behaves when the new Pod template is broken (crash-looping or failing readiness), and explain why the rollout stalls rather than completing.",
+        "Explain why manually deleting a Pod owned by a Deployment doesn't reduce the total running count."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "Three Layers, Three Distinct Jobs",
+            "body": "A **Deployment** is the object you actually write and edit. Its job is to remember the *desired Pod template*, the *desired replica count*, and the *update strategy* -- and, critically, it never creates or touches a Pod directly. Its entire responsibility is versioning the Pod template over time and orchestrating a safe transition whenever that template changes.\n\nA **ReplicaSet** is what the Deployment actually manages, and its job is dramatically narrower: given a fixed Pod template and a selector, ensure exactly N Pods matching that selector exist, right now, at all times. A ReplicaSet has zero concept of 'update,' 'version,' or 'rollback' -- it is purely a count enforcer. This is worth stating explicitly because it produces a genuinely surprising result if you don't know it: if you edit a live ReplicaSet's Pod template directly, none of its *already-running* Pods change at all -- the edit only affects Pods the ReplicaSet creates *from that point forward*, because a ReplicaSet reconciles count, not content, against its existing Pods.\n\nA **Pod** is the actual running unit, exactly as covered in the previous concept. You can see this three-layer chain directly in the generated names: a Deployment named `web` produces a ReplicaSet named something like `web-7d9f8c9b7` (the suffix is a hash of the Pod template), which in turn produces Pods named `web-7d9f8c9b7-4x2lp`. That hash suffix isn't cosmetic -- it's how the Deployment controller recognizes 'have I already got a ReplicaSet for this exact template' versus 'this is a genuinely new template that needs a new ReplicaSet.'"
+          },
+          {
+            "heading": "Why a New ReplicaSet Per Change, Not an Edited One",
+            "body": "When you change `.spec.template` on a Deployment -- bumping an image tag is the everyday example -- the Deployment controller computes a hash of the new Pod template. If a ReplicaSet with that exact hash already exists (this happens on a rollback, covered below), it reuses it; otherwise, it creates a brand-new ReplicaSet, initially scaled to 0, and then begins shifting replica counts between the old ReplicaSet and the new one, at a pace and order dictated by the rolling update strategy: scale the new one up, scale the old one down, repeat, until the new one holds the full desired count and the old one holds zero.\n\nOld ReplicaSets are not deleted immediately once they reach zero replicas -- they're retained, up to a configurable `revisionHistoryLimit`, purely as scaled-to-zero objects. This is exactly what makes `kubectl rollout undo` fast and reliable: a rollback isn't a rebuild from scratch, it's simply 'scale the previous ReplicaSet back up, scale the current one back down' -- the exact same mechanism as a forward rollout, just pointed at an existing ReplicaSet instead of a newly created one.\n\nThis also explains why editing a running ReplicaSet's Pod template directly is effectively pointless for anything you intend to persist: existing Pods are untouched (as noted above), and the Deployment controller isn't tracking that mutated template as its own current desired state at all -- the next Deployment-driven change will very likely just create yet another new ReplicaSet from the Deployment's own (unedited) template, silently steamrolling your direct edit."
+          },
+          {
+            "heading": "Rolling Updates: maxSurge and maxUnavailable",
+            "body": "The default Deployment strategy is `RollingUpdate`, governed by two knobs: `maxSurge` (how many Pods above the desired count are allowed to exist temporarily) and `maxUnavailable` (how many Pods below the desired count are tolerated temporarily). Both default to 25%.\n\nWalk through a concrete example with integers for clarity: 4 desired replicas, `maxSurge: 1`, `maxUnavailable: 1`. The controller may briefly go up to 5 total Pods, and may briefly drop as low as 3 *available* Pods, but never further in either direction. Concretely, it creates 1 new Pod, waits for it to become Ready, then deletes 1 old Pod, and repeats that cycle until the new ReplicaSet holds all 4 and the old one holds 0. There is never a moment where the number of available Pods for this Deployment hits zero -- that's the entire mechanism that makes a rollout 'zero downtime.' Critically, this isn't traffic-draining magic; it's gated entirely on the new Pod's **readiness probe** reporting healthy. If a new Pod starts but never becomes Ready, the rollout stalls right there -- it does not barrel forward and replace everything with broken Pods, because the surge-then-shrink dance at each step waits on readiness before proceeding to the next step.\n\n```yaml\nspec:\n  strategy:\n    type: RollingUpdate\n    rollingUpdate:\n      maxSurge: 1\n      maxUnavailable: 1\n```\n\nCompare this against the alternative `Recreate` strategy, which deletes *all* old Pods first and only then creates the new ones -- a real downtime window, appropriate only for workloads that genuinely cannot run two versions simultaneously (an exclusive lock on a shared resource, an in-place schema migration that both versions can't safely straddle)."
+          },
+          {
+            "heading": "Watching, Pausing, and Undoing a Rollout",
+            "body": "`kubectl rollout status deployment/web` blocks and streams progress until the rollout completes or times out -- the single most useful command for verifying a rollout actually finished rather than assuming it did because `apply` returned instantly. `kubectl rollout history deployment/web` lists prior revisions, each one mapped to a specific ReplicaSet. `kubectl rollout undo deployment/web` triggers exactly the mechanism from the previous section: scale the previous revision's ReplicaSet back up, scale the current one back down -- which is why rollbacks are typically fast, since no new Pod template needs to be computed or images pulled for the first time (assuming the node still has that older image cached, or can pull it quickly). `kubectl rollout pause` and `kubectl rollout resume` let you halt a rollout partway through -- useful for a manual canary-style check before committing to the rest.\n\nOne more field worth knowing: `progressDeadlineSeconds`. If a rollout hasn't made forward progress within this window (default 600s), the Deployment surfaces a `ProgressDeadlineExceeded` condition in `.status.conditions`, visible via `kubectl describe deployment`. This is what lets a CI/CD pipeline running `kubectl rollout status` actually fail fast on a broken rollout instead of hanging indefinitely waiting for Pods that will never become Ready."
+          },
+          {
+            "heading": "Desired Replicas Is Enforced -- Even Against You",
+            "body": "A common early surprise: you `kubectl delete pod web-7d9f8c9b7-4x2lp`, expecting to reduce the running count by one, and a few seconds later `kubectl get pods` shows the same total count, just with one Pod's name and IP different from before. This is the ReplicaSet controller doing exactly its job: it observed the actual count drop below the desired count and immediately created a replacement. Deleting a Pod owned by a ReplicaSet doesn't express 'I want one fewer Pod' -- the *only* way to change the desired count is to change `.spec.replicas` on the Deployment (or ReplicaSet) itself; deleting a Pod it owns is indistinguishable, from the controller's point of view, from that Pod simply crashing.\n\nThe mechanism underneath this is `ownerReferences`: every Pod created by a ReplicaSet carries an `ownerReferences` entry pointing back to that ReplicaSet's UID. This is how the controller knows which Pods are 'its own' to count toward the desired total, and it's also how cascading deletion works -- deleting a Deployment, by default, cascades to delete its ReplicaSets, which in turn cascades to delete their Pods, all driven by the same owner-reference chain, not by any special-cased deletion logic."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Seeing the Three-Layer Chain and Its Naming Pattern",
+          "language": "bash",
+          "code": "kubectl get deployment web\n# NAME   READY   UP-TO-DATE   AVAILABLE\n# web    3/3     3            3\n\nkubectl get rs -l app=web\n# NAME               DESIRED   CURRENT   READY\n# web-7d9f8c9b7       3         3         3\n\nkubectl get pods -l app=web\n# NAME                     READY   STATUS\n# web-7d9f8c9b7-4x2lp      1/1     Running\n# web-7d9f8c9b7-9plm2      1/1     Running\n# web-7d9f8c9b7-k7q3z      1/1     Running",
+          "explanation": "The ReplicaSet's name, web-7d9f8c9b7, embeds the same hash suffix that appears at the start of every Pod name it owns -- that hash is computed from the Pod template, and it's exactly how the Deployment controller recognizes 'this ReplicaSet corresponds to this specific template' when deciding whether to reuse an existing ReplicaSet or create a new one on the next template change. If you ran `kubectl get pod web-7d9f8c9b7-4x2lp -o jsonpath='{.metadata.ownerReferences[0].name}'`, it would print `web-7d9f8c9b7` -- the Pod's actual recorded owner is the ReplicaSet, not the Deployment `web` directly, which is precisely the layering this concept is built around."
+        },
+        {
+          "title": "A maxSurge/maxUnavailable Rollout, Step by Step",
+          "language": "text",
+          "code": "Deployment: replicas=4, maxSurge=1, maxUnavailable=1\nRolling from ReplicaSet-OLD (image v1) to ReplicaSet-NEW (image v2)\n\nStep 0 (start):   OLD=4  NEW=0   total=4  available=4\nStep 1 (surge):   OLD=4  NEW=1   total=5  available=4  (waiting for 1 NEW pod to become Ready)\nStep 2 (shrink):  OLD=3  NEW=1   total=4  available=4  (1 OLD pod deleted once NEW pod was Ready)\nStep 3 (surge):   OLD=3  NEW=2   total=5  available=4\nStep 4 (shrink):  OLD=2  NEW=2   total=4  available=4\nStep 5 (surge):   OLD=2  NEW=3   total=5  available=4\nStep 6 (shrink):  OLD=1  NEW=3   total=4  available=4\nStep 7 (surge):   OLD=1  NEW=4   total=5  available=4\nStep 8 (shrink):  OLD=0  NEW=4   total=4  available=4  (rollout complete)",
+          "explanation": "Notice the 'available' column never drops below 4 (the desired count) and the 'total' column never exceeds 5 -- exactly the bounds maxUnavailable=1 and maxSurge=1 set, expressed as 'never more than 1 short of desired' and 'never more than 1 over desired,' respectively. Also notice each shrink step (deleting an OLD pod) only happens after the preceding surge step's NEW pod is confirmed Ready -- if that NEW pod's readiness probe never passes, the sequence simply freezes at whichever step it's on, mid-surge, rather than proceeding to delete more OLD pods and risk driving available capacity down. This is exactly why a correct readinessProbe on the new Pod template is load-bearing for the entire zero-downtime guarantee: without one (or with one that's misconfigured to always report ready), the controller has no reliable signal to gate this dance on at all."
+        },
+        {
+          "title": "A Broken Rollout, Stalled, Then Rolled Back",
+          "language": "bash",
+          "code": "kubectl set image deployment/web nginx=nginx:typo-tag\nkubectl rollout status deployment/web\n# Waiting for deployment \"web\" rollout to finish: 1 out of 4 new replicas have been updated...\n# (hangs here -- the new Pod can't pull nginx:typo-tag, so it never becomes Ready)\n\n# In another terminal:\nkubectl get pods -l app=web\n# web-7d9f8c9b7-4x2lp    1/1   Running            (OLD, still serving traffic)\n# web-7d9f8c9b7-9plm2    1/1   Running            (OLD, still serving traffic)\n# web-7d9f8c9b7-k7q3z    1/1   Running            (OLD, still serving traffic)\n# web-8a1e2f4c3-h9z1x    0/1   ImagePullBackOff   (NEW, stuck)\n\nkubectl rollout undo deployment/web\n# deployment.apps/web rolled back\nkubectl rollout status deployment/web\n# deployment \"web\" successfully rolled out",
+          "explanation": "Because maxUnavailable defaults to a fraction of the desired count (25% of 4 rounds to 1) and the new Pod never became Ready, the rollout froze at a single surged, broken Pod -- exactly the maxSurge=1 boundary -- while all three original Pods kept running and serving traffic untouched. This is the practical payoff of gating each step on readiness: a bad image never gets a chance to replace every healthy Pod. `kubectl rollout undo` then triggers the same scale-up/scale-down mechanism as a forward rollout, but pointed at the previous (still-retained) ReplicaSet, which is why it resolves quickly -- no new template hashing, no new image pull of a fresh version, just re-balancing replica counts between two ReplicaSets that already exist."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "Deployments manage Pods directly -- the Deployment object is the 'owner' of the Pods it creates.",
+          "clarification": "The ownership chain is Deployment -> ReplicaSet -> Pod, and a Pod's actual ownerReferences entry points to the ReplicaSet, never to the Deployment. You can confirm this directly: kubectl get pod <name> -o yaml shows ownerReferences with kind: ReplicaSet. This isn't a pedantic detail -- during a rollout, you will genuinely see two ReplicaSets simultaneously owning nonzero counts of Pods for the same Deployment, which only makes sense once you know the Deployment itself was never the direct owner of any Pod in the first place; it only ever owns ReplicaSets."
+        },
+        {
+          "description": "Editing a running ReplicaSet's Pod template YAML directly, or deleting individual Pods it owns, is a normal way to push out a new version of an application.",
+          "clarification": "A ReplicaSet has no update or versioning logic whatsoever -- editing its template only affects Pods it creates after the edit; every already-running Pod is left completely untouched. And if that ReplicaSet is owned by a Deployment, the Deployment controller doesn't treat your mutated template as its own current desired state at all, so the next Deployment-driven change is likely to overwrite your edit entirely, or create a separate new ReplicaSet alongside it. The supported path for shipping a new version is always changing the Deployment's own .spec.template, which deliberately triggers the create-a-new-ReplicaSet-and-shift-traffic sequence -- that sequence is the feature, not something to route around."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "kubernetes-deployments-replicasets-ex1",
+          "type": "predictOutput",
+          "prompt": "A Deployment has replicas=3, maxSurge=1, maxUnavailable=0, and is rolling from v1 to v2. At the single busiest moment of this rollout, what is the maximum possible total number of Pods (old + new combined), and what is the minimum number of Pods that must remain Available throughout the entire rollout?",
+          "code": "spec:\n  replicas: 3\n  strategy:\n    type: RollingUpdate\n    rollingUpdate:\n      maxSurge: 1\n      maxUnavailable: 0",
+          "hints": [
+            "maxSurge=1 caps how far ABOVE the desired count (3) the total is allowed to go at any instant.",
+            "maxUnavailable=0 caps how far BELOW the desired count the number of available Pods is allowed to drop -- what does a value of exactly 0 mean for that lower bound?",
+            "Work out the two bounds independently: one bounds the ceiling on total Pods, the other bounds the floor on available Pods."
+          ],
+          "expectedAnswer": "Maximum total Pods at once: 4 (desired 3 + maxSurge 1). Minimum Available throughout: 3 -- maxUnavailable=0 means the available count is never allowed to drop even by one, so a new Pod must be confirmed Ready before any old Pod is removed, at every single step.",
+          "solutionExplanation": "maxSurge=1 permits the controller to create one extra Pod above the desired count of 3 before removing any old one, capping the total at 4 during the transition. maxUnavailable=0 is the stricter, more interesting constraint here: it means the number of currently-available Pods may never fall below the full desired count of 3, not even briefly -- so the controller cannot delete an old Pod until a new one has already been created AND confirmed Ready, since deleting first would momentarily drop availability to 2. This combination (surge above, zero tolerance for unavailability) is a common choice for latency-sensitive services where even a few seconds of reduced capacity is unacceptable, at the cost of the rollout needing to briefly run one extra Pod's worth of resources at each step."
+        },
+        {
+          "id": "kubernetes-deployments-replicasets-ex2",
+          "type": "debugging",
+          "prompt": "This Deployment's owner wanted a 'fast, aggressive rollout' for a latency-sensitive service. In practice, every rollout causes a brief but total outage -- all old Pods disappear before any new ones are confirmed ready. Find and fix the bug.",
+          "code": "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: web\nspec:\n  replicas: 4\n  strategy:\n    type: RollingUpdate\n    rollingUpdate:\n      maxSurge: 0%\n      maxUnavailable: 100%\n  selector:\n    matchLabels:\n      app: web\n  template:\n    metadata:\n      labels:\n        app: web\n    spec:\n      containers:\n        - name: nginx\n          image: nginx:1.26",
+          "hints": [
+            "maxUnavailable=100% means the controller is allowed to let the ENTIRE desired count become unavailable at once -- what does that let it do to the old Pods before any new one exists?",
+            "maxSurge=0% means the controller isn't allowed to create even a single extra Pod above the desired count before removing an old one -- so with unavailability also uncapped, what has to happen first?",
+            "Compare this configuration's effective behavior to the Recreate strategy discussed in this concept -- are they actually different in this specific case?"
+          ],
+          "solutionCode": "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: web\nspec:\n  replicas: 4\n  strategy:\n    type: RollingUpdate\n    rollingUpdate:\n      maxSurge: 25%\n      maxUnavailable: 0\n  selector:\n    matchLabels:\n      app: web\n  template:\n    metadata:\n      labels:\n        app: web\n    spec:\n      containers:\n        - name: nginx\n          image: nginx:1.26",
+          "solutionExplanation": "With maxSurge: 0% the controller can never create a new Pod before removing an old one (there's no room to surge above the desired count at all), and with maxUnavailable: 100% it's simultaneously permitted to let every single old Pod become unavailable at once. Combined, the only sequence available to the controller is: delete all old Pods first, then create new ones -- which is a full outage, functionally identical to the Recreate strategy, despite being configured as 'RollingUpdate.' The fix inverts the intent correctly: a nonzero maxSurge (25%, matching the default, meaning one extra Pod for a desired count of 4) lets new Pods be created and confirmed Ready before any old ones are removed, and maxUnavailable: 0 forbids the available count from ever dropping below the desired total, which together restore a genuine zero-downtime rollout rather than the 'fast' but outage-causing one that was configured."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "kubernetes-deployments-replicasets-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "Midway through a rolling update, you run `kubectl get rs -l app=web` and see two ReplicaSets for the same Deployment, both showing a nonzero DESIRED and CURRENT count at the same time. What does this indicate?",
+          "options": [
+            "This is expected, transient, in-flight state -- the Deployment controller is concurrently scaling the new ReplicaSet up and the old one down within the bounds set by maxSurge/maxUnavailable.",
+            "This is a bug -- a Deployment should only ever have exactly one ReplicaSet with a nonzero count at any given time, and seeing two indicates a stuck or broken rollout.",
+            "It means the cluster accidentally created two unrelated Deployments that happen to share the app=web label.",
+            "It means maxSurge and maxUnavailable were both misconfigured to allow more Pods than the Deployment's own replicas field specifies."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "Seeing two ReplicaSets both with nonzero counts is exactly what a rolling update in progress looks like: the Deployment controller creates (or reuses) a new ReplicaSet and shifts replicas from the old one to the new one gradually, bounded by maxSurge/maxUnavailable, rather than switching all at once -- so both legitimately have Pods running simultaneously for the rollout's duration. Option B is wrong because this is normal, not a bug -- it would only be worth investigating if the rollout stays in this state well past when it should have completed (check kubectl rollout status / progressDeadlineSeconds for that). Option C misreads the label match as a coincidence rather than the Deployment's own selector correctly finding both of its own ReplicaSets. Option D confuses the transient total (which can briefly exceed desired replicas by exactly maxSurge, by design) with a misconfiguration."
+        },
+        {
+          "id": "kubernetes-deployments-replicasets-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain, layer by layer -- Deployment, ReplicaSet, Pod -- exactly what gets created versus mutated at each layer when you change the container image in a Deployment's Pod template and Kubernetes performs a rolling update.",
+          "modelAnswer": "At the Deployment layer, the object you edited is mutated in place -- .spec.template.spec.containers[].image changes on the existing Deployment object itself; there is no new Deployment created. The Deployment controller reacts to that change by computing a hash of the new Pod template and checking whether a ReplicaSet with that hash already exists. Assuming this is a genuinely new image tag, it does not, so a brand-new ReplicaSet object is created at the ReplicaSet layer, initially scaled to 0 replicas -- the previous ReplicaSet (matching the old image's template hash) is left in place, untouched, still holding the full desired count for now. The Deployment controller then begins alternately incrementing the new ReplicaSet's replica count and decrementing the old ReplicaSet's replica count, one step at a time, bounded by maxSurge and maxUnavailable, waiting at each step for newly created Pods to pass their readiness probe before proceeding further. At the Pod layer, this plays out as genuinely new Pod objects being created by the new ReplicaSet (new names, new IPs, running the new image) while old Pods, owned by the old ReplicaSet, are deleted one at a time as the new ones become Ready -- no existing Pod is ever mutated or 'upgraded' in place; every Pod running the new image is a Pod that didn't exist before the rollout started. Once the new ReplicaSet reaches the full desired count and the old one reaches zero, the rollout is complete, and the old ReplicaSet is retained (scaled to zero) rather than deleted outright, up to revisionHistoryLimit, specifically so that a later rollback can reuse it instead of building a new ReplicaSet from scratch."
+        }
+      ]
+    },
+    {
+      "id": "kubernetes-services-networking",
+      "title": "Services: Stable Networking for Ephemeral Pods",
+      "description": "Pods are disposable and their IPs churn constantly, so Kubernetes needs a stable, load-balanced front door in front of a set of Pods that never stops changing -- a Service -- and understanding how that front door is actually implemented, via Endpoints/EndpointSlices and kube-proxy rewriting packets, turns 'it just works' networking into something you can genuinely debug.",
+      "moduleId": "deployments_and_services",
+      "topicId": "deployments_and_services",
+      "difficulty": "advanced",
+      "estimatedMinutes": 45,
+      "prerequisites": ["kubernetes-deployments-replicasets"],
+      "learningObjectives": [
+        "Explain the problem a Service solves, tying it directly to Pod IP churn covered in the Pods concept.",
+        "Explain how a Service finds the Pods that back it via label selectors, and where that resolved list is actually stored (Endpoints/EndpointSlice objects).",
+        "Explain, conceptually, how kube-proxy uses that list to get a packet from 'client sends to the Service's ClusterIP' to 'packet arrives at a specific Pod IP.'",
+        "Distinguish ClusterIP, NodePort, and LoadBalancer Service types and identify when each is appropriate.",
+        "Explain why a Pod that is Running but not yet Ready is excluded from a Service's routable endpoints, and why this matters for zero-downtime rollouts.",
+        "Debug a 'Service has no traffic reaching Pods' scenario by checking selector/label mismatches and inspecting whether Endpoints are populated."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "The Problem: Pods Are a Moving Target",
+            "body": "As covered in the Pods concept, a Pod's IP address is not durable: it changes every single time that Pod is replaced, and during any rolling update, scaling event, or node failure there may be several Pods with different IPs appearing and disappearing in quick succession. Nothing that needs to reliably talk to 'the web app' can hardcode any specific Pod's IP -- it would go stale within minutes, sometimes seconds.\n\nA **Service** is Kubernetes' answer: a stable virtual IP address (its ClusterIP) and a stable DNS name that never change, sitting in front of a dynamically changing set of Pods that are selected purely by label. Clients talk to the Service's stable address; the Service (via mechanisms covered below) is responsible for getting that traffic to whichever Pods currently happen to be backing it, without the client ever needing to know or care how many there are, or what their individual IPs happen to be at that moment."
+          },
+          {
+            "heading": "Selectors, Endpoints, and EndpointSlices",
+            "body": "A Service finds its backing Pods using the exact same label-matching mechanism a ReplicaSet uses to find the Pods it owns:\n\n```yaml\napiVersion: v1\nkind: Service\nmetadata:\n  name: web\nspec:\n  selector:\n    app: web\n  ports:\n    - port: 80\n      targetPort: 8080\n```\n\nA separate controller (the endpoints/EndpointSlice controller) continuously watches for Pods matching that selector, and specifically for their **Ready** condition, and writes the current set of (IP, port) pairs to actually route to into an `Endpoints` object (or, on modern clusters, one or more `EndpointSlice` objects -- the newer, more scalable representation of the same information). This is the mechanism, not magic, behind 'traffic doesn't get sent to a Pod that isn't ready yet': only Pods currently passing their readiness probe are included in this list at all. That single fact is exactly why a correct `readinessProbe` is load-bearing for a zero-downtime rollout, tying directly back to the rolling-update mechanics from the previous concept -- a new Pod that's merely Running but not yet Ready is deliberately invisible to any Service pointed at it.\n\n`kubectl get endpoints web` (or `kubectl get endpointslice -l kubernetes.io/service-name=web`) is the single most useful command for debugging Service traffic issues, because it shows you exactly what the selector actually resolved to, right now."
+          },
+          {
+            "heading": "kube-proxy: How a Packet Actually Gets From ClusterIP to a Pod",
+            "body": "A Service's ClusterIP is **virtual** -- it doesn't correspond to any real network interface anywhere in the cluster, and nothing ever 'listens' on it in the way a process listens on a socket. **kube-proxy**, running on every node, watches Services and their Endpoints/EndpointSlices, and programs the node's packet-handling layer (historically iptables rules performing destination NAT; increasingly IPVS or eBPF depending on the cluster and mode) so that any packet addressed to a Service's ClusterIP+port gets rewritten, in flight, to target one of the currently-Ready backing Pod IPs -- chosen essentially at random per new connection, with no awareness of Pod load or health beyond the binary Ready/not-Ready signal.\n\nThis rewriting happens transparently in the kernel networking layer of whichever node the traffic originates from; the calling Pod never 'knows' it addressed a virtual IP that got rewritten -- from its own point of view, it opened a TCP connection to an address and received a response, exactly as it would for any other IP. This is also exactly why a plain kube-proxy-backed Service operates purely at Layer 4 (TCP/UDP): it has no notion of HTTP paths, headers, retries, or circuit breaking -- it's rewriting packets, not parsing requests. That gap is precisely what Ingress controllers and service meshes exist to fill one layer up, which is out of scope here but worth flagging by name."
+          },
+          {
+            "heading": "ClusterIP, NodePort, and LoadBalancer",
+            "body": "**ClusterIP** (the default type) is reachable only from inside the cluster, and is the normal choice for the overwhelming majority of Service-to-Service traffic, where nothing external ever needs to reach it directly.\n\n**NodePort** builds on ClusterIP by additionally opening a fixed port, in the 30000-32767 range by default, on every node's own IP -- so external traffic can reach the Service by hitting *any* node's IP on that port. In practice, NodePort is usually a building block rather than a production end-state: it's clunky as a direct external entry point, since callers need to know and track individual node IPs, and there's no single stable address to hand out.\n\n**LoadBalancer**, on a cloud provider, allocates a NodePort under the hood exactly as above, *and* additionally asks the cloud's cloud-controller-manager to provision a real, managed external load balancer that forwards traffic to that NodePort across the cluster's nodes. This is why LoadBalancer is a strict superset of NodePort's mechanism rather than a wholly separate one -- and it's exactly why, on a bare-metal cluster with no cloud-controller-manager implementation, a LoadBalancer Service's `.status.loadBalancer` field simply stays pending forever, unless something like MetalLB is installed specifically to implement that provisioning step yourself.\n\nWorth a brief mention: a **headless Service** (`clusterIP: None`) skips the virtual IP and kube-proxy rewriting entirely -- DNS lookups for it return each individual backing Pod's IP directly, rather than one shared virtual address. This is used specifically when clients need to address individual Pods by identity (StatefulSets being the canonical example), rather than 'any one of an interchangeable pool,' which is the assumption every other Service type is built around."
+          },
+          {
+            "heading": "Debugging 'My Service Has No Traffic'",
+            "body": "A methodical checklist, roughly in the order you should actually check things:\n\n1. **`kubectl get endpoints <svc>`** -- an empty address list is by far the most common symptom, and it means the selector matched zero currently-Ready Pods. Check for a label mismatch between `Service.spec.selector` and the Pod template's labels first; matching is exact and case-sensitive (`app: web` will not match `app: Web`), with no partial or fuzzy matching of any kind.\n2. If Endpoints *are* populated but traffic still fails, check whether the Pods are actually behaving as expected end to end -- a Pod can be `Running` but not `Ready`, and would then correctly be *excluded* from Endpoints; that's not a bug in the Service, it's the readinessProbe doing exactly its job, and the real fix is in the probe or the application, not the Service.\n3. Check for a `port` vs. `targetPort` mixup: `port` is what clients use to reach the Service; `targetPort` is the port the container actually listens on inside the Pod. It's a common mistake to assume these default to matching each other -- they only match if you explicitly set them the same, and a container listening on 8080 while the Service forgets to set `targetPort: 8080` (leaving it defaulted to equal `port`) will silently route to the wrong port on an otherwise perfectly healthy, perfectly Ready Pod."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "A Service and Deployment With Matching Labels",
+          "language": "yaml",
+          "code": "apiVersion: v1\nkind: Service\nmetadata:\n  name: web\nspec:\n  selector:\n    app: web\n  ports:\n    - port: 80\n      targetPort: 8080\n---\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: web\nspec:\n  replicas: 3\n  selector:\n    matchLabels:\n      app: web\n  template:\n    metadata:\n      labels:\n        app: web\n    spec:\n      containers:\n        - name: nginx\n          image: nginx:1.26\n          ports:\n            - containerPort: 8080",
+          "explanation": "The Service's selector (app: web) matches the exact label the Deployment stamps onto every Pod it creates (metadata.labels.app: web in the Pod template) -- that shared label is the only connection between these two objects; there's no other reference by name anywhere. Running `kubectl get endpoints web` against this setup shows three addresses, one per Ready Pod, each on port 8080 (the targetPort) -- not port 80, which is only the port clients use to reach the Service itself. If a fourth, unrelated Pod anywhere in the same namespace happened to also carry the label app: web, it would be picked up by this Service too, whether or not that was intended -- selectors match on labels alone, with no awareness of which controller actually created the Pod."
+        },
+        {
+          "title": "A Label Mismatch Producing Empty Endpoints",
+          "language": "bash",
+          "code": "kubectl get svc web -o jsonpath='{.spec.selector}'\n# {\"app\":\"web-app\"}\n\nkubectl get pods --show-labels\n# NAME                  LABELS\n# web-7d9f8c9b7-4x2lp    app=web\n# web-7d9f8c9b7-9plm2    app=web\n# web-7d9f8c9b7-k7q3z    app=web\n\nkubectl get endpoints web\n# NAME   ENDPOINTS   AGE\n# web    <none>      4m",
+          "explanation": "The Service's selector is app=web-app, but every actual Pod is labeled app=web -- a one-word typo, but label matching is exact-string, case-sensitive, with zero fuzziness, so this Service matches nothing at all. The Endpoints object confirms it plainly: <none>. This is precisely the first thing to check whenever a Service seems to have Pods 'behind' it but traffic goes nowhere -- before suspecting kube-proxy, networking policy, firewalls, or anything more exotic, confirm the Endpoints object is actually populated at all, because if it's empty, kube-proxy has correctly programmed zero rewrite rules for this Service; there is nothing broken in the networking layer, only in the selector."
+        },
+        {
+          "title": "LoadBalancer as NodePort Plus a Cloud-Provisioned Front Door",
+          "language": "bash",
+          "code": "kubectl get svc web -o wide\n# NAME   TYPE           CLUSTER-IP     EXTERNAL-IP      PORT(S)\n# web    LoadBalancer   10.96.14.201   203.0.113.42     80:31842/TCP",
+          "explanation": "The PORT(S) column, 80:31842/TCP, reveals the LoadBalancer/NodePort relationship directly: 80 is the port clients use against the external IP, and 31842 is the NodePort that was allocated under the hood on every node, exactly as it would be for a plain NodePort Service. The cloud provider's external load balancer, reachable at 203.0.113.42, is simply forwarding traffic to that same NodePort across the cluster's nodes -- it's an additional layer in front of the NodePort mechanism, not a replacement for it. On a cluster with no cloud-controller-manager able to actually provision that external load balancer (a bare-metal cluster with nothing like MetalLB installed), EXTERNAL-IP would show <pending> indefinitely, while the NodePort itself (31842) would still work perfectly fine if you hit any individual node's IP directly on that port."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "A Service is basically a load-balancer process or Pod running somewhere in the cluster that receives traffic and forwards it along, similar to how an nginx reverse proxy would work.",
+          "clarification": "No such process exists anywhere. A Service's ClusterIP is a virtual address that is never actually bound by any real listening process on any host -- routing is implemented by kube-proxy programming packet-rewriting (destination NAT) rules directly into the network stack of every node. A Service is closer to a distributed set of firewall/NAT rules, kept in sync across every node, than it is to a running program in the traditional sense -- there is no single place you could kubectl exec into and find 'the load balancer' for a given Service."
+        },
+        {
+          "description": "As soon as a new Pod's container status shows Running, a Service pointed at it will immediately start sending it traffic.",
+          "clarification": "Running only reflects that the container process has started -- it says nothing about whether the application inside is actually ready to serve requests (it might still be loading a cache, connecting to a database, or running startup migrations). The Endpoints/EndpointSlice controller specifically checks the Pod's Ready condition, driven by its readinessProbe, and only Ready Pods get added to the address list kube-proxy actually routes to. A Pod can sit in Running for an extended period while correctly and deliberately excluded from all Service traffic -- and if no readinessProbe is configured at all, a Pod defaults to Ready as soon as it's Running, which is itself a common, easy-to-miss footgun for anything with a nontrivial startup sequence."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "kubernetes-services-networking-ex1",
+          "type": "predictOutput",
+          "prompt": "A Service has selector app=web. Four Pods exist: three are labeled app=web and are Ready; one is labeled app=web,tier=canary and is Running but currently failing its readiness probe. How many addresses will `kubectl get endpoints web` show, and which Pods are they?",
+          "code": "kubectl get pods --show-labels\n# NAME    LABELS               READY\n# pod-a   app=web              1/1\n# pod-b   app=web              1/1\n# pod-c   app=web              1/1\n# pod-d   app=web,tier=canary  0/1",
+          "hints": [
+            "Does the Service's selector care about the extra tier=canary label at all, or only about whether app=web is present and matches?",
+            "Endpoints are built from Pods matching the selector AND passing their readiness check -- both conditions have to hold, independently.",
+            "pod-d matches the label selector just fine. What specifically disqualifies it, and is that a Service-level decision or a Pod-level one?"
+          ],
+          "expectedAnswer": "3 addresses -- pod-a, pod-b, and pod-c. pod-d matches the selector (app=web is present, and a selector only requires the specified key(s) to match, ignoring any extra labels like tier=canary) but is excluded because it isn't Ready.",
+          "solutionExplanation": "A label selector like app=web matches any Pod that has that key-value pair, regardless of what other labels it might also carry -- so pod-d's extra tier=canary label doesn't disqualify it from matching the selector at all. What does exclude pod-d is entirely separate: the Endpoints/EndpointSlice controller only includes Pods that are both selector-matching AND currently Ready, and pod-d is explicitly shown as 0/1, meaning it's failing its readiness check right now. So the Endpoints object ends up with exactly 3 addresses (pod-a, pod-b, pod-c), and pod-d -- despite matching the selector -- correctly receives zero traffic from this Service until its readiness probe starts passing."
+        },
+        {
+          "id": "kubernetes-services-networking-ex2",
+          "type": "debugging",
+          "prompt": "A team deployed a Service and a Deployment together, but `kubectl get endpoints web` shows no addresses at all, even though `kubectl get pods` shows 3 healthy, Ready Pods. Find and fix the bug.",
+          "code": "apiVersion: v1\nkind: Service\nmetadata:\n  name: web\nspec:\n  selector:\n    app: Web\n  ports:\n    - port: 80\n      targetPort: 8080\n---\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: web\nspec:\n  replicas: 3\n  selector:\n    matchLabels:\n      app: web\n  template:\n    metadata:\n      labels:\n        app: web\n    spec:\n      containers:\n        - name: nginx\n          image: nginx:1.26\n          ports:\n            - containerPort: 8080",
+          "hints": [
+            "Label matching is an exact string comparison -- compare the Service's selector value character by character against the Pod template's label value.",
+            "Case matters. 'Web' and 'web' are two completely different string values as far as a selector is concerned.",
+            "The fix is a one-character change, and it's in the Service, not the Deployment."
+          ],
+          "solutionCode": "apiVersion: v1\nkind: Service\nmetadata:\n  name: web\nspec:\n  selector:\n    app: web\n  ports:\n    - port: 80\n      targetPort: 8080\n---\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: web\nspec:\n  replicas: 3\n  selector:\n    matchLabels:\n      app: web\n  template:\n    metadata:\n      labels:\n        app: web\n    spec:\n      containers:\n        - name: nginx\n          image: nginx:1.26\n          ports:\n            - containerPort: 8080",
+          "solutionExplanation": "The Service's selector specifies app: Web (capital W), while every actual Pod created by the Deployment carries app: web (lowercase) -- label matching is an exact, case-sensitive string comparison with no normalization of any kind, so these two values are simply unequal as far as Kubernetes is concerned, and the Service matches zero Pods despite all three being healthy and Ready. Lowercasing the Service's selector to app: web fixes the mismatch, and kubectl get endpoints web will immediately populate with all three Pod addresses once the selector actually matches. This is exactly the class of bug the 'check Endpoints first, then check the selector text itself' debugging order from this concept is built to catch quickly, rather than jumping straight to suspecting kube-proxy or the network."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "kubernetes-services-networking-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "A Service is defined with `port: 80` and `targetPort: 8080`, backed by Pods running a container that listens on 8080. A client inside the cluster runs `curl http://web:80`. What actually happens at the networking level?",
+          "options": [
+            "kube-proxy rewrites the destination of the outgoing packet from the Service's ClusterIP:80 to a specific backing Pod's IP:8080, chosen from the current Endpoints list.",
+            "The Pod's container must also be listening on port 80, or the connection is refused outright.",
+            "A dedicated Service Pod, running somewhere in the cluster, receives the connection on port 80 and manually proxies it to a backend Pod on port 8080.",
+            "Port 80 is rewritten to whatever port the Service itself happens to be listening on, which is always the same as the ClusterIP's own port."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "This is precisely what port and targetPort are for: port (80) is what the client addresses, and kube-proxy's programmed rules rewrite the destination to a backing Pod's actual IP and targetPort (8080) as the packet passes through the node's network stack -- a pure Layer 4 rewrite, no proxying process involved. Option B is false and misunderstands the entire purpose of targetPort, which exists specifically to decouple the Service's port from whatever port the container actually listens on. Option C is false -- there is no such standalone Service process anywhere, as covered in the misconceptions for this concept; the rewriting happens in the kernel networking layer of the node, not in a running proxy Pod. Option D is false and nonsensical -- a ClusterIP doesn't 'listen' on anything at all, being purely virtual."
+        },
+        {
+          "id": "kubernetes-services-networking-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain the full path a request takes from a client Pod calling a Service's DNS name to a response coming back from a specific backing Pod, and explain specifically what being listed in a Service's Endpoints does -- and does not -- guarantee about that Pod's ability to actually handle the request correctly.",
+          "modelAnswer": "When a client Pod resolves the Service's DNS name, it gets back the Service's stable ClusterIP -- a virtual address with no real listener anywhere. When the client then opens a connection to that ClusterIP on the Service's port, the packet passes through the network stack of whichever node the client Pod is running on, where kube-proxy has already programmed destination-NAT rules (based on the Service's current Endpoints/EndpointSlice) that rewrite the packet's destination to one specific backing Pod's real IP and targetPort, chosen essentially at random among the currently eligible backends for that new connection. From that point on, the packet is routed normally through the cluster network directly to that Pod, which responds as if it had simply received a normal, directly-addressed connection -- the client never sees or needs to know that any rewriting happened at all. Being listed in the Endpoints object guarantees exactly two things: the Pod matched the Service's label selector, and the Pod's Ready condition was true the last time the endpoints controller checked. It does NOT guarantee that the specific request about to be sent will actually succeed -- the Pod could still fail this particular request for any reason unrelated to its aggregate Ready status (a transient error, a dependency that's flaky for this one call, a bug that only manifests on certain inputs), and kube-proxy's rewriting has no request-level awareness at all, since it operates purely at Layer 4 and has already committed to a destination before any application-level response is even in flight. Endpoints membership is a coarse, point-in-time health signal for routing eligibility, not a per-request success guarantee -- that finer-grained behavior (retries, circuit breaking, request-aware load balancing) is exactly what a service mesh or an application-level client library would need to add on top."
+        }
+      ]
+    },
+    {
+      "id": "kubernetes-configmaps-secrets",
+      "title": "ConfigMaps and Secrets: Externalizing Configuration",
+      "description": "Baking environment-specific configuration or credentials directly into a container image defeats the entire point of building one image and promoting it, unchanged, across environments -- ConfigMaps and Secrets are Kubernetes' mechanism for injecting that configuration at runtime instead, and knowing exactly how and when injection actually happens (env vars vs. mounted files, and what 'Secret' does and doesn't protect against) prevents some genuinely dangerous assumptions.",
+      "moduleId": "deployments_and_services",
+      "topicId": "deployments_and_services",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 35,
+      "prerequisites": ["kubernetes-pods", "kubernetes-deployments-replicasets"],
+      "learningObjectives": [
+        "Explain why configuration should be externalized from container images, and how ConfigMaps/Secrets achieve that.",
+        "Consume a ConfigMap both as environment variables and as a mounted volume, and explain the practical difference between the two, especially around updates.",
+        "Explain what a Secret actually is under the hood, and precisely what protection it does and does not provide compared to a plain ConfigMap.",
+        "Predict whether a running Pod picks up a change to a ConfigMap or Secret it's already using, for both the env-var and mounted-volume consumption styles.",
+        "Explain why committing a rendered Secret manifest (plain YAML containing a base64-encoded value) to a git repository is a real credential leak, not a safe practice."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "Why Externalize Configuration At All",
+            "body": "The underlying argument is the same one behind twelve-factor-app style configuration: you want to build a single, tested, immutable image and promote that *exact same artifact* through dev, staging, and production unchanged. If a database connection string or a feature flag were baked into the image at build time, you would need a separate image build for every environment -- which quietly defeats the entire point of an immutable artifact that's been tested once and trusted everywhere. Just as importantly, a configuration change (rotating an endpoint, tweaking a timeout) shouldn't require a full rebuild-push-redeploy cycle just to take effect.\n\nA **ConfigMap** holds non-sensitive key-value data -- URLs, feature flags, entire config files -- decoupled from both the container image and the Pod spec that references it. A **Secret** is structurally almost identical to a ConfigMap, and is intended for sensitive data: passwords, tokens, certificates. That phrase, 'intended for,' is doing real work, and it's the entire subject of a later section here -- the intention doesn't automatically come with strong protection attached."
+          },
+          {
+            "heading": "Consuming a ConfigMap: Environment Variables vs. Mounted Files",
+            "body": "```yaml\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: web-config\ndata:\n  DATABASE_URL: \"postgres://db:5432/app\"\n  LOG_LEVEL: \"info\"\n```\n\nConsumed as an environment variable (via `envFrom` or a per-key `valueFrom.configMapKeyRef`), the value is read exactly **once**, at container start, and baked directly into that process's environment block by the container runtime. If the ConfigMap changes afterward, an already-running container simply never sees the new value -- there is no ongoing watch or live-update mechanism for environment variables at all; the only way a running Pod picks up a changed value consumed this way is for the Pod itself to be replaced.\n\nConsumed instead as a **mounted volume**, the kubelet does periodically sync the files on disk inside the Pod to reflect the ConfigMap's current contents (subject to the kubelet's own sync period, on the order of roughly a minute -- not instant), *without* restarting the Pod. But this only helps if the application itself is actually written to notice the file changed on disk (via inotify, or by periodically re-reading it) -- Kubernetes updates the file; it does not force the application to re-read it, and most applications, by default, read a config file once at startup and never look at it again.\n\nThe practical guidance falls out of this directly: for anything you genuinely want a running Pod to pick up without a restart, use a mounted file *and* make sure the application actually watches for changes to it. For anything that's perfectly fine only refreshing on the next deploy or restart -- which is most configuration, in practice -- environment variables are simpler and require no extra application-side logic at all."
+          },
+          {
+            "heading": "What a Secret Actually Is (and Isn't)",
+            "body": "A Secret's values are stored **base64-encoded**, not encrypted. Base64 is an encoding, not a cipher -- it has no key, and anyone with read access to the Secret object (or a copy of its rendered YAML) can decode it trivially: `echo <value> | base64 -d`. This needs to be stated bluntly because the misconception it corrects is genuinely common and genuinely dangerous.\n\nWhat actual protection *does* exist, and it's worth being precise about each layer:\n\n1. **etcd encryption at rest**, if -- and only if -- the cluster operator has explicitly configured an `EncryptionConfiguration` for the API server. This is not on by default in a great many real-world clusters.\n2. **RBAC**, restricting which users and service accounts are even allowed to `get`/`list` Secret objects in the first place. This is the actual access-control boundary that matters day to day -- not the base64 encoding.\n3. The kubelet mounts Secrets into Pods via `tmpfs` (RAM-backed storage) rather than writing them to the node's real, persistent disk, which reduces -- though doesn't eliminate -- the risk of credentials lingering on a node's disk after a Pod is gone.\n\nPut plainly: a Secret is best understood as 'a ConfigMap with a naming convention, plus a few default handling niceties (tmpfs mounts, kubectl not printing values by default in some views) that signal *treat this as sensitive*.' It is not a vault, and it is not encrypted by default. For genuine secret management -- rotation, audit trails, dynamic short-lived credentials, strong encryption guarantees -- production clusters typically integrate an external secrets manager (HashiCorp Vault, a cloud provider's KMS-backed secret store) rather than relying on raw core Secret objects as the whole story."
+          },
+          {
+            "heading": "The Git Leak Footgun",
+            "body": "```bash\nkubectl create secret generic db-creds \\\n  --from-literal=password=hunter2 \\\n  --dry-run=client -o yaml\n# apiVersion: v1\n# kind: Secret\n# data:\n#   password: aHVudGVyMg==\n```\n\nThat `aHVudGVyMg==` is base64 for `hunter2` -- one trivial command away from plaintext, for anyone who can read this file's text at all, with no cluster access required whatsoever. Committing a rendered Secret manifest like this to git -- even to a *private* repository, and certainly to a public one -- is functionally identical to committing the plaintext password with a very thin disguise on top. Git history retains it forever, even after the file is later 'removed' in a subsequent commit, unless the history itself is rewritten and force-pushed (and any prior clones or forks may still have it regardless).\n\nThe correct pattern is to never commit a rendered Secret manifest containing a real value at all. Either generate the Secret at deploy time from a genuine secret store or CI-injected environment variable, and apply it directly without ever writing the real value to a file that touches version control -- or use a tool built specifically for this problem (Sealed Secrets, SOPS, the External Secrets Operator), which keeps only an *encrypted* form of the Secret in git and decrypts it into a real Secret object inside the cluster only at apply time."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "The Same ConfigMap, Consumed Two Ways",
+          "language": "yaml",
+          "code": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: web-config\ndata:\n  LOG_LEVEL: \"info\"\n---\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: web\nspec:\n  template:\n    spec:\n      containers:\n        - name: app\n          image: my-app:1.0\n          envFrom:\n            - configMapRef:\n                name: web-config\n          volumeMounts:\n            - name: config-volume\n              mountPath: /etc/app-config\n      volumes:\n        - name: config-volume\n          configMap:\n            name: web-config",
+          "explanation": "The same ConfigMap is wired in two different ways here, and they behave completely differently after the ConfigMap changes. The envFrom entry injects LOG_LEVEL=info as a real environment variable, resolved exactly once when the container starts -- if web-config is later updated, this running container's environment variable is permanently stale until the Pod itself is replaced. The volumeMount, by contrast, exposes the ConfigMap's keys as files under /etc/app-config (a file named LOG_LEVEL containing info) that the kubelet will update on disk within roughly a minute of the ConfigMap changing -- but only the application's own code, if it's written to watch that path for changes, will actually notice and react; nothing here forces a re-read, and most applications never look at a config file again after their own startup sequence finishes reading it once."
+        },
+        {
+          "title": "A Secret Is a Base64 Round Trip, Not Encryption",
+          "language": "bash",
+          "code": "kubectl create secret generic db-creds \\\n  --from-literal=password=hunter2 \\\n  --dry-run=client -o yaml\n# apiVersion: v1\n# kind: Secret\n# metadata:\n#   name: db-creds\n# data:\n#   password: aHVudGVyMg==\n\necho aHVudGVyMg== | base64 -d\n# hunter2",
+          "explanation": "This is a two-command, zero-privilege round trip: anyone who can read this manifest's text at all -- no cluster access, no kubectl, no RBAC permissions needed, just the raw YAML in front of them -- can recover the real password in seconds. Treating a checked-in Secret manifest as 'safe because it's not plaintext' is a false sense of security; the encoding provides no confidentiality whatsoever on its own. The actual protections that matter are entirely about who can read the object or the file in the first place -- RBAC for the live cluster object, and repository access controls for a file sitting in git -- not anything about the base64 wrapper itself."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "Kubernetes Secrets are encrypted, so storing sensitive values there is inherently more secure than putting the same value in a ConfigMap, with no other precautions needed.",
+          "clarification": "Base64 is not encryption. Without a cluster operator explicitly configuring etcd encryption at rest, Secret data sits in etcd, and travels over the API, in a trivially reversible encoding -- anyone able to run kubectl get secret -o yaml against it gets the real value back in about two seconds with a single extra decode step. The actual security boundary is RBAC (controlling who can read the Secret object at all), combined optionally with etcd encryption at rest and, for real-world sensitive credentials, an external secrets manager -- not the base64 wrapper Secrets happen to use, which ConfigMaps could just as easily have used too."
+        },
+        {
+          "description": "Updating a ConfigMap that a running Deployment already references will immediately update the live application's configuration, the same way updating the Deployment's image field triggers a rolling update.",
+          "clarification": "Whether and how fast a running Pod picks up a ConfigMap change depends entirely on how it's consumed, and in neither case does Kubernetes push the new value into the running process for you. Environment-variable consumption is resolved once, at container start, and never re-checked afterward -- a running container simply never sees a ConfigMap update at all until its Pod is replaced by some other event (a new rollout, a manual restart). Mounted-volume consumption does get updated on disk by the kubelet within roughly a minute, but it only actually changes the application's behavior if that application is specifically written to notice the file changed and re-read it -- unlike an image change, a ConfigMap change never triggers a rollout or a Pod restart by itself, for either consumption style."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "kubernetes-configmaps-secrets-ex1",
+          "type": "predictOutput",
+          "prompt": "A Deployment's Pods consume a ConfigMap via envFrom. You update the ConfigMap with `kubectl apply`, without touching the Deployment or any Pod. Immediately afterward, you run `kubectl exec <pod> -- printenv LOG_LEVEL` against a Pod that was already running before the update. Does it show the old value or the new value, and why?",
+          "code": "kubectl apply -f configmap.yaml   # LOG_LEVEL changed from \"info\" to \"debug\"\nkubectl exec web-7d9f8c9b7-4x2lp -- printenv LOG_LEVEL   # ?",
+          "hints": [
+            "When exactly does Kubernetes resolve a configMapKeyRef or envFrom reference into an actual value inside a container's environment -- once, or continuously?",
+            "The container process that's already running was started before this ConfigMap update happened at all.",
+            "Is there any mechanism at all that pushes an updated environment variable value into an already-running process? Compare this to how the mounted-volume consumption style behaves."
+          ],
+          "expectedAnswer": "It still shows the OLD value, \"info\". Environment variables sourced from a ConfigMap are resolved once, at container start, and baked into that process's environment block -- there is no live mechanism that updates an already-running process's environment. Only a new Pod, created after the ConfigMap change, would show \"debug\".",
+          "solutionExplanation": "envFrom (and configMapKeyRef) resolve their values exactly once, at the moment the container process is started, and the resulting values are written directly into that process's environment block by the container runtime -- there's no ongoing connection back to the ConfigMap object after that point. Updating the ConfigMap changes the object stored in etcd, but it does not reach into any already-running container and rewrite its environment; that's simply not a capability environment variables have. The already-running Pod queried here was started before the update, so printenv correctly reports the stale value, \"info\", and will continue to do so indefinitely unless that specific Pod is deleted and replaced by a fresh one, which would then resolve envFrom fresh at its own startup and pick up \"debug\"."
+        },
+        {
+          "id": "kubernetes-configmaps-secrets-ex2",
+          "type": "debugging",
+          "prompt": "A security review flagged this deploy script as leaking a database credential, even though it only ever creates a Kubernetes 'Secret,' never a plain ConfigMap. The script's author argues this is fine because Secrets are encrypted. Identify what's actually wrong with the workflow and fix it.",
+          "code": "#!/bin/bash\nkubectl create secret generic db-creds \\\n  --from-literal=password=SuperSecret123 \\\n  --dry-run=client -o yaml > secret.yaml\ngit add secret.yaml\ngit commit -m \"Add db credentials\"",
+          "hints": [
+            "The kind of object being created (Secret vs ConfigMap) doesn't change what's happening to secret.yaml on disk -- what does that file actually contain, in a form anyone reading the repo could reverse?",
+            "The literal password is being written into a real file, and that file is then committed to git -- would that be a problem even if this were creating a ConfigMap instead of a Secret?",
+            "Fix the flow so the real value never gets written into a file that touches version control at all -- where should the real password actually come from at deploy time?"
+          ],
+          "solutionCode": "#!/bin/bash\n# The real password comes from CI's own secret store at deploy time,\n# and is piped straight into apply -- it never touches a file, let alone git.\nkubectl create secret generic db-creds \\\n  --from-literal=password=\"$DB_PASSWORD\" \\\n  --dry-run=client -o yaml | kubectl apply -f -",
+          "solutionExplanation": "The original script's actual bug has nothing to do with 'Secret vs ConfigMap' -- it's that the literal, real password is written into a plain YAML file (secret.yaml) containing nothing more than a base64 encoding of it, and that file is then committed to git, where it becomes permanently recoverable by anyone with repository access via a single base64 -d, and stays recoverable in history even after later deletion. The fix removes both problems at once: DB_PASSWORD is read from an environment variable injected by the CI system's own secret store at deploy time (never hardcoded in the script or committed anywhere), and the rendered manifest is piped directly into kubectl apply -f - rather than ever being written to a file on disk, let alone added to git. The security review's underlying point stands regardless of object kind: the author's 'Secrets are encrypted' defense is itself the misconception this concept warns about -- base64 provides no real confidentiality, so committing a rendered Secret manifest is exactly as dangerous as committing the plaintext value directly."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "kubernetes-configmaps-secrets-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "What is the most accurate description of the difference between a ConfigMap and a Secret in a vanilla Kubernetes cluster, with no additional tooling installed?",
+          "options": [
+            "Secrets are strongly encrypted at rest by default, while ConfigMaps are never encrypted at all.",
+            "They are structurally almost identical -- both are key-value objects consumable as environment variables or mounted files -- and Secrets add conventions like base64 storage and not printing values by default, but neither is encrypted at rest unless the cluster operator explicitly configures that.",
+            "ConfigMaps can only be consumed as environment variables, while Secrets can only be consumed as mounted files.",
+            "Secrets are stored in a separate, access-controlled datastore entirely apart from etcd, while ConfigMaps are stored in etcd."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This is the accurate picture: a Secret and a ConfigMap share the same underlying object shape and the same two consumption styles, and the meaningful difference is a set of conventions (base64 encoding, kubectl's default display behavior) that signal intent rather than provide strong protection by themselves. Option A overclaims default encryption -- etcd encryption at rest for Secrets is an opt-in cluster configuration, not a default. Option C is false in both directions -- both ConfigMaps and Secrets support both env-var and mounted-file consumption identically. Option D is false -- Secrets live in etcd exactly like every other Kubernetes object, with no separate datastore involved by default."
+        },
+        {
+          "id": "kubernetes-configmaps-secrets-assess-explain1",
+          "type": "explanation",
+          "prompt": "A teammate just discovered that `kubectl get secret db-creds -o jsonpath='{.data.password}' | base64 -d` reveals a plaintext password, and is alarmed, assuming this must be a bug. Explain why this is actually expected behavior, not a bug, and describe what genuinely prevents an unauthorized person from doing the exact same thing in a properly configured cluster.",
+          "modelAnswer": "This is expected behavior because a Secret's data field has never been anything other than base64-encoded, not encrypted -- base64 is a reversible encoding with no key involved at all, designed purely so that arbitrary binary data can be represented safely inside a YAML/JSON text field, not to provide any confidentiality. Decoding it back to plaintext with a single base64 -d call is therefore not a security flaw being exploited; it's simply reversing an encoding step that was always meant to be reversible by design. What actually stands between an unauthorized person and that same plaintext value, in a properly configured cluster, is almost entirely RBAC: the Kubernetes API enforces who is permitted to even issue a `get` or `list` request against Secret objects in the first place, and a well-configured cluster grants that permission narrowly -- typically only to the specific ServiceAccounts and human users that genuinely need it, following least-privilege, rather than broadly to every authenticated user. Beyond RBAC, a cluster operator can additionally configure etcd encryption at rest (via an EncryptionConfiguration on the API server), which protects the value if someone gains direct access to etcd's underlying storage or backups, bypassing the API server's RBAC checks entirely. For genuinely sensitive, high-value credentials, many teams go a step further and don't rely on core Secret objects as the source of truth at all, instead integrating an external secrets manager like Vault or a cloud KMS-backed store, which adds real encryption, automatic rotation, and detailed audit logging that a raw Kubernetes Secret object was never designed to provide on its own."
+        }
+      ]
+    }
+  ]
+}

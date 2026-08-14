@@ -1,0 +1,367 @@
+{
+  "learningPathId": "docker",
+  "moduleId": "dockerfiles_and_images",
+  "title": "Dockerfiles & Images in Practice",
+  "order": 2,
+  "concepts": [
+    {
+      "id": "docker-dockerfile-layer-caching",
+      "title": "Writing Dockerfiles: Instructions and Layer-Cache Efficiency",
+      "description": "Docker builds an image by executing Dockerfile instructions in order, caching the result of each one as a layer; ordering instructions from least-to-most frequently changing turns routine rebuilds from minutes into seconds, while getting the order backwards silently defeats the cache on every single build.",
+      "moduleId": "dockerfiles_and_images",
+      "topicId": "dockerfiles_and_images",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 40,
+      "prerequisites": ["docker-images-and-layers"],
+      "learningObjectives": [
+        "Write a basic Dockerfile using FROM, WORKDIR, COPY, RUN, ENV, EXPOSE, and CMD correctly and in a sensible order.",
+        "Explain precisely how Docker decides whether to reuse a cached layer or re-run an instruction, including the extra rule for COPY/ADD.",
+        "Explain why one cache miss invalidates every layer below it in the Dockerfile, regardless of whether those later instructions themselves changed.",
+        "Reorder a Dockerfile so that installing dependencies is cached separately from copying application source code.",
+        "Explain the difference between CMD and ENTRYPOINT, and describe a case for combining them.",
+        "Explain what .dockerignore is for and how an unfiltered build context can defeat caching in surprising ways."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "Anatomy of a Basic Dockerfile",
+            "body": "A Dockerfile reads top to bottom as a literal build script, and a handful of instructions cover the overwhelming majority of real-world use: FROM picks the base image everything else builds on top of, and must be the first real instruction; WORKDIR sets the working directory for every instruction after it, creating the directory if it doesn't exist, which is generally cleaner than littering cd calls inside RUN; COPY brings files from the build context (the directory you pointed docker build at) into the image; RUN executes a command inside the image during the build and commits its filesystem effects as a new layer; ENV sets an environment variable that persists both during the rest of the build and inside any container started from the resulting image; EXPOSE is documentation -- it declares which port(s) the container's application listens on, but does not itself publish anything to the host, which is a separate, opt-in step at docker run time covered in a later concept; and CMD sets the default command that runs when a container starts, which a later section here digs into properly alongside ENTRYPOINT.\n\n```dockerfile\nFROM python:3.11.8-slim-bookworm\nWORKDIR /app\nCOPY requirements.txt .\nRUN pip install --no-cache-dir -r requirements.txt\nCOPY . .\nENV PORT=8000\nEXPOSE 8000\nCMD [\"python\", \"app.py\"]\n```\n\nEvery instruction that touches the filesystem (RUN, COPY, ADD) produces its own layer, per the previous module. ENV, EXPOSE, WORKDIR, and CMD mostly just update image metadata rather than adding meaningful filesystem content, though technically each still gets its own thin layer in the manifest."
+          },
+          {
+            "heading": "The Build Cache: A Linear Chain, Not a Set",
+            "body": "Docker's build cache works instruction by instruction, in the exact order they appear in the Dockerfile, and it's best understood as a chain rather than a bag of independent decisions. For each instruction, Docker checks: is there already a cached layer built from the identical instruction text, and the identical parent layer -- the cache result of everything above it? If both match, Docker reuses the existing layer wholesale and skips actually running anything: no command executes, no time is spent. If either doesn't match, that's a cache miss, and this is the critical part: every instruction from that point downward is also treated as a cache miss, even if their own text hasn't changed at all, because their parent layer -- the output of the instruction above them -- is now different than it was last time. Cache validity cascades strictly downward from the first miss; nothing below a miss can still be a hit, no matter how unrelated it looks.\n\nCOPY and ADD get one extra rule on top of the instruction-text comparison: Docker also computes a checksum of the actual files being copied, and treats a change in that checksum as a cache miss for that instruction -- even if the COPY line's text is byte-for-byte identical to last time. This makes complete sense once you say it out loud (the whole point of COPY is to bring in file content, so a build cache that ignored changes to that content would be actively wrong), but it's exactly the mechanism the next section's ordering advice hinges on."
+          },
+          {
+            "heading": "Ordering for Cache Efficiency: Put What Changes Least First",
+            "body": "Combine the two facts from the previous section -- a miss cascades to everything below it, and COPY's cache validity depends on file content -- and a concrete, extremely common anti-pattern falls out immediately:\n\n```dockerfile\n# Anti-pattern: source code changes invalidate the dependency install every single time\nFROM node:20.11.1-bookworm-slim\nWORKDIR /app\nCOPY . .\nRUN npm install\nCMD [\"node\", \"server.js\"]\n```\n\nHere, COPY . . brings in the entire project, including application source files that change on nearly every commit. Because that COPY's checksum changes whenever any file in the project changes, even a single-character edit to a file npm install doesn't even care about, the RUN npm install layer right after it gets invalidated on almost every single build, forcing a full dependency reinstall even when package.json itself hasn't changed at all. For a project with a slow install step, this can turn what should be a near-instant rebuild into a multi-minute one, on every single commit, forever.\n\nThe fix is to copy only the files that actually determine the install step's output before running the install, and copy the rest of the frequently-changing source afterward:\n\n```dockerfile\n# Cache-friendly: dependency install only reruns when package files actually change\nFROM node:20.11.1-bookworm-slim\nWORKDIR /app\nCOPY package.json package-lock.json ./\nRUN npm ci\nCOPY . .\nCMD [\"node\", \"server.js\"]\n```\n\nNow RUN npm ci's cache validity depends only on the checksum of package.json and package-lock.json, which change far less often than the rest of the source tree. A commit that only touches application code, and not the dependency manifests, hits the cache for the entire install step and only re-executes the final COPY . . (cheap, since it's just a filesystem copy with no package resolution) and whatever comes after it. The general principle extends past this one example: order Dockerfile instructions from least-frequently-changing to most-frequently-changing, so that cache misses are confined to the smallest, cheapest possible suffix of the file on a typical day-to-day change."
+          },
+          {
+            "heading": "CMD vs ENTRYPOINT, and the Exec-Form Signal-Handling Gotcha",
+            "body": "CMD sets the default command for the container, but it's just a default -- anything supplied after the image name in docker run image_name <this part> completely replaces it. ENTRYPOINT sets the command that always runs, no matter what -- arguments given at docker run time are appended to it rather than replacing it. Combining them gives you a common, useful pattern: a fixed executable via ENTRYPOINT plus overridable default arguments via CMD:\n\n```dockerfile\nENTRYPOINT [\"python\", \"app.py\"]\nCMD [\"--port=8000\"]\n```\n\ndocker run myimage runs python app.py --port=8000; docker run myimage --port=9000 runs python app.py --port=9000 -- the entrypoint executable stays fixed, but the default arguments after it are swapped out. Contrast that with a CMD-only image, where supplying anything at docker run time replaces the entire command, executable included.\n\nSeparately, and this trips people up constantly, both instructions come in two forms, and the difference matters far more than it looks like it should. Exec form, CMD [\"node\", \"server.js\"], runs the given program directly as the container's PID 1. Shell form, CMD node server.js, actually runs /bin/sh -c \"node server.js\" -- meaning the shell, not your program, becomes PID 1, with node as its child. This matters because docker stop sends SIGTERM to PID 1 and waits a grace period (10 seconds by default) before escalating to SIGKILL. In shell form, that SIGTERM goes to the shell, which by default does not forward signals to its child process -- so your actual application never even receives the shutdown signal, and docker stop ends up waiting out the full grace period and then hard-killing the process with SIGKILL, skipping any graceful-shutdown logic, like closing DB connections or finishing in-flight requests, your application might have. Exec form avoids this entirely, since your program itself is PID 1 and receives SIGTERM directly. Prefer exec form for both CMD and ENTRYPOINT unless you have a specific reason to need shell features like variable expansion or piping in the command line itself."
+          },
+          {
+            "heading": ".dockerignore: Keeping Irrelevant Files Out of the Build Context and the Cache",
+            "body": "Before Docker evaluates a single instruction, it first sends the entire build context -- everything in the directory you pointed docker build at -- to the Docker daemon, and any COPY . . reads from that context. If that directory contains a bulky .git history, a node_modules folder installed on the host, log files, or editor scratch files, all of that gets included in the context, slowing down every build's initial context-transfer step, and, worse, factors into COPY's content checksum -- meaning an entirely unrelated change, like a new commit landing in .git's internal objects, or a stray local log file being appended to, can invalidate a COPY . . layer's cache for reasons that have nothing to do with your actual application code changing.\n\n```\n# .dockerignore\n.git\nnode_modules\n*.log\n.env\ndist/\n__pycache__/\n```\n\nA .dockerignore file, using the same pattern syntax as .gitignore, excludes matching paths from the build context entirely -- they're never sent to the daemon and never considered by any COPY instruction's checksum. Beyond the caching benefit, it's also a real security backstop: without it, a careless COPY . . can accidentally bake a local .env file full of secrets, or an entire .git history containing old commits with since-rotated-but-still-embarrassing credentials, directly into an image layer -- which is difficult to fully undo later, since removing the file in a later layer, per the multi-stage concept coming up next, doesn't erase it from the earlier layer where it still physically sits."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Cache-Busting vs Cache-Friendly Ordering, Side by Side",
+          "language": "dockerfile",
+          "code": "# BEFORE -- every source change forces a full reinstall\nFROM node:20.11.1-bookworm-slim\nWORKDIR /app\nCOPY . .\nRUN npm install\nCMD [\"node\", \"server.js\"]\n\n# AFTER -- reinstall only happens when the dependency manifest itself changes\nFROM node:20.11.1-bookworm-slim\nWORKDIR /app\nCOPY package.json package-lock.json ./\nRUN npm ci\nCOPY . .\nCMD [\"node\", \"server.js\"]",
+          "explanation": "In BEFORE, changing even one line in server.js changes the checksum of COPY . ., which invalidates that layer's cache -- and by the cascading rule, invalidates RUN npm install right after it too, forcing a full dependency reinstall on essentially every rebuild regardless of whether any dependency actually changed. In AFTER, the first COPY only depends on package.json and package-lock.json, so RUN npm ci's cache validity is now decoupled from application source changes entirely -- a typical day-to-day commit that only touches server.js hits the cache for the often-slow install step completely, and only re-executes the final, cheap COPY . . and anything after it. The two Dockerfiles produce functionally identical final images; only their rebuild speed on routine changes differs, often by minutes."
+        },
+        {
+          "title": "Shell Form vs Exec Form: Who Actually Receives SIGTERM",
+          "language": "dockerfile",
+          "code": "# Shell form -- /bin/sh becomes PID 1, node is its child\nCMD node server.js\n\n# Exec form -- node itself becomes PID 1\nCMD [\"node\", \"server.js\"]",
+          "explanation": "CMD node server.js is shorthand Docker expands to CMD [\"/bin/sh\", \"-c\", \"node server.js\"] -- the shell is what actually becomes the container's PID 1, with node running underneath it as a regular child process. docker stop always signals PID 1; in the shell-form container, that's the shell, and most shells don't forward signals to child processes by default, so node never sees the SIGTERM at all, and docker stop ends up waiting the full grace period before force-killing everything with SIGKILL. CMD [\"node\", \"server.js\"] (exec form) skips the intermediate shell entirely -- node itself is PID 1, receives SIGTERM directly, and can run whatever graceful-shutdown logic it has, such as finishing in-flight requests or closing database connections, before exiting on its own, which is why docker stop returns almost immediately in that case."
+        },
+        {
+          "title": "ENTRYPOINT + CMD: A Fixed Binary With Overridable Default Args",
+          "language": "dockerfile",
+          "code": "FROM python:3.11.8-slim-bookworm\nWORKDIR /app\nCOPY . .\nENTRYPOINT [\"python\", \"manage.py\"]\nCMD [\"runserver\", \"0.0.0.0:8000\"]",
+          "explanation": "ENTRYPOINT fixes python manage.py as the command that always executes, no matter what's supplied at docker run time -- there is no way to accidentally run something entirely unrelated to manage.py from this image without overriding the entrypoint itself with --entrypoint. CMD's [\"runserver\", \"0.0.0.0:8000\"] supplies default arguments that get appended after the entrypoint, and are wholesale replaced, not merged, by whatever arguments follow the image name in docker run. So docker run myimage runs python manage.py runserver 0.0.0.0:8000 by default, while docker run myimage migrate runs python manage.py migrate instead -- this single image can serve as both 'run the dev server' and 'run any other manage.py subcommand,' just by changing the trailing docker run arguments, without ever needing a second Dockerfile or a second image."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "The Docker build cache looks at whether the Dockerfile as a whole has changed -- if it has, everything reruns; if it hasn't, nothing reruns.",
+          "clarification": "The cache operates per instruction, in file order, not on the file as a single unit. Each instruction is checked independently against its own cached layer, matching instruction text plus, for COPY/ADD, matching file content checksums, and its specific parent layer. Editing line 8 of a 10-line Dockerfile reuses the cache for lines 1 through 7 exactly as before, and only lines 8 through 10 are re-executed -- it does not force a full rebuild from FROM, and conversely, an unchanged instruction can still be forced to rerun if something above it in the file changed, since its parent layer is now different."
+        },
+        {
+          "description": "Putting COPY . . right after FROM, before installing dependencies, is a harmless simplification -- it just means the files are available a bit earlier in the build.",
+          "clarification": "It's not harmless -- it typically defeats caching for every single instruction after it. Because almost every commit touches something under the project root, an early COPY . . gets a new content checksum on nearly every build, which invalidates that layer's cache and, by the cascading-miss rule, invalidates every instruction below it too, including expensive steps like apt-get install, npm install or pip install, or a compilation step, forcing them to rerun in full on essentially every rebuild rather than only when their actual inputs changed."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "docker-dockerfile-layer-caching-ex1",
+          "type": "predictOutput",
+          "prompt": "Given this Dockerfile, a developer changes only a single line inside app.py, not requirements.txt, and reruns docker build. Which instructions get a cache hit, and which get re-executed?",
+          "code": "FROM python:3.11.8-slim-bookworm\nWORKDIR /app\nCOPY . .\nRUN pip install --no-cache-dir -r requirements.txt\nCMD [\"python\", \"app.py\"]",
+          "hints": [
+            "COPY . . brings in the ENTIRE project directory -- does its checksum depend only on requirements.txt, or on every file underneath it?",
+            "If COPY . . gets a cache miss because app.py changed, what happens to every instruction listed after it in the file?",
+            "Compare this to the AFTER ordering from the explanation, where only files that actually affect the install step come before RUN pip install."
+          ],
+          "expectedAnswer": "FROM and WORKDIR still hit the cache, since nothing about their inputs changed. COPY . . is a cache miss, because app.py, one of the files it copies, changed, which changes its overall content checksum. RUN pip install ... is ALSO forced to re-execute, purely because it comes after the now-invalidated COPY, even though requirements.txt itself never changed and the actual list of dependencies to install is identical to last time.",
+          "solutionExplanation": "COPY . . computes its cache validity from a checksum over every file in the build context it copies, which includes app.py -- so changing even one unrelated line inside app.py changes that checksum and forces a cache miss on this COPY instruction, regardless of the fact that requirements.txt is byte-for-byte identical to the previous build. Because a cache miss cascades to every instruction below it in the file, RUN pip install --no-cache-dir -r requirements.txt is also forced to re-execute -- pip will resolve and reinstall the exact same dependencies it already had cached from last time, wasting real build time for zero actual behavioral difference. This is precisely the anti-pattern the ordering-for-cache-efficiency section warns about: copying requirements.txt separately, before the rest of the source, and running pip install against just that narrower COPY, would have let this exact build skip the reinstall entirely."
+        },
+        {
+          "id": "docker-dockerfile-layer-caching-ex2",
+          "type": "debugging",
+          "prompt": "A team's Docker image build takes 4 minutes on every single commit, even for one-line frontend tweaks, because npm ci reruns the full dependency install every time. Find the ordering problem in this Dockerfile and fix it.",
+          "code": "FROM node:20.11.1-bookworm-slim\nWORKDIR /app\nCOPY . .\nRUN npm ci\nRUN npm run build\nCMD [\"node\", \"dist/server.js\"]",
+          "hints": [
+            "COPY . . brings in the entire project before npm ci runs -- what specifically does npm ci's cache validity end up depending on, given that ordering?",
+            "npm ci only actually needs package.json and package-lock.json to determine what to install -- does it need the rest of the source tree at that point at all?",
+            "Split the single COPY . . into two COPY steps: one narrow one for just the files the install step needs, before RUN npm ci, and a second, broader one for everything else, after it."
+          ],
+          "solutionCode": "FROM node:20.11.1-bookworm-slim\nWORKDIR /app\nCOPY package.json package-lock.json ./\nRUN npm ci\nCOPY . .\nRUN npm run build\nCMD [\"node\", \"dist/server.js\"]",
+          "solutionExplanation": "The original COPY . . before RUN npm ci means the install step's cache validity is tied to a checksum over the entire project, including every frontend source file -- so any commit at all, even one that never touches package.json or package-lock.json, invalidates that COPY and cascades into forcing a full npm ci rerun. The fix splits the single COPY into two: a narrow one that copies only package.json and package-lock.json before npm ci, so that instruction's cache validity depends solely on the dependency manifests, and a second, broader COPY . . afterward that brings in the rest of the source, which the subsequent npm run build step does need, but which doesn't affect npm ci's own caching at all anymore. A typical one-line frontend tweak now only invalidates the second COPY and everything after it -- npm ci's 4-minute install step hits the cache and is skipped entirely, unless package.json or package-lock.json themselves actually changed."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "docker-dockerfile-layer-caching-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "In a Dockerfile with five instructions in order, instruction #3 gets a cache miss because its instruction text, or, for COPY/ADD, its copied file content, changed since the last build. What happens to instructions #4 and #5, assuming their own text is completely unchanged from the last build?",
+          "options": [
+            "They still get cache hits, since their own instruction text didn't change.",
+            "They are also forced to re-execute, because their cached layer's parent, the output of instruction #3, is no longer the same as it was last time.",
+            "Docker skips them entirely and reuses whatever the final image looked like last time.",
+            "Only #4 reruns; #5 can still be a cache hit as long as it doesn't reference anything from #3."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 is correct: cache validity for each instruction depends on both its own instruction, plus, for COPY/ADD, its file-content checksum, AND its specific parent layer being identical to last time. Once #3 misses, its own resulting layer differs from before, which makes it a different parent for #4 -- so #4 misses too, regardless of its own text, and the same logic cascades to #5. Option 1 is wrong because it ignores the parent-layer half of the cache check. Option 3 is nonsensical -- a miss doesn't cause Docker to silently reuse an old final result; it re-executes the remaining instructions. Option 4 is wrong because there's no per-instruction opt-out from the cascade based on whether an instruction references the earlier one -- the cascade is structural, based on layer parentage, not on any analysis of what each RUN command actually touches."
+        },
+        {
+          "id": "docker-dockerfile-layer-caching-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain, using the mental model of a cache chain where a parent layer must match for a child layer to be reused, exactly why moving COPY package.json package-lock.json ./ and RUN npm ci before COPY . . makes routine rebuilds of a typical Node.js project dramatically faster.",
+          "modelAnswer": "Docker's build cache checks each instruction against two things: whether the instruction itself, plus, for COPY/ADD, a checksum of the files it copies, matches what produced the cached layer last time, and whether that cached layer's parent, the layer produced by the instruction directly above it, is also still the same. A miss at any point forces every instruction after it to be treated as a miss too, since their parent layer has now changed, even if their own text is completely unchanged. In a Dockerfile that does COPY . . before installing dependencies, that COPY's checksum depends on the entire project tree, which changes on virtually every commit, so it misses almost every build, and drags RUN npm ci down with it as a forced miss every single time, regardless of whether package.json actually changed. Reordering to COPY package.json package-lock.json ./ followed by RUN npm ci, with the full COPY . . moved to after the install step, decouples the install step's cache validity from the rest of the source tree entirely -- now it only depends on two files that change relatively rarely compared to application code. On a typical day where a commit only touches source files and not the dependency manifests, that first COPY and the npm ci layer both hit the cache and are skipped outright, and only the second, broader COPY, plus anything after it like a build step, actually reruns, turning what might have been a multi-minute dependency reinstall into a near-instant cache hit on the overwhelming majority of day-to-day builds."
+        }
+      ]
+    },
+    {
+      "id": "docker-multi-stage-builds",
+      "title": "Multi-Stage Builds: Separating Build-Time From Run-Time",
+      "description": "A multi-stage Dockerfile uses more than one FROM instruction to split the toolchain needed to build an application from the minimal runtime needed to run it, so the final image ships only what production actually needs, not the compilers, package caches, and source trees used to produce it.",
+      "moduleId": "dockerfiles_and_images",
+      "topicId": "dockerfiles_and_images",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 35,
+      "prerequisites": ["docker-dockerfile-layer-caching"],
+      "learningObjectives": [
+        "Explain the problem multi-stage builds solve: build tools and intermediate artifacts baked permanently into a production image.",
+        "Write a Dockerfile with multiple named FROM stages and use COPY --from=<stage> to bring specific artifacts forward.",
+        "Explain that each FROM starts a completely independent stage that does not automatically inherit any files from earlier stages.",
+        "Explain why a smaller final image matters beyond raw disk space, including attack surface and pull/deploy time.",
+        "Use docker build --target to build only up to an intermediate stage, and explain why naming stages is required for that to work reliably."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "The Problem: Build Tools Don't Belong in the Thing You Ship",
+            "body": "Producing a running application and building it from source are frequently two very different jobs with very different tool requirements. Compiling a Go binary needs the full Go toolchain; building a TypeScript frontend needs Node, npm, and every devDependency -- bundlers, type checkers, test runners -- that production has no use for at all; compiling a native C extension needs a C compiler and headers that the finished, compiled shared library doesn't need anywhere near it at runtime. A naive, single-stage Dockerfile that does the compiling step and then just keeps going, with CMD at the bottom of that same stage, bakes the entire build-time toolchain permanently into the final image, whether or not the running application ever touches any of it again.\n\nThis has real costs beyond feeling untidy: the image is dramatically larger than it needs to be, meaning slower to pull, slower to push, more disk consumed per node running it, and every package installed in that toolchain -- a compiler, a package manager, dozens of transitive build dependencies -- is one more thing a vulnerability scanner can flag a CVE against, even though production never executes a single line of that code. None of that toolchain is doing anything except sitting there as dead weight and attack surface once the build itself is done."
+          },
+          {
+            "heading": "Multiple FROM Instructions: Independent Stages, Explicitly Bridged",
+            "body": "A multi-stage Dockerfile simply uses FROM more than once, optionally naming each occurrence with AS <name>:\n\n```dockerfile\nFROM golang:1.22 AS builder\nWORKDIR /src\nCOPY . .\nRUN CGO_ENABLED=0 go build -o /out/server .\n\nFROM alpine:3.19\nCOPY --from=builder /out/server /usr/local/bin/server\nENTRYPOINT [\"server\"]\n```\n\nThe critical thing to internalize here: each FROM starts a completely independent build stage, starting fresh from whatever base image it names -- it does not inherit any files, installed packages, or layers from any earlier stage automatically. The builder stage in the example above has the full Go toolchain and the entire source tree, but none of that exists in the second, unnamed, final stage unless it's explicitly brought over. COPY --from=builder /out/server /usr/local/bin/server is exactly that explicit bridge: it reaches back into the builder stage's filesystem, even though that stage's image is never itself pushed anywhere or run as a container, and copies just the one compiled binary forward into the final stage's own layers. Everything else the builder stage contained -- the Go compiler, the module cache, the source .go files -- simply never makes it into the final image at all, because nothing ever asked for it to be copied."
+          },
+          {
+            "heading": "Sizing It Up: A Concrete Before/After",
+            "body": "Consider the same Go application built two ways. A single-stage build FROM golang:1.22, compiling in place and running from that same stage, ships an image that includes the entire Go toolchain -- easily 900MB or more -- permanently, even though the running server needs none of it once the binary exists. A multi-stage build that compiles in a builder stage and copies only the resulting static binary into a minimal final stage, alpine, or even FROM scratch for a fully static binary with no OS at all, typically produces a final image in the 10-20MB range: the compiled binary plus, at most, a thin base layer for basic OS utilities and CA certificates.\n\nThe running application's actual behavior is identical either way -- multi-stage builds are purely a build-process and packaging optimization, not a change to what the code does. What changes is everything about the image as an artifact: it pulls in a fraction of the time, it takes a fraction of the disk and registry storage, it presents a dramatically smaller surface for a vulnerability scanner to flag anything against, since there's no compiler, no package manager, no build-time dependency tree left inside it at all, and on any platform that scales out by frequently pulling fresh container instances, that smaller pull size can meaningfully affect cold-start latency at the margins."
+          },
+          {
+            "heading": "Intermediate Stages Also Cache, and --target Lets You Stop Early",
+            "body": "Multi-stage builds aren't only about the final image -- each stage caches independently, using exactly the same per-instruction rules from the previous concept, which opens up a genuinely useful CI pattern. Consider splitting dependency installation, testing, and the final production build into their own explicitly named stages:\n\n```dockerfile\nFROM node:20.11.1-bookworm-slim AS deps\nWORKDIR /app\nCOPY package.json package-lock.json ./\nRUN npm ci\n\nFROM deps AS test\nCOPY . .\nRUN npm test\n\nFROM deps AS build\nCOPY . .\nRUN npm run build\n\nFROM nginx:1.25-alpine AS production\nCOPY --from=build /app/dist /usr/share/nginx/html\n```\n\ndocker build --target test -t myapp:test . builds only as far as the test stage -- useful in CI, where you might want to run the test suite inside the exact same environment the real build uses, without ever producing, or needing to tag and store, the final production image at all. docker build . with no --target builds the full chain through to the last stage, production here, by default. Note that --target needs stages to be referenced reliably, and named stages, AS test, AS build, are what make that robust; referencing stages purely by their numeric position works but becomes fragile the moment anyone reorders or inserts a stage, silently changing what an index-based reference now points at."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Naive Single-Stage vs Multi-Stage for a Compiled Go Service",
+          "language": "dockerfile",
+          "code": "# Single-stage: ships the entire Go toolchain in production (~900MB+)\nFROM golang:1.22\nWORKDIR /src\nCOPY . .\nRUN CGO_ENABLED=0 go build -o /out/server .\nENTRYPOINT [\"/out/server\"]\n\n# Multi-stage: ships only the compiled binary (~15-20MB)\nFROM golang:1.22 AS builder\nWORKDIR /src\nCOPY . .\nRUN CGO_ENABLED=0 go build -o /out/server .\n\nFROM alpine:3.19\nRUN apk add --no-cache ca-certificates\nCOPY --from=builder /out/server /usr/local/bin/server\nENTRYPOINT [\"server\"]",
+          "explanation": "Both images run the identical compiled binary and behave identically at runtime -- the difference is entirely in what else comes along for the ride. The single-stage version's final image is literally the golang:1.22 image, compiler, standard library source, build cache, and all, plus one more layer containing the compiled binary -- none of that toolchain gets removed just because the build is done. The multi-stage version's final stage starts fresh from alpine, tens of MBs, adds CA certificates, needed for the server to make outbound HTTPS calls, a genuinely runtime concern, and copies in only the one compiled binary from the builder stage -- the Go compiler, module cache, and source tree that the builder stage contains are simply never referenced by any COPY --from in the final stage, so they never appear in it at all."
+        },
+        {
+          "title": "Three Stages: Dependencies, Build, and a Slim Runtime",
+          "language": "dockerfile",
+          "code": "FROM node:20.11.1-bookworm-slim AS deps\nWORKDIR /app\nCOPY package.json package-lock.json ./\nRUN npm ci\n\nFROM deps AS build\nCOPY . .\nRUN npm run build\n\nFROM node:20.11.1-bookworm-slim AS runtime\nWORKDIR /app\nCOPY --from=deps /app/node_modules ./node_modules\nCOPY --from=build /app/dist ./dist\nCOPY package.json .\nCMD [\"node\", \"dist/server.js\"]",
+          "explanation": "The build stage is declared FROM deps, so it starts from deps's already-completed state, including node_modules, rather than a bare Node image -- this is a legitimate way to chain stages when a later stage genuinely needs everything an earlier one produced, distinct from selectively cherry-picking with COPY --from. The final runtime stage, though, starts completely fresh FROM node:20.11.1-bookworm-slim again -- it does NOT inherit anything from deps or build automatically, including the TypeScript compiler, dev tooling, or raw source files that lived in those stages, and explicitly pulls forward only the two things it actually needs to run: the installed node_modules from deps, and the compiled dist output from build. The finished runtime image never contains a TypeScript compiler, a bundler, or a single .ts source file, even though building the app absolutely required all of that."
+        },
+        {
+          "title": "Running Only the Test Stage in CI with --target",
+          "language": "bash",
+          "code": "$ docker build --target test -t myapp:ci-test .\n$ docker run --rm myapp:ci-test\n# runs the test suite inside the exact same environment the real build uses,\n# and never builds or tags the final production stage at all\n\n$ docker build -t myapp:latest .\n# with no --target, builds the FULL chain through to the last stage (production)",
+          "explanation": "--target test tells Docker to build only up through the stage named test and stop there, entirely skipping any later stages -- useful for CI jobs whose only job is to run the test suite against a build environment that's guaranteed to match production's dependency versions exactly, without paying the cost of also building, and needing to store or tag, the eventual production image on every single test run. Omitting --target builds the entire chain of stages in order and, by default, tags the result of the very last stage in the file -- which is exactly why stage order in the file matters: whichever stage is written last becomes 'the image' for a plain, no-flag docker build."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "Each new FROM in a multi-stage Dockerfile builds on top of the previous stage, the same way each RUN instruction builds on top of the previous layer within one stage.",
+          "clarification": "A FROM line starts an entirely new, independent build stage from whatever base image it names -- it does not automatically carry forward any files, installed packages, or layers from an earlier stage. The only way for a later stage to get anything from an earlier one is an explicit COPY --from=<stage> naming exactly which files to bring across; anything not explicitly copied is left behind in that earlier stage and never appears in the final image, no matter how recently it was created in the file."
+        },
+        {
+          "description": "Multi-stage builds are mainly a disk-space optimization -- a 900MB image and a 20MB image behave identically otherwise, so it's a nice-to-have, not something worth prioritizing.",
+          "clarification": "Disk space is the most visible benefit, but not the only one that matters in practice. A smaller image also pulls and pushes faster, which matters directly for deploy latency and for any platform that scales by frequently starting fresh containers; and, separately, a smaller image contains far fewer installed packages, no compiler, no build-time dependency tree, no package manager caches, for a vulnerability scanner to flag CVEs against -- even CVEs in tools that production never actually executes still show up on security reports and have to be triaged, purely because the tool happens to physically exist inside the shipped image."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "docker-multi-stage-builds-ex1",
+          "type": "debugging",
+          "prompt": "This multi-stage Dockerfile fails to build with a message like 'COPY failed: file not found in build context' (or produces an empty runtime image, depending on the Docker version). Find the bug.",
+          "code": "FROM golang:1.22 AS build\nWORKDIR /src\nCOPY . .\nRUN CGO_ENABLED=0 go build -o /out/server .\n\nFROM alpine:3.19\nCOPY --from=builder /out/server /usr/local/bin/server\nENTRYPOINT [\"server\"]",
+          "hints": [
+            "Compare the name given to the first stage's AS clause against the name referenced in the second stage's COPY --from=.",
+            "Stage names have to match exactly, character for character -- Docker doesn't try to guess which stage you probably meant.",
+            "Fix it by making both references consistent, in either direction."
+          ],
+          "solutionCode": "FROM golang:1.22 AS build\nWORKDIR /src\nCOPY . .\nRUN CGO_ENABLED=0 go build -o /out/server .\n\nFROM alpine:3.19\nCOPY --from=build /out/server /usr/local/bin/server\nENTRYPOINT [\"server\"]",
+          "solutionExplanation": "The first stage is named build (AS build), but the final stage's COPY --from=builder references a stage named builder -- a name that was never actually declared anywhere in the file. Docker doesn't fuzzy-match or warn about a close-enough stage name; a COPY --from referencing a nonexistent stage name simply fails outright, or, in some contexts, silently fails to produce anything meaningful in the target path. The fix is just making the two names agree -- either rename the reference to --from=build to match the actual declared stage name, or rename the stage itself to AS builder to match the reference; either direction resolves the mismatch."
+        },
+        {
+          "id": "docker-multi-stage-builds-ex2",
+          "type": "predictOutput",
+          "prompt": "Given this Dockerfile, list which of the following exist inside the FINAL image once the build completes: (a) the gcc compiler, (b) the compiled server binary, (c) the main.c source file, (d) apk's package cache from installing ca-certificates.",
+          "code": "FROM gcc:13 AS builder\nWORKDIR /src\nCOPY main.c .\nRUN gcc -o /out/server main.c\n\nFROM alpine:3.19\nRUN apk add --no-cache ca-certificates\nCOPY --from=builder /out/server /usr/local/bin/server\nENTRYPOINT [\"server\"]",
+          "hints": [
+            "The final stage starts fresh FROM alpine -- go through each of the four items and ask whether it was ever explicitly copied into THIS stage, or installed directly inside it.",
+            "gcc and main.c only exist in the builder stage's own filesystem, which the final image never inherits from automatically.",
+            "The apk package cache question is about what --no-cache specifically does at install time inside the final stage itself, not about anything from the builder stage."
+          ],
+          "expectedAnswer": "Only (b), the compiled server binary, exists in the final image -- it's the one artifact explicitly brought over with COPY --from=builder. (a) gcc and (c) main.c exist only in the builder stage, which is discarded once the build finishes and never contributes anything else to the final image. (d) the apk package cache does NOT exist either, specifically because apk add --no-cache deliberately skips writing a local package cache to disk in the first place.",
+          "solutionExplanation": "The final stage starts completely fresh FROM alpine:3.19 and gets exactly two things added to it: ca-certificates installed directly via RUN apk add, which lives entirely within this stage, not something copied from elsewhere, and the compiled server binary explicitly pulled forward with COPY --from=builder. gcc and main.c belong entirely to the builder stage's own filesystem -- since nothing in the final stage references or copies either of them, they're never present in the final image at all, despite gcc having been necessary to produce the one artifact, the binary, that IS present. The apk package cache is a slightly different kind of gotcha: --no-cache is a flag telling apk not to persist its package index/cache to disk during this install at all, so there's no cache directory left behind in this stage either -- independent of any multi-stage reasoning, it simply was never written in the first place."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "docker-multi-stage-builds-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "A Dockerfile has FROM golang:1.22 AS builder followed later by FROM alpine:3.19. Immediately after that second FROM line executes, what does the alpine stage's filesystem contain?",
+          "options": [
+            "Everything from the builder stage, including the Go toolchain, source files, and compiled binary, plus everything alpine:3.19 normally provides.",
+            "Only whatever alpine:3.19's own image normally provides -- nothing from the builder stage is present unless a later COPY --from=builder explicitly brings it in.",
+            "Only the compiled binary from the builder stage; everything else from both images is dropped automatically.",
+            "An error, because you cannot switch base images partway through a single Dockerfile."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 is correct: each FROM starts a brand-new stage from exactly the named base image's own filesystem, with zero automatic carryover from any earlier stage -- getting anything from builder into this stage requires an explicit COPY --from=builder naming exactly what to bring across. Option 1 is wrong because it assumes automatic inheritance, which multi-stage builds specifically do not do. Option 3 is wrong because it assumes Docker automatically figures out 'the one artifact you probably want,' which it never does -- COPY --from is always explicit about paths. Option 4 is wrong -- switching base images across stages via multiple FROM lines is the entire mechanism multi-stage builds are built on; it's fully valid syntax."
+        },
+        {
+          "id": "docker-multi-stage-builds-assess-explain1",
+          "type": "explanation",
+          "prompt": "A teammate asks why bother with multiple FROM stages instead of just running apt-get remove (or the alpine equivalent) on the build tools at the end of a single-stage Dockerfile, right after compiling. Explain why that approach doesn't actually work the way they'd expect, and why multi-stage builds are the better solution.",
+          "modelAnswer": "Removing packages in a later RUN instruction doesn't shrink the image the way it looks like it should, because of how layers work: each instruction produces its own immutable, stacked layer, and an earlier layer that already contains the build tools' files is never edited or shrunk after the fact -- a later apt-get remove layer only adds a whiteout marker on top that hides those files from the running container's view, while the actual bytes are still physically present in the earlier layer underneath, contributing to the image's real size and still retrievable by anyone who inspects the individual layers directly, or by any tooling that scans layer contents rather than the merged final view. So a single-stage 'install, compile, then remove the compiler' Dockerfile can end up with a final image that reports a similar or even larger total size than just leaving the compiler installed, once you count every layer rather than only the merged top-level view, and a security scanner that looks at layer contents, not just the final filesystem, will still flag CVEs in a compiler that's technically 'not there' from the container's own point of view. A genuinely fresh multi-stage final stage sidesteps this completely: it starts from a clean base image that never had the build tools' layers in its history at all, and only receives the specific compiled artifacts an explicit COPY --from=builder brings across -- so there's no earlier layer anywhere in the final image's actual layer stack containing the build toolchain to begin with, which is a categorically different, and truly smaller, truly cleaner, result than hiding files after the fact within a single stage."
+        }
+      ]
+    },
+    {
+      "id": "docker-volumes-and-networking",
+      "title": "Volumes, Persistence, and Container Networking Basics",
+      "description": "A container's writable layer disappears the moment the container is removed, so data meant to outlive a single container -- a database's files, uploaded assets -- needs to live in a volume or bind mount instead; getting containers to talk to each other and to the outside world depends on the same network-namespace model, which behaves differently than most people expect the first time they hit it.",
+      "moduleId": "dockerfiles_and_images",
+      "topicId": "dockerfiles_and_images",
+      "difficulty": "advanced",
+      "estimatedMinutes": 45,
+      "prerequisites": ["docker-namespaces-and-cgroups", "docker-images-and-layers", "docker-dockerfile-layer-caching"],
+      "learningObjectives": [
+        "Explain precisely when a container's writable-layer data is lost, on docker rm, versus preserved, on docker stop/start, and why that distinction matters for reasoning about persistence.",
+        "Distinguish a named volume from a bind mount and choose correctly between them for a given scenario.",
+        "Explain what docker run -p host:container actually configures, and why a service running inside a container can still be completely unreachable from the host without it.",
+        "Explain why containers on a shared user-defined bridge network can resolve each other by name via DNS, while containers on the default bridge, or on different networks, cannot.",
+        "Debug a connection-refused or name-not-found scenario caused by a missing port publish or missing shared network."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "The Writable Layer Is Ephemeral -- But Not As Fragile As People Assume",
+            "body": "It's worth being precise about exactly when a container's data disappears, because the common shorthand -- 'containers are ephemeral, so don't store anything in them' -- overstates the danger in one specific, easy-to-get-wrong way. A container's writable layer survives docker stop: stopping a container just halts its process; the container object, and its writable layer, still exist on disk, and docker start on that same container resumes with all of that data intact. It is docker rm, explicitly removing the container, that actually discards the writable layer for good, along with anything that was only ever written there.\n\nThat distinction matters because a lot of real deployment workflows don't just stop and restart the same container -- they remove it and create a brand-new one: any docker run for a fresh deploy, any orchestrator rescheduling a workload onto a different node, any docker compose up after pulling a new image. In every one of those cases, the old container's writable layer is gone, along with anything living only there -- a database's data files, uploaded user files, anything that needs to survive past the lifetime of one specific container instance needs to live somewhere else entirely: a volume, or a bind mount."
+          },
+          {
+            "heading": "Named Volumes vs Bind Mounts",
+            "body": "Both mechanisms attach storage that lives outside any single container's own writable layer, but they differ in where that storage actually lives and who manages it. A named volume, created with docker volume create mydata, or implicitly via -v mydata:/path if it doesn't already exist, is storage that Docker itself manages -- you refer to it by name, Docker decides where it physically lives on the host's disk, and its lifecycle is fully independent of any particular container: removing the container that was using it does not remove the volume, you'd need docker volume rm, or docker rm -v / docker compose down -v, to explicitly take that extra step. This makes named volumes the right default for things like a database's data directory -- you don't especially care about the exact host path, you care that the data survives container recreation and that it's portable to a different host without you needing to know or replicate a specific directory layout.\n\nA bind mount, -v /host/specific/path:/container/path, instead maps one exact, pre-existing host directory directly into the container. This is the right tool when you genuinely want the container to see a specific piece of the host filesystem -- most commonly, mounting a local project's source directory into a development container so that edits made in your normal editor are instantly visible inside the running container without rebuilding an image or re-copying files. The trade-off is portability and coupling: a bind mount ties your setup to that host's specific directory layout and permissions, which is exactly why it's a poor fit for anything meant to run unmodified across different machines, a teammate's laptop, CI, production, where a named volume's host-independence is the better fit."
+          },
+          {
+            "heading": "Container Networking: Each Container Gets Its Own Network Namespace",
+            "body": "From the very first concept in this subject: every container gets its own network namespace by default, which means its own loopback interface, its own set of network interfaces, its own routing table, and its own view of which ports are in use. A service listening on port 5432 inside a container is listening on port 5432 within that container's own private network namespace -- it has no automatic relationship whatsoever to port 5432 on the host, or to port 5432 inside any other container. This is precisely why 'the container shows Up in docker ps and the process inside is definitely listening' does not by itself mean you can reach it from your browser at localhost: localhost from the host's own point of view refers to the host's own network namespace, which is a completely different, separate network stack from the container's.\n\ndocker run -p HOST_PORT:CONTAINER_PORT is what actually bridges the two: it configures a NAT, network address translation, port-forwarding rule that takes traffic arriving at the host's own network namespace on HOST_PORT and forwards it into the container's network namespace, to CONTAINER_PORT. Once that's set up, curl localhost:HOST_PORT on the host genuinely reaches the service -- but the service inside the container has no idea any of this remapping is happening; from its own point of view, it's just an ordinary process listening on CONTAINER_PORT, same as if it were running directly on a machine with no Docker involved at all. Forget -p entirely, and the service is completely unreachable from the host's network namespace, no matter how correctly it's running inside the container's own."
+          },
+          {
+            "heading": "EXPOSE Is Documentation, Not a Publish Instruction",
+            "body": "It's worth being explicit about a very common point of confusion: the Dockerfile's EXPOSE instruction does not, by itself, publish anything to the host, and never has. EXPOSE 8080 records metadata on the image saying 'the application inside this image expects to listen on port 8080' -- useful as documentation, and used by some tooling, like docker run -P, capital P, which auto-publishes every EXPOSEd port to a random host port, but it creates no actual reachability on its own. A Dockerfile with EXPOSE 8080 and a docker run with no -p flag at all produces a container that is running, has a process genuinely listening on 8080 inside its own network namespace, and is completely unreachable from the host regardless of that EXPOSE line -- the two instructions, declaring the port in the image versus actually publishing it at run time, are unrelated levers, and skipping the second one is one of the single most common beginner points of confusion in this entire subject."
+          },
+          {
+            "heading": "User-Defined Networks and DNS-Based Service Discovery",
+            "body": "Two containers reaching each other, rather than a container reaching, or being reached from, the host, is a separate question with its own separate answer. By default, docker run with no --network flag attaches a container to Docker's default bridge network, which, for historical reasons, does not provide automatic DNS resolution between containers on it; reaching another container by name on the default bridge either doesn't work at all or requires the long-deprecated --link flag.\n\nA user-defined bridge network, docker network create appnet, then docker run --network appnet --name db ... and docker run --network appnet --name api ..., behaves meaningfully differently and better: every container attached to that same user-defined network gets automatic DNS resolution of every other container's name on that network. From inside the api container, a plain hostname lookup for db resolves directly to db's IP address on that specific network -- no manual IP address bookkeeping, no editing /etc/hosts, no --link. This is exactly the mechanism docker compose relies on under the hood: a compose file's services are automatically placed on a shared, project-specific user-defined network, which is precisely why application code in a typical compose setup can just connect to a hostname like db or redis and have it work, with zero manual networking setup visible in the compose file itself. Two containers started with plain docker run and no shared --network are, by contrast, either on the default bridge, no name resolution, or on entirely separate networks if run without any shared flag at all -- and typically can't resolve each other by name until you explicitly put them on the same user-defined network."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Data Survives docker stop/start, But Not docker rm Without a Volume",
+          "language": "bash",
+          "code": "$ docker run -d --name db -v pgdata:/var/lib/postgresql/data postgres:16\n$ docker exec db psql -U postgres -c \"CREATE TABLE t(x int); INSERT INTO t VALUES (1);\"\n\n$ docker stop db && docker start db\n$ docker exec db psql -U postgres -c \"SELECT * FROM t;\"\n# x\n# ---\n# 1        <- still there, stop/start preserved both the writable layer AND the volume\n\n$ docker rm -f db\n$ docker run -d --name db -v pgdata:/var/lib/postgresql/data postgres:16\n$ docker exec db psql -U postgres -c \"SELECT * FROM t;\"\n# x\n# ---\n# 1        <- STILL there, because it lives in the named volume pgdata, not in db's writable layer,\n#             and pgdata's lifecycle is independent of the container that used it",
+          "explanation": "The table survives docker stop/start regardless of whether a volume is even involved, since stopping a container never destroys its writable layer -- that's a separate, later concern from removal. The more important part of this example is what happens after docker rm -f db, which genuinely does discard that specific container and its writable layer entirely: a fresh container started from the same image, with no shared volume, would start with a brand-new, empty Postgres data directory and no table at all. Because the actual data directory was mounted from the named volume pgdata rather than living in the container's own writable layer, it survived the container's removal untouched, and the newly created container, a completely different container object sharing nothing else with the old one, picks the data right back up simply by mounting the same volume by name."
+        },
+        {
+          "title": "What -p Actually Wires Up, and What Forgetting It Looks Like",
+          "language": "bash",
+          "code": "$ docker run -d --name web1 -p 8080:80 nginx\n$ curl -s -o /dev/null -w \"%{http_code}\\n\" http://localhost:8080\n200\n\n$ docker run -d --name web2 nginx   # no -p at all\n$ curl -s -o /dev/null -w \"%{http_code}\\n\" http://localhost:80\ncurl: (7) Failed to connect to localhost port 80: Connection refused\n$ docker ps --filter name=web2\n# STATUS shows \"Up\" -- nginx really is running and listening on port 80 INSIDE its own network namespace",
+          "explanation": "web1's -p 8080:80 sets up a NAT rule forwarding the host's port 8080 into web1's own network namespace on port 80, which is exactly why curl localhost:8080 succeeds -- the host and the container are two separate network namespaces, and that flag is the explicit bridge between them. web2 has no such rule: nginx inside it is genuinely running and genuinely listening on port 80, entirely correctly, but only within its own private network namespace, which the host's localhost has no automatic path into. docker ps reporting web2 as Up reflects that the process is alive and healthy -- it says nothing at all about whether any port has been published to the host, which is a completely separate, opt-in configuration."
+        },
+        {
+          "title": "Two Containers Reaching Each Other by Name on a Shared Network",
+          "language": "bash",
+          "code": "$ docker network create appnet\n$ docker run -d --network appnet --name db postgres:16\n$ docker run -d --network appnet --name api myapi:1.0\n$ docker exec api curl -s http://db:5432\n# connects successfully by resolving the hostname \"db\" via Docker's embedded DNS on appnet\n\n$ docker run -d --name db2 postgres:16          # no --network at all -- lands on the default bridge\n$ docker run -d --name api2 myapi:1.0            # same -- default bridge\n$ docker exec api2 curl -s http://db2:5432\n# curl: (6) Could not resolve host: db2",
+          "explanation": "db and api share the explicitly created user-defined network appnet, which gives every container on it automatic DNS resolution of every other container's name -- api looking up the hostname db gets back db's actual IP address on that specific network, with zero manual configuration beyond both containers specifying --network appnet. db2 and api2, by contrast, were started with no --network flag at all, which lands them on Docker's default bridge network -- a network that, for legacy reasons, does not provide this same automatic name resolution between containers. The fix is never a DNS configuration change inside the application; it's making sure the containers that need to find each other by name are actually placed on the same user-defined network in the first place, which is exactly the setup docker compose creates automatically for every service in a compose file."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "As long as docker ps shows a container as 'Up' and I know the service inside is listening on some port, I should be able to reach it from my host's browser or curl.",
+          "clarification": "Each container gets its own network namespace, entirely separate from the host's -- a service listening inside a container is only reachable from the host if that specific port was explicitly published with -p HOST:CONTAINER, or -P to auto-publish every EXPOSEd port. docker ps reporting 'Up' only reflects that the container's main process is alive; it says nothing about whether any port-forwarding rule into the host's network namespace has actually been configured. EXPOSE in the Dockerfile doesn't publish anything either -- it's documentation metadata on the image, not a runtime networking action."
+        },
+        {
+          "description": "A Docker volume is really just a folder that happens to live inside the container, so it's just as ephemeral as anything else written inside a container -- it disappears whenever the container is removed.",
+          "clarification": "A named volume, or a bind mount, deliberately lives OUTSIDE the container's own writable layer and has its own independent lifecycle, which is the entire point of using one. Removing the container that was using a named volume does not delete the volume itself -- the data persists and can be reattached to a brand-new, unrelated container simply by mounting the same volume name again. A volume is only actually deleted by an explicit, separate action, docker volume rm, or docker rm -v / docker compose down -v, which opt in to also removing associated volumes, never as an automatic side effect of removing whichever container happened to be using it most recently."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "docker-volumes-and-networking-ex1",
+          "type": "debugging",
+          "prompt": "A developer runs a web app in a container and says: 'docker ps shows it's Up, but I can't load it in my browser at localhost:3000 no matter what I try.' Find the bug in how they started the container and fix it.",
+          "code": "$ docker build -t myapp .\n$ docker run -d --name myapp myapp\n$ docker ps\nCONTAINER ID   IMAGE    STATUS         PORTS\na1b2c3d4e5f6   myapp    Up 2 minutes\n$ curl http://localhost:3000\ncurl: (7) Failed to connect to localhost port 3000: Connection refused",
+          "hints": [
+            "Look at the PORTS column in that docker ps output -- what would you expect to see there if a port had actually been published to the host?",
+            "The app being 'Up' and listening on port 3000 inside its own network namespace has no automatic effect on the host's own port 3000 at all.",
+            "You can't add -p to an already-running container -- it has to be specified at docker run time, so the container needs to be recreated with it."
+          ],
+          "solutionCode": "$ docker rm -f myapp\n$ docker run -d --name myapp -p 3000:3000 myapp\n$ docker ps\nCONTAINER ID   IMAGE    STATUS         PORTS\nf6e5d4c3b2a1   myapp    Up 2 seconds   0.0.0.0:3000->3000/tcp\n$ curl http://localhost:3000\n# now succeeds",
+          "solutionExplanation": "The original docker run -d --name myapp myapp never included a -p flag at all, so no NAT/port-forwarding rule was ever created between the host's network namespace and the container's -- the app really is running and really is listening on port 3000, but strictly within its own private network namespace, which the host's localhost has no path into. The empty PORTS column in docker ps is the direct, visible confirmation that nothing was published. Because -p can only be specified when a container is created, not added to an already-running one, the fix requires removing the existing container and recreating it with -p 3000:3000, at which point docker ps shows the expected 0.0.0.0:3000->3000/tcp mapping and the host-side curl succeeds."
+        },
+        {
+          "id": "docker-volumes-and-networking-ex2",
+          "type": "predictOutput",
+          "prompt": "Two containers are started with these commands, with no shared --network flag between them. The api container's code tries to connect to a Postgres database at the hostname db. Predict what happens when it tries, and why.",
+          "code": "$ docker run -d --name db postgres:16\n$ docker run -d --name api myapi:1.0\n$ docker exec api python -c \"import socket; print(socket.gethostbyname('db'))\"",
+          "hints": [
+            "Neither docker run specified a --network flag -- what network do containers land on by default when you don't specify one?",
+            "Does the default bridge network provide automatic DNS-based name resolution between containers on it, the way a user-defined network does?",
+            "The fix isn't a code change inside api -- it's a docker network create plus attaching both containers to it via --network."
+          ],
+          "expectedAnswer": "It fails with a name resolution error, something like socket.gaierror: [Errno -2] Name or service not known, because both containers landed on Docker's default bridge network with no --network flag specified, and the default bridge does not provide automatic DNS resolution of container names -- db simply doesn't resolve to anything from api's point of view.",
+          "solutionExplanation": "With no --network specified, both db and api are attached to Docker's default bridge network, which, unlike a user-defined bridge network, does not run the embedded DNS resolution that maps container names to their IP addresses automatically. From inside api, looking up the hostname db has nothing to resolve it against, so the lookup fails outright rather than connecting to the wrong thing or timing out slowly. The fix is to create a user-defined network, docker network create appnet, and start both containers with --network appnet, which is exactly the setup a docker-compose.yml provides implicitly for every service it defines -- at which point the identical socket.gethostbyname('db') call would succeed and return db's actual IP address on that network."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "docker-volumes-and-networking-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "You run docker run -d nginx with no -p flag, and the Dockerfile that built the image includes EXPOSE 80. What happens when you then run curl http://localhost:80 from the host?",
+          "options": [
+            "It succeeds, because EXPOSE 80 in the Dockerfile automatically publishes port 80 to the host.",
+            "It fails to connect, because no port was actually published to the host -- EXPOSE is documentation on the image, not a runtime publish action, and nginx is only reachable within its own container network namespace.",
+            "It succeeds, but only for the first request, because Docker publishes the first connection attempt automatically.",
+            "It fails with a permission error, because nginx needs root privileges to bind to port 80 on the host."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 is correct: EXPOSE is purely image metadata/documentation and never publishes a port on its own; only -p/--publish at docker run time, or -P to auto-publish every EXPOSEd port, actually creates the host-to-container port-forwarding rule, and none of those were used here. Option 1 directly misstates what EXPOSE does. Option 3 describes behavior Docker has no such 'first request' mechanism for -- it's invented. Option 4 is wrong for two reasons: it's not a permission issue, and more fundamentally the request never even reaches the container's network namespace to encounter any such issue, because nothing was published."
+        },
+        {
+          "id": "docker-volumes-and-networking-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain the difference between a named volume and a bind mount, and give one concrete, realistic scenario where you'd specifically choose each.",
+          "modelAnswer": "Both attach storage to a container that lives outside that container's own writable layer, so the data survives even if the container itself is removed -- the difference is in where that storage physically lives and who is responsible for managing it. A named volume is storage that Docker itself creates and manages; you refer to it purely by name, for example -v pgdata:/var/lib/postgresql/data, Docker decides where it actually sits on the host's disk, and its lifecycle is fully decoupled from any specific container -- removing the container that used it leaves the volume intact, ready to be reattached to a brand-new container later. This makes named volumes the right choice for something like a production database's data directory: you don't care about, or want to hardcode, a specific host path, you care that the data reliably persists across container recreation, deploys, crashes, orchestrator rescheduling, and is trivially portable to a different host without needing to replicate any particular directory structure there. A bind mount instead maps one specific, already-existing host directory directly into the container, for example -v /Users/me/project/src:/app/src, giving the container direct, live access to that exact piece of the host filesystem. This is the right choice for local development: mounting your project's source directory into a container so that edits made in your normal editor on the host are instantly visible inside the running container, without needing to rebuild an image or manually copy files every time you change a line of code. The trade-off is that a bind mount ties the setup to that specific host's directory layout and permissions, which is exactly why it's the wrong tool for anything meant to run unmodified across different machines -- a teammate's laptop, a CI runner, and a production host are unlikely to share the same absolute path, which is precisely the portability problem a named volume avoids by design."
+        }
+      ]
+    }
+  ]
+}
+
+

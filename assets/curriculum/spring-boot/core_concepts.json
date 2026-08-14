@@ -1,0 +1,365 @@
+{
+  "learningPathId": "spring-boot",
+  "moduleId": "core_concepts",
+  "title": "Spring Core Concepts",
+  "order": 1,
+  "concepts": [
+    {
+      "id": "spring-boot-ioc-and-di",
+      "title": "Inversion of Control and Dependency Injection",
+      "description": "Inversion of Control flips who is responsible for creating and wiring an object's dependencies -- from the object itself to an external container -- and Dependency Injection is the concrete technique Spring uses to hand those dependencies in, instead of letting objects go looking for their own.",
+      "moduleId": "core_concepts",
+      "topicId": "core_concepts",
+      "difficulty": "beginner",
+      "estimatedMinutes": 35,
+      "prerequisites": [],
+      "learningObjectives": [
+        "Explain what Inversion of Control means and contrast it with an object constructing its own dependencies directly.",
+        "Explain what Dependency Injection is and how it is the mechanism that implements IoC.",
+        "Use constructor injection to wire a dependency into a class and explain why Spring can do this without an explicit @Autowired in the common case.",
+        "Explain why depending on an interface rather than a concrete class improves testability and flexibility.",
+        "Predict the runtime error that results from an unsatisfied or ambiguous dependency."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "The Problem: Objects That Build Their Own Dependencies",
+            "body": "Consider a class that needs to send a notification whenever an order ships:\n\n```java\npublic class OrderService {\n    private final EmailNotifier notifier = new EmailNotifier();\n\n    public void ship(Order order) {\n        // ... shipping logic ...\n        notifier.send(order.getCustomerEmail(), \"Your order has shipped!\");\n    }\n}\n```\n\nThis compiles, runs, and looks perfectly reasonable at a glance. But look at what `OrderService` has taken on: it is not just responsible for *using* an email notifier, it is also responsible for *deciding which concrete implementation to construct* and *how to construct it*. Those are two very different responsibilities glued together. If you ever want to send an SMS instead of an email in some deployments, or swap in a fake notifier for a unit test, or point at a different SMTP configuration in staging versus production, you have to go edit `OrderService`'s source code -- because the `new EmailNotifier()` call is baked directly into it. `OrderService` is *tightly coupled* to one specific implementation, and that coupling is invisible to anyone calling `OrderService` from the outside; you'd only discover it by reading the class's internals."
+          },
+          {
+            "heading": "Inversion of Control: Flipping Who's in Charge",
+            "body": "Inversion of Control (IoC) is the general principle of taking that responsibility -- deciding which implementation to create, and how to wire it together with everything it depends on -- away from the class itself, and handing it to something external: a framework, a container, an assembler. The class no longer asks 'who do I need, and how do I build them?' It simply declares 'I need something that can send notifications' and trusts that whoever is constructing it will supply a working instance.\n\nThis is a genuine inversion, not just a rename. In the ordinary flow of a program, your code is in control: it calls libraries, creates objects, decides what happens next. Under IoC, a framework is in control of the overall wiring: it constructs your objects, in an order it determines by inspecting their declared dependencies, and calls into your code at the points it decides are appropriate. Spring's IoC container -- the `ApplicationContext`, covered in the next concept -- is exactly this kind of external authority. It reads metadata (annotations, in a modern Spring Boot app) describing what each class needs, builds a dependency graph, and constructs everything in the right order, handing each object its dependencies rather than letting it construct its own." },
+          {
+            "heading": "Dependency Injection: The Mechanism",
+            "body": "Dependency Injection (DI) is the specific technique Spring uses to achieve IoC: dependencies are *passed into* an object from the outside, rather than *constructed inside* it. There are three ways to inject a dependency in Spring -- constructor injection, setter injection, and field injection -- but they all share the same underlying idea. Rewriting the example above with constructor injection and an interface:\n\n```java\npublic interface Notifier {\n    void send(String recipient, String message);\n}\n\n@Component\npublic class EmailNotifier implements Notifier {\n    public void send(String recipient, String message) {\n        // ... actually send an email ...\n    }\n}\n\n@Service\npublic class OrderService {\n    private final Notifier notifier;\n\n    public OrderService(Notifier notifier) {\n        this.notifier = notifier;\n    }\n\n    public void ship(Order order) {\n        notifier.send(order.getCustomerEmail(), \"Your order has shipped!\");\n    }\n}\n```\n\n`OrderService` no longer knows or cares that `EmailNotifier` exists. It only knows about the `Notifier` interface. Spring's container sees that `OrderService` needs *something* implementing `Notifier`, finds the `EmailNotifier` bean it already created, and passes it into the constructor automatically when it builds the `OrderService` bean. Nothing inside `OrderService` changed to make this swappable -- the swappability was there the moment it stopped calling `new` itself."
+          },
+          {
+            "heading": "Why Constructor Injection Is Preferred",
+            "body": "Spring supports field injection (`@Autowired` directly on a field) and setter injection too, and you will see both in real codebases, but constructor injection is the recommended default, for reasons that matter well beyond style preference. First, it lets you declare the field `final`, which means the compiler guarantees the dependency is set exactly once and never reassigned -- the class becomes genuinely immutable with respect to its dependencies. Second, it makes missing dependencies fail *immediately and obviously*: if Spring cannot find a bean to satisfy a constructor parameter, the application refuses to start at all, with a clear exception naming the missing type. Field injection, by contrast, can leave you with an object that constructs successfully but has a silently-null field, which only blows up later, at the exact moment something tries to use it -- a much harder bug to trace back to its root cause. Third, constructor injection makes plain unit testing trivial: `new OrderService(new FakeNotifier())` works with no Spring container involved at all, because a constructor is just a constructor. A field annotated `@Autowired` is invisible to `new` -- nothing populates it unless a container reflectively injects it, which is exactly why field-injected classes are so much more annoying to unit test in isolation.\n\nOne more detail worth knowing precisely: as of Spring 4.3, if a class has exactly one constructor, you do not need to write `@Autowired` on it at all -- Spring implicitly uses that single constructor for injection. You only need an explicit `@Autowired` on a constructor when a class defines more than one and you need to tell Spring which one to use for injection."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "From Tight Coupling to Constructor Injection",
+          "language": "java",
+          "code": "// Before: OrderService decides its own implementation\npublic class OrderService {\n    private final EmailNotifier notifier = new EmailNotifier();\n\n    public void ship(Order order) {\n        notifier.send(order.getCustomerEmail(), \"Shipped!\");\n    }\n}\n\n// After: OrderService only knows about an abstraction, wired in from outside\npublic interface Notifier {\n    void send(String recipient, String message);\n}\n\n@Component\npublic class EmailNotifier implements Notifier {\n    public void send(String recipient, String message) { /* ... */ }\n}\n\n@Service\npublic class OrderService {\n    private final Notifier notifier;\n\n    public OrderService(Notifier notifier) {\n        this.notifier = notifier;\n    }\n\n    public void ship(Order order) {\n        notifier.send(order.getCustomerEmail(), \"Shipped!\");\n    }\n}",
+          "explanation": "The 'before' version has exactly one implementation of notification, forever, unless someone edits OrderService's source. The 'after' version depends on the Notifier interface, and Spring's container -- having scanned the classpath and found EmailNotifier annotated @Component -- passes that instance into OrderService's constructor when it builds the OrderService bean. Swapping in an SmsNotifier later, or a test double, requires zero changes to OrderService itself: you either register a different bean implementing Notifier, or, in a unit test, skip Spring entirely and call `new OrderService(myFakeNotifier)` directly."
+        },
+        {
+          "title": "Constructor Injection vs. Field Injection Under Test",
+          "language": "java",
+          "code": "// Field injection -- looks compact, but has a real cost\n@Service\npublic class ReportService {\n    @Autowired\n    private ReportRepository repository;\n\n    public Report generate(Long id) {\n        return repository.findEnrichedReport(id);\n    }\n}\n\n// Plain unit test, no Spring context started:\nReportService service = new ReportService();\nservice.generate(1L); // NullPointerException -- repository was never injected!\n\n// Constructor injection -- the same class, testable with plain `new`\n@Service\npublic class ReportService {\n    private final ReportRepository repository;\n\n    public ReportService(ReportRepository repository) {\n        this.repository = repository;\n    }\n\n    public Report generate(Long id) {\n        return repository.findEnrichedReport(id);\n    }\n}\n\nReportService service = new ReportService(fakeRepository);\nservice.generate(1L); // works -- fakeRepository was passed in explicitly",
+          "explanation": "The field-injected version only gets its `repository` field populated when Spring itself constructs the bean and performs reflection-based injection after the fact. A plain `new ReportService()` in a unit test bypasses Spring entirely, so `repository` stays null, and the test blows up with a NullPointerException that has nothing to do with the logic you actually meant to test. The constructor-injected version has no such trap: the constructor signature itself demands a `ReportRepository`, so it is structurally impossible to end up with an instance that's missing one -- and a test can supply a hand-written fake with zero framework involvement."
+        },
+        {
+          "title": "What Happens When a Dependency Can't Be Resolved",
+          "language": "java",
+          "code": "public interface PaymentGateway {\n    void charge(String customerId, int amountCents);\n}\n\n@Component\npublic class StripeGateway implements PaymentGateway { /* ... */ }\n\n@Component\npublic class PaypalGateway implements PaymentGateway { /* ... */ }\n\n@Service\npublic class CheckoutService {\n    private final PaymentGateway gateway;\n\n    public CheckoutService(PaymentGateway gateway) {\n        this.gateway = gateway;\n    }\n}\n\n// Starting this application throws at startup:\n// NoUniqueBeanDefinitionException: expected single matching bean but found 2:\n// stripeGateway, paypalGateway",
+          "explanation": "Both StripeGateway and PaypalGateway implement PaymentGateway, and both are registered as beans. When Spring tries to construct CheckoutService, it looks for exactly one bean assignable to PaymentGateway to hand to the constructor -- and finds two equally valid candidates, with no tie-breaker specified. Rather than guessing, Spring refuses to start the application at all, failing loudly and immediately with NoUniqueBeanDefinitionException. This is IoC's fail-fast promise in action: an ambiguous or missing dependency is a startup-time error you cannot miss, not a runtime surprise that only appears once a particular code path executes. The fix is to disambiguate explicitly -- with @Primary on the default choice, or @Qualifier(\"stripeGateway\") at the injection point -- rather than removing one of the beans."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "Dependency Injection means Spring magically creates objects out of nowhere, without calling any constructor -- it's fundamentally different from how the rest of Java works.",
+          "clarification": "There is no magic involved: Spring calls the exact same constructors (or setters) that your code would call by hand. The only difference is *who* decides what value to pass as the argument, and *when*. Spring maintains a registry of already-constructed bean instances (the ApplicationContext), and when it needs to build, say, an OrderService, it looks in that registry for something assignable to the Notifier type its constructor asks for, and passes that existing object in -- via a perfectly ordinary constructor call, just reached through reflection instead of source code you typed by hand. It is automation of plumbing you would otherwise write yourself, not a different execution model."
+        },
+        {
+          "description": "@Autowired must be written on every constructor used for dependency injection, or Spring won't inject anything.",
+          "clarification": "Since Spring 4.3, if a class has exactly one constructor, Spring uses it automatically for dependency injection with no @Autowired annotation required at all -- this is now the normal, idiomatic style for constructor injection in a modern Spring Boot codebase. @Autowired is only strictly necessary on a constructor when a class defines two or more constructors and you need to tell Spring explicitly which one it should use to build the bean; it remains necessary for field and setter injection, since those have no other signal telling Spring where to inject."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "spring-boot-ioc-and-di-ex1",
+          "type": "debugging",
+          "prompt": "This unit test fails with a NullPointerException on the line that calls notifier.send(...), even though OrderService looks correctly annotated with @Autowired. Find the bug and fix it so the test passes without starting a Spring container.",
+          "code": "@Service\npublic class OrderService {\n    @Autowired\n    private Notifier notifier;\n\n    public void ship(Order order) {\n        notifier.send(order.getCustomerEmail(), \"Shipped!\");\n    }\n}\n\n// Plain JUnit test -- no Spring context is started\n@Test\nvoid shipSendsNotification() {\n    Notifier fakeNotifier = mock(Notifier.class);\n    OrderService service = new OrderService();\n    // how would fakeNotifier ever get into the private notifier field here?\n    service.ship(new Order(\"amy@example.com\"));\n    verify(fakeNotifier).send(eq(\"amy@example.com\"), any());\n}",
+          "hints": [
+            "The test never starts a Spring container -- it calls `new OrderService()` directly. Does plain `new` know anything about @Autowired?",
+            "@Autowired field injection only works because Spring's container reflectively sets the field AFTER construction. Without a container, who sets it?",
+            "Change OrderService to accept its Notifier through its constructor instead of a field, so a plain `new OrderService(fakeNotifier)` can supply it directly, with no framework involved."
+          ],
+          "solutionCode": "@Service\npublic class OrderService {\n    private final Notifier notifier;\n\n    public OrderService(Notifier notifier) {\n        this.notifier = notifier;\n    }\n\n    public void ship(Order order) {\n        notifier.send(order.getCustomerEmail(), \"Shipped!\");\n    }\n}\n\n@Test\nvoid shipSendsNotification() {\n    Notifier fakeNotifier = mock(Notifier.class);\n    OrderService service = new OrderService(fakeNotifier);\n    service.ship(new Order(\"amy@example.com\"));\n    verify(fakeNotifier).send(eq(\"amy@example.com\"), any());\n}",
+          "solutionExplanation": "The original OrderService relies on Spring's container to reflectively populate its @Autowired field after construction -- but the test calls `new OrderService()` directly, bypassing Spring entirely, so `notifier` is never set and stays null, causing the NullPointerException on `notifier.send(...)`. Switching to constructor injection removes the dependency on a container altogether: the constructor's signature itself requires a Notifier argument, so `new OrderService(fakeNotifier)` supplies it directly and explicitly, with the exact same code working identically whether Spring is running or not. This is precisely why constructor injection is considered more testable than field injection -- it doesn't merely make tests shorter, it makes plain object construction actually possible."
+        },
+        {
+          "id": "spring-boot-ioc-and-di-ex2",
+          "type": "predictOutput",
+          "prompt": "Two classes both implement the Shipper interface and are both annotated @Component. A third class, ShippingService, has a constructor that takes a single Shipper parameter. What happens when the Spring Boot application starts up?",
+          "code": "public interface Shipper {\n    void dispatch(Order order);\n}\n\n@Component\npublic class GroundShipper implements Shipper {\n    public void dispatch(Order order) { /* ... */ }\n}\n\n@Component\npublic class AirShipper implements Shipper {\n    public void dispatch(Order order) { /* ... */ }\n}\n\n@Service\npublic class ShippingService {\n    private final Shipper shipper;\n\n    public ShippingService(Shipper shipper) {\n        this.shipper = shipper;\n    }\n}",
+          "hints": [
+            "How many beans does Spring find that are assignable to the Shipper type ShippingService's constructor is asking for?",
+            "Spring does not guess or pick 'the first one it finds' when there's more than one equally valid candidate and no tie-breaker like @Primary or @Qualifier.",
+            "Recall the fail-fast promise of IoC: an unresolvable dependency is a startup-time failure, not something deferred until a request happens to need ShippingService."
+          ],
+          "expectedAnswer": "The application fails to start, throwing a NoUniqueBeanDefinitionException that reports two matching beans for the Shipper type (groundShipper and airShipper) and no way to choose between them.",
+          "solutionExplanation": "Both GroundShipper and AirShipper are registered as beans implementing Shipper, and ShippingService's constructor asks for exactly one Shipper. With two equally valid, undistinguished candidates and no @Primary marking a default or @Qualifier naming a specific one at the injection point, Spring cannot decide which bean to pass in, and rather than arbitrarily picking one, it fails the entire application startup with NoUniqueBeanDefinitionException, naming both conflicting candidates in the exception message. Fixing this requires disambiguation -- adding @Primary to whichever Shipper should be the default, or @Qualifier(\"groundShipper\") on the constructor parameter to pick one explicitly."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "spring-boot-ioc-and-di-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "Which of the following best explains why constructor injection is generally preferred over field injection in Spring applications?",
+          "options": [
+            "Constructor injection runs faster at application startup than field injection.",
+            "Constructor injection allows the dependency field to be declared final, fails fast at startup if a dependency is missing, and allows the class to be constructed with plain `new` in unit tests without a container.",
+            "Field injection is deprecated and will be removed in a future version of Spring.",
+            "Constructor injection is required for any class annotated with @Component."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Constructor injection's real advantages are structural: a `final` field guarantees the dependency is set exactly once, a missing dependency causes an immediate, obvious startup failure rather than a later NullPointerException, and a constructor can be called directly with `new` in tests with no Spring container involved. Option A is false -- there's no meaningful performance difference between the two at the scale that matters. Option C is false -- field injection is fully supported and common in real code, just less recommended. Option D is false -- Spring supports field and setter injection just as validly on @Component classes; constructor injection is a best practice, not an enforced requirement."
+        },
+        {
+          "id": "spring-boot-ioc-and-di-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain Inversion of Control and Dependency Injection to a developer who has only ever written `new SomeClass()` to wire up an object's dependencies by hand. Be sure to explain why this approach makes testing easier.",
+          "modelAnswer": "Normally, if class A needs class B, A's own code decides which concrete B to construct and does so directly with `new B()`. That decision -- which implementation to use, and how to build it -- is baked permanently into A's source code, which means A is tightly coupled to that one specific B, and swapping it out (for a different implementation, or for a fake one in a test) requires editing A itself. Inversion of Control flips this: instead of A deciding and constructing its own dependencies, an external authority -- Spring's IoC container -- takes over that responsibility. A simply declares, typically through its constructor parameters, what abstractions it needs (an interface, not a concrete class), and the container is the one that decides which concrete implementation to construct and hands it to A. Dependency Injection is the specific mechanism that makes this real: dependencies are passed *into* an object from outside (through its constructor, in the recommended style) rather than built *inside* it. The testing benefit follows directly from this: because A only depends on an interface and receives its implementation through a constructor parameter, a test can call `new A(fakeB)` and hand it a hand-written fake or mock implementation of B, with zero involvement from Spring or any container at all -- something that would be far harder if A's constructor were hardcoded to build a real, possibly slow or side-effect-laden B internally. The dependency becomes an explicit, swappable input instead of a hidden implementation detail."
+        }
+      ]
+    },
+    {
+      "id": "spring-boot-application-context-and-beans",
+      "title": "The ApplicationContext, Beans, and Component Scanning",
+      "description": "The ApplicationContext is Spring's IoC container -- the runtime registry that creates, wires, and manages the lifecycle of every bean -- and component scanning is the mechanism it uses to discover which of your classes should become beans in the first place, without any manual registration.",
+      "moduleId": "core_concepts",
+      "topicId": "core_concepts",
+      "difficulty": "beginner",
+      "estimatedMinutes": 40,
+      "prerequisites": ["spring-boot-ioc-and-di"],
+      "learningObjectives": [
+        "Explain what the ApplicationContext is and what role it plays as Spring's IoC container.",
+        "Explain what a bean is and how it differs from an ordinary object created with `new`.",
+        "Explain how component scanning discovers classes and registers them as beans without explicit configuration.",
+        "Distinguish @Component, @Service, @Repository, and @Controller, and explain why the distinction matters even though the container treats them almost identically.",
+        "Explain the default singleton bean scope and identify the risk of storing per-request mutable state in a singleton bean.",
+        "Predict why a correctly-annotated class might still fail to be found as a bean, based on where it lives on the classpath."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "What Is the ApplicationContext?",
+            "body": "The `ApplicationContext` is the central interface representing Spring's IoC container. When a Spring Boot application starts -- via `SpringApplication.run(MyApplication.class, args)` -- one of the first things that happens is that an `ApplicationContext` is created and populated. Its job, for the entire lifetime of the running application, is to instantiate your beans, inject their dependencies into each other in the correct order, manage their lifecycle (including calling any initialization or destruction callbacks), and hold them ready to be used. `ApplicationContext` extends a more primitive interface, `BeanFactory`, adding enterprise-oriented capabilities on top -- publishing application events, resolving internationalized messages, and reading configuration through a unified `Environment` abstraction (which becomes very relevant in the autoconfiguration concept later in this module).\n\nYou can technically pull a bean out of the context by hand: `MyService service = context.getBean(MyService.class);`. In real application code you almost never do this -- it's a pattern called the *service locator* pattern, and it defeats much of the point of dependency injection, since it hides a class's real dependencies inside its method bodies instead of declaring them up front in its constructor. It is, however, an excellent way to build a mental model of what the container actually is: a queryable registry of already-built objects, not an abstract concept."
+          },
+          {
+            "heading": "What Is a Bean?",
+            "body": "A **bean** is simply an object whose entire lifecycle -- when it gets created, what it gets wired up with, when (if ever) it gets destroyed -- is managed by the Spring container instead of by your own code calling `new`. That's the whole definition; a bean is not a special kind of Java object, and no interface needs to be implemented to become one. The distinction that matters is entirely about *who is in control*: an object you construct yourself with `new Foo()` in the middle of some method is a plain object, fully under your code's control from the moment it exists. An object the container constructs, tracks in its internal registry, and hands out to other beans that ask for it -- that's a bean.\n\nThis is also why the earlier `Notifier` / `OrderService` example from the previous concept works at all: `EmailNotifier` becomes a bean the moment Spring's container decides to construct it (because it found the `@Component` annotation during scanning), and `OrderService` becomes a bean the same way. Injection only works between beans the container itself is managing -- you cannot `@Autowired` a dependency into a plain object you constructed yourself with `new`, because that object was never registered with the container in the first place, and the container has no idea it exists."
+          },
+          {
+            "heading": "Component Scanning: How Classes Become Beans",
+            "body": "Rather than requiring you to list every bean by hand in some central configuration file, Spring Boot uses **component scanning**: at startup, it walks the classpath looking for classes annotated with a *stereotype annotation* (`@Component` and its specializations, covered next), and registers each one as a `BeanDefinition` -- a blueprint the container later uses to actually construct that bean when it's needed. Crucially, this scanning has a *starting point*: by default, Spring Boot scans the package containing your `@SpringBootApplication`-annotated main class, and every sub-package beneath it, and nowhere else. This is because `@SpringBootApplication` is itself a meta-annotation that bundles `@ComponentScan` (along with `@SpringBootConfiguration` and `@EnableAutoConfiguration`, covered in the autoconfiguration concept), and `@ComponentScan` with no explicit `basePackages` argument defaults to 'the package of the class it's declared on.'\n\nThis has a very concrete, very common practical consequence: if you place a `@Service`-annotated class in a package that is a sibling of your main application's package -- rather than beneath it -- component scanning will never see it, no error is raised during the scan itself, and the failure only surfaces later as a `NoSuchBeanDefinitionException` the moment something tries to inject it. The fix, when this happens, is either to move the class into (or under) the scanned base package, or to widen scanning explicitly with `@ComponentScan(basePackages = \"com.example.other\")` on a configuration class."
+          },
+          {
+            "heading": "Stereotype Annotations: @Component, @Service, @Repository, @Controller",
+            "body": "`@Component` is the generic, foundational stereotype annotation: 'this class should be scanned and registered as a bean.' `@Service`, `@Repository`, and `@Controller` are all, themselves, annotated with `@Component` -- meaning they are specializations of it, and from the container's point of view, purely as far as *bean registration* goes, they behave identically to a plain `@Component`. So why bother distinguishing them at all?\n\nFirst, semantic clarity: seeing `@Repository` on a class immediately tells a reader 'this talks to a data store,' and `@Service` says 'this holds business logic,' which is genuinely useful documentation that a bare `@Component` doesn't provide. Second, and more concretely, `@Repository` triggers real additional behavior: Spring registers a `PersistenceExceptionTranslationPostProcessor` that wraps `@Repository`-annotated beans so that low-level, persistence-technology-specific exceptions (a JPA `PersistenceException`, for example) get automatically translated into Spring's own unified, unchecked `DataAccessException` hierarchy -- meaning your service layer can catch one consistent family of exceptions regardless of which persistence technology sits underneath. Third, some tooling and AOP pointcuts are written to specifically target `@Service` or `@Repository` rather than the generic `@Component`, so using the wrong stereotype can silently exclude a bean from behavior that's supposed to apply to it. In short: functionally almost identical for plain wiring, but not truly interchangeable once you look past the basics.\n\n```java\n@Repository\npublic class JpaOrderRepository implements OrderRepository {\n    // ... persistence-specific exceptions thrown here get translated automatically\n}\n\n@Service\npublic class OrderService {\n    private final OrderRepository repository;\n\n    public OrderService(OrderRepository repository) {\n        this.repository = repository;\n    }\n}\n```"
+          },
+          {
+            "heading": "Bean Scope: The Default Singleton, and Why It's Dangerous to Forget",
+            "body": "Unless told otherwise, every bean Spring creates is a **singleton** -- but specifically a *container-scoped* singleton, meaning exactly one instance exists per `ApplicationContext`, not one instance for the entire JVM (an important distinction if an application ever runs multiple contexts, which is rare but does happen in some testing setups). This single shared instance is created once and handed out to every other bean that asks for it, and to every HTTP request that gets routed through it in a web application.\n\nThis has a sharp practical consequence: if a singleton bean has a mutable instance field, that field is shared -- genuinely, literally shared -- across every concurrent request your application is handling at that moment. A `@Service` bean with something like `private int requestCount;` that it increments per call is not safe under concurrent load; multiple threads mutating the same field on the same shared object is a textbook data race. The fix is not to avoid singletons (they are the right default for stateless services, and the vast majority of Spring beans should be stateless) but to keep singleton beans free of per-request mutable state, and reach for a narrower scope -- `@Scope(\"prototype\")` for a fresh instance per injection point, or `@Scope(\"request\")` for a fresh instance per HTTP request in a web app -- on the rare occasions a bean genuinely needs to hold state that shouldn't be shared."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "From @Component to a Fully Wired Bean Graph",
+          "language": "java",
+          "code": "@Component\npublic class EmailGateway {\n    public void send(String to, String body) { /* ... */ }\n}\n\n@Service\npublic class NotificationService {\n    private final EmailGateway gateway;\n\n    public NotificationService(EmailGateway gateway) {\n        this.gateway = gateway;\n    }\n\n    public void notifyCustomer(String email, String message) {\n        gateway.send(email, message);\n    }\n}",
+          "explanation": "During component scanning, Spring finds both EmailGateway (@Component) and NotificationService (@Service) beneath the base package and registers a BeanDefinition for each -- at this point neither object has actually been constructed yet, only the blueprint for how to construct it. When the container later builds these beans, it inspects NotificationService's constructor, sees it needs an EmailGateway, checks whether that bean has already been constructed (if not, it builds it first), and then constructs NotificationService by passing the existing EmailGateway instance in. You never wrote a single line of wiring code -- the dependency graph was inferred entirely from constructor signatures and stereotype annotations."
+        },
+        {
+          "title": "Peeking Inside the Container (For Understanding, Not for Everyday Use)",
+          "language": "java",
+          "code": "@SpringBootApplication\npublic class DemoApplication {\n    public static void main(String[] args) {\n        ApplicationContext context = SpringApplication.run(DemoApplication.class, args);\n\n        NotificationService service = context.getBean(NotificationService.class);\n        service.notifyCustomer(\"amy@example.com\", \"Hello!\");\n\n        NotificationService sameService = context.getBean(NotificationService.class);\n        System.out.println(service == sameService);   // true\n    }\n}",
+          "explanation": "SpringApplication.run(...) returns the fully initialized ApplicationContext itself, which is exactly why context.getBean(...) works -- it's a direct, literal query against the container's registry, not a metaphor. The final line prints true because NotificationService is an ordinary singleton bean: every call to getBean(NotificationService.class) against the same context returns a reference to the exact same object, never a fresh one. In real application code you virtually never call getBean(...) directly like this (constructor injection should supply every dependency your own beans need); this example exists purely to make 'the container is a registry of constructed objects' concrete and visible rather than abstract."
+        },
+        {
+          "title": "The Danger of Shared Mutable State in a Singleton Bean",
+          "language": "java",
+          "code": "@Service\npublic class RequestCounter {\n    private int count = 0;   // one shared field, one shared bean instance\n\n    public int increment() {\n        count = count + 1;\n        return count;\n    }\n}\n\n// Two concurrent HTTP requests both call:\n// counter.increment();\n// Both requests hit the exact same RequestCounter instance and the exact same count field.",
+          "explanation": "RequestCounter is a singleton -- one instance, shared by every request that gets routed through the application, for as long as the application runs. If two requests call increment() at nearly the same moment on two different threads, both can read the same value of count before either writes back the incremented result, and one increment can be lost entirely -- a classic race condition. Nothing about the code looks obviously wrong; it only breaks under real concurrent load, which is exactly what makes this class of bug dangerous. Fixing it properly means either avoiding shared mutable state altogether (e.g., delegate counting to a thread-safe construct like AtomicInteger, or push the state into a database), rather than assuming a bean's fields are safely private to 'one call.'"
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "@Service and @Repository are purely cosmetic -- they're literally interchangeable with @Component and make no functional difference to how the application behaves.",
+          "clarification": "As far as basic bean registration goes, this is nearly true -- all three are scanned and registered the same way, since @Service and @Repository are themselves meta-annotated with @Component. But @Repository specifically triggers registration of exception-translation behavior via PersistenceExceptionTranslationPostProcessor, converting low-level persistence exceptions into Spring's unified DataAccessException hierarchy -- a real behavioral difference, not just a label. Beyond that, some AOP pointcuts, static analysis tools, and team conventions are written to target the semantically correct stereotype specifically, so using @Component everywhere out of laziness can silently opt a bean out of behavior or tooling meant to apply to it."
+        },
+        {
+          "description": "Any class in the project annotated @Component (or @Service, @Repository, @Controller) will automatically be picked up as a bean, regardless of which package it lives in.",
+          "clarification": "Component scanning has a starting point, not global classpath-wide reach: by default it's the package containing your @SpringBootApplication-annotated main class, plus every sub-package beneath it -- nowhere else. A correctly-annotated class placed in a sibling package, or in a separate module entirely, will simply never be found, with no warning at scan time. The failure only appears later, as a NoSuchBeanDefinitionException the moment something tries to inject it -- which is exactly why 'where does this class live relative to my main application class' is one of the first things to check when a bean 'should' exist but doesn't."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "spring-boot-application-context-and-beans-ex1",
+          "type": "debugging",
+          "prompt": "This Spring Boot application fails to start with 'NoSuchBeanDefinitionException: No qualifying bean of type com.example.billing.InvoiceService available' -- even though InvoiceService is clearly annotated @Service. Given the package layout below, find and fix the bug.",
+          "code": "// File: com/example/app/DemoApplication.java\npackage com.example.app;\n\n@SpringBootApplication\npublic class DemoApplication {\n    public static void main(String[] args) {\n        SpringApplication.run(DemoApplication.class, args);\n    }\n}\n\n// File: com/example/billing/InvoiceService.java\npackage com.example.billing;\n\n@Service\npublic class InvoiceService {\n    public void generate() { /* ... */ }\n}\n\n// File: com/example/app/BillingController.java\npackage com.example.app;\n\n@RestController\npublic class BillingController {\n    private final com.example.billing.InvoiceService invoiceService;\n\n    public BillingController(com.example.billing.InvoiceService invoiceService) {\n        this.invoiceService = invoiceService;\n    }\n}",
+          "hints": [
+            "@SpringBootApplication implicitly carries @ComponentScan with no explicit basePackages -- what package does that default to scanning from?",
+            "Compare the package of DemoApplication (com.example.app) with the package of InvoiceService (com.example.billing). Is billing a sub-package of app?",
+            "You can either move InvoiceService under com.example.app, or explicitly widen scanning with @ComponentScan(basePackages = {\"com.example.app\", \"com.example.billing\"}) on DemoApplication."
+          ],
+          "solutionCode": "// Option A: widen scanning explicitly\npackage com.example.app;\n\n@SpringBootApplication\n@ComponentScan(basePackages = {\"com.example.app\", \"com.example.billing\"})\npublic class DemoApplication {\n    public static void main(String[] args) {\n        SpringApplication.run(DemoApplication.class, args);\n    }\n}",
+          "solutionExplanation": "com.example.billing is a sibling of com.example.app, not a sub-package of it, so the default component scan rooted at com.example.app (implied by @SpringBootApplication on DemoApplication) never walks into com.example.billing at all -- InvoiceService is annotated correctly, but it is simply never seen, so no BeanDefinition for it ever gets registered. The failure doesn't appear at scan time; it only surfaces when BillingController's constructor asks for an InvoiceService bean that was never created, producing NoSuchBeanDefinitionException. Adding an explicit @ComponentScan(basePackages = {...}) that includes com.example.billing (or, more commonly in real projects, simply moving InvoiceService under com.example.app.billing) makes the scanner walk into that package and register the bean."
+        },
+        {
+          "id": "spring-boot-application-context-and-beans-ex2",
+          "type": "predictOutput",
+          "prompt": "Given this bean and the two calls below, what do the two printed lines say, and why?",
+          "code": "@Component\npublic class Settings {\n    private String theme = \"light\";\n\n    public String getTheme() { return theme; }\n    public void setTheme(String theme) { this.theme = theme; }\n}\n\n// Elsewhere, using the ApplicationContext directly:\nSettings a = context.getBean(Settings.class);\na.setTheme(\"dark\");\n\nSettings b = context.getBean(Settings.class);\nSystem.out.println(b.getTheme());\nSystem.out.println(a == b);",
+          "hints": [
+            "Settings has no @Scope annotation at all -- what scope does Spring apply to a bean by default?",
+            "getBean(Settings.class) called twice against the same context, for a singleton-scoped bean -- does it construct two separate objects, or return the same one both times?",
+            "If `a` and `b` refer to the exact same object, then a.setTheme(\"dark\") is a mutation everyone sees afterward, including through the reference named `b`."
+          ],
+          "expectedAnswer": "'dark' then 'true'. Settings has no explicit @Scope, so it defaults to singleton -- there is exactly one Settings instance in this context. Both `a` and `b` are references to that same single object, so mutating it through `a` is visible through `b`, and `a == b` is true because they are literally the same object, not two equal-but-separate ones.",
+          "solutionExplanation": "Because no @Scope is declared on Settings, Spring registers it with the default singleton scope, meaning the container constructs exactly one instance for its entire lifetime and hands that same instance out to every caller of getBean(Settings.class) (and to every other bean that has it injected). `a.setTheme(\"dark\")` mutates that one shared object's theme field. When `b` is obtained via a second getBean(Settings.class) call, it does not get a new, independently-\"light\"-themed object -- it gets a reference to the very same instance `a` already mutated, so b.getTheme() reports \"dark\", and a == b evaluates to true because both variables hold references to the identical object in memory, not merely two objects with equal field values."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "spring-boot-application-context-and-beans-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "A colleague argues that using @Component everywhere instead of @Service/@Repository/@Controller would be simpler and 'shouldn't break anything.' What is the most accurate response?",
+          "options": [
+            "They're right -- @Service, @Repository, and @Controller have no relationship to @Component at all, so there's no risk either way.",
+            "They're mostly right for basic bean registration, but @Repository specifically enables persistence-exception translation via a registered post-processor, and some tooling/AOP targets the specific stereotype -- so it's not entirely risk-free.",
+            "They're wrong -- @Component-annotated classes are not scanned by default and require extra configuration.",
+            "They're wrong -- using @Component instead of @Repository will cause a startup failure."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "@Service, @Repository, and @Controller are all meta-annotated with @Component, so for plain scanning and registration they behave the same -- but @Repository specifically triggers PersistenceExceptionTranslationPostProcessor's exception-translation behavior, and other tooling or AOP pointcuts may be written to target a specific stereotype rather than the generic @Component. Option A is wrong because there IS a real relationship (meta-annotation) and a real behavioral difference for @Repository. Option C is wrong -- @Component classes are scanned by default under the standard component-scan rules. Option D is wrong -- there is no startup failure from using @Component instead of @Repository, just a loss of the extra behavior/semantics."
+        },
+        {
+          "id": "spring-boot-application-context-and-beans-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain, step by step, what happens from JVM startup to a fully-wired @Service bean being ready to use, in an application that relies entirely on component scanning with no manual bean configuration.",
+          "modelAnswer": "When SpringApplication.run(...) is called, Spring creates an ApplicationContext and, because the main class is annotated @SpringBootApplication (which bundles @ComponentScan with no explicit base package, defaulting to the main class's own package and everything beneath it), it walks the classpath under that package looking for classes annotated with a stereotype annotation -- @Component, or one of its specializations like @Service, @Repository, or @Controller. For each one it finds, it registers a BeanDefinition: essentially a blueprint recording the class and how to construct it, but without actually instantiating anything yet. Once every relevant class has been discovered this way, the container begins actually constructing beans, and it does so by inspecting each bean's constructor (assuming constructor injection) to see what other beans it depends on; if a dependency bean hasn't been constructed yet, the container builds that one first, recursively, effectively performing a dependency-graph traversal so that everything is built in an order where each object's dependencies already exist by the time it needs them. Once a @Service bean's dependencies are all resolved, its constructor is called with those already-built objects passed in, and the fully constructed, fully wired bean is stored in the container's internal registry as a singleton (unless a different scope was specified), ready to be handed out -- whether that's to another bean that depends on it, or ultimately to an incoming HTTP request that gets routed to a controller depending on it. All of this happens with zero manual `new` calls or explicit wiring code written by the developer; the entire graph is inferred purely from stereotype annotations and constructor signatures."
+        }
+      ]
+    },
+    {
+      "id": "spring-boot-autoconfiguration-and-starters",
+      "title": "Spring Boot Autoconfiguration and Starters",
+      "description": "Starters bundle the dependencies a feature needs at compatible versions, and autoconfiguration inspects what's on the classpath -- and what beans you've already defined yourself -- to wire up sensible default beans automatically, which is the combination that lets a Spring Boot app boot into a working web server and JSON stack with essentially zero manual configuration.",
+      "moduleId": "core_concepts",
+      "topicId": "core_concepts",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 40,
+      "prerequisites": ["spring-boot-application-context-and-beans"],
+      "learningObjectives": [
+        "Explain what a Spring Boot starter is and why starters exist rather than developers listing individual dependencies by hand.",
+        "Explain what autoconfiguration does and how @SpringBootApplication triggers it.",
+        "Explain @ConditionalOnClass, @ConditionalOnMissingBean, and @ConditionalOnProperty and why they let your own beans silently take precedence over Spring Boot's defaults.",
+        "Override an autoconfigured default (such as the embedded server's port) using application.properties, and explain how that value actually reaches the relevant autoconfiguration class.",
+        "Use debug logging to inspect which autoconfiguration classes were applied versus skipped, and explain why this is a valuable debugging skill.",
+        "Predict what happens to Spring Boot's own default bean when a developer defines their own bean of the same type."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "The Problem Autoconfiguration Solves",
+            "body": "Before Spring Boot existed, getting a working Spring MVC web application running required a surprising amount of explicit setup: registering a `DispatcherServlet` with the servlet container, configuring a `ViewResolver`, wiring a JSON converter, choosing and configuring an embedded or external server -- all by hand, in XML or Java configuration classes, before you'd written a single line of your own business logic. Spring Boot's central promise is: if certain jars are present on the classpath, and you haven't already defined your own bean of a given type, Spring Boot will register a sensible default bean for you, fully wired, with zero configuration required on your part.\n\nThe crucial thing to internalize here -- because it removes a lot of the mystery -- is that autoconfiguration classes are *not* some special kind of magic that works differently from everything else you've learned. They are ordinary `@Configuration` classes with ordinary `@Bean` methods, exactly like ones you could write yourself, just guarded by conditional annotations and loaded automatically at startup rather than being classes you wrote by hand. You can open the `spring-boot-autoconfigure` jar's source and read `WebMvcAutoConfiguration` or `JacksonAutoConfiguration` like any other Java class -- there is nothing hidden about what they do."
+          },
+          {
+            "heading": "Starters: Curated Dependency Bundles",
+            "body": "A **starter** is a dependency you add to your build file (`pom.xml` or `build.gradle`) that itself pulls in a curated, version-aligned set of other dependencies for a specific feature area -- named by convention `spring-boot-starter-<feature>`. Adding `spring-boot-starter-web`, for example, transitively brings in Spring MVC, an embedded Tomcat server, and Jackson for JSON handling, all at versions verified to work correctly together by the Spring Boot team's own testing, managed centrally through Spring Boot's parent POM / dependency-management BOM (Bill of Materials). Before this existed, assembling a compatible set of Spring, Jackson, and servlet-container versions by hand was a real, recurring source of dependency conflicts -- 'dependency hell' -- that starters remove almost entirely; you generally just declare the starter and trust the version alignment.\n\nStarters and autoconfiguration are two halves of the same mechanism: adding a starter is what *makes autoconfiguration activate* for that feature area, because autoconfiguration classes check for the presence of specific classes on the classpath (covered next), and a starter is precisely what puts those classes there."
+          },
+          {
+            "heading": "How @SpringBootApplication Triggers Autoconfiguration",
+            "body": "`@SpringBootApplication` is itself a meta-annotation bundling three others: `@SpringBootConfiguration` (a specialized `@Configuration`, marking the class itself as a source of bean definitions), `@ComponentScan` (covered in the previous concept), and `@EnableAutoConfiguration`. It's specifically `@EnableAutoConfiguration` that triggers Spring Boot to consult a list of candidate autoconfiguration classes -- registered by the `spring-boot-autoconfigure` jar (in a file that has moved locations across Boot versions, from `META-INF/spring.factories` historically to `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports` in newer releases, though the underlying idea is unchanged) -- and evaluate each one's conditions to decide whether it should actually contribute beans to this specific application."
+          },
+          {
+            "heading": "Conditional Beans: @ConditionalOnClass, @ConditionalOnMissingBean, @ConditionalOnProperty",
+            "body": "Each autoconfiguration class is guarded by one or more conditional annotations that decide, at startup, whether it activates. `@ConditionalOnClass(SomeClass.class)` checks whether a specific class is actually present on the classpath -- `JacksonAutoConfiguration`, for instance, is guarded by a check for Jackson's `ObjectMapper` class, so it only activates at all if some starter (typically `spring-boot-starter-web` or `-json`) has actually put Jackson on the classpath. `@ConditionalOnProperty` gates activation on a specific configuration property being set (or set to a particular value) in `application.properties`/`.yml`.\n\nThe one that matters most for everyday development is `@ConditionalOnMissingBean`. Spring Boot's own default beans -- the embedded Tomcat factory, the default `ObjectMapper`, and dozens of others -- are deliberately annotated `@ConditionalOnMissingBean(TheType.class)`, meaning: 'only register this default if no bean of this type already exists in the context.' This is the designed escape hatch that lets you override any autoconfigured default cleanly: define your own `@Bean` of that type, anywhere in your own configuration, and Boot's default politely backs off instead of colliding with it. There is no conflict, no ambiguous-bean error -- that is exactly the intended behavior, not a special case to work around defensively.\n\n```java\n@Configuration\npublic class JacksonConfig {\n    @Bean\n    public ObjectMapper objectMapper() {\n        ObjectMapper mapper = new ObjectMapper();\n        mapper.registerModule(new JavaTimeModule());\n        return mapper;\n    }\n}\n```\n\nBecause this `ObjectMapper` bean now exists in the context, `JacksonAutoConfiguration`'s own `@ConditionalOnMissingBean(ObjectMapper.class)`-guarded default bean method simply does not run at all -- your custom mapper, with its extra module registered, is the one every controller's JSON conversion ends up using."
+          },
+          {
+            "heading": "Configuration Properties and the Environment Abstraction",
+            "body": "Autoconfiguration classes very rarely hardcode values -- instead, they read settings from Spring Boot's unified `Environment` abstraction, which merges values from multiple sources (command-line arguments, environment variables, `application.properties`/`.yml`, and more) according to a defined precedence order, and exposes them as one coherent set of properties regardless of where each one actually came from. This is precisely how a line like `server.port=8081` in `application.properties`, with zero Java code changed, can override the embedded server's default port of 8080: the autoconfiguration class responsible for building the embedded server factory bean reads its configuration through a `@ConfigurationProperties`-annotated class (`ServerProperties`, in this case) that is itself bound automatically from the `Environment` -- so changing the properties file changes what that bound object contains, which changes what the autoconfiguration class builds, with no source code touched at all.\n\nWhen you genuinely need to understand *why* a particular bean was or wasn't autoconfigured -- a very common real debugging need -- running the application with `--debug` (or setting `debug=true` in `application.properties`) produces a detailed 'CONDITIONS EVALUATION REPORT' in the startup logs, listing every autoconfiguration class considered, whether its conditions matched, and if not, exactly which condition failed. This turns 'why isn't my bean showing up' from a guessing game into something you can look up directly."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Overriding an Autoconfigured Bean Cleanly",
+          "language": "java",
+          "code": "@Configuration\npublic class JacksonConfig {\n\n    @Bean\n    public ObjectMapper objectMapper() {\n        ObjectMapper mapper = new ObjectMapper();\n        mapper.registerModule(new JavaTimeModule());\n        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);\n        return mapper;\n    }\n}",
+          "explanation": "Spring Boot's own JacksonAutoConfiguration defines a default ObjectMapper bean guarded by @ConditionalOnMissingBean(ObjectMapper.class). Because this JacksonConfig class registers an ObjectMapper bean of its own, that condition evaluates to false when JacksonAutoConfiguration runs, so Boot's default is simply skipped -- no exception, no NoUniqueBeanDefinitionException, no conflict of any kind. Every controller and component that gets an ObjectMapper injected (directly, or indirectly through the HttpMessageConverter Spring MVC uses to serialize responses) now receives this customized instance, with java.time support registered and ISO-8601 date formatting instead of raw timestamps."
+        },
+        {
+          "title": "How Adding a Dependency Flips a Condition",
+          "language": "xml",
+          "code": "<!-- Before: no web starter -->\n<dependencies>\n    <dependency>\n        <groupId>org.springframework.boot</groupId>\n        <artifactId>spring-boot-starter</artifactId>\n    </dependency>\n</dependencies>\n\n<!-- After: adding the web starter -->\n<dependencies>\n    <dependency>\n        <groupId>org.springframework.boot</groupId>\n        <artifactId>spring-boot-starter-web</artifactId>\n    </dependency>\n</dependencies>",
+          "explanation": "Before this change, classes like DispatcherServlet and an embedded Tomcat server class simply don't exist on the classpath, so any autoconfiguration class guarded by @ConditionalOnClass(DispatcherServlet.class) -- like WebMvcAutoConfiguration -- evaluates that condition to false and contributes no beans at all; there is no web layer, because there's nothing on the classpath that would make one useful. After adding spring-boot-starter-web, those classes are transitively present, which flips the relevant @ConditionalOnClass checks from false to true, and a whole slice of autoconfiguration -- an embedded server, a DispatcherServlet, Jackson's HttpMessageConverter, default error handling -- activates as a direct, mechanical consequence. Nothing about this is magic: adding a dependency changed the classpath, and the classpath is literally what @ConditionalOnClass inspects."
+        },
+        {
+          "title": "Overriding a Default via application.properties, No Code Involved",
+          "language": "properties",
+          "code": "# application.properties\nserver.port=8081\nspring.jackson.date-format=yyyy-MM-dd",
+          "explanation": "ServletWebServerFactoryAutoConfiguration builds the embedded server's factory bean using values bound from a @ConfigurationProperties class (ServerProperties) rather than any hardcoded number, and that class is bound automatically from Spring Boot's unified Environment, which in turn reads application.properties as one of its property sources. Setting server.port=8081 here changes what ServerProperties.getPort() returns, which changes what port the embedded server factory bean actually configures -- with zero Java code written or recompiled. The same mechanism is what makes spring.jackson.date-format work: JacksonAutoConfiguration's Jackson2ObjectMapperBuilder reads Jackson-related properties from the Environment the same way, and applies them when constructing the default ObjectMapper it would otherwise register."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "Autoconfiguration is special JVM or Spring 'magic' that works fundamentally differently from ordinary Spring configuration classes -- there's no real way to see what it's actually doing.",
+          "clarification": "Autoconfiguration classes are ordinary @Configuration classes with ordinary @Bean methods, guarded by conditional annotations (@ConditionalOnClass, @ConditionalOnMissingBean, @ConditionalOnProperty, and others) and loaded automatically at startup from a registered list, rather than being classes you wrote by hand. You can open spring-boot-autoconfigure's source directly and read WebMvcAutoConfiguration or JacksonAutoConfiguration like any other Java class -- and running your own app with --debug produces a full conditions evaluation report naming every autoconfiguration class considered and why each one did or didn't activate. It is inspectable and debuggable by design, not a black box."
+        },
+        {
+          "description": "If I define my own bean of a type that Spring Boot also autoconfigures a default for, I'll get a bean conflict -- an ambiguous injection error, similar to what happens with two competing @Component classes implementing the same interface.",
+          "clarification": "Spring Boot's own autoconfigured default beans are deliberately annotated @ConditionalOnMissingBean(TheType.class) specifically so that a user-defined bean of the same type takes precedence with zero conflict -- the default simply does not get registered at all once your bean already exists, because the 'missing bean' condition it depends on is no longer true. This is the intended, designed override mechanism, not an edge case you need to work around defensively with @Primary or exclusion lists; those tools solve a different problem (disambiguating between two of YOUR OWN competing beans)."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "spring-boot-autoconfiguration-and-starters-ex1",
+          "type": "debugging",
+          "prompt": "A developer wrote a custom ObjectMapper bean intended to format dates as 'yyyy-MM-dd' instead of raw timestamps, expecting it to override Spring Boot's default JSON configuration. In production, dates are still serialized as raw timestamps -- the custom configuration never takes effect. Find and fix the bug.",
+          "code": "public class JacksonConfig {\n\n    @Bean\n    public ObjectMapper objectMapper() {\n        ObjectMapper mapper = new ObjectMapper();\n        mapper.registerModule(new JavaTimeModule());\n        mapper.setDateFormat(new SimpleDateFormat(\"yyyy-MM-dd\"));\n        return mapper;\n    }\n}",
+          "hints": [
+            "For a @Bean method to actually run and register a bean, the class it lives in has to be a Spring-managed bean itself -- typically via @Configuration. Is JacksonConfig annotated as anything at all?",
+            "If JacksonConfig is never registered as a bean, is its objectMapper() method ever invoked by Spring at all -- or does the whole class just sit there, unused, like any other plain, un-scanned class?",
+            "If no custom ObjectMapper bean actually ends up in the context, what does that mean for JacksonAutoConfiguration's own @ConditionalOnMissingBean(ObjectMapper.class) default?"
+          ],
+          "solutionCode": "@Configuration\npublic class JacksonConfig {\n\n    @Bean\n    public ObjectMapper objectMapper() {\n        ObjectMapper mapper = new ObjectMapper();\n        mapper.registerModule(new JavaTimeModule());\n        mapper.setDateFormat(new SimpleDateFormat(\"yyyy-MM-dd\"));\n        return mapper;\n    }\n}",
+          "solutionExplanation": "JacksonConfig was missing @Configuration (or any stereotype annotation at all), so it was never discovered by component scanning and never registered as a bean itself -- which means Spring never calls its objectMapper() method as a bean-producing factory method; the class is entirely inert, just an unused plain Java class sitting in the package. Because no custom ObjectMapper bean is ever actually registered, JacksonAutoConfiguration's own default ObjectMapper bean -- guarded by @ConditionalOnMissingBean(ObjectMapper.class) -- finds that its 'missing bean' condition IS satisfied (there really is no ObjectMapper bean, custom or otherwise) and registers its standard default instead, with none of the intended date-format or module customization. Adding @Configuration makes JacksonConfig itself a bean, which makes its @Bean method a real factory method Spring actually invokes, which registers the custom ObjectMapper and correctly causes the autoconfigured default to back off."
+        },
+        {
+          "id": "spring-boot-autoconfiguration-and-starters-ex2",
+          "type": "predictOutput",
+          "prompt": "A Spring Boot web application currently starts its embedded server on the default port, 8080. A developer adds this line to application.properties and restarts the app, with no Java code changed at all:\n\nserver.port=8081\n\nWhat port does the application listen on after the restart, and mechanically, why does a properties file change Spring's runtime behavior at all?",
+          "code": "# application.properties\nserver.port=8081",
+          "hints": [
+            "Autoconfiguration classes generally avoid hardcoding values -- they read them from somewhere. What is that 'somewhere' for server settings?",
+            "Look for a @ConfigurationProperties-annotated class that the embedded-server autoconfiguration would use internally to read settings like the port.",
+            "The Environment abstraction merges application.properties, environment variables, and command-line args into one place autoconfiguration classes read from -- changing a source changes what the bound properties object returns."
+          ],
+          "expectedAnswer": "The application now listens on port 8081. The embedded server's autoconfiguration builds its server factory bean using values read from a ServerProperties object (a @ConfigurationProperties class) that is automatically bound from Spring Boot's Environment abstraction, which in turn reads application.properties as one of its sources -- so changing the file changes the bound value the autoconfiguration class consumes, with zero code changes needed.",
+          "solutionExplanation": "The embedded server's autoconfiguration class never hardcodes a port number; instead, it constructs the embedded server factory using a ServerProperties object, whose fields (including port) are automatically populated ('bound') from Spring Boot's Environment abstraction at startup. The Environment merges configuration from multiple sources -- application.properties among them -- into one unified view, with a defined precedence order across sources. Adding server.port=8081 to application.properties adds a value to one of those sources, which changes what ServerProperties.getPort() returns the next time the application starts, which changes what port value the autoconfiguration class passes when building the actual embedded server. No Java source was touched or recompiled -- the same autoconfiguration code ran, and simply read a different value out of the environment this time."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "spring-boot-autoconfiguration-and-starters-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "What is the specific purpose of the @ConditionalOnMissingBean annotation on Spring Boot's own autoconfigured default beans?",
+          "options": [
+            "It prevents the application from starting if a bean of that type is missing.",
+            "It lets a developer's own bean of the same type silently take precedence, causing the autoconfigured default to be skipped entirely rather than conflict with it.",
+            "It marks a bean as required for autoconfiguration to activate at all.",
+            "It logs a warning whenever no bean of that type exists, but registers the default anyway regardless."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "@ConditionalOnMissingBean(SomeType.class) means 'only register this bean if no bean of SomeType already exists in the context' -- it's the exact mechanism that lets you override any autoconfigured default cleanly, by defining your own bean of that type anywhere in your configuration; Boot's default then backs off with no conflict. Option A describes the opposite of what the annotation does -- missing a bean of that type is precisely the condition under which the annotated bean DOES get registered, not a startup failure. Option C confuses it with @ConditionalOnClass, which checks classpath presence, not bean presence. Option D is wrong -- when the condition is satisfied, the annotated bean is registered unconditionally as the fallback, with no warning logic involved."
+        },
+        {
+          "id": "spring-boot-autoconfiguration-and-starters-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain to another developer how adding a single dependency (a starter) to the build file can cause new beans to appear in the application context automatically, with no code changes at all.",
+          "modelAnswer": "Spring Boot's autoconfiguration classes -- ordinary @Configuration classes bundled inside the spring-boot-autoconfigure jar -- are guarded by conditional annotations, most importantly @ConditionalOnClass, which checks whether a specific class is present on the compiled classpath at startup. Before a given starter is added, the classes it would have brought in transitively simply don't exist on the classpath, so any autoconfiguration class checking for them evaluates its condition to false and contributes no beans at all -- there's nothing to configure, because the underlying library isn't there. A starter is a curated, version-aligned bundle of dependencies for one feature area; adding it (say, spring-boot-starter-web) transitively places new classes on the classpath (an embedded server implementation, Spring MVC's DispatcherServlet, Jackson's ObjectMapper, and more). The moment those classes are present, every autoconfiguration class whose @ConditionalOnClass check was previously failing now passes, and Spring Boot evaluates its remaining conditions (such as @ConditionalOnMissingBean, checking that you haven't already defined a competing bean yourself) and, if everything is satisfied, registers the corresponding default beans -- an embedded server factory, a DispatcherServlet, HTTP message converters, and so on. None of this required writing a single line of Java: the trigger was purely a classpath change, and the autoconfiguration classes were written from the start to react to exactly that kind of change, evaluated once, at application startup."
+        }
+      ]
+    }
+  ]
+}

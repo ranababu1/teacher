@@ -1,0 +1,361 @@
+{
+  "learningPathId": "devops",
+  "moduleId": "cicd_foundations",
+  "title": "CI/CD Foundations",
+  "order": 1,
+  "concepts": [
+    {
+      "id": "devops-cicd-fundamentals",
+      "title": "What CI/CD Actually Automates",
+      "description": "Continuous Integration and Continuous Delivery/Deployment replace manual, error-prone integration and release work with automated, repeatable pipelines -- understanding the specific problem they solve explains why teams that skip them accumulate integration debt and deployment risk that eventually blows up all at once.",
+      "moduleId": "cicd_foundations",
+      "topicId": "cicd_foundations",
+      "difficulty": "beginner",
+      "estimatedMinutes": 30,
+      "prerequisites": [],
+      "learningObjectives": [
+        "Explain the integration and release problems that existed before CI/CD, and why 'it works on my machine' is a symptom of a deeper problem rather than a one-off annoyance.",
+        "Distinguish Continuous Integration, Continuous Delivery, and Continuous Deployment as three progressively stronger levels of automation.",
+        "Explain why frequent, small integrations reduce risk compared to infrequent, large merges.",
+        "Describe the role of an automated build-and-test suite as the quality gate a pipeline enforces on every single change.",
+        "Identify the difference between a pipeline that produces a deployable artifact and one that actually deploys it automatically."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "The Problem Before CI/CD: Integration Hell",
+            "body": "Before CI/CD became standard practice, a common workflow looked like this: developers worked in isolation on long-lived branches for days or weeks, then merged everything back into the mainline right before a release -- a ritual teams openly called 'merge day' or 'integration week', and not affectionately. The longer any two branches diverge, the more their changes overlap and contradict each other, so the eventual merge doesn't just add up the individual conflicts linearly -- it compounds them, because each developer has also been reacting to (and building on top of) their own now-stale view of the code the whole time. A conflict discovered on day one, while it's still fresh in someone's head and small in scope, is a five-minute fix. The same underlying conflict, discovered three weeks later after both sides have kept building on their divergent assumptions, can take days to untangle, because by then nobody fully remembers why either side did what it did.\n\nThis same delay shows up in another notorious symptom: 'it works on my machine.' That phrase is usually treated as a joke about one developer's laptop being slightly misconfigured, but it's really a symptom of a much bigger problem -- nobody has actually verified that the code works anywhere except that one machine, at that one moment, with whatever combination of dependency versions happened to be installed there. Without an automated, repeatable build-and-test process, 'does this work' is a question with a different answer on every machine that asks it, and the only way to get a trustworthy answer was, historically, a slow, largely manual QA pass right before release -- by which point any problems found are the most expensive kind: found late, understood by the fewest people, and blocking a release that people are already expecting."
+          },
+          {
+            "heading": "Continuous Integration: Merge Constantly, Verify Automatically",
+            "body": "Continuous Integration (CI) is the practice of merging every developer's work into a single shared mainline branch frequently -- ideally at least once a day per developer -- with every merge automatically built and tested by a CI server that watches the repository, triggers on every push, and reports pass or fail within minutes. The automation (Jenkins, GitHub Actions, GitLab CI, CircleCI, and similar tools) is what makes this practical at scale, but the automation itself isn't the point -- the point is the *frequency*, and the fast feedback that frequency enables. A conflict or a broken build discovered ten minutes after it was introduced, while the author still has full context loaded in their head and nobody else has built on top of it yet, is dramatically cheaper to fix than the same problem discovered weeks later.\n\nIt's worth being precise about a common misunderstanding here: simply *having* a CI server configured on a repository doesn't automatically mean a team is doing CI. If developers still work on branches that live for two or three weeks before merging, and the CI server only really gets exercised in a meaningful way once that big merge finally lands, the team has automated tooling pointed at a workflow that is, in spirit, the exact opposite of continuous integration -- it's still batched, deferred integration, just with a robot running the tests instead of a human. Genuine CI requires the *practice* of small, frequent merges to a shared mainline; the tooling only pays off once that practice is actually in place. (The next concept in this module covers pipeline stages in more depth, and the module's third concept covers exactly how trunk-based development operationalizes 'small, frequent merges' as a team habit.)"
+          },
+          {
+            "heading": "Continuous Delivery vs Continuous Deployment: Two Different Promises",
+            "body": "'CD' is one of the most overloaded abbreviations in the industry, because it's used for two related but meaningfully different practices. **Continuous Delivery** means every change that passes the pipeline is *proven ready to release* -- built, tested, packaged into a deployable artifact -- but an actual human still makes a deliberate decision (often just clicking a button) about exactly when it goes to production. **Continuous Deployment** goes one step further and removes that human gate entirely: every change that passes the automated pipeline is released to production automatically, with no manual approval step at all.\n\n```yaml\njobs:\n  build-and-test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm ci && npm test && npm run build\n\n  deploy-with-gate:                 # Continuous Delivery: a human must click 'approve'\n    needs: build-and-test\n    environment: production          # environments with required reviewers pause here\n    steps:\n      - run: ./deploy.sh\n\n  deploy-automatically:              # Continuous Deployment: no gate, no human in the loop\n    needs: build-and-test\n    if: github.ref == 'refs/heads/main'\n    steps:\n      - run: ./deploy.sh\n```\n\nThe difference between these two jobs is not a difference in tooling or pipeline sophistication -- both are equally 'automated' up to the point of deployment. The difference is entirely about whether a human approval step exists between 'proven deployable' and 'actually deployed.' Teams keep that gate for real, often non-technical reasons: coordinating a release with a marketing announcement, complying with a change-management policy, or simply wanting a human to control the timing of customer-visible change -- not necessarily because they distrust the automation. Continuous Deployment, by removing the gate, requires a much higher standing level of confidence in the automated test suite, since there is no longer a human checkpoint to catch what the tests missed before real users see it."
+          },
+          {
+            "heading": "Why Automate: Fast Feedback, Reduced Risk, Removed Toil",
+            "body": "Pulling the previous sections together, the case for CI/CD automation rests on three related benefits. First, **consistency**: a scripted pipeline runs the exact same steps in the exact same order every single time, eliminating the class of bugs caused by a tired human skipping a step in a manual release checklist. Second, **speed of feedback**: a problem caught by an automated test two minutes after a commit is dramatically cheaper to fix than the same problem caught by a user in production two weeks later. Third, **reduced blast radius through smaller batches**: automating the pipeline makes frequent, small releases practical, and a small release is inherently easier to reason about, easier to bisect if something goes wrong, and easier to roll back than a large one containing weeks of accumulated change.\n\nIt's important not to overstate what automation alone buys you, though. A pipeline that runs zero meaningful tests doesn't make a team safer -- it just makes broken code ship faster and with more confidence than it deserves, because a green checkmark now exists where none did before, and green checkmarks are trusted. The pipeline only verifies what you've told it to verify; it automates the *execution* of a quality gate, not the *existence* of one. A team that adopts a CI tool without also investing real effort into a meaningful, fast test suite has automated the wrong half of the problem, and often doesn't discover that until an outage makes it obvious."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "A Minimal CI Pipeline Definition",
+          "language": "yaml",
+          "code": "name: ci\non:\n  push:\n    branches: [main]\n\njobs:\n  build-and-test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - name: Install dependencies\n        run: npm ci\n      - name: Run unit tests\n        run: npm test\n      - name: Build production bundle\n        run: npm run build",
+          "explanation": "This pipeline triggers automatically on every push to `main`, which is exactly the 'automated, on every merge' behavior that turns occasional manual verification into continuous integration. `npm ci` is used instead of `npm install` deliberately: `npm ci` installs exact versions from the lockfile and fails outright if the lockfile and package.json disagree, giving a deterministic, reproducible install every time -- `npm install` can silently resolve slightly different versions run to run, which is precisely the kind of environment drift that produces 'it works on my machine' bugs inside the pipeline itself. The steps are also deliberately ordered cheapest-and-most-informative first: tests run before the production build, so a broken test fails the pipeline in seconds without ever spending time on a full build that nobody needed once the tests already told you the change is broken."
+        },
+        {
+          "title": "Continuous Delivery vs Continuous Deployment: The Approval Gate",
+          "language": "yaml",
+          "code": "jobs:\n  build-and-test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm ci && npm test && npm run build\n\n  deploy:\n    needs: build-and-test\n    runs-on: ubuntu-latest\n    environment: production   # configured in the repo with 2 required human reviewers\n    steps:\n      - run: ./deploy.sh",
+          "explanation": "Everything up through `build-and-test` is identical whether this team practices Continuous Delivery or Continuous Deployment -- the artifact gets built and proven deployable automatically either way. The single thing that makes this specific pipeline Continuous Delivery rather than Continuous Deployment is the `environment: production` line combined with that environment being configured (outside this file, in repository settings) to require human reviewer approval before any job targeting it can proceed. Delete that one environment protection rule and this becomes Continuous Deployment with no other change to the YAML at all -- which is a useful thing to internalize: the distinction lives in policy and configuration around the pipeline, not in some fundamentally different pipeline architecture."
+        },
+        {
+          "title": "Mirroring the CI Gate Locally with a Pre-Push Hook",
+          "language": "bash",
+          "code": "#!/bin/sh\n# .git/hooks/pre-push\necho \"Running local checks before push...\"\nnpm test && npm run lint\nif [ $? -ne 0 ]; then\n  echo \"Local checks failed -- push aborted. Fix issues or use --no-verify to override.\"\n  exit 1\nfi",
+          "explanation": "This hook runs the same fast checks the CI server will run, but locally, before the code even leaves the developer's machine -- shrinking feedback time from 'minutes, after a push, in a CI dashboard' to 'seconds, before the push even happens.' It's a genuinely useful complement to the fast-feedback goal behind CI, but it is explicitly not a substitute for the server-side gate: any developer can bypass it with `git push --no-verify`, a mistyped or misconfigured hook silently does nothing, and hooks live in `.git/hooks`, which by default is not version-controlled or shared automatically to every clone. The server-side pipeline is the actual, unbypassable quality gate; the local hook is a convenience that saves round trips for the common case where the change is genuinely broken."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "CI just means 'we use a CI tool or server, like Jenkins or GitHub Actions.'",
+          "clarification": "CI is a *practice* -- frequent integration into a shared mainline, verified automatically -- not a piece of software. A team can have Jenkins fully configured and still not be doing CI in any meaningful sense if branches routinely live for weeks before merging, because the tool only ever gets exercised at the end of a long, deferred integration cycle; the tool automated the verification step, but the underlying workflow is still batched integration. Conversely, the practice is what matters: the tool is what makes the practice sustainable at scale, not what defines it."
+        },
+        {
+          "description": "Continuous Delivery and Continuous Deployment are basically synonyms -- 'CD' means releases happen automatically, full stop.",
+          "clarification": "The two describe different amounts of automation, and conflating them causes real miscommunication (two people can both say 'we do CD' and mean different things). Continuous Delivery guarantees that every change passing the pipeline is *proven ready to deploy*, but a human still decides exactly when it actually goes live -- often for business, compliance, or release-pacing reasons unrelated to trust in the automation. Continuous Deployment removes that human decision point entirely: every passing change ships to production automatically. Knowing which one a team means changes what 'the pipeline passed' actually implies about what happens next."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "devops-cicd-fundamentals-ex1",
+          "type": "debugging",
+          "prompt": "This pipeline is supposed to prevent broken code from ever reaching production, but the team keeps finding that deployments happen even when tests fail. Find and fix the bug.",
+          "code": "jobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm test\n\n  deploy:\n    runs-on: ubuntu-latest\n    steps:\n      - run: ./deploy.sh",
+          "hints": [
+            "In this CI system, are the `test` and `deploy` jobs connected to each other in any way, or does the engine just run every job in the file whenever the workflow is triggered?",
+            "Look for a keyword that would make one job wait on -- and depend on the success of -- another job before it's allowed to start.",
+            "Add a `needs:` key to the `deploy` job pointing at `test`."
+          ],
+          "solutionCode": "jobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm test\n\n  deploy:\n    needs: test\n    runs-on: ubuntu-latest\n    steps:\n      - run: ./deploy.sh",
+          "solutionExplanation": "By default, jobs defined in the same workflow file run independently and in parallel unless a `needs:` relationship links them -- the engine has no idea `deploy` is supposed to depend on `test` passing just because they happen to be written in the same file. Without `needs: test`, `deploy` starts immediately when the workflow triggers, completely regardless of whether `test` ever finishes or what it reports. Adding `needs: test` makes `deploy` wait for `test` to complete, and -- critically -- the default behavior is that if a needed job fails, dependent jobs are skipped rather than run, which is exactly the gate the team intended to have all along."
+        },
+        {
+          "id": "devops-cicd-fundamentals-ex2",
+          "type": "predictOutput",
+          "prompt": "Within this single job, the `test` step fails. Given how steps inside one job execute, what actually happens to the rest of the job -- does `build` still run, and does anything get deployed?",
+          "code": "jobs:\n  build-and-test:\n    runs-on: ubuntu-latest\n    steps:\n      - name: checkout\n        run: echo \"checking out code\"\n      - name: install\n        run: npm ci\n      - name: test\n        run: npm test        # this step fails\n      - name: build\n        run: npm run build\n      - name: deploy\n        run: ./deploy.sh",
+          "hints": [
+            "Unlike separate jobs (which run in parallel unless linked with `needs`), steps inside a single job normally run strictly in sequence.",
+            "What is the default behavior of a job runner when one step in the sequence exits with a failure -- does it skip ahead, or stop?",
+            "Trace exactly which named steps actually get a chance to execute before the run stops."
+          ],
+          "expectedAnswer": "checkout and install run and succeed; test runs and fails; build and deploy never run at all -- the job stops at the first failing step by default, so nothing gets built and nothing gets deployed.",
+          "solutionExplanation": "Steps within a single job execute sequentially, and by default a CI runner stops the job at the first step that fails rather than continuing on to the remaining steps -- this default-stop behavior is exactly what makes a pipeline a usable quality gate at the step level, the same way `needs:` does at the job level. So `checkout` and `install` run normally, `test` fails and halts the job immediately, and `build` and `deploy` are never reached at all. This is a different mechanism from the `needs:` relationship between separate jobs covered in the debugging exercise above, but it serves the identical purpose: stop forward progress the moment something is proven broken, rather than pressing on regardless."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "devops-cicd-fundamentals-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "Which of the following best distinguishes Continuous Delivery from Continuous Deployment?",
+          "options": [
+            "Continuous Delivery is used for mobile apps and Continuous Deployment is used for web services.",
+            "Continuous Delivery guarantees every passing change is deployable but leaves the release decision to a human; Continuous Deployment removes that human gate and releases every passing change automatically.",
+            "Continuous Delivery only runs unit tests, while Continuous Deployment also runs integration tests.",
+            "Continuous Delivery is an older, deprecated term that has been fully replaced by Continuous Deployment."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The real distinction is about where the human decision point sits, not about test coverage or platform. Continuous Delivery proves every passing change is release-ready but keeps a deliberate human approval step before it actually goes live; Continuous Deployment removes that step so release happens automatically the moment the pipeline passes. Option A invents a platform distinction that doesn't exist in either term's definition; option C invents a testing-scope distinction that isn't what separates the two practices; option D is simply false -- both terms remain in active, distinct use across the industry."
+        },
+        {
+          "id": "devops-cicd-fundamentals-assess-explain1",
+          "type": "explanation",
+          "prompt": "A colleague says: 'We don't need CI -- we already have automated deploy scripts that we run manually before every release.' Explain what's actually missing from their process and why it matters.",
+          "modelAnswer": "Having an automated *deploy* script only automates the last step of the pipeline -- it says nothing about whether the code being deployed was ever verified to work correctly, or how long ago that verification happened relative to when the code was actually written. The core practice CI adds is frequent integration into a shared mainline with fast, automatic build-and-test feedback on every single change, which is what catches problems while they're small, fresh in the author's mind, and cheap to fix. Without that, this team is very likely still accumulating integration risk between releases -- multiple developers' changes pile up unverified against each other until release time, at which point any conflicts or breakages surface all at once, in a much harder-to-diagnose batch, right when the team is under the most time pressure to ship. An automated deploy script makes the *release* mechanically consistent and repeatable, which is valuable, but it doesn't provide the fast feedback loop, small-batch risk reduction, or early bug detection that make CI the more foundational practice -- deploy automation without integration automation is automating the easy, low-risk part of the problem while leaving the expensive, error-prone part (verifying that the code actually works, continuously, as it's written) exactly as manual and deferred as it was before."
+        }
+      ]
+    },
+    {
+      "id": "devops-cicd-pipeline-stages",
+      "title": "Pipeline Stages: Build, Test, Deploy",
+      "description": "A CI/CD pipeline is a sequence of gated stages -- build, test, and deploy -- each producing an artifact or a verdict that the next stage depends on; understanding what each stage should (and should not) do is what keeps a pipeline fast, trustworthy, and debuggable rather than a black box people learn to distrust.",
+      "moduleId": "cicd_foundations",
+      "topicId": "cicd_foundations",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 35,
+      "prerequisites": ["devops-cicd-fundamentals"],
+      "learningObjectives": [
+        "Describe the build stage's responsibility of producing a single, immutable, versioned artifact.",
+        "Explain why the same artifact should be promoted through environments rather than rebuilt separately for each one.",
+        "Distinguish fast unit tests, slower integration tests, and end-to-end tests, and explain why pipelines order them cheapest-and-fastest first.",
+        "Explain what a deploy stage does with a built artifact, and why deploy should be a mechanical, repeatable operation rather than a manual, bespoke one.",
+        "Identify anti-patterns like rebuilding per environment and tolerating flaky tests, and explain why each undermines trust in the pipeline."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "The Build Stage: One Artifact, Built Once",
+            "body": "The build stage's job is narrow and specific: take source code and produce a single, immutable, uniquely identified artifact -- a Docker image, a JAR, a Python wheel, a compiled binary, a static site bundle. 'Uniquely identified' matters a great deal here: the artifact should be tagged with something immutable and traceable back to exactly the code it came from, most commonly the Git commit SHA (or a content hash of the build inputs), rather than a mutable label like `latest` that silently points to a different thing every time it's rebuilt.\n\nThis leads to a principle worth internalizing early: **build once, promote the same artifact everywhere.** The artifact that gets tested in staging should be the exact same bytes that later get deployed to production -- not a fresh rebuild from 'the same' source commit run again right before the production deploy. Rebuilding per environment sounds harmless (it's 'the same code', after all) but it quietly reopens the door to nondeterminism: a base image that received a patch-level security update between the staging build and the production build, a dependency resolver that picks a slightly different transitive version on a different day, a compiler flag or environment variable that differs between the two build machines. Any of these can mean the artifact that passed every test in staging is not, byte for byte, the artifact that actually reaches production -- which defeats the entire point of having tested it first."
+          },
+          {
+            "heading": "The Test Stage: A Pyramid, Not a Single Gate",
+            "body": "Test stages aren't monolithic -- they're best organized as a pyramid of increasingly expensive, increasingly realistic layers. **Unit tests** sit at the base: fast (milliseconds to a few seconds total), isolated from real dependencies like databases or networks, and numerous -- they should run on every single commit and finish in well under a minute. **Integration tests** sit in the middle: slower, because they exercise real dependencies (a real database, a real message queue, or at least a realistic fake of one), and typically run on merge to mainline rather than on every keystroke. **End-to-end tests** sit at the top: the slowest and most expensive, driving the full system (often through a real browser or a full deployed environment) to validate that everything works together -- these are usually run more sparingly, such as before a release or on a nightly schedule, because they're both slow and comparatively fragile.\n\nPipelines should order these cheapest-and-fastest first, for the same fail-fast reason build steps are ordered deliberately: if unit tests already prove a change is broken, there's no reason to spend ten minutes running a full end-to-end suite against it first. A closely related, genuinely important operational concern is **flaky tests** -- tests that fail intermittently for reasons unrelated to the actual code change, such as timing assumptions, shared mutable state between test runs, or reliance on real network calls. Flaky tests are corrosive specifically because of how people respond to them: a test that occasionally fails for no code-related reason teaches everyone watching the pipeline that a red result might just mean 'rerun it,' which is a habit that generalizes disastrously to *actual* regressions. Flaky tests should be quarantined and root-caused aggressively, not tolerated as background noise -- the moment 'just rerun the pipeline' becomes a normal reflex, the pipeline has stopped functioning as a trustworthy gate."
+          },
+          {
+            "heading": "The Deploy Stage: Mechanical, Idempotent, Reversible",
+            "body": "The deploy stage takes the already-built, already-tested artifact and puts it into a running environment, following a scripted, deterministic procedure -- the same procedure every single time, regardless of who or what triggered it. This is a direct rejection of the 'hero deploy' pattern, where one specific engineer SSHes into a production box and runs a sequence of commands from memory or a wiki page: that approach is a single point of failure (what happens when that engineer is on vacation during an incident?), it's not actually repeatable (memory and wiki pages drift out of sync with reality), and it offers no guarantee that the same steps were followed correctly the previous ten times either.\n\nA well-designed deploy stage should be able to target different environments (staging, production) using the *same* automation, with only configuration -- environment variables, secrets, target hostnames -- varying between them, rather than maintaining separate deploy scripts per environment that can silently drift apart from each other. It should also be designed with rollback in mind from the start: since the artifact is immutable and versioned (from the build stage), the cheapest possible rollback strategy is almost always 'redeploy the previous version's artifact,' which only works smoothly if deploy automation was built to take *which* artifact to deploy as a parameter, rather than always assuming 'the newest one.'"
+          },
+          {
+            "heading": "Gating Between Stages: Why Failures Should Stop the Line",
+            "body": "Manufacturing has a long-standing concept called the Andon cord: any worker on the line can pull it to stop the entire production line the moment they spot a defect, rather than letting a known-bad unit continue downstream to be built on top of. A well-designed pipeline applies the exact same principle: a failure at any stage should stop forward progress into the next stage, full stop, rather than merely logging a warning and continuing.\n\n```yaml\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps: [ ... ]\n  test:\n    needs: build\n    runs-on: ubuntu-latest\n    steps: [ ... ]\n  deploy:\n    needs: test          # deploy is structurally incapable of running if test failed\n    runs-on: ubuntu-latest\n    steps: [ ... ]\n```\n\nThe anti-pattern to watch for is a pipeline that quietly erodes this guarantee over time -- marking a chronically failing test as 'non-blocking' or 'allowed to fail' so the team stops being interrupted by it, or letting a deploy stage run regardless of test outcome because 'it's usually fine.' Each individual exception feels reasonable in isolation and under time pressure, but the cumulative effect is that a green pipeline gradually stops meaning what everyone still assumes it means, and by the time that's discovered -- usually via an incident -- nobody can say with confidence which of the pipeline's checks are actually still load-bearing."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "A Multi-Stage Pipeline with Explicit Dependencies",
+          "language": "yaml",
+          "code": "jobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - run: docker build -t app:${{ github.sha }} .\n      - run: docker save app:${{ github.sha }} -o app.tar\n      - uses: actions/upload-artifact@v4\n        with: { name: app-image, path: app.tar }\n\n  test:\n    needs: build\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/download-artifact@v4\n        with: { name: app-image }\n      - run: docker load -i app.tar\n      - run: docker run app:${{ github.sha }} pytest\n\n  deploy:\n    needs: test\n    if: github.ref == 'refs/heads/main'\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/download-artifact@v4\n        with: { name: app-image }\n      - run: ./deploy.sh app:${{ github.sha }}",
+          "explanation": "Notice that the image is built exactly once, tagged with the commit SHA, saved, and uploaded as a workflow artifact -- and every later stage downloads and reuses that same saved image rather than rebuilding it. This is 'build once, promote the same artifact' in concrete form: `test` runs the actual bytes that `deploy` will later ship, not a fresh rebuild that merely claims to be from the same commit. The `needs:` chain (`test` needs `build`, `deploy` needs `test`) enforces the stop-the-line gating -- a failure in `test` structurally prevents `deploy` from ever starting, not just discourages it. The `if:` condition additionally restricts real deployment to the `main` branch, so this same workflow file safely runs build-and-test on every branch and pull request without accidentally deploying feature-branch code."
+        },
+        {
+          "title": "Ordering Test Stages by Cost",
+          "language": "yaml",
+          "code": "jobs:\n  unit-tests:                 # seconds; runs on every push, every branch\n    runs-on: ubuntu-latest\n    steps: [ { run: pytest tests/unit -x --timeout=30 } ]\n\n  integration-tests:           # minutes; needs a real database container\n    needs: unit-tests\n    runs-on: ubuntu-latest\n    services: { postgres: { image: postgres:16 } }\n    steps: [ { run: pytest tests/integration --timeout=300 } ]\n\n  e2e-tests:                   # tens of minutes; runs a real browser against a deployed preview\n    needs: integration-tests\n    if: github.ref == 'refs/heads/main'\n    runs-on: ubuntu-latest\n    steps: [ { run: pytest tests/e2e --timeout=1800 } ]",
+          "explanation": "The `needs:` chain here does double duty: it enforces gating (an integration failure stops end-to-end tests from ever running), and it also encodes the cost ordering -- cheap, fast unit tests must pass before the pipeline spends minutes standing up a real Postgres container for integration tests, which must in turn pass before it spends tens of minutes driving a real browser for end-to-end tests. Restricting `e2e-tests` to `main` with an `if:` condition reflects a deliberate trade-off: these tests are valuable but slow and comparatively fragile, so the team chooses to pay their cost only where it matters most (before code reaches the shared mainline) rather than on every feature-branch push."
+        },
+        {
+          "title": "A Flaky Test Masking a Real Regression",
+          "language": "python",
+          "code": "def test_order_total_updates_after_concurrent_writes():\n    order = create_order()\n    thread_a = threading.Thread(target=order.add_item, args=(\"widget\", 10))\n    thread_b = threading.Thread(target=order.add_item, args=(\"gadget\", 5))\n    thread_a.start(); thread_b.start()\n    thread_a.join(); thread_b.join()\n    time.sleep(0.05)   # \"give it a moment to settle\"\n    assert order.total == 15   # passes ~95% of the time; fails ~5% of the time",
+          "explanation": "This test is treated by the team as 'just flaky' and routinely re-run until it passes, but the intermittent failure is not noise -- it's the test correctly detecting a genuine race condition in `order.add_item`, which isn't safely handling concurrent writes to `order.total`. The `time.sleep(0.05)` is a giveaway of the underlying problem: it's an attempt to paper over a timing-dependent bug with a timing-dependent test, which is why the test still fails occasionally rather than consistently either passing or failing. Treating this as an acceptable rerun-until-green situation doesn't just create pipeline noise -- it lets a real concurrency bug that will eventually corrupt data in production continue to ship, hidden behind a test that 'usually' passes."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "Each environment (dev, staging, production) should get its own fresh build of the code, built right before deploying to that environment, even if it's from the same commit.",
+          "clarification": "Rebuilding per environment reopens exactly the nondeterminism that testing was supposed to rule out: a base image patch, a dependency resolver picking a different transitive version, or a differing build-machine environment variable between the staging build and the production build can mean the two builds aren't byte-for-byte identical, even from 'the same' source commit. The correct model is to build one immutable, versioned artifact and deploy that exact same artifact, unchanged, to every environment -- only configuration (secrets, endpoints, feature flag defaults) should vary per environment, never the artifact's actual bytes."
+        },
+        {
+          "description": "If a test fails intermittently but usually passes, it's safe to just rerun the pipeline until it goes green.",
+          "clarification": "Intermittent failure almost always means one of two things, and neither is safe to ignore: either a genuine bug (a race condition, a resource leak, a timing dependency) that only manifests under certain conditions, or a badly written test (order-dependence, shared mutable state between test runs, unrealistic timing assumptions). Training a team to rerun-until-green destroys the pipeline's signal value, because it normalizes ignoring red results generally, not just for this one test. The correct response is to quarantine the flaky test immediately (mark it, track it, and set a deadline to fix it) and root-cause it, treating repeated manual reruns as a symptom that needs real engineering attention rather than an acceptable everyday workflow."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "devops-cicd-pipeline-stages-ex1",
+          "type": "debugging",
+          "prompt": "This pipeline is meant to deploy exactly what was tested, but the team discovered a bug that had already been caught and fixed in tests kept reappearing in production. Find and fix the bug.",
+          "code": "jobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: docker build -t app:latest .\n      - run: docker run app:latest pytest\n\n  deploy:\n    needs: test\n    runs-on: ubuntu-latest\n    steps:\n      - run: docker build -t app:latest .    # rebuilds from whatever the source looks like right now\n      - run: ./deploy.sh app:latest",
+          "hints": [
+            "The `deploy` job does depend on `test` via `needs:` -- so the gating is fine. Look instead at exactly which bytes get deployed versus which bytes were tested.",
+            "Between the `test` job running and the `deploy` job running, could the underlying source or base image have changed at all, even slightly?",
+            "Build the image exactly once, tag it uniquely (e.g. with the commit SHA), save it as an artifact in the test job, and have deploy reuse that exact saved image instead of invoking `docker build` a second time."
+          ],
+          "solutionCode": "jobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: docker build -t app:${{ github.sha }} .\n      - run: docker save app:${{ github.sha }} -o app.tar\n      - uses: actions/upload-artifact@v4\n        with: { name: app-image, path: app.tar }\n      - run: docker run app:${{ github.sha }} pytest\n\n  deploy:\n    needs: test\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/download-artifact@v4\n        with: { name: app-image }\n      - run: docker load -i app.tar\n      - run: ./deploy.sh app:${{ github.sha }}",
+          "solutionExplanation": "The original pipeline built the image twice -- once in `test`, once in `deploy` -- both tagged with the mutable label `latest`. Even though `deploy` correctly waited for `test` to pass, it then ran its own independent `docker build`, which could pick up a newer base image layer, a slightly different dependency resolution, or any other source of drift between the two build invocations. The fix builds the image exactly once, tags it with the immutable commit SHA instead of the mutable `latest`, saves it as a workflow artifact, and has `deploy` download and reuse that exact saved image rather than rebuilding. Now the bytes that were actually tested are, byte-for-byte, the bytes that get deployed -- there is no second build step in which anything could have quietly changed."
+        },
+        {
+          "id": "devops-cicd-pipeline-stages-ex2",
+          "type": "predictOutput",
+          "prompt": "Given this job graph, the `integration-tests` job fails. Which of the jobs below actually run, and which are skipped?",
+          "code": "jobs:\n  unit-tests:\n    runs-on: ubuntu-latest\n    steps: [ { run: pytest tests/unit } ]\n\n  integration-tests:\n    needs: unit-tests\n    runs-on: ubuntu-latest\n    steps: [ { run: pytest tests/integration } ]   # this job fails\n\n  e2e-tests:\n    needs: integration-tests\n    runs-on: ubuntu-latest\n    steps: [ { run: pytest tests/e2e } ]\n\n  deploy:\n    needs: e2e-tests\n    runs-on: ubuntu-latest\n    steps: [ { run: ./deploy.sh } ]",
+          "hints": [
+            "`needs:` relationships chain -- a job's dependency isn't just its immediate `needs:` target, it's transitive through the whole chain.",
+            "If a job's direct or transitive dependency fails, the default behavior is to skip that job entirely, not run it and let it fail on its own.",
+            "Trace the chain: unit-tests -> integration-tests -> e2e-tests -> deploy, and find exactly where it breaks."
+          ],
+          "expectedAnswer": "unit-tests runs and passes; integration-tests runs and fails; e2e-tests and deploy are both skipped entirely -- neither one ever starts, because each depends (directly or transitively) on integration-tests having succeeded.",
+          "solutionExplanation": "unit-tests has no dependency, so it runs first and, per the scenario, passes. integration-tests needs unit-tests, which succeeded, so it also runs -- and this is the one that fails. e2e-tests needs integration-tests; since that dependency failed, e2e-tests is skipped rather than run, by default CI behavior. deploy needs e2e-tests, which was skipped (not merely 'not yet run') -- a skipped dependency also counts as not satisfying `needs:`, so deploy is skipped too. The net effect is that a single failure partway through the chain correctly prevents everything downstream of it, transitively, without anyone having to explicitly wire up every job to check every other job's status by hand."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "devops-cicd-pipeline-stages-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "Why is 'build once, promote the same artifact through every environment' generally preferred over rebuilding the artifact separately for each environment?",
+          "options": [
+            "It's mainly a speed optimization, since compiler caches make repeat builds faster.",
+            "It guarantees the exact bytes validated by testing are the same bytes that reach production, avoiding drift introduced by rebuilding (different base image patch levels, dependency resolution, or build-machine environment).",
+            "Most container registries technically forbid storing more than one tagged image per repository.",
+            "Automated tests can only be executed successfully one time per built artifact."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The core reason is trust in what actually gets deployed: rebuilding introduces the possibility that the artifact deployed to production differs, even subtly, from the one that was tested, because build inputs like base images and dependency resolution can shift between two separate build runs -- even from 'the same' source commit. Option A describes a real but secondary benefit (build caching can indeed be faster), not the main reason for the practice. Option C is simply false -- registries commonly store many tags per repository. Option D is false and not how test execution works at all."
+        },
+        {
+          "id": "devops-cicd-pipeline-stages-assess-explain1",
+          "type": "explanation",
+          "prompt": "A teammate suggests marking a frequently-failing end-to-end test as 'non-blocking' (allowed to fail without failing the whole pipeline) so the team stops being interrupted by it. Explain the risk in this approach and what you would do instead.",
+          "modelAnswer": "Marking a test non-blocking doesn't fix whatever is causing it to fail -- it just removes the pipeline's ability to act on that failure, which quietly erodes the core guarantee a pipeline exists to provide: that a passing pipeline means the checks it runs actually held. The specific risk is that this kind of exception rarely stays contained to just one test; once the team has normalized 'this failure doesn't actually block anything,' it becomes easier to make the same call for the next inconvenient test, and the next, until a green pipeline no longer reliably means what everyone still assumes it means -- typically discovered only once a real regression that this exact test would have caught reaches production. Instead of disabling the gate, the better move is to quarantine the test explicitly and visibly -- for example, tag it as known-flaky with an owner and a deadline, track it as an open issue -- and root-cause why it's failing: is it revealing a genuine intermittent bug in the system (as with a race condition), or is the test itself poorly written (order-dependent, timing-sensitive, sharing state with other tests)? Either way, the fix is to resolve the underlying cause and restore the test to fully blocking status, not to permanently weaken what 'pipeline passed' is allowed to mean."
+        }
+      ]
+    },
+    {
+      "id": "devops-branching-and-release-strategies",
+      "title": "Branching Models and Release Strategies",
+      "description": "How a team merges code -- trunk-based development versus long-lived feature branches -- determines how much integration pain it accumulates, and how a team ships a new version -- blue-green versus canary -- determines how much blast radius a bad release can have; both are risk-management decisions dressed up as process trivia.",
+      "moduleId": "cicd_foundations",
+      "topicId": "cicd_foundations",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 45,
+      "prerequisites": ["devops-cicd-pipeline-stages"],
+      "learningObjectives": [
+        "Explain trunk-based development and why it depends on small, frequent commits to a shared mainline.",
+        "Explain the integration-cost trade-off of long-lived feature branches and why merge conflicts compound with branch age.",
+        "Explain how feature flags let trunk-based teams merge incomplete work safely without resorting to long-lived branches.",
+        "Describe blue-green deployment's mechanism (two environments, one traffic switch) and why it makes rollback close to instantaneous.",
+        "Describe canary deployment's mechanism (gradual traffic shifting) and how it limits blast radius while still validating against real production conditions.",
+        "Compare blue-green and canary deployment in terms of infrastructure cost, rollback speed, and ability to catch production-only issues before full exposure."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "Trunk-Based Development: One Shared Line of Truth",
+            "body": "Trunk-based development means every developer integrates into a single shared mainline branch (the 'trunk') constantly -- committing directly, or through branches so short-lived (hours, not weeks) that they barely differ from committing directly. This is, in a very literal sense, what makes Continuous Integration actually continuous: the smaller and more frequent each individual merge is, the smaller and more manageable any resulting conflict is, because there's simply less accumulated divergence for any two changes to disagree about.\n\nThe catch is that this requires real discipline to pull off well. Work has to be broken down into small, mergeable increments rather than one sprawling branch per feature, and -- crucially -- code for a feature that isn't finished yet still has to be safely present in the shared mainline without being visible or active to users. That second requirement is exactly what feature flags exist to solve, covered in the third section below."
+          },
+          {
+            "heading": "Long-Lived Feature Branches: Deferred, Compounding Integration Cost",
+            "body": "The feature-branch workflow -- create a branch, work on it in isolation for the life of a feature, merge it back when done -- is intuitively appealing because it isolates risky or half-finished work from the shared mainline. The problem is the cost model as the branch ages: while the branch sits open, the mainline keeps moving (other people's changes keep landing on it) *and* the branch keeps moving (its own author keeps adding commits) -- both sides accumulate change independently, so the eventual merge doesn't face one isolated conflict, it faces however many conflicts accumulated across the entire divergence window, discovered all at once, usually right when the feature is 'done' and everyone wants it merged immediately.\n\nThe cost isn't only mechanical merge conflicts, either -- it's also semantic drift. If the mainline underwent an API refactor while the branch was open, the branch's code may merge cleanly (no textual conflict) while still calling an API that no longer behaves the way the branch author assumed, a bug that a simple merge won't surface but that only shows up later, in testing or production. None of this means branches are inherently forbidden -- short-lived branches that are frequently rebased against (or merged from) the mainline, and merged back within a day or two, are perfectly compatible with trunk-based development. The risk is specifically proportional to how long a branch is allowed to live and diverge, not to the mere existence of a branch."
+          },
+          {
+            "heading": "Feature Flags: Decoupling 'Deployed' from 'Released'",
+            "body": "Feature flags (also called feature toggles) are the mechanism that makes trunk-based development practical even for large or risky features: merge the code continuously, even while it's incomplete, but gate its execution behind a runtime condition so it has zero user-visible effect until someone deliberately turns it on.\n\n```python\ndef get_checkout_page(user):\n    if feature_flags.is_enabled(\"new_checkout_flow\", user):\n        return render_new_checkout(user)\n    return render_legacy_checkout(user)\n```\n\nThis single idea separates two questions that used to be conflated: 'is this code merged and deployed to production' and 'is this feature actually live for users' -- with a feature flag, the answer to the first can be yes for weeks while the answer to the second stays no, with no long-lived branch required at all. This is also the mechanism that connects directly to canary-style rollout, covered below: a flag can be enabled for 1% of users, then 10%, then everyone, all without any additional deploy. One real cost worth naming: flags accumulate. Once a feature is fully rolled out and stable, the flag and the old code path it guards need to actually be deleted -- teams that skip this step end up with a codebase full of permanent branching logic for features that have been 'done' for a year, sometimes called flag debt."
+          },
+          {
+            "heading": "Blue-Green Deployment: Two Full Environments, One Traffic Switch",
+            "body": "Blue-green deployment maintains two identical, fully provisioned production environments -- call them blue (currently serving all live traffic) and green (idle). To release a new version, you deploy it fully to the idle environment and validate it there -- smoke tests, health checks -- while it receives zero real user traffic. Once you're confident, you flip the load balancer or router so that all traffic now goes to green; blue keeps running, untouched, in the background.\n\nThe payoff is rollback speed: because the previous version is still fully running on blue, rolling back is just flipping the router back -- no redeploy, no rebuild, close to instantaneous. The cost is that it requires roughly double the infrastructure, at least for the duration of the cutover, and it works most cleanly for stateless services. Database schema changes complicate the picture considerably, since both blue and green may briefly need to operate against the same database during the switchover window -- this generally requires an 'expand-contract' migration approach, where the schema stays compatible with both the old and new application versions simultaneously, rather than switching the schema atomically at the same moment as the traffic cutover."
+          },
+          {
+            "heading": "Canary Deployment: A Small Slice of Real Traffic First",
+            "body": "Canary deployment takes a different approach: deploy the new version alongside the old one, and route a small percentage of *real* production traffic to it -- often starting around 1-5% -- while closely watching error rates, latency, and relevant business metrics. If the new version looks healthy, gradually increase its share of traffic; if it doesn't, roll back simply by routing traffic away from it.\n\nThe reason this catches issues that blue-green's pre-cutover smoke tests structurally cannot is worth being explicit about: blue-green's validation happens *before* any real traffic reaches the new version, so a bug that only manifests under genuine production load -- real data shapes, real concurrency, real edge-case user behavior -- is invisible until the full cutover already happened. Canary deliberately exposes the new version to real traffic first, but only a small, controlled slice of it, so if such a bug exists, it's caught while the blast radius is still small rather than universal. The trade-off is infrastructure and tooling: canary needs the ability to route a precise percentage of live traffic to two concurrently running versions (a service mesh or a load balancer supporting weighted routing), and it inherently takes longer to fully roll out than blue-green's near-instant full cutover, because the entire point is to deliberately pause and observe at each step rather than move all at once. Many teams combine both ideas -- running a canary phase *inside* the green environment before the final full blue-green switch -- rather than treating the two strategies as mutually exclusive alternatives."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "A Feature Flag Guarding an Incomplete Feature",
+          "language": "python",
+          "code": "def get_checkout_page(user):\n    if feature_flags.is_enabled(\"new_checkout_flow\", user):\n        return render_new_checkout(user)\n    return render_legacy_checkout(user)",
+          "explanation": "This one conditional is what lets the entire `new_checkout_flow` implementation merge to trunk and deploy to production continuously -- even mid-development -- with zero user-visible risk, since `feature_flags.is_enabled` returns false for everyone until someone deliberately changes that. Once the feature is actually ready, the same flag can be flipped on for a small percentage of users first (functioning exactly like a canary rollout, but of a feature rather than of a whole deployment), watched for problems, and ramped up gradually -- all without a single additional deploy, because the code enabling the new behavior was already shipped and merely dormant. Once it's fully rolled out and stable, the flag check and the `render_legacy_checkout` path should be deleted -- leaving them in place indefinitely is exactly how a codebase accumulates permanent, unnecessary branching logic for decisions that were actually settled long ago."
+        },
+        {
+          "title": "Blue-Green Cutover, Conceptually",
+          "language": "bash",
+          "code": "# 1. Deploy the new version to the currently-idle 'green' target group\naws ecs update-service --cluster prod --service app-green --task-definition app:v42\n\n# 2. Validate green while it receives ZERO real traffic\ncurl -f https://green.internal.example.com/healthz\n\n# 3. Cut over: point the load balancer's listener at green instead of blue\naws elbv2 modify-listener --listener-arn $LISTENER --default-actions TargetGroupArn=$GREEN_TG\n\n# 4. If anything looks wrong, rollback is just pointing the listener back at blue\naws elbv2 modify-listener --listener-arn $LISTENER --default-actions TargetGroupArn=$BLUE_TG",
+          "explanation": "The entire release is steps 1-3; the entire rollback is step 4 -- a single, near-instant configuration change, not a redeploy of the old version, because blue was never torn down and is still running exactly what it was running before. This is the concrete payoff of maintaining two full environments: rollback speed is decoupled from redeploy speed entirely. Note what's deliberately absent from this example: any database schema change. If v42 required a schema change, blue (the old version, still potentially receiving traffic if a rollback happens) and green would both need to work correctly against whatever schema state exists during and after the cutover window -- which is exactly why teams doing blue-green with a stateful backing store adopt expand-contract migrations rather than atomic schema swaps timed to the traffic cutover."
+        },
+        {
+          "title": "Canary Rollout with Traffic Weights",
+          "language": "yaml",
+          "code": "# Step 1: initial canary -- only 5% of live traffic reaches the new version\nrouting:\n  - target: app-stable\n    weight: 95\n  - target: app-canary\n    weight: 5\n\n# Step 2 (after watching error rate + p99 latency stay healthy for ~15 minutes): ramp up\nrouting:\n  - target: app-stable\n    weight: 50\n  - target: app-canary\n    weight: 50\n\n# Step 3: fully promoted -- canary becomes the new stable\nrouting:\n  - target: app-canary\n    weight: 100",
+          "explanation": "Each step is a deliberate, observed pause, not an automatic progression -- the team is expected to watch error rate and p99 latency (metrics covered in depth in this subject's Observability module) between steps and only increase the canary's weight once those signals stay healthy. This is precisely what distinguishes canary from blue-green: instead of one all-or-nothing cutover validated beforehand by synthetic checks, real production traffic is exposed to the new version incrementally, so a problem that only shows up under genuine load is caught while it's only affecting 5% of traffic rather than 100%. A production setup would typically also wire an automatic rollback -- if the canary's error rate crosses a threshold at any step, weight snaps back to 0 for app-canary without waiting for a human to notice and intervene."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "Feature branches are just bad practice -- teams practicing trunk-based development never use branches at all.",
+          "clarification": "Trunk-based development doesn't ban branches outright; it specifically avoids *long-lived* ones. Branches that live for hours (not weeks), stay small, and merge back before they've had a chance to diverge much are entirely compatible with -- and in most real trunk-based setups, literally how the work happens, typically via short-lived pull request branches that CI validates before a fast merge. The distinguishing factor that actually matters is branch lifetime and divergence, not whether a branch technically exists for any period of time."
+        },
+        {
+          "description": "Canary deployment and blue-green deployment are the same idea with different names -- both just mean 'run two versions and switch between them.'",
+          "clarification": "The mechanisms and the risk profile they produce are meaningfully different. Blue-green's cutover is instantaneous and all-or-nothing -- 100% of traffic moves at once, after validation that happened with no real user traffic involved. Canary's cutover is gradual and partial -- a small, deliberately limited percentage of real production traffic is exposed first, and the percentage increases incrementally only as health is confirmed at each step. Blue-green optimizes for near-instant rollback of a fully pre-validated version; canary optimizes for catching problems that only manifest under genuine production conditions, before most users are exposed to them. The two aren't interchangeable, and many mature setups run a canary phase inside the green environment rather than treating them as two separate, competing choices."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "devops-branching-and-release-strategies-ex1",
+          "type": "coding",
+          "prompt": "Complete this function so that a `new_dashboard` feature is shown to exactly 10% of users, chosen deterministically by user id -- the same user should always get the same experience (on or off) across repeated requests, rather than flickering between the two.",
+          "code": "def is_enabled(feature_name, user_id):\n    # TODO: return True for ~10% of users, deterministically, based on user_id\n    pass",
+          "hints": [
+            "Using `random.random() < 0.10` would give roughly 10% of *requests* True, but not the same 10% of *users* every time -- think about why that stickiness matters for both user experience and for measuring canary health accurately.",
+            "You need something that maps the same user_id to the same number every time it's called -- a deterministic hash function is exactly that.",
+            "Hash the user_id (and ideally the feature name too, so different flags don't all light up for the same users), reduce it to a number in a fixed range like 0-99, and compare against your target percentage."
+          ],
+          "solutionCode": "import hashlib\n\ndef is_enabled(feature_name, user_id):\n    key = f\"{feature_name}:{user_id}\".encode()\n    bucket = int(hashlib.sha256(key).hexdigest(), 16) % 100\n    return bucket < 10   # ~10% of users, deterministically",
+          "solutionExplanation": "Hashing `feature_name:user_id` and reducing it modulo 100 produces a number that is always the same for a given user and feature, so `bucket < 10` reliably picks the same roughly-10%-sized group of users every single time it's evaluated -- that's the deterministic 'stickiness' the exercise asks for. Including `feature_name` in the hashed key (rather than hashing `user_id` alone) matters too: without it, every flag in the system would happen to light up for the exact same subset of users, which would make it impossible to tell, from user-level effects alone, which flag was responsible for what. Using `random.random()` instead would re-roll on every single call, meaning the same user could see the feature on one request and off on the next -- both a confusing user experience and something that would make any canary-style health metrics for the flag meaningless, since 'the 10% seeing the new version' wouldn't actually be a stable, comparable group over time."
+        },
+        {
+          "id": "devops-branching-and-release-strategies-ex2",
+          "type": "debugging",
+          "prompt": "This canary routing config was supposed to expose only a small fraction of live traffic to an unproven new version while the team watches for problems. Find and fix the bug.",
+          "code": "routing:\n  - target: app-stable\n    weight: 5\n  - target: app-canary\n    weight: 95",
+          "hints": [
+            "Re-read what a canary deployment is actually meant to limit -- which target is supposed to be receiving the small slice of traffic, and which one currently is?",
+            "Compare the weight values against which target name they're attached to, not just the two numbers in isolation.",
+            "Swap which target gets which weight so the unproven version is the one receiving the small percentage."
+          ],
+          "solutionCode": "routing:\n  - target: app-stable\n    weight: 95\n  - target: app-canary\n    weight: 5",
+          "solutionExplanation": "The weights were attached to the wrong targets: as written, the unproven `app-canary` version receives 95% of live traffic while the proven `app-stable` version receives only 5% -- the exact opposite of a canary's purpose, and it means a bug in the new version would immediately affect the vast majority of users rather than a small, controlled slice of them. This is a realistic and dangerous class of bug precisely because the file is syntactically valid and the total still adds up to 100% -- nothing about it looks obviously broken unless you check which weight is attached to which named target. The fix simply swaps the two weight values so the small percentage (5%) goes to the canary being validated, and the large percentage (95%) stays on the already-trusted stable version."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "devops-branching-and-release-strategies-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "A team deploying with blue-green noticed that a subtle bug went undetected until 100% of traffic was cut over, because it only manifested under real, high-concurrency production load rather than in pre-cutover smoke tests. Which change would most directly address this specific gap?",
+          "options": [
+            "Switching to canary deployment, so the new version is exposed to a small, controlled percentage of real production traffic before any further rollout.",
+            "Switching from long-lived feature branches to trunk-based development.",
+            "Adding more smoke tests to the pre-cutover validation step.",
+            "Making the rollback procedure faster."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "The gap described is specifically that pre-cutover validation happens with no real traffic, so anything that only shows up under genuine production conditions is invisible until full exposure -- which is exactly the gap canary deployment closes, by deliberately exposing the new version to a small slice of real traffic before increasing exposure further. Option B addresses branching/merge risk, an unrelated concern to deployment-time production validation. Option C is a plausible-sounding partial improvement, but synthetic smoke tests structurally cannot fully replicate real concurrent production traffic patterns and data shapes, which is the actual source of this specific class of bug. Option D improves recovery speed after the fact but does nothing to catch the issue earlier, at smaller blast radius."
+        },
+        {
+          "id": "devops-branching-and-release-strategies-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain to a teammate who has only ever used long-lived feature branches why trunk-based development plus feature flags is generally considered lower risk overall, even though it means unfinished code is sometimes present in the shared mainline.",
+          "modelAnswer": "The key trade-off is between two different kinds of risk: long-lived branches defer integration risk, concentrating it into one large, hard-to-diagnose merge at the end, while trunk-based development pays a small amount of integration cost continuously and in small pieces, which is dramatically cheaper in aggregate. With long-lived branches, both the mainline and the branch keep accumulating independent changes for the entire life of the branch, so the eventual merge doesn't face one isolated conflict -- it faces the full compounded divergence at once, often including semantic drift (an API the branch still assumes exists but that changed on the mainline) that won't even show up as a textual merge conflict. Trunk-based development avoids this by merging constantly, so any conflict is caught while it's small, recent, and still fresh in the author's head. The concern about 'unfinished code in the mainline' is real but solved by a different mechanism: feature flags let incomplete or risky code be merged and even deployed to production continuously, while remaining completely inert and invisible to real users until someone deliberately turns it on -- which decouples the question of 'is this code deployed' from 'is this feature live.' So the unfinished code sitting in the mainline isn't actually a live risk to users at all; it's dormant, gated behind a runtime check, and it can even be rolled out gradually to a small percentage of users first (much like a canary deployment) once it is ready, all without the giant, deferred, all-at-once integration event that a long-lived branch eventually forces."
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,366 @@
+{
+  "learningPathId": "java",
+  "moduleId": "control_flow_and_methods",
+  "title": "Control Flow & Methods",
+  "order": 2,
+  "concepts": [
+    {
+      "id": "java-conditionals",
+      "title": "Conditionals: if/else and switch",
+      "description": "if/else chains pick exactly one branch by evaluating conditions top to bottom until the first true one wins, while switch dispatches on a single value against a set of labels -- and switch's classic fall-through behavior, together with Java's insistence on genuine boolean conditions, are two of the most consequential design decisions beginners run into.",
+      "moduleId": "control_flow_and_methods",
+      "topicId": "control_flow_and_methods",
+      "difficulty": "beginner",
+      "estimatedMinutes": 35,
+      "prerequisites": ["java-types-and-variables"],
+      "learningObjectives": [
+        "Write if/else if/else chains and explain the exact order Java evaluates them in, including which branches get skipped once a match is found.",
+        "Explain why Java requires a genuine boolean expression in an if condition, unlike languages with 'truthy' values, and what class of bug that prevents.",
+        "Use a classic switch statement correctly, including explaining fall-through behavior and why break is usually required.",
+        "Use a modern switch expression with arrow syntax and explain how it avoids fall-through by design.",
+        "Predict bugs caused by missing break statements in a switch and by ambiguous nested if/else without braces."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "if / else if / else: Top to Bottom, First Match Wins",
+            "body": "Java evaluates an if/else if/else chain strictly in order, from top to bottom, and executes the block belonging to the **first** condition that evaluates to true -- every subsequent else if and else in that same chain is then skipped entirely, even if a later condition would also have been true.\n\n```java\nint score = 85;\nif (score >= 90) {\n    System.out.println(\"A\");\n} else if (score >= 80) {\n    System.out.println(\"B\");   // this one runs\n} else if (score >= 70) {\n    System.out.println(\"C\");   // never even checked, because a branch above already matched\n} else {\n    System.out.println(\"F\");\n}\n```\n\nOrder matters enormously here: if the `score >= 70` check were written *above* `score >= 80`, a score of 85 would incorrectly print \"C\", since that broader condition is also technically true and it would be reached first. A related, easy-to-miss hazard is the so-called dangling else: when an if has no braces and is nested inside another if with no braces, it can become genuinely ambiguous to a human reader (though not to the compiler, which always attaches an else to the nearest unmatched if) which if an else actually belongs to. The reliable habit that sidesteps this entirely is to always use braces `{ }` around if/else bodies, even for a single statement -- it costs nothing and removes an entire category of misreading."
+          },
+          {
+            "heading": "Java Requires a Real boolean -- No 'Truthy' Values",
+            "body": "In C, `if (x)` is legal for an int x, and it's treated as true whenever x is nonzero. Many scripting languages generalize this further with 'truthy' and 'falsy' values for all sorts of types. Java deliberately does none of this: the expression inside an if must be an actual `boolean` (or `Boolean`), full stop -- `if (x)` where x is an int is a compile-time error, `incompatible types: int cannot be converted to boolean`, not a silently-accepted 'nonzero means true' shortcut.\n\nThis single restriction quietly closes off a specific, famous class of C bug. In C, `if (x = 5)` compiles -- it's an assignment expression, x is set to 5, and the expression's value (5, nonzero) is treated as true, so the branch always runs, even though the programmer almost certainly meant `==` and intended a comparison. In Java, if x is an int, the exact same typo, `if (x = 5)`, fails to compile, because the type of an assignment expression is the type of the value assigned -- here, int -- and int is not a legal if-condition type. The compiler catches the typo before the program ever runs.\n\nIt's worth being precise about the limits of this protection, though: if x is itself a `boolean`, `if (flag = true)` compiles just fine, because the assigned value's type is boolean, which is a legal condition -- and it silently overwrites flag to true while always taking the branch, reproducing the exact same category of bug in the one case where the types happen to align. Static typing closes the door for numeric and object comparisons; it doesn't provide blanket immunity for booleans specifically."
+          },
+          {
+            "heading": "switch Statements: Fall-Through Is a Feature You Have to Actively Stop",
+            "body": "A classic `switch` compares one value against a series of `case` labels and jumps to the matching one -- but execution does not stop there automatically. Without an explicit `break`, control **falls through** into the next case's code, and the one after that, and so on, until it hits a break or runs out of cases entirely. This was an original, deliberate design choice (it lets several case labels intentionally share one block of code by stacking labels with no code between them), but in ordinary use it is one of the most common sources of Java bugs, precisely because it's easy to forget a `break` and get silently, extra behavior with no error of any kind.\n\n```java\nint day = 3;\nswitch (day) {\n    case 1:\n        System.out.println(\"Monday\");\n    case 2:\n        System.out.println(\"Tuesday\");\n    case 3:\n        System.out.println(\"Wednesday\");\n    case 4:\n        System.out.println(\"Thursday\");\n    default:\n        System.out.println(\"Some other day\");\n}\n```\n\nWith `day == 3`, this prints \"Wednesday\", then falls straight through into \"Thursday\" and \"Some other day\" too, because none of those three cases has a `break` stopping it. `default` is not required syntactically, but leaving it out means a value matching no case simply does nothing at all -- silently -- which is almost always worth guarding against explicitly rather than leaving as an implicit no-op."
+          },
+          {
+            "heading": "Modern switch Expressions: Arrow Syntax and No Fall-Through, By Design",
+            "body": "Java 14 introduced a genuinely different form of `switch` that is an **expression** -- it directly produces a value you can assign or return -- using `->` instead of `:` and `break`. Each case in this form is an independent branch with no fall-through possible at all; there's no missing-break bug to even make, because there's nothing to fall through into.\n\n```java\nint day = 3;\nString name = switch (day) {\n    case 1 -> \"Monday\";\n    case 2 -> \"Tuesday\";\n    case 3 -> \"Wednesday\";\n    default -> \"Some other day\";\n};\nSystem.out.println(name);   // Wednesday, and only Wednesday\n```\n\nFor a case that needs more than one expression's worth of logic, a braced block after `->` can compute a value and hand it back with `yield`: `case 3 -> { System.out.println(\"matched three\"); yield \"Wednesday\"; }`. Beyond just being safer, using switch as an *expression* (assigning its result directly to a variable, as above) is often more readable than the classic statement form, because it makes clear, structurally, that every branch is contributing to one single value rather than performing scattered side effects. The classic colon-and-break form still exists and still works exactly as it always has -- for statement-style, multi-branch side effects, or in codebases targeting older Java versions -- but the arrow form is generally the better default for new code once you can use it."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "The Fall-Through Bug in a Classic switch",
+          "language": "java",
+          "code": "int day = 3;\nswitch (day) {\n    case 1:\n        System.out.println(\"Monday\");\n    case 2:\n        System.out.println(\"Tuesday\");\n    case 3:\n        System.out.println(\"Wednesday\");\n    case 4:\n        System.out.println(\"Thursday\");\n    default:\n        System.out.println(\"Some other day\");\n}",
+          "explanation": "day matches case 3 exactly, so execution jumps straight to the \"Wednesday\" println -- but none of case 3, case 4, or default has a break statement, so control keeps falling straight through each subsequent case's code regardless of whether its label matches anything. The result is that this prints three lines -- Wednesday, Thursday, Some other day -- when a reader skimming the case 3 label alone would reasonably expect only one. This is exactly why fall-through has a reputation as one of Java's sharper edges: the code isn't broken syntactically, produces no warning, and the bug only shows up as visibly wrong runtime behavior once you actually run it and read the output carefully."
+        },
+        {
+          "title": "Fixed with break, and the Modern Arrow Alternative",
+          "language": "java",
+          "code": "int day = 3;\n\n// classic form, fixed with break\nswitch (day) {\n    case 1:\n        System.out.println(\"Monday\");\n        break;\n    case 2:\n        System.out.println(\"Tuesday\");\n        break;\n    case 3:\n        System.out.println(\"Wednesday\");\n        break;\n    default:\n        System.out.println(\"Some other day\");\n}\n\n// modern switch expression -- no break needed, fall-through is structurally impossible\nString name = switch (day) {\n    case 1 -> \"Monday\";\n    case 2 -> \"Tuesday\";\n    case 3 -> \"Wednesday\";\n    default -> \"Some other day\";\n};\nSystem.out.println(name);",
+          "explanation": "In the classic form, adding break after each case's println stops execution from continuing into the next case the moment a match's code has finished -- day == 3 now prints only \"Wednesday\", exactly once, matching what a reader would naturally expect from the label alone. The arrow-based switch expression achieves the same correct result through a completely different mechanism: rather than relying on break to opt out of a default fall-through behavior, each case -> value branch is self-contained and independent by construction, so there's no shared control-flow path between cases for execution to accidentally fall into. Both versions here produce identical output for day == 3, but the arrow form makes the missing-break class of bug structurally impossible rather than merely avoided by discipline."
+        },
+        {
+          "title": "if (x) Doesn't Compile for a Non-boolean x",
+          "language": "java",
+          "code": "int x = 5;\n// if (x) {\n//     System.out.println(\"nonzero\");\n// }\n// compile error: incompatible types: int cannot be converted to boolean\n\nif (x != 0) {\n    System.out.println(\"x is nonzero\");   // this is the correct, explicit way to say it\n}",
+          "explanation": "The commented-out block would fail to compile, because Java's if statement requires its condition to already be a genuine boolean expression -- there is no implicit 'nonzero counts as true' conversion the way there is in C or many scripting languages. Writing the comparison out explicitly, x != 0, produces an actual boolean, which is what if always requires. This restriction is a direct, practical benefit of static typing: an entire class of typo bugs (writing = where you meant ==, in languages that would otherwise silently accept a numeric condition) simply cannot compile in Java when the variable involved is a non-boolean type."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "In a switch statement, only the matching case's code runs and then execution automatically stops there, the same way an if/else if chain stops after its first matching branch.",
+          "clarification": "switch and if/else if behave differently here, and conflating them is exactly how fall-through bugs happen. An if/else if chain inherently runs at most one branch, by its own structure -- there's no way for two branches to both execute. A classic switch, by contrast, finds the matching case label and then keeps executing every line after it, across every subsequent case, until it hits an explicit break (or the switch ends) -- matching a label is only where execution starts, not where it's guaranteed to stop. The modern arrow-based switch expression restores the 'only one branch runs' behavior beginners expect from the classic form, but it does so by design, not by adding an implicit stop -- there's structurally no shared path for execution to fall through along."
+        },
+        {
+          "description": "Java's requirement that if conditions be a genuine boolean makes the classic C bug of writing = instead of == in a condition completely impossible in Java.",
+          "clarification": "It closes the bug for numeric and object types, but not universally. if (x = 5) fails to compile when x is an int, because the assignment expression's type (int) isn't a legal condition type -- this is the protection working as intended. But if flag is already declared as a boolean, if (flag = true) compiles without complaint, because the assigned value's type is boolean, which is exactly what if requires; it silently reassigns flag to true and always takes the branch, which is the identical bug, just relocated to the one case where the types happen to line up. The rule to take away is precise: Java's type system prevents this bug whenever the variable's type isn't boolean, not whenever the variable is being used in a boolean context."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "java-conditionals-ex1",
+          "type": "predictOutput",
+          "prompt": "What does this print, and why?",
+          "code": "int month = 2;\nswitch (month) {\n    case 1:\n        System.out.println(\"January\");\n        break;\n    case 2:\n        System.out.println(\"February\");\n    case 3:\n        System.out.println(\"March\");\n        break;\n    case 4:\n        System.out.println(\"April\");\n        break;\n    default:\n        System.out.println(\"Unknown month\");\n}",
+          "hints": [
+            "Find which case label actually matches month == 2 first, then check: does that specific case end with a break?",
+            "If a case has no break, execution keeps running the code for every case AFTER it too, regardless of whether those labels match anything.",
+            "Trace forward from case 2 until you hit the first break you actually encounter -- everything printed along the way is part of the output."
+          ],
+          "expectedAnswer": "February\nMarch\nBecause case 2 has no break, execution falls through into case 3's code and stops there, since case 3 does have a break.",
+          "solutionExplanation": "month == 2 matches case 2, which prints \"February\" -- but case 2 has no break statement, so control falls straight through into case 3's code next, printing \"March\" as well. case 3 does have a break, so execution stops there, and case 4 and default are never reached. The output is therefore two lines, February and March, even though only one case label actually matched the value 2 -- a direct illustration of how a single missing break can silently pull in an unrelated case's output."
+        },
+        {
+          "id": "java-conditionals-ex2",
+          "type": "debugging",
+          "prompt": "This method is supposed to print exactly one line describing a traffic light color, but for \"yellow\" it prints two lines instead of one. Find and fix the bug.",
+          "code": "public class TrafficLight {\n    public static void describe(String color) {\n        switch (color) {\n            case \"red\":\n                System.out.println(\"Stop\");\n                break;\n            case \"yellow\":\n                System.out.println(\"Slow down\");\n            case \"green\":\n                System.out.println(\"Go\");\n                break;\n            default:\n                System.out.println(\"Unknown signal\");\n        }\n    }\n\n    public static void main(String[] args) {\n        describe(\"yellow\");\n    }\n}",
+          "hints": [
+            "Look specifically at the case \"yellow\" block -- does it end with a break before moving on to the next case?",
+            "Without a break, control keeps executing into case \"green\"'s code too, even though the color passed in was never \"green\".",
+            "Add the missing break right after the 'yellow' case's println, the same way 'red' and 'green' already have one."
+          ],
+          "solutionCode": "public class TrafficLight {\n    public static void describe(String color) {\n        switch (color) {\n            case \"red\":\n                System.out.println(\"Stop\");\n                break;\n            case \"yellow\":\n                System.out.println(\"Slow down\");\n                break;\n            case \"green\":\n                System.out.println(\"Go\");\n                break;\n            default:\n                System.out.println(\"Unknown signal\");\n        }\n    }\n\n    public static void main(String[] args) {\n        describe(\"yellow\");   // prints only \"Slow down\"\n    }\n}",
+          "solutionExplanation": "The case \"yellow\" block prints \"Slow down\" but has no break, so execution falls straight through into case \"green\"'s code next, printing \"Go\" as well -- even though the argument passed in was \"yellow\", never \"green\". Adding break right after the \"yellow\" case's println stops execution there, matching the pattern already correctly used for \"red\" and \"green\". This is the exact same category of bug switch is notorious for: the missing break produces no compiler warning and no exception, just quietly wrong extra output that's easy to miss unless you're specifically checking every case for a terminating break."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "java-conditionals-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "int n = 1;\nswitch (n) {\n    case 1:\n        System.out.println(\"one\");\n    case 2:\n        System.out.println(\"two\");\n        break;\n    case 3:\n        System.out.println(\"three\");\n        break;\n}\nWhat does this print?",
+          "options": [
+            "one",
+            "one\ntwo",
+            "one\ntwo\nthree",
+            "This fails to compile because case 1 has no break."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "n matches case 1 and prints \"one\", but case 1 has no break, so execution falls through into case 2's code next, printing \"two\" as well; case 2 does have a break, so execution stops there and case 3 is never reached, giving exactly two lines: one, then two. Option A wrongly assumes execution stops automatically after a match, the way if/else if does. Option C wrongly assumes it keeps falling through past case 2's break. Option D is wrong because a case without a break is completely legal Java -- fall-through is a real, intentional language feature, not a compile error, even though it's a very common bug source."
+        },
+        {
+          "id": "java-conditionals-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain, to a beginner who is confused about why their switch statement is printing more than they expected, what fall-through actually is, why the language behaves this way, and how the modern switch expression avoids the problem entirely.",
+          "modelAnswer": "In a classic Java switch statement, matching a case label is only where execution starts -- it is not, by itself, where execution stops. Once control jumps to the matching case, it keeps running every subsequent line of code, straight through the boundaries of the next case labels too, completely ignoring whether those later labels match the switched-on value at all, until it either hits an explicit break statement or reaches the very end of the switch block. This is called fall-through, and it's the reason a switch can end up printing output from cases that were never actually matched: if you forget a break at the end of a matched case's code, you get that case's output plus whatever comes immediately after it too, silently, with no compiler warning or runtime error of any kind. This isn't a mistake in the language's design so much as a deliberate original choice -- it lets several case labels intentionally share one block of code by stacking labels together with no statements in between them -- but in the vast majority of ordinary switch statements, where each case is meant to be independent, it behaves like a trap rather than a feature, and forgetting a break is an extremely common, easy-to-miss bug. Java 14 introduced switch expressions using arrow syntax (case value -> result) specifically to sidestep this: each arm is a self-contained branch that produces a value directly, with no shared control-flow path connecting it to the next case at all, so there's nothing to break out of and nothing to fall through into -- the missing-break bug becomes structurally impossible rather than merely something you have to remember to avoid."
+        }
+      ]
+    },
+    {
+      "id": "java-loops",
+      "title": "Loops: for, while, and do-while",
+      "description": "Java's three loop forms all repeat a block of code but differ in exactly when the condition is checked and how the iteration variable is managed -- and break, continue, and labeled loops give you fine-grained control over exactly which iteration, or which loop, gets interrupted.",
+      "moduleId": "control_flow_and_methods",
+      "topicId": "control_flow_and_methods",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 40,
+      "prerequisites": ["java-conditionals"],
+      "learningObjectives": [
+        "Trace the exact execution order of a for loop's init, condition, and update clauses across multiple iterations.",
+        "Choose between for, while, and do-while based on whether the iteration count is known ahead of time and whether the body must run at least once.",
+        "Explain precisely when do-while checks its condition relative to when while checks its, and what that changes in practice.",
+        "Use break and continue correctly, including labeled break/continue for escaping or skipping in nested loops.",
+        "Predict and diagnose an infinite loop caused by a missing or incorrect update step.",
+        "Use the enhanced for-each loop over arrays, and explain why it cannot be used to reassign an element back into a primitive array."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "The for Loop: init, condition, update -- In That Exact Order",
+            "body": "A classic for loop's header has three parts, and it's worth being precise about the order they actually run in, because it's not simply top-to-bottom repeated: `for (int i = 0; i < 3; i++) { ... }` runs `int i = 0` exactly **once**, at the very start; then it repeatedly checks `i < 3`, and if true, runs the body, then runs `i++`, then goes back and checks `i < 3` again -- and stops the moment that check is false, without running the body one more time.\n\n```java\nfor (int i = 0; i < 3; i++) {\n    System.out.println(\"i = \" + i);\n}\n// i is out of scope here -- it only exists within the for statement itself\n```\n\nThis prints `i = 0`, `i = 1`, `i = 2` -- three lines, not four, because the moment `i` becomes 3, the condition check happens *before* the body would run again, and fails, ending the loop. Writing `i <= 3` instead would run one extra iteration (`i = 3` included) -- this exact kind of boundary slip is where off-by-one bugs come from, and reading the condition literally, rather than assuming what it 'probably means,' is the reliable way to avoid them. The loop variable declared in the header (`i`, here) is scoped to the for statement alone -- it doesn't exist before it and doesn't exist after it, which is deliberate: it prevents accidental reuse of a leftover loop counter later in the method."
+          },
+          {
+            "heading": "while and do-while: Checking Before vs Checking After",
+            "body": "`while` checks its condition **before** every single iteration, including the very first one -- if the condition is already false the first time it's checked, the body never runs at all, not even once. `do-while` checks its condition **after** running the body -- guaranteeing the body executes at least once, no matter what, before the condition is ever consulted.\n\n```java\nint attempts = 0;\nwhile (attempts >= 5) {\n    System.out.println(\"this never prints -- condition is false immediately\");\n}\n\nint tries = 0;\ndo {\n    tries++;\n    System.out.println(\"attempt number \" + tries);\n} while (tries < 3);\n// prints: attempt number 1, attempt number 2, attempt number 3\n```\n\nThe practical case where this distinction actually matters is when the very thing you want to check depends on something that only exists *after* the body has run once -- a classic example being 'prompt the user for input, then keep re-prompting until it's valid': there's no meaningful input to validate before the first prompt has actually happened, which is precisely the shape do-while is built for. Using a plain while for that same pattern usually forces you to duplicate the prompt-and-read logic once before the loop, just to have something to check going into the first condition test -- do-while avoids that duplication by construction."
+          },
+          {
+            "heading": "break, continue, and Labeled Loops",
+            "body": "`break` exits the nearest enclosing loop (or switch) immediately and completely -- execution jumps straight to the first statement after that loop, skipping any remaining iterations entirely. `continue` is weaker and easier to misjudge: it does **not** exit the loop -- it only skips the *rest of the current iteration's body*, then jumps straight to the next iteration's condition check (running the update step first, in a for loop). The loop itself keeps going.\n\nBoth normally target the loop they're textually inside of, but nested loops sometimes need to affect an *outer* loop from inside an inner one -- that's what a **label** is for: a name placed before a loop that `break` or `continue` can reference directly.\n\n```java\nint target = 5;\nboolean found = false;\n\nsearch:\nfor (int row = 0; row < 3; row++) {\n    for (int col = 0; col < 3; col++) {\n        int value = row * 3 + col;\n        if (value == target) {\n            System.out.println(\"found at row \" + row + \", col \" + col);\n            found = true;\n            break search;   // exits BOTH loops at once\n        }\n    }\n}\n```\n\nAn unlabeled `break` inside the inner loop here would only exit the inner `for`, and the outer loop would simply continue on to its next row, needlessly checking columns for rows that no longer matter once the target's already been found. `break search;` exits both loops in a single step, which is exactly the intended behavior and avoids needing an extra `if (found) break;` check duplicated in the outer loop too."
+          },
+          {
+            "heading": "The Enhanced for-each Loop, and What You Give Up for the Cleaner Syntax",
+            "body": "For simply visiting every element of an array (or any `Iterable`) in order, the enhanced for-each loop is shorter and harder to get wrong: `for (int value : numbers) { ... }` reads as 'for each value in numbers,' with no index variable, no condition, and no update step to manage yourself.\n\n```java\nint[] numbers = {10, 20, 30};\nint sum = 0;\nfor (int value : numbers) {\n    sum += value;\n}\nSystem.out.println(sum);   // 60\n```\n\nThe cost is real, though: you lose direct access to the current index (no way to know 'this is element 2' just from `value` alone, without maintaining a separate counter yourself), and for an array of primitives, `value` inside the loop is a **copy** of each element for that iteration -- reassigning `value` has zero effect on the underlying array, since `value` is not a reference back into it. If you need the index (to print positions, to compare adjacent elements, to skip every other one) or you need to actually mutate elements in place, you need the classic indexed `for` loop, writing through `numbers[i] = ...` directly, rather than the for-each form."
+          },
+          {
+            "heading": "Infinite Loops: How They Actually Happen",
+            "body": "An infinite loop is not some special, separate kind of loop -- it's simply an ordinary loop whose condition never becomes false, usually because of one specific, recurring mistake: forgetting the update step entirely, updating the wrong variable (one the condition doesn't actually depend on), or writing an update that moves the wrong direction relative to the condition.\n\n```java\nint i = 0;\nwhile (i < 5) {\n    System.out.println(i);\n    // forgot: i++;   -- i never changes, condition never becomes false\n}\n```\n\nA for loop's header groups all three parts together specifically so this is harder to forget, but it's still entirely possible -- `for (int i = 0; i < 5; i--)` compiles perfectly fine and also runs forever, because decrementing `i` moves it further away from ever failing `i < 5`, not closer. When a loop hangs and never produces expected output, the update step relative to the condition is the very first thing worth checking: does this loop's own logic guarantee the condition eventually flips to false, or is that just an assumption?"
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Tracing a for Loop's Exact Execution Order",
+          "language": "java",
+          "code": "for (int i = 0; i < 3; i++) {\n    System.out.println(\"i = \" + i);\n}\nSystem.out.println(\"loop finished\");",
+          "explanation": "int i = 0 runs exactly once, before anything else. Then the sequence is: check i < 3 (true, since i is 0) -> run body, printing 'i = 0' -> run i++ , making i 1 -> check i < 3 again (true) -> print 'i = 1' -> i++ makes i 2 -> check (true) -> print 'i = 2' -> i++ makes i 3 -> check i < 3 (now false) -> loop ends without running the body again. So exactly three lines print, for i = 0, 1, and 2 -- i = 3 is checked but never printed, because the condition is evaluated before the body runs on every pass, including what would have been the fourth one."
+        },
+        {
+          "title": "do-while Guarantees the Body Runs at Least Once",
+          "language": "java",
+          "code": "int attempt = 0;\nint result;\ndo {\n    attempt++;\n    result = attempt < 3 ? -1 : 42;   // simulate 'invalid' on the first two tries, then valid\n    System.out.println(\"attempt \" + attempt + \": got \" + result);\n} while (result < 0);\nSystem.out.println(\"accepted result: \" + result);",
+          "explanation": "This simulates a retry-until-valid pattern: attempt 1 and attempt 2 produce -1 (treated as invalid), so the do-while condition result < 0 keeps the loop going; attempt 3 finally produces 42, and the condition becomes false, ending the loop right after that iteration's body has already run. The key structural point is that result does not exist with any meaningful value before the first iteration -- there's nothing to check yet -- so do-while's 'run the body first, check after' order matches this pattern exactly. A plain while loop attempting the same logic would need some way to get an initial result before the loop even starts, just to have something to test against the first condition check, typically forcing you to duplicate the body's first line above the loop."
+        },
+        {
+          "title": "Labeled break to Escape Nested Loops in One Step",
+          "language": "java",
+          "code": "int target = 5;\nboolean found = false;\n\nsearch:\nfor (int row = 0; row < 3; row++) {\n    for (int col = 0; col < 3; col++) {\n        int value = row * 3 + col;\n        if (value == target) {\n            System.out.println(\"Found \" + target + \" at row \" + row + \", col \" + col);\n            found = true;\n            break search;\n        }\n    }\n}\nSystem.out.println(\"found = \" + found);",
+          "explanation": "value equals target (5) when row is 1 and col is 2 (1*3 + 2 = 5). break search; exits both the inner and outer for loops in that single statement, because search is a label attached to the outer loop -- execution jumps straight to the println after the nested loops entirely, never checking row 2 at all, since there's no point once the target has already been found. Without the label, an unlabeled break here would only exit the inner loop; the outer loop would then proceed to row = 2 and needlessly run through all of its columns too, even though found is already true -- exactly the kind of wasted, easy-to-miss extra work labeled break is designed to eliminate."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "continue works like a weaker version of break -- it still ends the loop, just somehow less abruptly.",
+          "clarification": "continue does not end the loop at all. It skips only the remainder of the current iteration's body and jumps straight to the next iteration's condition check (running the update step first, in a for loop) -- the loop keeps running exactly as it otherwise would, for as many remaining iterations as its condition allows. break, by contrast, genuinely terminates the loop immediately and completely, with no further iterations of any kind. They are not two strengths of the same action; they do fundamentally different things to the loop's control flow."
+        },
+        {
+          "description": "In a for-each loop like for (int x : numbers), assigning a new value to x inside the loop body updates the corresponding element back in the numbers array.",
+          "clarification": "For an array of primitive elements, x is a copy of each element, freshly created for that one iteration -- it has no ongoing connection back to the array's actual storage. Reassigning x only changes that local copy, and the array itself is completely unaffected once the loop moves to the next iteration. To actually mutate elements in place, you need the classic indexed for loop and an explicit assignment through the array itself, such as numbers[i] = newValue, which writes directly into the array's own storage rather than into a throwaway per-iteration copy."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "java-loops-ex1",
+          "type": "predictOutput",
+          "prompt": "What does this print, and why?",
+          "code": "for (int i = 0; i < 5; i++) {\n    if (i == 2) {\n        continue;\n    }\n    if (i == 4) {\n        break;\n    }\n    System.out.println(i);\n}",
+          "hints": [
+            "continue at i == 2 skips only the println for that one iteration -- does the loop keep going afterward, or does it stop entirely?",
+            "break at i == 4 is a completely different action from continue -- what does it do to the rest of the loop's remaining iterations?",
+            "List out i's values in order (0,1,2,3,4) and decide, for each one, whether it reaches the println at all."
+          ],
+          "expectedAnswer": "0\n1\n3\ni=2 hits continue and skips its println only, i=3 prints normally, and i=4 hits break and stops the loop before its println ever runs.",
+          "solutionExplanation": "For i = 0 and i = 1, neither if triggers, so both print normally. For i = 2, the continue statement runs, which skips only the println below it for this one iteration and jumps straight to the loop's update step (i++) and next condition check -- the loop itself keeps going. For i = 3, again neither if triggers, so it prints normally. For i = 4, the break statement runs, which terminates the loop immediately and completely -- its println never executes, and no further iterations happen at all (i = 5 is never reached, since the loop has already ended). The final output is therefore 0, 1, 3 -- three lines, with 2 skipped by continue and 4 (and anything beyond it) cut off entirely by break."
+        },
+        {
+          "id": "java-loops-ex2",
+          "type": "debugging",
+          "prompt": "This loop is supposed to print the numbers 5 down to 1, but it never terminates and just keeps printing forever. Find and fix the bug.",
+          "code": "int i = 5;\nwhile (i > 0) {\n    System.out.println(i);\n    i++;\n}",
+          "hints": [
+            "For the loop to eventually stop, i > 0 has to become false at some point. What direction does i actually need to move for that to happen?",
+            "Look at the update step inside the loop body -- what operation is it actually performing on i, and does that operation move i toward or away from satisfying i > 0 being false?",
+            "The loop needs i to count DOWN toward and past 0, not up away from it."
+          ],
+          "solutionCode": "int i = 5;\nwhile (i > 0) {\n    System.out.println(i);\n    i--;\n}",
+          "solutionExplanation": "The condition i > 0 can only ever become false if i eventually reaches 0 or goes negative -- but the original code uses i++, which increments i further away from zero on every iteration, guaranteeing i > 0 stays true forever and the loop never terminates. Changing i++ to i--, so i counts down instead of up, means i decreases by one each pass (5, 4, 3, 2, 1), and once i reaches 0, the condition i > 0 finally evaluates to false and the loop ends -- printing exactly 5, 4, 3, 2, 1 in that order, matching the intended behavior."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "java-loops-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "What is the key behavioral difference between while and do-while?",
+          "options": [
+            "do-while can only be used with integers, while while works with any type.",
+            "while checks its condition before running the body on every pass, including the first, so the body might never run at all; do-while checks its condition after running the body, so the body always runs at least once.",
+            "do-while automatically breaks out after exactly one iteration, while while can run any number of times.",
+            "There is no real difference -- they are two equivalent ways of writing the same loop."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B correctly identifies the actual mechanism: the difference is entirely about WHEN the condition is checked relative to the body -- before every iteration for while (so a false condition up front means zero iterations), versus after the body for do-while (so the body is guaranteed to run at least once regardless of the condition's initial value). Option A is fabricated -- neither loop is restricted to integers. Option C is wrong -- do-while can run any number of iterations, just like while; it only guarantees a minimum of one. Option D is wrong because the difference described in B is a real, observable behavioral distinction, not a stylistic one -- it changes whether the body can run zero times or not."
+        },
+        {
+          "id": "java-loops-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain the difference between break and continue, and then explain what a labeled break adds on top of an ordinary, unlabeled one.",
+          "modelAnswer": "break and continue both alter a loop's normal flow, but they do genuinely different things. break terminates the nearest enclosing loop immediately and entirely -- once it runs, no further iterations of that loop happen at all, and execution resumes at the first statement after the loop. continue is much narrower: it only skips whatever remains of the CURRENT iteration's body, then proceeds directly to the next iteration as normal -- in a for loop, that means the update step still runs and the condition is still checked again -- so the loop keeps going exactly as it otherwise would for its remaining iterations. Mixing these up is a common source of confusion, since continue is sometimes mistaken for 'a softer break,' when really it doesn't end the loop at all. A labeled break addresses a specific limitation of the plain, unlabeled version: an ordinary break, written inside a loop that's nested inside another loop, only escapes the innermost loop it's directly inside of -- the outer loop keeps running its remaining iterations untouched. By placing a label immediately before the outer loop and writing break outerLabel; inside the inner loop, you can exit both loops in one single statement, which is especially useful once you've found what you were looking for in a nested search and there's no reason to keep checking any further, in either loop. Labeled continue exists too, with the analogous meaning: skip the rest of the current iteration of the labeled (outer) loop specifically, rather than just the loop the continue statement happens to be textually inside of."
+        }
+      ]
+    },
+    {
+      "id": "java-methods-and-arrays",
+      "title": "Methods, Overloading, and Arrays",
+      "description": "A method's return type is part of its contract and must be honored on every path through its body; overloading lets several methods share a name as long as their parameter lists differ, resolved entirely at compile time; and arrays are fixed-size, reference-type containers whose 'pass a copy of the reference, not the data' behavior explains exactly which changes made inside a method survive back in the caller.",
+      "moduleId": "control_flow_and_methods",
+      "topicId": "control_flow_and_methods",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 45,
+      "prerequisites": ["java-loops", "java-main-method"],
+      "learningObjectives": [
+        "Define a method with an explicit return type and explain why every reachable path through a non-void method's body must return a value.",
+        "Define overloaded methods and explain how the compiler chooses which overload to call, based on the static types of the arguments at compile time.",
+        "Predict overload-resolution behavior involving primitive widening, explaining why it's attempted before autoboxing.",
+        "Declare, initialize, and index arrays, and explain why their size is fixed once created.",
+        "Explain what is actually copied when an array is passed to a method, and why mutation through that reference is visible to the caller while reassignment of the parameter is not.",
+        "Predict and explain ArrayIndexOutOfBoundsException and NullPointerException scenarios involving arrays."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "Defining a Method: The Return Type Is a Promise the Compiler Enforces",
+            "body": "A method declaration is `modifiers returnType name(parameterList) { body }` -- and unlike a dynamically-typed language, the return type is not a hint or a comment, it's a contract the compiler actively checks. `void` means the method genuinely hands nothing back to its caller (it's used purely for its side effects); any other return type is a binding promise that **every possible path** through the method's body ends in a `return` statement producing a value of that type -- if the compiler can find even one path that falls off the end without returning, it's a compile-time error, `missing return statement`, not a runtime surprise.\n\n```java\nstatic int classify(int score) {\n    if (score >= 60) {\n        return 1;\n    } else {\n        return 0;\n    }\n    // no missing-return risk here -- both branches of the if/else return\n}\n```\n\nIf that `else` were removed, leaving only the `if`, the compiler would reject the method: there'd be a real path (score less than 60) that reaches the end of the method with nothing returned, which isn't allowed for a method declared to return `int`. This is a meaningfully different discipline from `main`, specifically -- `main` is `void`, so it's allowed to simply run out of statements with nothing returned; a method with a real return type never gets that same leniency."
+          },
+          {
+            "heading": "Overloading: Same Name, Different Parameter List, Chosen at Compile Time",
+            "body": "Java lets several methods share the exact same name as long as their parameter lists differ in type, number, or order -- this is called **overloading**, and it's resolved entirely by the compiler, based on the static (declared) types of the arguments at the call site, before the program ever runs.\n\n```java\nstatic int add(int a, int b) { return a + b; }\nstatic double add(double a, double b) { return a + b; }\nstatic String add(String a, String b) { return a + b; }\n\nadd(2, 3);        // compiler picks the (int, int) overload -> 5\nadd(2.5, 3.5);     // compiler picks the (double, double) overload -> 6.0\nadd(\"2\", \"3\");     // compiler picks the (String, String) overload -> \"23\"\n```\n\nA method that differs from another *only* in its return type, with an identical parameter list, is not a legal overload -- the compiler can't disambiguate a call based on what you do with the result, only on the arguments you pass in. Worth flagging explicitly, because it becomes genuinely relevant later once inheritance enters the picture: overloading is sometimes called 'compile-time polymorphism' precisely because the decision of *which method body actually runs* is locked in when the code is compiled, based purely on declared argument types -- a sharply different mechanism from *overriding*, where the method that runs is chosen at run time based on the actual object's real type. Confusing the two is a common source of subtle bugs once subclasses are involved."
+          },
+          {
+            "heading": "Overload Resolution Order: Exact Match, Then Widening, Then Autoboxing",
+            "body": "When more than one overload could plausibly accept a given call, Java doesn't pick arbitrarily -- it follows a fixed preference order. It first looks for an overload matching the argument types **exactly**. If none exists, it considers **widening** a primitive to a larger compatible primitive type (`int` to `long`, `long` to `double`, and so on) -- this is attempted before **autoboxing** (wrapping a primitive in its object wrapper, like `int` into `Integer`) is even considered.\n\n```java\nstatic void show(long value) { System.out.println(\"long: \" + value); }\nstatic void show(Integer value) { System.out.println(\"Integer: \" + value); }\n\nshow(5);   // prints \"long: 5\" -- widening int -> long wins over autoboxing int -> Integer\n```\n\nThis often surprises people who expect the `Integer` overload to be picked because `5` 'is an int', assuming autoboxing is somehow the more natural or direct path -- but Java's resolution rules specifically prefer a same-primitive-family widening conversion over crossing into object-wrapper territory, precisely because widening was part of the language before autoboxing existed and the rule was never revisited to prefer autoboxing instead. If neither an exact match, a widening conversion, nor autoboxing produces a single unambiguous best overload, the compiler reports an ambiguity error rather than guessing."
+          },
+          {
+            "heading": "Arrays: Fixed-Size, Zero-Indexed, Reference-Type Containers",
+            "body": "An array is created with a size that is fixed permanently at the moment of creation -- `int[] scores = new int[5];` allocates room for exactly five `int` values, default-initialized to `0`, and that size can never grow or shrink afterward; there is no 'add one more element' operation on an array itself. Elements are accessed by a zero-based index, `scores[0]` through `scores[4]` for a five-element array, and reading or writing an index outside that range compiles just fine but throws `ArrayIndexOutOfBoundsException` at run time -- the compiler has no way to verify indices against array length in general, since indices are often computed from data that only exists while the program is running.\n\n```java\nint[] scores = new int[3];\nscores[0] = 90;\nscores[1] = 85;\nscores[2] = 78;\nSystem.out.println(scores.length);   // 3 -- .length is a FIELD here, not a method call\nSystem.out.println(scores[3]);       // compiles fine, throws ArrayIndexOutOfBoundsException at run time\n```\n\nArrays are reference types, even when their elements are primitives -- `scores` itself is a reference to an object living on the heap, not the values directly, which is why `array.length` is accessed without parentheses (it's a field on the array object) while `String.length()` is a method call -- an easy detail to trip over given how similar they look. A declared-but-unassigned array variable holds `null` until explicitly given an array with `new`, and calling `.length` on a `null` array reference throws `NullPointerException`, a distinct failure from indexing past the end of a real array that does exist."
+          },
+          {
+            "heading": "Passing Arrays to Methods: What's Actually Copied",
+            "body": "Java is always, without exception, pass-by-value -- but what that 'value' actually is depends entirely on whether the parameter's type is primitive or a reference type. For a primitive parameter, the value copied is the primitive value itself. For an array (or any reference type) parameter, the value copied is the **reference** -- effectively, the address the variable points to -- not the array's contents. This single fact explains a distinction that trips up a lot of people moving into Java: mutating an array's elements inside a method is visible to the caller afterward, but reassigning the parameter variable itself inside the method is not.\n\n```java\nstatic void mutate(int[] arr) {\n    arr[0] = 99;                 // mutates the array the CALLER's reference also points to\n}\n\nstatic void reassign(int[] arr) {\n    arr = new int[]{1, 2, 3};    // only repoints this method's own LOCAL copy of the reference\n}\n\npublic static void main(String[] args) {\n    int[] numbers = {0, 0, 0};\n    mutate(numbers);\n    System.out.println(numbers[0]);   // 99 -- visible: mutate() wrote through the shared reference\n\n    reassign(numbers);\n    System.out.println(numbers[0]);   // still 99 -- reassign() only changed ITS OWN copy of the reference\n}\n```\n\n`mutate` receives a copy of the reference, but that copy still points at the exact same array object the caller's `numbers` points at -- so `arr[0] = 99` writes into that one shared array, and the caller sees it. `reassign` also receives a copy of the reference, but `arr = new int[]{1, 2, 3}` only changes what that local copy of the variable points to -- it makes `reassign`'s own `arr` point somewhere new, with zero effect on `main`'s `numbers`, which still points at the original array, untouched by that reassignment. This is precisely the same 'copy the reference, not the object' rule from the primitives-vs-references concept, just now observed across a method call boundary instead of a simple assignment."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Overload Resolution at Compile Time",
+          "language": "java",
+          "code": "public class Calc {\n    static int add(int a, int b) { return a + b; }\n    static double add(double a, double b) { return a + b; }\n    static String add(String a, String b) { return a + b; }\n\n    public static void main(String[] args) {\n        System.out.println(add(2, 3));         // 5\n        System.out.println(add(2.5, 3.5));      // 6.0\n        System.out.println(add(\"2\", \"3\"));      // 23\n    }\n}",
+          "explanation": "There are three separate methods here, all named add, distinguished only by their parameter types. When the compiler sees add(2, 3), it looks at the static types of the arguments -- two int literals -- and picks the (int, int) overload, since that's an exact match; no widening or boxing is even needed. add(2.5, 3.5) similarly matches the (double, double) overload exactly, and add(\"2\", \"3\") matches the (String, String) overload -- note this last one performs string concatenation, not numeric addition, because that's what + means for the String overload's body, entirely unrelated to what + does in the other two. All of this is decided while javac is compiling the code, purely by looking at the argument types written at each call site -- none of it depends on any value that only exists while the program is running."
+        },
+        {
+          "title": "Widening Beats Autoboxing in Overload Resolution",
+          "language": "java",
+          "code": "public class Widening {\n    static void show(long value) {\n        System.out.println(\"long: \" + value);\n    }\n\n    static void show(Integer value) {\n        System.out.println(\"Integer: \" + value);\n    }\n\n    public static void main(String[] args) {\n        show(5);   // prints \"long: 5\"\n    }\n}",
+          "explanation": "5 is an int literal, and neither overload matches int exactly -- so the compiler moves on to its fallback rules, in a fixed order: widening conversions are considered before autoboxing. Widening int to long is a same-family primitive conversion and is tried first; it succeeds, so show(long) is chosen. Autoboxing int to Integer would also technically make show(Integer) callable, but it's only ever considered if no widening conversion could satisfy the call, which isn't the case here. This often surprises people who expect Integer to win because '5 is basically an int already' -- but Java's resolution order specifically favors staying within primitive widening before ever crossing into the object-wrapper world."
+        },
+        {
+          "title": "Arrays Are References: Mutation Survives a Method Call, Reassignment Doesn't",
+          "language": "java",
+          "code": "public class ArrayPassing {\n    static void mutate(int[] arr) {\n        arr[0] = 99;\n    }\n\n    static void reassign(int[] arr) {\n        arr = new int[]{1, 2, 3};\n    }\n\n    public static void main(String[] args) {\n        int[] numbers = {0, 0, 0};\n\n        mutate(numbers);\n        System.out.println(numbers[0]);   // 99\n\n        reassign(numbers);\n        System.out.println(numbers[0]);   // still 99\n    }\n}",
+          "explanation": "mutate receives a copy of the reference stored in numbers, but that copy still points at the exact same array object -- so writing to arr[0] inside mutate writes into the one and only array that exists, and main sees the change through its own numbers variable afterward. reassign also receives a copy of that same reference, but arr = new int[]{1, 2, 3} does something different: it makes reassign's own local arr variable point at a brand-new array, without touching what numbers points at back in main at all. Once reassign returns, that new array it created is simply discarded (nothing else refers to it), and numbers in main is exactly as it was after mutate ran. The rule underneath both outcomes is the same: passing an array copies the reference, so writes through that reference are shared, but rebinding the local copy of the reference itself is not."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "Overloaded methods are chosen at run time based on the actual object passed in, the same way method overriding works.",
+          "clarification": "Overload resolution happens entirely at compile time, based on the static (declared) types of the arguments at each call site -- javac decides which overloaded method's code a given call will run, and that decision is baked into the compiled bytecode before the program ever executes. This is a fundamentally different mechanism from overriding, where a subclass provides its own version of an inherited method, and the version that actually runs is chosen at run time based on the real, actual type of the object the method is called on, not on how the reference variable is declared. Overloading is sometimes called 'compile-time polymorphism' and overriding 'run-time polymorphism' for exactly this reason -- conflating them is a common source of confusion once inheritance enters the picture."
+        },
+        {
+          "description": "Passing an array into a method passes a full copy of the array's contents, so changes made to it inside the method can never affect the caller's array.",
+          "clarification": "Java passes a copy of the array's REFERENCE, not a copy of its contents -- the copied reference still points at the exact same array object the caller has. Mutating an element through that reference inside the method (arr[i] = newValue) writes into the one shared array and is visible to the caller once the method returns. What does NOT survive is reassigning the parameter variable itself (arr = new int[]{...}) -- that only repoints the method's own local copy of the reference, leaving the caller's variable pointing at the original, unaffected array. The two operations, mutating through the reference versus reassigning the reference, have opposite visibility outcomes, and it's the difference between them -- not a blanket 'arrays are always copied' or 'arrays are never copied' rule -- that actually matters."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "java-methods-and-arrays-ex1",
+          "type": "predictOutput",
+          "prompt": "What does this program print, and why?",
+          "code": "public class Tracker {\n    static void addPoint(int[] scores) {\n        scores[0] = scores[0] + 10;\n    }\n\n    static void resetScores(int[] scores) {\n        scores = new int[scores.length];\n    }\n\n    public static void main(String[] args) {\n        int[] scores = {50, 60, 70};\n\n        addPoint(scores);\n        System.out.println(scores[0]);\n\n        resetScores(scores);\n        System.out.println(scores[0]);\n    }\n}",
+          "hints": [
+            "addPoint mutates scores[0] through the array reference it was given -- is that reference the same one main's scores variable holds?",
+            "resetScores assigns a brand-new array to its own parameter named scores -- does that reassignment reach back and change what main's scores variable points to?",
+            "Separate 'writing through the reference' (arr[i] = ...) from 'rebinding the reference itself' (arr = new int[...]) -- they have very different visibility outside the method."
+          ],
+          "expectedAnswer": "60, then 60. addPoint mutates the shared array through its reference, so the change is visible in main. resetScores only reassigns its own local copy of the parameter to a new array; main's scores variable still points at the original array, unaffected.",
+          "solutionExplanation": "addPoint receives a copy of the reference stored in main's scores, but that copy points at the same underlying array -- so scores[0] = scores[0] + 10 mutates that one shared array, changing its first element from 50 to 60, which main's own scores[0] reflects immediately afterward: 60. resetScores also receives a copy of that reference, but scores = new int[scores.length] only repoints resetScores's own local parameter variable at a freshly created array full of zeros -- it does not, and cannot, change what main's scores variable points to. So after resetScores returns, main's scores is exactly as it was left by addPoint: still pointing at the original array with 60 in its first slot, giving a second printed line of 60, not 0."
+        },
+        {
+          "id": "java-methods-and-arrays-ex2",
+          "type": "debugging",
+          "prompt": "This method is supposed to print every element of an array, but it throws ArrayIndexOutOfBoundsException. Find and fix the bug.",
+          "code": "public class Printer {\n    static void printAll(int[] values) {\n        for (int i = 0; i <= values.length; i++) {\n            System.out.println(values[i]);\n        }\n    }\n\n    public static void main(String[] args) {\n        printAll(new int[]{10, 20, 30});\n    }\n}",
+          "hints": [
+            "For an array of length 3, what are the valid indices -- and does values.length itself ever count as a valid index?",
+            "Compare the loop's continuation condition, i <= values.length, against the actual valid index range.",
+            "Change the comparison operator so the loop stops one iteration earlier than it currently does."
+          ],
+          "solutionCode": "public class Printer {\n    static void printAll(int[] values) {\n        for (int i = 0; i < values.length; i++) {\n            System.out.println(values[i]);\n        }\n    }\n\n    public static void main(String[] args) {\n        printAll(new int[]{10, 20, 30});   // prints 10, 20, 30\n    }\n}",
+          "solutionExplanation": "For an array of length 3, the valid indices are 0, 1, and 2 -- index 3 (equal to the array's length) is one past the last real element and does not exist. The original condition, i <= values.length, allows i to reach 3, and values[3] on that final pass throws ArrayIndexOutOfBoundsException, since there is no fourth element. Changing the condition to i < values.length stops the loop after i = 2, the last valid index, which is the correct, idiomatic bound for iterating an array by index. This is the array-specific version of the same off-by-one mistake that shows up in for loops generally -- the fix is always to check the exact boundary condition against what's actually valid, rather than what looks close enough."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "java-methods-and-arrays-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "static void grow(int[] arr) {\n    arr = new int[]{7, 8, 9};\n}\n\npublic static void main(String[] args) {\n    int[] data = {1, 2, 3};\n    grow(data);\n    System.out.println(data[0]);\n}\nWhat does this print, and why?",
+          "options": [
+            "7, because grow replaces the array data refers to with a new one.",
+            "1, because grow only reassigns its own local copy of the array reference -- it never changes what data, back in main, points to.",
+            "This throws a NullPointerException, because arr is reassigned inside grow.",
+            "0, because reassigning the parameter resets the original array's contents to their default values."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "grow receives a copy of the reference stored in data, and arr = new int[]{7, 8, 9} only repoints THAT local copy at a brand-new array -- it has no way to reach back and change what main's own data variable points to, since that would require modifying the caller's variable directly, which passing a copy of a reference does not allow. So data in main still points at the original array {1, 2, 3}, completely unaffected, and data[0] prints 1. Option A describes what would happen if arrays were passed by reference to the variable itself (which Java does not do); option C is wrong because nothing here produces a null reference; option D is wrong because the original array's contents are never touched at all -- only a separate, new, and ultimately unused array is created and then discarded once grow returns."
+        },
+        {
+          "id": "java-methods-and-arrays-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain why an array passed into a method can have its elements changed by that method (visible to the caller afterward), while reassigning the array parameter itself inside that method has no effect on the caller at all. Use the concept of what is actually being copied when an argument is passed.",
+          "modelAnswer": "Java is always pass-by-value, but for a reference type like an array, the 'value' being copied into the method's parameter is the reference itself -- essentially an address pointing to where the array actually lives on the heap -- not the array's contents. That copied reference still points at the exact same array object the caller has, so there are, at that point, two separate variables (the caller's and the method's parameter) both pointing at one shared array. If the method writes to an element through its reference, such as arr[0] = 99, it is writing into that one shared array object, and since the caller's variable points at that same object, the caller observes the change immediately after the method returns -- nothing needs to be 'passed back'; the caller was always looking at the same underlying data. Reassigning the parameter itself, such as arr = new int[]{1, 2, 3}, is a completely different operation: it changes what the method's own local copy of the reference points to, aiming it at a newly created array instead. That reassignment only affects the method's local variable -- it cannot reach back and change what the caller's own variable points to, because the caller's variable is a separate copy of the original reference, never connected to the method's local variable beyond having started out pointing at the same object. So the general rule is: any change made THROUGH a reference (mutating the object it points to) is visible everywhere that reference is shared, but any change made TO the reference itself (making it point elsewhere) is purely local to whichever variable was reassigned."
+        }
+      ]
+    }
+  ]
+}

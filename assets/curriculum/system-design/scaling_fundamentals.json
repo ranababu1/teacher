@@ -1,0 +1,364 @@
+{
+  "learningPathId": "system-design",
+  "moduleId": "scaling_fundamentals",
+  "title": "Scaling Fundamentals",
+  "order": 1,
+  "concepts": [
+    {
+      "id": "system-design-vertical-vs-horizontal-scaling",
+      "title": "Vertical vs. Horizontal Scaling",
+      "description": "Every capacity problem starts with the same fork in the road -- make one machine bigger, or use more machines -- and the choice you make quietly sets the ceiling, the cost curve, and the failure model of everything you build on top of it.",
+      "moduleId": "scaling_fundamentals",
+      "topicId": "scaling_fundamentals",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 35,
+      "prerequisites": [],
+      "learningObjectives": [
+        "Define vertical scaling and horizontal scaling in terms of exactly what resource is being added.",
+        "Explain the physical and economic ceiling that limits vertical scaling, including non-linear cost growth for larger instances.",
+        "Explain why horizontal scaling requires additional coordination infrastructure that vertical scaling does not.",
+        "Explain why a single machine -- no matter how large -- cannot satisfy a high-availability requirement on its own.",
+        "Given a workload description, recommend vertical or horizontal scaling and justify the choice with a concrete tradeoff."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "Two Different Answers to \"We Need More Capacity\"",
+            "body": "**Vertical scaling** (\"scaling up\") means adding more resources -- CPU, RAM, faster disks, more network bandwidth -- to a single existing machine. If your database runs on a `db.r5.xlarge` instance and you resize it to a `db.r5.8xlarge`, you still have exactly one database instance; it's just a much more powerful one. **Horizontal scaling** (\"scaling out\") means adding more machines that each handle a share of the total work: going from 2 application servers to 20 behind a load balancer, or adding read replicas to a database so multiple machines can serve read traffic in parallel.\n\nThe distinction is easy to state but worth internalizing precisely, because it drives everything downstream: after you scale, do you still have the same number of things running your workload (vertical), or do you now have more of them (horizontal)? That single question determines whether you've changed how fast one machine is, or how many independently-failing machines exist -- and those are very different kinds of change, with very different consequences for cost, complexity, and what happens when something breaks."
+          },
+          {
+            "heading": "The Ceiling on Vertical Scaling: Physics and Price",
+            "body": "Vertical scaling runs into two ceilings, and it's worth distinguishing them because they bite at different points. The first is **physical**: at any given moment, there is a largest machine you can rent or buy. Cloud providers cap out at some maximum instance size -- a few terabytes of RAM, a few hundred cores -- and eventually you simply run out of bigger boxes to move to.\n\nThe second ceiling is **economic**, and it usually bites first. Pricing for the largest instances is typically *superlinear*: doubling the cores and RAM of an instance often costs meaningfully more than double the price, not because the hardware itself is twice as expensive to build, but because top-tier instances are relatively scarce, see less competitive pressure, and command a premium. So price-per-unit-of-capacity tends to get *worse*, not better, as you climb the instance ladder -- the opposite of what \"just buy a bigger box\" intuitively suggests.\n\nAnd there's a ceiling that isn't about price or size at all: no matter how large that one machine is, it is still **one machine** -- one power supply, one kernel, one network interface, one physical host that can fail, need a reboot for patching, or hit a noisy-neighbor problem in a shared cloud environment. A single point of failure that happens to be very fast is still a single point of failure."
+          },
+          {
+            "heading": "The Price of Horizontal Scaling: You're Buying Coordination, Not Just Capacity",
+            "body": "Horizontal scaling avoids both of vertical scaling's ceilings -- you can, in principle, keep adding machines indefinitely, and commodity mid-sized machines are usually far cheaper per unit of capacity than the very largest ones. But it isn't free; it trades a hardware problem for a software and coordination problem.\n\nOnce you have more than one machine serving the same workload, you need a way to route requests across them (a load balancer -- the subject of the next concept), and you need the system's behavior to not depend on *which* machine happened to handle a given request (statelessness -- also covered next). If the workload is stateful -- a database, a cache, a queue -- you additionally need a way to keep multiple machines' copies of the data consistent with each other, which is where replication, sharding, and consistency tradeoffs (the CAP theorem, and the whole second module of this subject) come from.\n\nNone of that complexity exists with a single vertically-scaled machine, because there's only one copy of anything -- there's nothing to keep in sync. This is exactly why \"just scale vertically\" is often the right answer for as long as it holds: it defers an entire category of distributed-systems complexity that horizontal scaling requires you to take on."
+          },
+          {
+            "heading": "Choosing Between Them: Sequencing, Not Ideology",
+            "body": "In practice this isn't a one-time either/or decision -- it's a sequence most systems follow. Scale vertically first, because it requires zero application changes (resize the instance, maybe restart it) and modern hardware is enormous; plenty of real workloads never actually hit the physical or economic ceiling at all.\n\nMove to horizontal scaling when one of two things becomes true: you hit the vertical ceiling (there's no bigger box, or the cost curve has become absurd), or -- and this is the case people most often miss -- you have an availability requirement that no single machine can satisfy regardless of its size, because a single machine is always exactly one fault domain. If your SLA is \"99.99% uptime,\" you need at least two independently-failing machines serving traffic, full stop; vertical scaling, however large, cannot get you there alone, because it is still betting everything on one thing not breaking. Recognizing which of these two forces -- a capacity ceiling, or a fault-domain requirement -- is actually driving your scaling need tells you which direction genuinely solves your problem, rather than just moving it."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Resizing vs. Replicating a Database",
+          "language": "text",
+          "code": "BEFORE:\n  1x db.r5.2xlarge  (8 vCPU, 64 GB RAM)   -- handling 5,000 reads/sec, CPU-bound at 85%\n\nOPTION A (vertical):\n  1x db.r5.8xlarge  (32 vCPU, 256 GB RAM) -- same single instance, 4x the resources\n  -> capacity roughly 4x; at this size, roughly 4x the price too\n  -> still ONE instance: one failure domain, one maintenance window, one upper bound\n\nOPTION B (horizontal):\n  1x db.r5.2xlarge (primary, handles writes)\n  + 4x db.r5.2xlarge (read replicas, handle reads)\n  -> read capacity now ~5x, spread across 5 machines, similar total cost to Option A\n  -> if ANY one replica dies, the other 4 keep serving traffic\n  -> but: replicas lag behind the primary, so reads can be slightly stale",
+          "explanation": "At this particular size, cost happens to scale roughly linearly (that's not always true -- going one or two sizes further up the ladder often breaks it), so the deciding factor here isn't price, it's fault tolerance and the shape of read scaling. Option A still has exactly one thing that can go down and take the entire database with it. Option B spreads read traffic across five independently-failing machines, at the cost of introducing replication lag -- a client could read slightly stale data from a replica, which is a preview of the consistency tradeoffs covered later in this subject. This example undercuts the \"vertical is always worse value\" myth while also showing concretely why horizontal buys you something vertical structurally cannot: no single point of failure."
+        },
+        {
+          "title": "Why the Cost Curve Bends Against You at the Top",
+          "language": "text",
+          "code": "Instance size        vCPU   RAM      Relative price   Price per vCPU\nsmall (baseline)       4     16 GB     1.0x             1.00x\nmedium                 8     32 GB     2.1x             1.05x\nlarge                 16     64 GB     4.6x             1.15x\n2x-large              32    128 GB    10.8x             1.35x\n4x-large (top tier)   64    256 GB    28.0x             1.75x",
+          "explanation": "Each step up the ladder roughly doubles the raw resources, but the relative price more than doubles each time, so price-per-vCPU climbs steadily -- by the top tier you're paying 75% more per unit of compute than at the baseline. This is a realistic shape (not exact numbers from any one vendor) of what happens across most cloud providers' instance families: the largest instances are priced at a premium because there's less competitive pressure and less demand at that tier, and because the provider is allocating genuinely scarce top-of-rack hardware. This is the concrete economic mechanism behind \"vertical scaling hits a ceiling\" -- the ceiling isn't just \"no bigger box exists,\" it's also \"the box that does exist gets disproportionately expensive well before you're technically unable to buy it.\""
+        },
+        {
+          "title": "One Big Box vs. a Pool of Small Ones, Under Failure",
+          "language": "text",
+          "code": "Scenario: a traffic spike causes one machine to become unhealthy and get taken out of rotation.\n\nARCHITECTURE A -- one vertically-scaled machine:\n  [ single large server ] -- unhealthy -- 100% of traffic has nowhere to go -- full outage\n\nARCHITECTURE B -- eight horizontally-scaled machines behind a load balancer:\n  [LB] -> server 1 (unhealthy, removed from rotation)\n       -> server 2 .. server 8 (healthy, absorb the extra load)\n  -- ~12.5% capacity lost; remaining 7 machines take a modest load increase each",
+          "explanation": "This is the fault-tolerance argument for horizontal scaling in its purest form. In Architecture A, \"unhealthy\" and \"total outage\" are the same event, because there is nothing else to fail over to. In Architecture B, losing one of eight machines degrades capacity by roughly one-eighth rather than taking the system down entirely -- assuming, importantly, that the load balancer actually detects the unhealthy instance and stops routing to it (health checks, covered in the next concept), and that the remaining seven machines have headroom to absorb the extra load each is now picking up. Horizontal scaling doesn't eliminate failure, it contains it -- and that containment is arguably the real product being purchased, more so than raw extra capacity."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "Horizontal scaling is the modern, correct approach and vertical scaling is a legacy technique you should avoid.",
+          "clarification": "Vertical scaling is frequently the right and simplest answer -- it requires no code changes, no distributed-systems complexity, and modern single machines are large enough to run the vast majority of real-world workloads without ever hitting a ceiling. Horizontal scaling trades a hardware limitation for a genuinely harder problem: coordinating multiple independently-failing machines, keeping their state consistent, and load-balancing traffic between them. Reaching for horizontal scaling before you actually need it (\"premature scaling\") adds real operational and cognitive cost for a problem you don't have yet; the right sequence is almost always vertical-first, horizontal when vertical provably can't meet a capacity or availability requirement."
+        },
+        {
+          "description": "If I have N servers instead of 1, my capacity is N times higher, full stop.",
+          "clarification": "That's only true if the workload is embarrassingly parallel -- each unit of work is fully independent and never needs to touch shared state. The moment multiple servers need to read or write the same database, cache, or lock, some of the added capacity gets consumed by contention and coordination overhead (extra network hops, lock waits, cache invalidation traffic) rather than useful work -- this is the practical, systems-level version of Amdahl's law. In the extreme, adding more servers past the point where a shared bottleneck (like a single non-replicated database) is already saturated buys no additional throughput at all, no matter how many app servers sit in front of it."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "system-design-vertical-vs-horizontal-scaling-ex1",
+          "type": "predictOutput",
+          "prompt": "A checkout service runs on one machine and is CPU-bound at 500 req/s. The on-call engineer resizes the machine to 4x the CPU and RAM (\"vertical scaling\") and announces the capacity problem is solved permanently. Given the metrics below, predict what happens to (a) throughput headroom and (b) the system's exposure to outages, and say whether \"solved permanently\" is a fair characterization.",
+          "code": "BEFORE resize:\n  1 server, 8 vCPU, CPU util 92% at 500 req/s\n  Uptime SLA target: 99.95%\n\nAFTER resize:\n  1 server, 32 vCPU, CPU util ~23% at 500 req/s (projected)\n  Number of servers: still 1",
+          "hints": [
+            "Throughput headroom and availability risk are two different axes -- work out what changed and what didn't change between BEFORE and AFTER.",
+            "Count how many independently-failing machines exist in each scenario. Did that number change?",
+            "\"Solved permanently\" would require the ceiling to never be hit again AND the failure mode to have improved -- check both halves separately."
+          ],
+          "expectedAnswer": "Throughput headroom improves a lot (CPU util drops from 92% to ~23%, so the service can now absorb roughly 4x the traffic before hitting the same CPU pressure). But outage exposure is completely unchanged: there is still exactly one server, so any hardware fault, kernel panic, forced reboot for patching, or cloud host-level incident takes the checkout service down just as fully as before. \"Solved permanently\" is not fair -- it's solved for capacity, temporarily (until traffic grows 4x again, and there's a real ceiling above which no bigger box exists or the price becomes absurd), and it does nothing at all for availability, which was never a function of machine size to begin with.",
+          "solutionExplanation": "Vertical scaling only ever moves the capacity ceiling further away for the SAME single machine -- it has zero effect on the number of independent fault domains, which stays at exactly one. The 92% -> 23% CPU utilization drop is real and buys meaningful headroom against future traffic growth, but the claim of a permanent fix conflates two separate problems: a capacity problem (temporarily fixed, will recur) and an availability problem (not addressed at all, and structurally cannot be addressed by resizing, since resizing never produces a second machine to fail over to). A 99.95% SLA requires reasoning about what happens when this one machine fails, and after this change the answer is identical to before: total outage."
+        },
+        {
+          "id": "system-design-vertical-vs-horizontal-scaling-ex2",
+          "type": "debugging",
+          "prompt": "A team's capacity plan claims: \"We scaled our app tier from 2 to 40 servers behind a load balancer, so we can now handle 20x the traffic.\" Under load testing, throughput plateaus at about 3x, not 20x. Find the architectural assumption that's wrong.",
+          "code": "ARCHITECTURE:\n  [Load Balancer] -> 40x app servers (stateless, each identical)\n                          |\n                          v\n                  1x PostgreSQL instance (single, un-replicated, un-sharded)\n                  -- every app server reads AND writes to this same instance\n                  -- no read replicas, no caching layer, no sharding",
+          "hints": [
+            "40 app servers were added, but look at what's directly downstream of all of them -- did that layer get scaled too?",
+            "Throughput plateauing well below the theoretical N-times number is the classic signature of a single shared bottleneck that didn't scale with everything in front of it.",
+            "Ask: if you added 400 app servers instead of 40, would the plateau move at all?"
+          ],
+          "solutionCode": "FIXED ARCHITECTURE (one of several valid directions):\n  [Load Balancer] -> 40x app servers (stateless)\n                          |\n              +-----------+-----------+\n              v                       v\n      1x Postgres primary      4x Postgres read replicas\n      (writes only)            (reads, load-balanced across replicas)\n                    + a caching layer (e.g. Redis) in front of the DB\n                      for hot read paths",
+          "solutionExplanation": "The team scaled the stateless app tier 20x but left the one stateful resource every request ultimately depends on -- the single Postgres instance -- completely unscaled. Once enough of the 40 app servers are busy enough to saturate that one database's connection, CPU, or IO capacity, adding a 41st, 100th, or 400th app server buys nothing, because the bottleneck was never the app tier's capacity to accept requests, it was the database's capacity to serve them. This is the single most common horizontal-scaling mistake: scaling the easy layer (stateless, horizontally trivial) while ignoring the hard layer (stateful, requires replication or sharding to scale) that actually gates end-to-end throughput. The fix has to attack the database itself -- read replicas for read-heavy load, a cache in front of hot reads, or sharding for write-heavy load -- not add more of the layer that was never the bottleneck."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "system-design-vertical-vs-horizontal-scaling-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "A team scales its web tier from 4 to 40 servers behind a load balancer, but observes that peak-load latency barely improves. What is the most likely explanation?",
+          "options": [
+            "The load balancer is misconfigured and cannot handle more than 4 backend servers.",
+            "Some shared downstream resource (a database, a cache, a lock, a third-party API) is saturated, so extra app servers just queue up in front of the same bottleneck instead of doing more useful work.",
+            "Horizontal scaling has a fundamental hard limit of about 4-10x, regardless of workload.",
+            "Adding more servers to a load balancer always increases network latency proportionally, canceling out the extra capacity."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This is the classic \"you scaled the wrong layer\" pattern: the app tier can now accept far more concurrent requests, but if all of them ultimately have to wait on one saturated shared resource downstream, extra app servers just create a longer queue in front of that same resource rather than increasing real throughput. Option A is wrong -- load balancers routinely handle far more than 40 backends; that's not an inherent limitation. Option C is wrong -- there's no universal hard limit like this; the actual limit depends entirely on where the real bottleneck sits. Option D is wrong -- a well-configured load balancer adds negligible, roughly constant latency per hop; it doesn't scale up proportionally with backend count."
+        },
+        {
+          "id": "system-design-vertical-vs-horizontal-scaling-assess-explain1",
+          "type": "explanation",
+          "prompt": "A stakeholder asks: \"Why can't we just buy the biggest possible database server and call our availability problem solved?\" Explain, in terms a non-distributed-systems engineer could follow, why a single machine -- no matter how large -- cannot satisfy a high-availability requirement on its own, and what actually has to change architecturally.",
+          "modelAnswer": "Machine size and machine count answer two completely different questions. Size determines how much traffic or data one machine can handle before it runs out of CPU, memory, or IO -- and yes, buying a bigger machine genuinely raises that ceiling, sometimes dramatically. But availability is a question about what happens when something breaks -- a disk failure, a kernel panic, a botched OS patch, the physical host losing power, or even just a routine maintenance reboot -- and a single machine, whatever its size, is always exactly one such failure away from being completely unavailable. Buying a bigger single machine does not create a second, independent thing that could take over when the first one is down; it just makes the one existing thing faster, while leaving the number of independent fault domains at exactly one. A 99.99% (or any serious) uptime target is fundamentally a statement about tolerating failures, not about raw capacity, so it can only be satisfied by having at least two machines that can fail independently of each other, with a mechanism (replication for data, a load balancer or failover process for traffic) to keep serving requests when one of them is down. In other words: solving a capacity problem is a vertical-scaling question (\"is this box big enough\"), but solving an availability problem is inherently a horizontal-scaling question (\"what happens to the other box when this one dies\"), and no amount of spending on a single box can convert one into an answer for the other."
+        }
+      ]
+    },
+    {
+      "id": "system-design-load-balancing-and-statelessness",
+      "title": "Load Balancing and Statelessness",
+      "description": "Horizontal scaling only works if requests can be spread across machines safely -- that requires a load balancer to decide where each request goes, and stateless services so it doesn't matter which machine actually handles it.",
+      "moduleId": "scaling_fundamentals",
+      "topicId": "scaling_fundamentals",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 40,
+      "prerequisites": ["system-design-vertical-vs-horizontal-scaling"],
+      "learningObjectives": [
+        "Explain the role of a load balancer and compare round-robin, least-connections, and consistent-hashing strategies.",
+        "Explain how health checks let a load balancer route around failed instances.",
+        "Define statelessness precisely and explain why it's a prerequisite for effective horizontal scaling.",
+        "Identify hidden sources of state (in-memory session data, sticky sessions, local file writes) that silently break horizontal scaling.",
+        "Explain the tradeoff sticky sessions introduce and when externalizing state is the better fix."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "What a Load Balancer Actually Does",
+            "body": "A load balancer sits in front of a pool of backend servers and decides which one handles each incoming request or connection. That decision is a small but critical piece of infrastructure: without it, clients would need to know about every backend individually and decide for themselves how to distribute load, which defeats the entire point of having a pool of interchangeable machines.\n\nLoad balancers generally operate at one of two levels. **L4 (transport-level)** balancers work purely with IP addresses and ports -- they route TCP or UDP connections without looking inside the traffic at all, which is fast and simple but blind to anything about the request's content. **L7 (application-level)** balancers understand the protocol running on top -- for HTTP, this means they can route based on the URL path, headers, or cookies, which enables things like sending `/api/*` to one pool of servers and `/static/*` to another. Beyond routing, a load balancer's other essential job is **health checking**, covered later in this concept -- deciding, continuously, which backends are actually fit to receive traffic right now."
+          },
+          {
+            "heading": "Load Balancing Strategies: Round Robin, Least Connections, Consistent Hashing",
+            "body": "**Round robin** rotates through backends in a fixed order -- request 1 to server A, request 2 to server B, request 3 to server C, request 4 back to server A, and so on. It's simple and genuinely fair in the narrow sense of \"equal request count per backend,\" but it has no idea how expensive any given request actually is, or how busy a backend currently is from previous requests still in flight.\n\n**Least connections** routes each new request to whichever backend currently has the fewest active connections (or in-flight requests). This adapts to reality in a way round robin can't: if one backend is stuck processing a slow, expensive request, least-connections routing naturally avoids piling more work on it, sending new requests to backends that are actually free.\n\n**Consistent hashing** routes based on a hash of some key in the request -- a client ID, a cache key, a user ID -- so that the same key tends to land on the same backend every time, rather than being distributed arbitrarily. This matters enormously for anything with a caching layer or sharded backend behind the load balancer: if the same key always reaches the same backend, that backend can build up a useful local cache for that key; consistent hashing is specifically designed so that when the backend pool changes size (a server is added or removed), only a small fraction of keys get reassigned to a different backend, rather than the wholesale reshuffling a naive hash-and-mod approach would cause."
+          },
+          {
+            "heading": "Health Checks: How the Load Balancer Knows a Backend Is Actually Alive",
+            "body": "A load balancer routing traffic to a dead backend is worse than useless -- it actively sends users to failure. Health checks are how a load balancer continuously verifies that each backend is actually capable of serving traffic, typically by periodically hitting a dedicated health endpoint (or passively watching for failed requests) and removing any backend that fails enough consecutive checks from rotation.\n\nThis is the mechanism that makes the fault-containment argument from the previous concept actually work in practice: a pool of eight servers only degrades gracefully when one dies *if* the load balancer notices and stops routing to it. Two subtleties are worth knowing. First, a health endpoint that just returns \"200 OK\" without exercising the actual dependencies a real request needs (database connectivity, downstream services) can report healthy while the real request path is broken -- a false-positive health check that defeats the whole point. Second, when a large batch of backends recovers at once (after a deploy, or a shared dependency coming back online), all of them can get marked healthy and receive a sudden flood of traffic simultaneously -- a \"thundering herd\" on recovery that a naive health-check policy doesn't protect against, usually mitigated by staggering how quickly recovered instances are added back to full rotation."
+          },
+          {
+            "heading": "Statelessness: The Precondition for All of This to Work",
+            "body": "A **stateless** service handles a request using only information contained in the request itself (plus whatever it can fetch from an external, shared store) -- it doesn't rely on anything remembered in its own process memory from an earlier request. This is what actually makes a pool of backend servers interchangeable: if any instance can serve any request equally well, the load balancer is free to route however it wants, and instances can be added, removed, or replaced without anyone noticing.\n\nA **stateful** service breaks this by keeping something important -- session data, an uploaded temp file, an in-memory cache of the user's cart -- locally, in one process's memory. That instance becomes special: it's the only one that actually knows what it knows. The typical (and typically wrong) fix is **sticky sessions**, configuring the load balancer to always route a given client's requests to the same backend. This reintroduces exactly the single-point-of-failure problem horizontal scaling was supposed to solve, at the level of \"this one user's experience\": if that specific backend goes down, that user's session goes with it, no matter how many other healthy backends exist. Statelessness is what actually lets you add and remove instances at will -- autoscaling up under load, rolling out a deploy one instance at a time -- without correctness problems; it is the precondition, not a nice-to-have, for horizontal scaling to work cleanly."
+          },
+          {
+            "heading": "Externalizing State: Making \"Stateless\" Practical",
+            "body": "Real applications obviously do have state -- who's logged in, what's in their cart, what they last searched for. \"Stateless\" doesn't mean an application has no data; it means that data isn't pinned to one process's local memory. There are two common patterns for making this work.\n\nThe first pushes state into the client: a signed token (most commonly a JWT) carries the relevant data and is sent back to the server on every request. The server verifies the signature and reads what it needs directly from the token, without needing to remember anything locally at all. This avoids an extra network round-trip to a shared store, but has real limits -- tokens can only carry a limited amount of data before they become unwieldy, and revoking a token before it naturally expires (e.g., logging a user out early, or responding to a compromised account) is awkward, since the server issuing the token isn't the one holding it.\n\nThe second pushes state into a shared external store -- a database, or more commonly a fast cache like Redis -- that every instance can reach identically. This keeps individual requests simple and keeps revocation trivial (just delete the record), but it adds a network hop to every request that needs the state, and it introduces a new dependency that itself has to be available and fast enough not to become the new bottleneck. Neither pattern eliminates state; both simply relocate it somewhere every instance can reach on equal footing, which is the entire trick."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Round Robin vs. Least Connections Under Uneven Request Cost",
+          "language": "text",
+          "code": "Backends: A, B, C\nLoad balancer policy: round robin (strict rotation A -> B -> C -> A -> ...)\n\nRequest sequence and costs: 80ms, 80ms, 8000ms (\"generate report\"), 80ms, 80ms, 80ms, ...\n\nRound robin assigns:\n  req1 (80ms)   -> A\n  req2 (80ms)   -> B\n  req3 (8000ms) -> C   <- C is now busy for the next 8 seconds\n  req4 (80ms)   -> A\n  req5 (80ms)   -> B\n  req6 (80ms)   -> C   <- queues BEHIND the still-running 8s report on C!",
+          "explanation": "Round robin decides the next backend purely by rotation position -- it has no concept of how busy any backend currently is. Once C draws the 8-second report request, round robin still dutifully sends C its next scheduled request (req6) three turns later, and that cheap 80ms request now has to wait in line behind the still-running report, ballooning its effective latency even though the request itself was trivial. Least-connections routing would behave differently here: it tracks in-flight work per backend, so once C is visibly busy with the report, new requests naturally get routed to A or B instead. Round robin's \"fairness\" (equal request count per backend) is not the same thing as equal *load* per backend once request costs vary -- which is exactly the gap least-connections is designed to close."
+        },
+        {
+          "title": "Sticky Sessions Reintroducing a Single Point of Failure",
+          "language": "text",
+          "code": "Load balancer, sticky sessions enabled (routes by session cookie):\n\n  User X's browser -> [LB] -> always routed to Backend 2 (pinned via cookie)\n\n  Backend 1: healthy, idle\n  Backend 2: CRASHES -- holds User X's entire in-memory session/cart\n  Backend 3: healthy, idle\n\n  Result: User X's session and cart are gone, even though 2 of 3 backends\n  are perfectly healthy and could have served the request just fine.",
+          "explanation": "Sticky sessions solve the routing half of the state problem (making sure the same user reaches the same backend) but not the fragility it was masking. User X's actual data never left Backend 2's process memory, so when Backend 2 dies, that data dies with it -- the other two healthy backends are irrelevant, because they never had a copy of anything for User X in the first place. This is the concrete failure mode that motivates externalizing state entirely: if User X's cart lived in Redis instead of Backend 2's memory, any of the three backends -- including whichever one takes over after Backend 2 is marked unhealthy -- could serve the exact same cart data without interruption."
+        },
+        {
+          "title": "Externalizing Session State with Redis",
+          "language": "python",
+          "code": "# BEFORE: state lives in one process's memory -- breaks horizontal scaling\nsessions = {}  # in-process dict, unique to THIS server instance\n\ndef handle_login(user_id):\n    session_id = generate_session_id()\n    sessions[session_id] = {\"user_id\": user_id, \"logged_in_at\": now()}\n    return session_id\n\ndef handle_request(session_id):\n    session = sessions.get(session_id)  # only found if THIS instance handled login\n    ...\n\n# AFTER: state lives in a shared external store -- any instance can serve any request\ndef handle_login(user_id):\n    session_id = generate_session_id()\n    redis.set(f\"session:{session_id}\", {\"user_id\": user_id, \"logged_in_at\": now()}, ex=3600)\n    return session_id\n\ndef handle_request(session_id):\n    session = redis.get(f\"session:{session_id}\")  # reachable from ANY instance\n    ...",
+          "explanation": "The BEFORE version breaks the moment the load balancer sends a follow-up request to a different instance than the one that handled login: that instance's own `sessions` dict never saw this `session_id`, so the user appears logged out despite having just logged in. This is what \"statelessness\" actually means concretely -- not the absence of state, but the absence of state pinned to one process. The AFTER version moves the same data into Redis, reachable identically from every instance, so it no longer matters which one serves any given request. Note the new cost: Redis is now a dependency that itself needs to be available and fast -- the state problem has been moved, not eliminated -- but it's been moved to infrastructure specifically designed to be shared and made highly available, rather than accidentally depending on one web server's process memory."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "Round robin load balancing is \"fair,\" so it's always the right default choice.",
+          "clarification": "Round robin is fair in the narrow sense of \"equal number of requests per backend,\" but that's not the same as \"equal load per backend\" when individual requests vary in cost -- some queries fast, some slow reports, some backends momentarily busy with garbage collection or cache warming. Least-connections load balancing accounts for actual in-flight work rather than just request count, and is usually the better real-world default when request costs vary; round robin's \"fairness\" can concentrate load exactly where it's least wanted."
+        },
+        {
+          "description": "Sticky sessions are a perfectly fine way to add statefulness back once you already have a load balancer, since the load balancer \"remembers\" where to send each user.",
+          "clarification": "Sticky sessions solve the routing problem (same user, same backend) but not the underlying fragility -- that user's session now depends on exactly one backend instance staying up, which recreates a single point of failure at the level of \"this one user's experience,\" and it also undermines the load-balancing benefit itself, since traffic can no longer be redistributed evenly if one sticky-pinned backend happens to accumulate a disproportionate share of \"heavy\" users. Externalizing the state (a shared store, or a signed token) removes the need for stickiness entirely and is the more robust fix."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "system-design-load-balancing-and-statelessness-ex1",
+          "type": "predictOutput",
+          "prompt": "A load balancer uses simple round robin across 3 backend instances. One request type (\"generate report\") takes 8 seconds; all other request types take about 80ms. Traffic is a mix of 1 report request per 10 requests, arriving steadily. Predict what happens to overall latency over time, and explain why round robin doesn't self-correct for it.",
+          "code": "Backends: A, B, C\nLoad balancer policy: round robin (strict rotation A -> B -> C -> A -> ...)\nTraffic pattern: request costs = [80ms x9, 8000ms x1], repeating in that pattern",
+          "hints": [
+            "Round robin decides where to send the NEXT request based only on rotation order -- does it look at how busy a backend currently is?",
+            "Trace which backend gets the 8-second report request in each cycle of 10, and think about what else gets routed to that same backend shortly after, before the report finishes.",
+            "If a backend is still processing an 8-second request when round robin sends it 3 more 80ms requests, what happens to those 3 requests?"
+          ],
+          "expectedAnswer": "Because round robin routes purely by rotation position and has no idea how busy a backend currently is, whichever backend lands the 8-second report request keeps getting new 80ms requests assigned to it on schedule anyway -- those requests now have to queue behind the still-running report request. This produces periodic latency spikes: roughly every 10 requests, one backend accumulates a queue of several 80ms requests stuck waiting behind one slow one, so their effective latency balloons even though the request itself is cheap. Over time this doesn't self-correct because round robin's decision process never changes based on outcomes -- it will send another report request (and pile more queued work behind it) on the very next cycle.",
+          "solutionExplanation": "Round robin is blind to actual backend load -- it only tracks whose turn is next. When backend B happens to draw the 8-second report request, the load balancer still dutifully sends B its next 80ms requests on schedule a few cycles later, and those requests sit in B's queue behind the long-running report instead of being sent to A or C, which may be comparatively idle. This is exactly the scenario where least-connections routing would behave differently and better: it tracks how many requests are currently in flight per backend, so it would naturally route the next 80ms requests to A or C instead of piling onto B, because B visibly has an outstanding request in progress. Round robin's \"fairness\" -- equal request count per backend -- is not the same thing as equal load per backend when request costs vary, which is exactly what's happening here."
+        },
+        {
+          "id": "system-design-load-balancing-and-statelessness-ex2",
+          "type": "debugging",
+          "prompt": "After moving a web app from 1 server to 4 servers behind a load balancer, users report being randomly logged out and sometimes seeing an empty shopping cart mid-session. Here's a simplified version of the relevant code, running identically on all 4 instances. Find the bug and fix it.",
+          "code": "# Runs identically on all 4 app server instances, each with its own process memory\ncarts = {}  # in-memory dict: session_id -> list of cart items\n\ndef add_to_cart(session_id, item):\n    carts.setdefault(session_id, []).append(item)\n\ndef get_cart(session_id):\n    return carts.get(session_id, [])",
+          "hints": [
+            "carts is a plain Python dict living in one process's memory. When the load balancer sends the next request from the same browser, is it guaranteed to land on the same one of the 4 instances?",
+            "Without sticky sessions configured, a typical load balancer (e.g. round robin or least-connections) has no notion of \"this user\" -- it just balances requests. What does that mean for two consecutive requests from the same session_id?",
+            "The fix isn't about making the dict thread-safe -- it's about where the data lives at all."
+          ],
+          "solutionCode": "import redis\nr = redis.Redis(host=\"cache.internal\", port=6379)\n\ndef add_to_cart(session_id, item):\n    r.rpush(f\"cart:{session_id}\", item)\n\ndef get_cart(session_id):\n    return r.lrange(f\"cart:{session_id}\", 0, -1)",
+          "solutionExplanation": "The bug is that `carts` is an in-memory Python dict, private to whichever one of the 4 processes happens to be running -- it is not shared across instances. Before the load balancer was introduced, there was only ever one instance, so every request necessarily hit the same `carts` dict, and everything worked by accident. Once 4 instances exist and the load balancer distributes requests across them (with no stickiness), `add_to_cart` might run on instance 2 while the next `get_cart` for the exact same session_id runs on instance 4, whose `carts` dict never received that item -- hence the empty cart. The same mechanism explains random logouts if session/login state is stored the same way. The fix moves the cart data out of any single process's memory into a shared external store (Redis here) that every instance can read and write identically, so it no longer matters which of the 4 instances happens to handle any given request -- this is what making the service actually stateless looks like in practice."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "system-design-load-balancing-and-statelessness-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "A team enables sticky sessions on their load balancer to fix a bug where users' shopping carts kept disappearing after scaling to multiple servers. What is the main long-term downside of this fix compared to externalizing session state to a shared store?",
+          "options": [
+            "Sticky sessions are slower for every single request, even when nothing goes wrong.",
+            "Sticky sessions pin each user to one specific backend instance, so if that instance goes down, that user's session/cart is lost anyway, and load can become uneven if some pinned users generate much more traffic than others.",
+            "Sticky sessions require rewriting the entire application in a different programming language.",
+            "Sticky sessions only work with round-robin load balancing and cannot be combined with health checks."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Sticky sessions fix the immediate symptom (routing) but not the underlying fragility: the user's data still lives on exactly one instance, so that instance becomes, in effect, a single point of failure for every user pinned to it, and the load balancer loses some of its freedom to spread load evenly since it must keep sending certain users to certain backends regardless of current load. Option A is wrong -- sticky sessions add negligible per-request overhead (just a cookie or header check), not a fundamental slowdown. Option C is absurd -- no language rewrite is implied. Option D is wrong -- sticky sessions can be layered on top of most balancing strategies and don't conflict with health checks, though a health check failure on a pinned backend does still strand that backend's sessions, reinforcing option B's point."
+        },
+        {
+          "id": "system-design-load-balancing-and-statelessness-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain, to a developer who has only ever run a single server, what \"statelessness\" means for a web service, why it matters specifically for horizontal scaling, and how real applications that clearly do have state (logins, carts, uploads) achieve it in practice.",
+          "modelAnswer": "Statelessness doesn't mean an application has no data or memory of anything -- almost every real application needs to remember who's logged in, what's in a cart, or what a user uploaded. What it actually means is that no single server process is the exclusive holder of that data in a way that makes it \"special\" -- any instance, given the right request and access to the same shared resources as every other instance, can produce the identical, correct result. The reason this matters specifically for horizontal scaling is that a load balancer, by default, treats all backend instances as interchangeable and routes each incoming request to whichever one is best positioned to handle it right now -- it does not guarantee that two requests from the same user land on the same instance. If a service keeps meaningful data in one process's local memory (a plain in-memory dict, a variable, a local file), then the very next request from that same user might hit a different instance that has never seen that data, producing bugs that look random and are maddening to reproduce -- logged-out users, vanishing cart items, missing uploaded files. Real applications solve this by moving that state somewhere every instance can reach identically: either an external shared store (a database or a cache like Redis) that all instances query over the network, or by pushing the state into the request itself, most commonly as a signed token (like a JWT) that the client sends back on every request, which the server can verify and read without needing to remember anything locally at all. Both approaches share the same underlying idea: state still exists, it's just no longer pinned to the process memory of one arbitrary machine that happened to handle an earlier request."
+        }
+      ]
+    },
+    {
+      "id": "system-design-cap-theorem",
+      "title": "The CAP Theorem",
+      "description": "Once data is replicated across more than one machine, a network partition forces an explicit choice between staying available and staying perfectly consistent -- the CAP theorem names that choice and explains why you cannot engineer your way out of it.",
+      "moduleId": "scaling_fundamentals",
+      "topicId": "scaling_fundamentals",
+      "difficulty": "advanced",
+      "estimatedMinutes": 45,
+      "prerequisites": ["system-design-vertical-vs-horizontal-scaling", "system-design-load-balancing-and-statelessness"],
+      "learningObjectives": [
+        "State the CAP theorem precisely: define Consistency, Availability, and Partition tolerance as the theorem uses them.",
+        "Explain why partition tolerance isn't really an optional design choice for a distributed system, which reduces the real-world tradeoff to C vs A.",
+        "Walk through a concrete network-partition scenario and determine what a CP system does vs. what an AP system does.",
+        "Explain common misreadings of CAP (e.g. \"pick any 2 of 3\" as a general design menu) and why they're misleading.",
+        "Map real systems and technologies to CP or AP tendencies and justify why their designers made that choice."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "The Three Letters, Precisely",
+            "body": "The CAP theorem, in Eric Brewer's original formulation, concerns exactly three properties of a distributed data system. **Consistency** here means every read receives the most recent write, or an error -- every node agrees on the current value, as if there were only one copy of the data (this is much closer to what's formally called *linearizability* than to everyday usage of the word). **Availability** means every request to a non-failing node receives a response -- not necessarily the *correct* or most recent one, just *a* response, rather than an error or a timeout. **Partition tolerance** means the system continues to operate despite messages between nodes being arbitrarily dropped or delayed by the network.\n\nThe most important precision to get right immediately: CAP's \"Consistency\" is not the same word as ACID's \"C.\" ACID consistency is about a single transaction never leaving a database in a state that violates its own defined invariants (foreign keys, constraints, application rules) -- it's about one node's internal correctness. CAP consistency is about agreement *between multiple nodes* holding copies of the same data. A system can be perfectly ACID-consistent on every individual node while still failing CAP consistency, if two of those nodes disagree with each other about the current value during a partition."
+          },
+          {
+            "heading": "Why Partition Tolerance Isn't Really a Choice",
+            "body": "The phrase \"pick any 2 of 3\" makes CAP sound like a menu with three equally available options -- CA, CP, or AP. That framing is misleading, because partitions are not something a system's designers get to opt out of: cables get cut, switches fail, packets get dropped or delayed, cross-region links go down. Any system with more than one node communicating over a real network *will* experience partitions eventually, whether it wants to or not.\n\nThat means \"CA\" -- consistent and available, having sacrificed partition tolerance -- isn't a real, sustainable option for a genuinely distributed system; it only holds under the assumption that partitions never happen, which is false for any multi-node system on a real network. So the actual, meaningful decision isn't \"which 2 of 3,\" it's narrower and more specific: **given that a partition will eventually occur, what does the system do during it** -- sacrifice consistency (answer anyway, possibly with stale data -- AP), or sacrifice availability (refuse to answer some requests, to guarantee correctness -- CP)? Outside of an actual partition, a well-built system can often be both consistent and available simultaneously; CAP is a statement about behavior specifically under partition, not a permanent, unconditional tax."
+          },
+          {
+            "heading": "Walking Through an Actual Partition",
+            "body": "Concretely: imagine a value replicated on two nodes, R1 and R2, in two different regions. A network partition splits them -- they can no longer talk to each other, though clients on each side can still reach their local node. A client on R1's side writes a new value. A client on R2's side then reads, *while the partition is still active*.\n\nA **CP** system's R2 knows it cannot confirm it has the latest value -- it can't reach R1 or form a quorum -- so it returns an error or times out rather than risk answering incorrectly; the client on R2's side gets no answer, but never gets a *wrong* one. An **AP** system's R2 answers anyway with whatever value it has locally, which may be stale (the write on R1 hasn't propagated yet); the client gets an answer, but it's out of date. Both are \"correct\" behaviors under CAP's definitions -- they're just optimizing for different failure costs. Once the partition heals, the AP system additionally needs some reconciliation process to resolve any conflicting writes that happened independently on both sides while split."
+          },
+          {
+            "heading": "Common Misreadings of CAP",
+            "body": "Beyond \"pick any 2 of 3\" (addressed above), two other misreadings come up constantly. First, people sometimes treat CAP as the final, complete word on distributed consistency, when in practice most production systems live on a *spectrum* rather than a binary CP/AP switch -- tunable consistency levels, quorum reads and writes, and bounded staleness windows all let an operator choose, often per operation, how far toward each end of the tradeoff to sit. CAP is a powerful tool for building the *intuition* that this tradeoff exists and is unavoidable during a partition; it's not a specification for exactly how any particular real system must be built.\n\nSecond, people forget that CAP is specifically a statement about behavior *during a partition*. It does not mean a distributed system must always be sacrificing one property or the other at every moment -- under normal, healthy network conditions (which is most of the time, for most systems), a well-designed system can serve both consistent and available responses simultaneously. The theorem only forces a choice at the specific moment a partition is actually preventing nodes from communicating."
+          },
+          {
+            "heading": "Mapping Real Systems to the Tradeoff",
+            "body": "Systems where an incorrect answer causes serious harm tend to lean CP. Coordination services like ZooKeeper and etcd, used for things like leader election and cluster configuration, will refuse to answer rather than risk two nodes both believing they're the leader at once -- a wrong answer there (\"split brain\") is far more damaging than a brief unavailability. Systems where users would rather get a fast, possibly-slightly-stale answer than no answer at all tend to lean AP: DNS resolvers serve cached records for a TTL window rather than fail outright; CDN edge caches serve a slightly stale asset rather than fail a page load; NoSQL stores like Cassandra and DynamoDB are commonly run with tunable, often AP-leaning defaults for things like shopping carts and session stores, where a few seconds of staleness is a minor inconvenience but an outright failure to load the page is a lost sale. The choice in each case reflects a genuine business judgment about which failure mode -- a wrong answer, or no answer -- is more tolerable for that specific piece of data; it is not a universal ranking of technologies as \"better\" or \"worse.\""
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "A Concrete Partition: Reading a Value During a Network Split",
+          "language": "text",
+          "code": "Setup: value X = 100, replicated on R1 (US region) and R2 (EU region)\n\n1. Network partition occurs -- R1 and R2 cannot communicate with each other\n2. Client in US writes X = 250 to R1  (R1 now has X=250; R2 still thinks X=100)\n3. Client in EU reads X from R2, WHILE the partition is still active\n\nCP behavior at R2:\n  R2 knows it cannot confirm it has the latest value (no quorum / can't reach R1)\n  -> R2 returns an error / times out rather than answer\n  -> client in EU gets no answer, but never gets a WRONG one\n\nAP behavior at R2:\n  R2 answers with its local value anyway\n  -> returns X = 100 (stale -- the US write hasn't been seen yet)\n  -> client in EU gets an answer, but it's out of date",
+          "explanation": "Both behaviors are \"correct\" under CAP's own definitions -- they're optimizing for different costs. CP treats \"return a possibly-wrong answer\" as worse than \"return no answer,\" which is right for something like an account balance used to authorize a large withdrawal: you'd rather the system say \"try again\" than approve a withdrawal against stale data. AP treats \"return no answer\" as worse, which is right for something like a product page's stock-availability badge, where a few seconds of staleness is a minor inconvenience but a hard failure to load the page is a lost sale. Once the partition heals, R2 needs to reconcile -- pull the latest value from R1, or run whatever conflict-resolution logic the system uses if both sides accepted writes during the split."
+        },
+        {
+          "title": "Mapping CAP Choices to Real Technologies",
+          "language": "text",
+          "code": "System / Technology                         Typical lean   Why\nZooKeeper / etcd (config, leader election)   CP             Two leaders elected at once is worse\n                                                             than a brief unavailability\nRDBMS with synchronous standby replication   CP             Refuses/blocks writes rather than risk\n                                                             divergence if the standby can't confirm\nCassandra / DynamoDB (tunable, common use)   AP-leaning     Built for always-on carts and session\n                                                             stores; consistency is a per-query knob\nDNS                                          AP             Stale records for a TTL window beat\n                                                             resolution failing outright\nCDN edge caches                              AP             A slightly stale asset beats a failed\n                                                             page load",
+          "explanation": "\"Typical lean\" is doing real work here -- many of these systems (Cassandra, DynamoDB) are explicitly tunable per operation, so calling the whole system \"AP\" or \"CP\" is a simplification; what's really true is that specific operations or consistency levels chosen by the operator lean one way or the other. The pattern across the CP row is systems where an incorrect answer causes a worse outcome than temporary unavailability (electing two leaders, corrupting a migration); the pattern across the AP rows is systems where users would rather get a slightly-stale answer instantly than wait or receive an error."
+        },
+        {
+          "title": "Why \"CA\" Systems Don't Really Exist at Scale",
+          "language": "text",
+          "code": "Attempt: \"we want R2 to be BOTH always available (answers every request)\n          AND always consistent (never returns stale data), even during a partition\"\n\nDuring partition (R1 <-x-> R2, cannot communicate):\n  Client writes X=250 to R1.\n  Client immediately reads X from R2.\n\n  For R2 to be Consistent, it must know about the write to R1 -- but it can't,\n  the partition blocks that message.\n  For R2 to be Available, it must answer anyway -- but the only value it HAS\n  is the old one (X=100), which is not consistent with R1's new write.\n\n  R2 cannot satisfy both simultaneously with the information it actually has.\n  It must pick: answer with a stale value (favor A) or refuse to answer (favor C).",
+          "explanation": "This is effectively CAP's proof by contradiction in miniature -- it's not a matter of insufficiently clever engineering; the two guarantees require contradictory actions given the same fact pattern (a real message that cannot be delivered). No amount of code sophistication lets R2 conjure the value of a write it structurally cannot learn about while partitioned -- the theorem is really a statement about information, not implementation quality."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "CAP means you get to pick any 2 of the 3 guarantees as a general design choice for your whole system.",
+          "clarification": "Partition tolerance isn't optional in the sense the \"pick 2 of 3\" phrasing implies -- any system with more than one node communicating over a real network will experience partitions (dropped packets, slow links, cut cables) whether it wants to or not; you don't get to \"choose\" P off the menu, you can only choose how the system behaves once a partition actually occurs. So the meaningful, live choice is C vs. A, and specifically only during the partition -- outside of a partition, a well-built system can often provide both."
+        },
+        {
+          "description": "CAP's \"Consistency\" is the same thing as the C in ACID.",
+          "clarification": "They're different concepts that happen to share a letter. ACID's Consistency is about a transaction never leaving the database in a state that violates its own defined invariants (e.g. foreign key constraints, application-level rules) -- it's about a single node or transaction's internal correctness. CAP's Consistency specifically means every client, regardless of which replica it talks to, sees the same, most-recent value (closer to what's formally called linearizability) -- it's about agreement between multiple nodes or replicas. A system can satisfy ACID consistency on each individual node while still failing CAP consistency across nodes if those nodes disagree about the current value during a partition."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "system-design-cap-theorem-ex1",
+          "type": "predictOutput",
+          "prompt": "A distributed key-value store is configured as CP. A network partition splits its 5 nodes into a group of 3 (which can still reach each other and form a quorum) and a group of 2 (isolated, no quorum). A client sends a write request to a node in the group of 2. Predict what happens, and why a CP system is designed to behave this way.",
+          "code": "Cluster: 5 nodes, quorum = any 3 nodes that can communicate\nPartition: Group A = {node1, node2, node3} (has quorum)\n           Group B = {node4, node5} (no quorum, isolated from Group A)\nClient -> write request -> node4 (in Group B)",
+          "hints": [
+            "A CP system's defining behavior is that it will sacrifice availability rather than risk an inconsistent write. Does Group B have enough nodes to safely confirm a write?",
+            "Quorum requires 3 of 5. Group B only has 2. What should a correctly-behaving CP node do when it can't reach quorum?",
+            "Think about what would go wrong if node4 accepted the write anyway, and Group A ALSO accepted a conflicting write to the same key during the same partition."
+          ],
+          "expectedAnswer": "node4 should reject the write (return an error or time out) rather than accept it, because Group B (2 nodes) cannot form the required quorum of 3. A correctly-implemented CP system refuses to accept writes it cannot safely confirm against enough of the cluster, specifically to prevent a scenario where Group A independently accepts a different, conflicting write to the same key -- which would leave the cluster with two contradictory \"confirmed\" values once the partition heals, with no principled way to know which one is right. Sacrificing availability for that one write (client gets an error) is the intentional, correct behavior for a CP system, not a bug.",
+          "solutionExplanation": "This is CAP's tradeoff enacted exactly as designed: node4 sits in the minority partition (Group B, 2 of 5 nodes) and cannot reach enough peers to form a quorum (3 of 5), so it has no way to confirm the write is durable and won't be contradicted by a concurrent write on the other side of the partition. A CP system is built to treat \"refuse the request\" as the safe outcome in this situation, favoring correctness over responsiveness -- the write attempt fails, and the client must retry (likely once the partition heals, or by finding a node in the quorum-holding Group A). Contrast this with an AP-configured system, which would have node4 accept the write locally anyway and rely on some later conflict-resolution process to reconcile it with whatever Group A did in the meantime -- a design that favors \"always get an answer\" over \"never get a possibly-wrong answer.\""
+        },
+        {
+          "id": "system-design-cap-theorem-ex2",
+          "type": "debugging",
+          "prompt": "A team builds a distributed cache and advertises it as \"always consistent AND always available, even across a network partition, because we wrote very careful synchronization code.\" Identify the flawed claim, and describe what a correct claim would say instead.",
+          "code": "Design doc excerpt:\n  \"Our cache replicates data between Node A and Node B. During normal operation,\n   writes are synchronously confirmed on both nodes before returning success to\n   the client, guaranteeing strong consistency. We also guarantee 100% availability,\n   because both nodes independently serve read traffic, so if one node is slow, the\n   other answers instead. This holds under all failure conditions, including a\n   network partition between Node A and Node B.\"",
+          "hints": [
+            "What does \"synchronously confirmed on both nodes\" actually require to be POSSIBLE at the moment of a write?",
+            "During an actual partition, can Node A and Node B still synchronously confirm anything with each other at all?",
+            "The bug isn't in the synchronization code's correctness -- it's in a claim about what's achievable no matter how good that code is."
+          ],
+          "solutionCode": "Corrected claim:\n  \"During normal operation (no partition), writes are synchronously confirmed on\n   both Node A and Node B, guaranteeing strong consistency, and both nodes serve\n   reads, giving high availability.\n\n   During a network partition between Node A and Node B, we choose consistency\n   over availability: a node that cannot reach its peer to synchronously confirm\n   a write will reject that write (or reject reads it cannot guarantee are current)\n   rather than risk serving or accepting an inconsistent value. This is a CP system,\n   not a CA system -- availability is intentionally sacrificed during a partition\n   to preserve correctness.\"",
+          "solutionExplanation": "The flawed claim is \"guarantees both, under all failure conditions, including a network partition\" -- that's precisely the combination CAP proves impossible to sustain once a partition is real. \"Synchronously confirmed on both nodes\" is exactly the mechanism that becomes impossible during a partition: if Node A cannot reach Node B, it cannot synchronously confirm anything with it, no matter how carefully the synchronization code is written -- this isn't a bug better code could fix, it's a hard consequence of the message simply not being deliverable. So during a real partition, the system has to do one of two things: refuse to confirm the write until it can reach Node B again (sacrificing availability, becoming CP for that operation), or confirm the write locally anyway and reconcile later (sacrificing strict consistency, becoming AP for that operation). Advertising both simultaneously as guaranteed \"under all failure conditions\" is a claim no implementation can honestly make; the fix is to be explicit about which guarantee bends during a partition, which is exactly the kind of decision a system-design review should force into the open before it's discovered in production during a real incident."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "system-design-cap-theorem-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "Which of the following best describes what the CAP theorem actually forces a distributed system to choose between?",
+          "options": [
+            "Whether the system uses SQL or NoSQL as its data model.",
+            "Whether the system prioritizes returning a response at all (availability) or refusing to respond rather than risk staleness (consistency), specifically during an actual network partition.",
+            "Whether the system runs on-premises or in the cloud.",
+            "Whether the system can have more than one replica of its data at all."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "CAP is specifically about the forced tradeoff that appears once a network partition actually occurs between nodes holding replicated data: a node cut off from its peers must either answer anyway with data it cannot guarantee is current (favoring availability) or refuse to answer until it can confirm correctness (favoring consistency) -- it cannot do both at once for the same request. Option A confuses CAP with a data-modeling choice unrelated to the theorem. Option C confuses it with a deployment/infrastructure choice. Option D is backwards -- CAP only becomes relevant once you DO have multiple replicas that can become partitioned from each other; a single-node system isn't making a CAP tradeoff at all."
+        },
+        {
+          "id": "system-design-cap-theorem-assess-explain1",
+          "type": "explanation",
+          "prompt": "A colleague says: \"CAP theorem is basically obsolete advice now -- modern databases like Cassandra and DynamoDB just give you both consistency and availability.\" Explain what's right and wrong about this claim.",
+          "modelAnswer": "What's right: modern distributed databases have gotten much better at making the CAP tradeoff feel less painful in practice, mainly by making consistency tunable per operation rather than a single fixed setting for the whole system. Cassandra and DynamoDB, for example, let you choose a consistency level per read or write (like requiring acknowledgment from a quorum of replicas versus just one), and outside of an actual network partition, a well-run cluster can genuinely serve requests that are both fast/available and strongly consistent almost all of the time -- partitions, in a healthy, well-connected data center network, are relatively rare events, not a constant condition. What's wrong: the claim that they give you \"both, full stop\" ignores that the tradeoff hasn't disappeared, it's just been made configurable and pushed to the moment it actually matters. The instant a real partition occurs -- a node genuinely can't reach enough of its peers to confirm a write or read is current -- that same database has to make the CAP choice for whatever consistency level you configured: a request demanding strong consistency will now be rejected or delayed rather than risk staleness (behaving CP for that request), while a request configured for a weaker consistency level will still get an immediate, possibly-stale answer (behaving AP for that request). So it's more accurate to say these systems let you choose, per operation, which side of the tradeoff you want to be on when a partition eventually happens -- not that they've found a way to avoid the tradeoff existing at all. CAP isn't obsolete; it's been productized into a configuration knob rather than an up-front, whole-system architectural decision."
+        }
+      ]
+    }
+  ]
+}

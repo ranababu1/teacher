@@ -1,0 +1,368 @@
+{
+  "learningPathId": "databases",
+  "moduleId": "relational_modeling_and_sql",
+  "title": "Relational Modeling & SQL Foundations",
+  "order": 1,
+  "concepts": [
+    {
+      "id": "databases-relational-modeling",
+      "title": "Tables, Keys, and Relationships",
+      "description": "Relational databases model the world as independent tables linked by keys; primary keys uniquely identify rows, foreign keys enforce relationships between tables, and normalization organizes columns to eliminate redundancy and the update anomalies it causes.",
+      "moduleId": "relational_modeling_and_sql",
+      "topicId": "relational_modeling_and_sql",
+      "difficulty": "beginner",
+      "estimatedMinutes": 35,
+      "prerequisites": [],
+      "learningObjectives": [
+        "Explain what a primary key is and why every table should have one.",
+        "Explain the difference between a natural key and a surrogate key, and when to prefer each.",
+        "Model a one-to-many relationship with a foreign key, and a many-to-many relationship with a junction table.",
+        "Explain the anomalies that 1NF, 2NF, and 3NF each eliminate, and identify violations in a sample schema.",
+        "Explain why normalization trades query simplicity for redundancy elimination, and when deliberate denormalization is reasonable."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "Tables, Rows, and the Idea of a Primary Key",
+            "body": "A relational database organizes data into tables: a table is a named collection of rows that all share the same set of typed columns. Conceptually a table is just a two-dimensional grid, but the property that makes it *relational* is that tables can reference each other by value, not by memory address or physical position -- which is what lets you model real-world relationships (an order belongs to a customer, a post has many comments) without duplicating whole records everywhere they're needed.\n\nEvery table you design should have a **primary key**: one column (or a small set of columns -- a *composite* primary key) that uniquely identifies each row and can never be NULL. PostgreSQL enforces both halves of that guarantee automatically -- declaring a column PRIMARY KEY creates a UNIQUE constraint and a NOT NULL constraint on it in one step, and backs it with a B-tree index for fast lookups (the mechanics of that index are the subject of the next module). Without a primary key, there is no reliable way to say 'update *this specific* row' -- if two rows happen to be identical on every column you're filtering by, an UPDATE or DELETE with a matching WHERE clause silently affects both of them, not just the one you meant.\n\n```sql\nCREATE TABLE authors (\n    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,\n    name TEXT NOT NULL,\n    email TEXT NOT NULL UNIQUE\n);\n```\n\n`GENERATED ALWAYS AS IDENTITY` is the modern, SQL-standard way to get an auto-incrementing integer primary key in PostgreSQL (older code you'll encounter uses the `SERIAL` pseudo-type, which does the same job through a sequence, but `IDENTITY` is preferred going forward -- it behaves more predictably around privileges and explicit inserts via `OVERRIDING SYSTEM VALUE`). A key like this one, with no meaning outside the database and invented purely to identify the row, is called a **surrogate key**. The alternative is a **natural key**: an existing real-world attribute that already happens to be unique, like an email address. Natural keys look appealing because they avoid an 'extra' column, but they carry real risk -- values you assumed were stable and unique (emails get reused after an account is deleted, external identifier schemes turn out to have edge cases) sometimes aren't, and changing a primary key's value after other tables hold foreign keys pointing at it is far more disruptive than changing a column that's merely UNIQUE. The common, pragmatic default is a surrogate key as the primary key, plus a UNIQUE constraint on whatever natural key exists -- you get fast lookups on both, and the stability of a key that nothing else depends on for its *meaning*."
+          },
+          {
+            "heading": "Foreign Keys: Modeling One-to-Many Relationships",
+            "body": "A **foreign key** is a column (or set of columns) in one table that must match a value already present in another table's primary key (or unique) column -- or be NULL, if the column allows it. This is how relational databases model a **one-to-many** relationship: one author can have many posts, so the 'many' side (`posts`) holds a foreign key column pointing back at the 'one' side (`authors`).\n\n```sql\nCREATE TABLE posts (\n    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,\n    title TEXT NOT NULL,\n    author_id BIGINT NOT NULL REFERENCES authors(id) ON DELETE RESTRICT,\n    published_at TIMESTAMPTZ\n);\n```\n\nThe database now *enforces* this relationship for you: PostgreSQL refuses an INSERT or UPDATE on `posts` that sets `author_id` to a value absent from `authors.id`, and it applies whichever `ON DELETE` policy you chose whenever someone tries to delete a referenced author. `ON DELETE RESTRICT` refuses to delete an author who still has posts, forcing you to decide explicitly what happens to those posts first. `ON DELETE CASCADE` would instead delete all of that author's posts automatically the instant the author row is deleted -- convenient, but genuinely dangerous if applied carelessly, since one DELETE on a parent row can silently fan out and remove a large amount of child data you didn't have in view at the call site. `ON DELETE SET NULL` is a third common option, useful when the child row should survive without its parent (an order shouldn't vanish just because the referring account was deleted) -- though it only works if the foreign key column is itself nullable."
+          },
+          {
+            "heading": "Many-to-Many Relationships Need a Junction Table",
+            "body": "A foreign key column can only point at *one* row on the other side, so it can express 'many posts belong to one author' but not 'many posts each have many tags, and many tags each apply to many posts.' A **many-to-many** relationship needs a third table -- a junction table, join table, or associative table -- sitting between the two, holding one row per *pairing*, with a foreign key pointing at each side.\n\n```sql\nCREATE TABLE tags (\n    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,\n    name TEXT NOT NULL UNIQUE\n);\n\nCREATE TABLE post_tags (\n    post_id BIGINT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,\n    tag_id  BIGINT NOT NULL REFERENCES tags(id)  ON DELETE CASCADE,\n    PRIMARY KEY (post_id, tag_id)\n);\n```\n\nThe composite primary key `(post_id, tag_id)` does two jobs at once: it gives the junction table the primary key every table needs, and -- because a primary key is also a uniqueness constraint -- it makes it impossible to insert the same `(post_id, tag_id)` pair twice, which is exactly the business rule 'a post can't have the same tag applied to it more than once.' `ON DELETE CASCADE` on both foreign keys is a genuinely good fit here, unlike the author/posts example: a junction row has no independent meaning of its own once either side of the pairing disappears, so cleaning it up automatically is correct rather than dangerous. Finding every tag on a post, or every post carrying a given tag, means joining through this table -- the subject of the next concept."
+          },
+          {
+            "heading": "Normalization: Naming the Anomalies It Prevents",
+            "body": "**Normalization** is the discipline of organizing columns into tables so that each fact is stored in exactly one place. It's usually taught as a numbered sequence of 'normal forms,' but the numbers matter far less than the anomalies each one eliminates -- it's worth learning to recognize the anomaly directly, in real schemas, rather than memorizing definitions.\n\nImagine a single wide `orders` table with columns `order_id, customer_email, customer_name, product_name, quantity`. This is unnormalized, and it produces three classic problems: an **update anomaly** (if a customer changes their display name, you must find and update *every* order row they've ever placed, and missing even one leaves the data self-contradictory); an **insertion anomaly** (you can't record a new customer at all until they place an order, because 'customer' isn't a first-class row anywhere on its own); and a **deletion anomaly** (deleting a customer's only order accidentally erases every fact you knew about them as a customer, since nothing about them exists independent of that order row).\n\n**First normal form (1NF)** requires every column to hold a single, atomic value -- no comma-separated lists stuffed into one text column, no repeating groups of columns like `phone1, phone2, phone3`. Wanting a variable number of values in one field is a signal you need a separate, related table instead. **Second normal form (2NF)** applies specifically when a table has a *composite* primary key, and requires every non-key column to depend on the *whole* key, not just part of it -- a table keyed on `(order_id, product_id)` shouldn't also store `customer_email`, because that depends only on `order_id`, not on the product at all. **Third normal form (3NF)** requires non-key columns to depend *only* on the primary key, not on each other -- in the wide orders table above, `customer_name` depends on `customer_email` (itself a non-key column), not directly on `order_id`, which is exactly the transitive dependency causing the update anomaly. The fix is to split `customers` into its own table (`id, email, name`) and have `orders` reference it by `customer_id` -- a customer's name now lives in exactly one row, and changing it is a single UPDATE that every order automatically reflects, because orders no longer store the name at all, only a reference to it."
+          },
+          {
+            "heading": "Denormalization Is a Deliberate Trade-off, Not a Beginner Shortcut",
+            "body": "Normalizing eliminates redundancy, but it also means some questions require joining several tables back together, which costs query complexity and, at scale, real execution time. **Denormalization** -- deliberately storing some redundant or derived data to avoid a join or a recomputation -- is a legitimate engineering tool, but it should be a conscious trade-off made *after* you have a normalized model and a measured reason to deviate from it, not a default adopted because joins seem inconvenient while you're still designing the schema.\n\nA safer, more contained form of denormalization in PostgreSQL is a **materialized view**: write a normal, correct query -- potentially an expensive one, joining several tables and aggregating -- and `CREATE MATERIALIZED VIEW monthly_sales AS SELECT ...` stores its *result* physically, like a table, which you then query cheaply. The cost is that the view goes stale the moment the underlying tables change, and you're responsible for refreshing it (`REFRESH MATERIALIZED VIEW monthly_sales`) on whatever schedule your staleness tolerance allows. That's a much more contained, reversible decision than denormalizing the base schema itself -- for example, adding a redundant `customer_name` column back onto `orders` 'for speed' -- which reintroduces exactly the update-anomaly risk normalization was solving, now kept in sync only by the discipline of every piece of code that ever writes an order, with no database constraint capable of enforcing that consistency for you."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Foreign Key Enforcement in Action",
+          "language": "sql",
+          "code": "CREATE TABLE authors (\n    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,\n    name TEXT NOT NULL\n);\n\nCREATE TABLE posts (\n    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,\n    title TEXT NOT NULL,\n    author_id BIGINT NOT NULL REFERENCES authors(id)\n);\n\nINSERT INTO authors (name) VALUES ('Amara Chen');\n-- authors.id = 1\n\nINSERT INTO posts (title, author_id) VALUES ('Intro to SQL', 1);   -- succeeds\nINSERT INTO posts (title, author_id) VALUES ('Ghost Post', 999);   -- fails\n\n-- ERROR:  insert or update on table \"posts\" violates foreign key constraint\n-- DETAIL:  Key (author_id)=(999) is not present in table \"authors\".",
+          "explanation": "The second INSERT is rejected before it ever touches the table's storage, because PostgreSQL checks every foreign key constraint on every write, regardless of which code path performed it. This matters far more than it sounds: it means an orphaned reference -- a post pointing at an author that doesn't exist -- is structurally impossible to create through this table, not merely discouraged by convention. Contrast that with an application that tries to 'be careful' by validating in code before every insert: a bug in one code path, a direct database script, or a second service writing to the same table can all bypass that validation, but none of them can bypass a foreign key constraint, because it's enforced at the one place all writes eventually pass through -- the database itself. The DETAIL line names the exact offending value and the exact table it failed to find it in, which is precisely the information you'd otherwise have to reconstruct by hand while debugging a mysterious data-integrity bug."
+        },
+        {
+          "title": "The Composite Primary Key Blocks Duplicate Tag Assignments",
+          "language": "sql",
+          "code": "CREATE TABLE tags (\n    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,\n    name TEXT NOT NULL UNIQUE\n);\n\nCREATE TABLE post_tags (\n    post_id BIGINT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,\n    tag_id  BIGINT NOT NULL REFERENCES tags(id)  ON DELETE CASCADE,\n    PRIMARY KEY (post_id, tag_id)\n);\n\nINSERT INTO tags (name) VALUES ('sql'), ('databases');\n-- tags.id = 1 ('sql'), 2 ('databases')\n\nINSERT INTO post_tags (post_id, tag_id) VALUES (1, 1);   -- succeeds: post 1 tagged 'sql'\nINSERT INTO post_tags (post_id, tag_id) VALUES (1, 1);   -- fails: duplicate pair\n\n-- ERROR:  duplicate key value violates unique constraint \"post_tags_pkey\"\n-- DETAIL:  Key (post_id, tag_id)=(1, 1) already exists.",
+          "explanation": "Because the primary key is the *pair* `(post_id, tag_id)` rather than either column alone, PostgreSQL treats the whole pair as the thing that must be unique -- inserting `(1, 1)` a second time collides with the row already there, not because either individual value is unique on its own (many rows can share `post_id = 1` with different tags), but because that exact combination already exists. Notice also what `ON DELETE CASCADE` buys here that it didn't in the authors/posts example: deleting post 1 will automatically remove its rows from `post_tags` with no error and no orphaned junction rows left behind, which is correct precisely because a `post_tags` row has no meaning independent of the post and tag it links -- unlike an author's posts, which are meaningful records in their own right that deserve a human decision before being cascade-deleted."
+        },
+        {
+          "title": "The Update Anomaly, Concretely",
+          "language": "sql",
+          "code": "-- Unnormalized: customer data repeated on every order row\nCREATE TABLE orders_unnormalized (\n    order_id BIGINT PRIMARY KEY,\n    customer_email TEXT NOT NULL,\n    customer_name TEXT NOT NULL,\n    product_name TEXT NOT NULL,\n    quantity INT NOT NULL\n);\n\nINSERT INTO orders_unnormalized VALUES\n    (1, 'amara@example.com', 'Amara Chen', 'Keyboard', 1),\n    (2, 'amara@example.com', 'Amara Chen', 'Monitor', 2);\n\n-- Amara changes her display name. Whoever writes this UPDATE has to\n-- remember every row that duplicated it.\nUPDATE orders_unnormalized SET customer_name = 'A. Chen' WHERE order_id = 1;\n-- order_id = 2 now silently disagrees about her name -- an update anomaly.\n\n-- Normalized: the fact \"Amara's name is X\" lives in exactly one row\nCREATE TABLE customers (\n    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,\n    email TEXT NOT NULL UNIQUE,\n    name TEXT NOT NULL\n);\n\nCREATE TABLE orders (\n    order_id BIGINT PRIMARY KEY,\n    customer_id BIGINT NOT NULL REFERENCES customers(id),\n    product_name TEXT NOT NULL,\n    quantity INT NOT NULL\n);\n\nUPDATE customers SET name = 'A. Chen' WHERE email = 'amara@example.com';\n-- every order for this customer now reflects the new name, because\n-- no order row stores the name at all -- only a reference to it.",
+          "explanation": "In the unnormalized table, `customer_name` is transitively dependent on `customer_email` -- a non-key column -- rather than on `order_id`, the actual primary key. That single structural fact is the entire root cause of the anomaly: the same name is copied onto every row that shares an email, so an UPDATE targeting one row leaves every sibling row stale unless you remember to chase down all of them by hand, which is exactly the kind of manual bookkeeping that eventually gets missed. The normalized version doesn't just fix this one instance -- it fixes the *category* of bug, because `orders` no longer has a `customer_name` column to go stale in the first place. There is exactly one row where Amara's name is stored, and every part of the system that needs her name reads it, live, from that one row via the foreign key."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "A table doesn't strictly need a primary key as long as the application code is careful to only ever write unique values.",
+          "clarification": "A convention enforced only in application code is not a guarantee -- it's a habit that a single bug, a direct database script, a bulk import, or simply a second service writing to the same table can violate without the database objecting at all. It gets worse under concurrency: two simultaneous inserts can each check 'does this value already exist?' and both see 'no' before either one has committed, then both insert the supposedly-unique value -- a race condition a database-level UNIQUE or PRIMARY KEY constraint closes completely, because the check and the insert happen atomically inside the database itself. There's a second, structural reason a primary key matters beyond uniqueness: it's the thing other tables' foreign keys point at. Without one, there is no dependable, guaranteed-unique target for a relationship to reference at all."
+        },
+        {
+          "description": "Normalizing all the way to 3NF is always strictly better, so any duplicated-looking data in a schema is automatically a design mistake.",
+          "clarification": "Normalization specifically targets redundancy that risks going *out of sync* -- a value that's supposed to always match its single source of truth, copied in multiple places where an update to one copy can be forgotten on another. Not all repeated-looking data fits that description. A shipment record that snapshots 'the warehouse address at the time this shipment went out' is duplicating warehouse data on purpose, and it should NOT automatically update if the warehouse later moves -- that snapshot is the correct model for a historical record, not an anomaly waiting to happen. The distinguishing question is always: is this value supposed to track its source going forward, or does it intentionally represent a fact frozen at a specific point in time? Only the first case is an anomaly that normalization should fix."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "databases-relational-modeling-ex1",
+          "type": "coding",
+          "prompt": "Design the schema for a many-to-many relationship between students and courses, where each enrollment also needs to record a grade -- a fact that belongs to the specific student-course pairing, not to either side alone. Write the CREATE TABLE statements.",
+          "code": "-- Write CREATE TABLE statements for: students, courses, and an\n-- enrollments table linking them, including a grade column.",
+          "hints": [
+            "A plain foreign key column can only point at one row on the other side -- it can express 'many courses per student' or 'many students per course,' but not both directions at once.",
+            "The junction table needs its own row per (student, course) pairing -- and since grade belongs to that specific pairing, it lives as a column on the junction table itself, not on students or courses.",
+            "The junction table's primary key should be the pair of foreign key columns together -- that also enforces 'a student can't enroll in the same course twice.'"
+          ],
+          "solutionCode": "CREATE TABLE students (\n    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,\n    name TEXT NOT NULL\n);\n\nCREATE TABLE courses (\n    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,\n    title TEXT NOT NULL\n);\n\nCREATE TABLE enrollments (\n    student_id BIGINT NOT NULL REFERENCES students(id) ON DELETE CASCADE,\n    course_id  BIGINT NOT NULL REFERENCES courses(id)  ON DELETE CASCADE,\n    grade TEXT,\n    PRIMARY KEY (student_id, course_id)\n);",
+          "solutionExplanation": "`enrollments` is the junction table: its composite primary key `(student_id, course_id)` guarantees a student can only have one enrollment row per course, exactly matching the real-world rule. `grade` is left nullable on purpose -- a student can be enrolled before a grade exists -- and it lives here rather than on `students` or `courses` because a grade is a fact about the *pairing*, not about the student in general (they have a different grade in every course) or the course in general (different students get different grades). `ON DELETE CASCADE` on both foreign keys is appropriate here for the same reason it was for post_tags: an enrollment row has no independent meaning once either the student or the course it links no longer exists."
+        },
+        {
+          "id": "databases-relational-modeling-ex2",
+          "type": "debugging",
+          "prompt": "This schema has an anomaly: a warehouse's address is duplicated onto every shipment row, so updating a warehouse's address after it relocates requires updating every historical shipment row too -- something nobody reliably remembers to do, and the requirement here really is 'always show the warehouse's current address,' not a historical snapshot. Identify the anomaly and rewrite the schema to fix it.",
+          "code": "CREATE TABLE shipments (\n    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,\n    warehouse_name TEXT NOT NULL,\n    warehouse_address TEXT NOT NULL,\n    order_id BIGINT NOT NULL,\n    shipped_at TIMESTAMPTZ NOT NULL DEFAULT now()\n);",
+          "hints": [
+            "Ask which table warehouse_address actually depends on -- is it a fact about this specific shipment, or a fact about the warehouse, copied onto every shipment that happens to use it?",
+            "If a warehouse relocates, how many rows currently need to change to reflect that correctly? A normalized design should need exactly one.",
+            "Pull warehouse_name and warehouse_address into their own table, keyed by an id, and reference it from shipments with a foreign key."
+          ],
+          "solutionCode": "CREATE TABLE warehouses (\n    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,\n    name TEXT NOT NULL,\n    address TEXT NOT NULL\n);\n\nCREATE TABLE shipments (\n    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,\n    warehouse_id BIGINT NOT NULL REFERENCES warehouses(id),\n    order_id BIGINT NOT NULL,\n    shipped_at TIMESTAMPTZ NOT NULL DEFAULT now()\n);",
+          "solutionExplanation": "`warehouse_address` was transitively dependent on `warehouse_name` (itself not the primary key of `shipments`), which is exactly the 3NF violation that produces an update anomaly: the same address string is copied onto every shipment that used that warehouse, so moving the warehouse means finding and updating every one of those rows, and missing any leaves the schema self-contradictory about where that warehouse actually is. After the fix, a warehouse's address is stored in exactly one row in `warehouses`; every shipment merely references it by `warehouse_id`, so an address change is a single UPDATE that every shipment automatically reflects. Worth flagging explicitly: this fix is only correct because the stated requirement is 'always show the current address.' If the actual business need were a customs or audit record of 'the address the warehouse had at the time it shipped this order,' deliberately snapshotting the address onto the shipment row would be the *correct* design, not an anomaly -- normalize based on what the data is supposed to mean, not by reflex."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "databases-relational-modeling-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "A `products` table has no declared PRIMARY KEY, but the application always writes a unique SKU into every row. Why is relying on this convention riskier than declaring an actual PRIMARY KEY (or UNIQUE constraint)?",
+          "options": [
+            "PostgreSQL requires every table to have a primary key just to physically store rows on disk, so a table without one silently fails to save data.",
+            "Without a database-enforced constraint, a race condition between two concurrent inserts -- or a single application bug -- can create duplicate or NULL SKUs that the database accepts without complaint, and other tables have no guaranteed-unique value to reference via foreign key.",
+            "It isn't actually risky -- uniqueness enforced in application code is exactly as reliable as a database constraint, just implemented in a different layer.",
+            "The only real downside is slightly slower SELECT queries, since primary keys exist purely to speed up reads."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B is correct: a constraint is checked and enforced by the database itself on every write, atomically, closing off both the concurrent-race case (two inserts each passing an app-level 'is this unique?' check before either commits) and the simple-bug case (a code path that forgets to check at all) -- and it gives other tables something dependable to point a foreign key at. Option A is false; tables without a primary key store rows just fine, they simply lack the uniqueness/not-null guarantee. Option C is the misconception directly -- application-level checks can be raced or bypassed in ways a database constraint cannot. Option D understates the risk (it's a correctness problem, not merely a performance one) and mischaracterizes primary keys as existing purely for reads."
+        },
+        {
+          "id": "databases-relational-modeling-assess-explain1",
+          "type": "explanation",
+          "prompt": "A colleague says: 'normalization is just an academic exercise -- in the real world you denormalize for performance anyway, so why bother getting the normalized model right first?' Explain what's wrong with this framing, and describe when denormalizing is actually a reasonable engineering choice.",
+          "modelAnswer": "This framing conflates two different problems that normalization and denormalization each solve. Normalization's primary purpose is correctness: it eliminates redundancy that would otherwise let the same fact be stored in multiple places and go silently out of sync, producing update, insertion, and deletion anomalies. Skipping normalization doesn't just cost you performance headroom you might reclaim later -- it costs you data integrity immediately, in the form of bugs where two rows disagree about a fact that should have one unambiguous answer, discoverable only when someone notices the inconsistency, often much later and often in production. Denormalization, when it's actually warranted, should be layered *on top of* a correct, normalized model -- as a deliberate, measured, and ideally reversible optimization aimed at a specific, observed bottleneck, such as a materialized view that caches an expensive join-and-aggregate query and is refreshed on a known schedule, or a read replica serving traffic away from the primary. It should not be a substitute for modeling the domain correctly in the first place, because doing that reintroduces exactly the anomalies normalization exists to prevent, and now every future piece of code that writes to the schema has to remember, by convention alone, to keep the duplicated data consistent -- with no constraint able to enforce that for it. The right sequence is: model correctly, measure, and only then denormalize the specific thing that measurement justifies."
+        }
+      ]
+    },
+    {
+      "id": "databases-sql-querying",
+      "title": "Querying with SELECT, WHERE, JOIN, and GROUP BY",
+      "description": "SELECT, WHERE, JOIN, and GROUP BY are the working core of SQL; understanding the logical order in which they actually execute -- not the order you type them in -- explains most of the surprising behavior beginners run into.",
+      "moduleId": "relational_modeling_and_sql",
+      "topicId": "relational_modeling_and_sql",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 40,
+      "prerequisites": ["databases-relational-modeling"],
+      "learningObjectives": [
+        "Write SELECT queries that filter rows with WHERE using comparison, boolean, and pattern-matching operators.",
+        "Explain the difference between INNER JOIN and LEFT JOIN, and predict which rows survive each when a match is missing.",
+        "Use GROUP BY with aggregate functions to compute per-group summaries.",
+        "Explain why HAVING, not WHERE, is required to filter on an aggregate result.",
+        "Explain the logical order in which a SELECT query's clauses actually execute, and use it to predict what a query will and won't allow."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "SELECT and WHERE: Choosing Columns and Rows",
+            "body": "A SELECT query does two conceptually separate jobs: choosing which *columns* to return (projection, the SELECT list) and choosing which *rows* to return (filtering, the WHERE clause). Keeping these separate in your head matters, because WHERE operates on the rows produced by FROM/JOIN before any column selection has meaningfully 'happened' yet -- you can filter on a column you don't even include in the SELECT list.\n\n```sql\nSELECT title, published_at\nFROM posts\nWHERE author_id = 1\n  AND published_at IS NOT NULL;\n```\n\nWHERE supports the comparison operators you'd expect (`=`, `<>`, `<`, `>`, `<=`, `>=`), boolean combination with `AND`/`OR`/`NOT`, set membership with `IN (...)`, range checks with `BETWEEN ... AND ...`, and pattern matching with `LIKE` (case-sensitive) or PostgreSQL's `ILIKE` (case-insensitive), where `%` matches any run of characters and `_` matches exactly one. A sharp edge worth knowing early: `AND` binds tighter than `OR`, exactly like multiplication binds tighter than addition in arithmetic, so `WHERE status = 'active' OR status = 'pending' AND is_flagged = false` does NOT mean 'active or pending, as long as not flagged' -- it means 'active (regardless of flag), OR (pending AND not flagged),' because the AND clause groups first. Parenthesize explicitly whenever you mix AND and OR: `WHERE status = 'active' OR (status = 'pending' AND is_flagged = false)`."
+          },
+          {
+            "heading": "JOIN: Combining Rows Across Tables",
+            "body": "A JOIN combines rows from two tables based on a matching condition. The most common form, `INNER JOIN`, keeps only the rows that have a match on both sides -- conceptually, it's as if PostgreSQL paired up every row from the left table with every row from the right table, then kept only the pairs satisfying the `ON` condition.\n\n```sql\nSELECT authors.name, posts.title\nFROM authors\nINNER JOIN posts ON posts.author_id = authors.id;\n```\n\nIf an author has zero posts, they simply don't appear in this result at all -- there's no row on the `posts` side to pair them with, so no combined row satisfies the `ON` condition for that author. That's often exactly what you want, but not always: if the question is 'list every author, and their posts if they have any,' you need `LEFT JOIN`, which keeps every row from the left table regardless of whether a match exists on the right, filling in NULL for every right-side column when there's no match.\n\n```sql\nSELECT authors.name, posts.title\nFROM authors\nLEFT JOIN posts ON posts.author_id = authors.id;\n```\n\nAn author with no posts now appears once, with `posts.title` as NULL, instead of vanishing. `RIGHT JOIN` is the mirror image (keep every row from the right table, NULL-fill the left), but it's rarely used in practice -- almost anything you'd write with RIGHT JOIN reads more naturally as a LEFT JOIN with the two table names swapped, so most style guides simply standardize on LEFT JOIN and never reach for RIGHT."
+          },
+          {
+            "heading": "GROUP BY and Aggregates: Collapsing Rows into Summaries",
+            "body": "`GROUP BY` collapses multiple rows sharing the same value(s) in specified column(s) down into one summary row per group, and it's almost always paired with an **aggregate function** -- `COUNT`, `SUM`, `AVG`, `MIN`, `MAX` -- that computes something across all the rows in each group.\n\n```sql\nSELECT customer_id, COUNT(*) AS order_count, SUM(total_amount) AS total_spent\nFROM orders\nGROUP BY customer_id;\n```\n\nThis produces exactly one row per distinct `customer_id`, with `order_count` and `total_spent` computed across that customer's own orders. PostgreSQL enforces a strict rule here that trips up people coming from more permissive databases: every column named in the SELECT list that *isn't* wrapped in an aggregate function must also appear in the GROUP BY list. `SELECT customer_id, order_date, COUNT(*) FROM orders GROUP BY customer_id` raises an error, because `order_date` isn't aggregated and isn't grouped on -- for a customer with three orders on three different dates, PostgreSQL has no principled way to decide which single `order_date` value the one summary row should display, so it refuses to guess."
+          },
+          {
+            "heading": "HAVING vs WHERE: Filtering Before vs After Aggregation",
+            "body": "A very common mistake is trying to filter on an aggregate using WHERE: `SELECT customer_id, COUNT(*) FROM orders WHERE COUNT(*) > 3 GROUP BY customer_id` fails outright. The reason is about *when* each clause conceptually runs: WHERE filters individual rows before any grouping or aggregation has happened, so at the point WHERE is evaluated, `COUNT(*)` simply doesn't exist yet as a value to compare against -- there's no group formed yet to count. `HAVING` is the clause that filters *after* grouping and aggregation, which is precisely where an aggregate result becomes available to test:\n\n```sql\nSELECT customer_id, COUNT(*) AS order_count\nFROM orders\nGROUP BY customer_id\nHAVING COUNT(*) > 3;\n```\n\nA useful way to keep the two straight: WHERE decides which *rows* make it into the grouping process at all; HAVING decides which already-formed *groups* survive into the final result. You can combine both in one query -- WHERE to cheaply discard rows you never want considered at all (say, `WHERE order_date >= '2026-01-01'`), and HAVING to filter on what the surviving rows aggregate to per group."
+          },
+          {
+            "heading": "The Real Order of Operations in a SELECT Query",
+            "body": "SQL is famous for having a written clause order that doesn't match its logical execution order, and internalizing the real order resolves most of the 'why doesn't this work' confusion beginners run into. Logically, a query executes roughly as: **FROM/JOIN** (build the combined row set) -> **WHERE** (filter individual rows) -> **GROUP BY** (collapse into groups) -> **HAVING** (filter groups) -> **SELECT** (compute the output columns/expressions) -> **DISTINCT** -> **ORDER BY** -> **LIMIT/OFFSET**.\n\nThis explains several things at once. It explains why WHERE can't use an aggregate but HAVING can (aggregation, GROUP BY, hasn't happened yet when WHERE runs). It explains why you generally can't reference a column alias defined in the SELECT list from within the WHERE clause in the same query (`SELECT price * quantity AS total FROM orders WHERE total > 100` fails in standard SQL, because WHERE executes before SELECT computes `total`) -- yet PostgreSQL *does* let you reference that same alias in ORDER BY, because ORDER BY executes after SELECT, once the alias genuinely exists as an output column. And it explains why LIMIT applied without an explicit ORDER BY gives you an *arbitrary*, not merely 'first N by insertion order,' subset of rows -- LIMIT is the very last step, cutting an unordered result set at a boundary that means nothing without a preceding ORDER BY to make 'first N' well-defined."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Operator Precedence: Why AND/OR Need Parentheses",
+          "language": "sql",
+          "code": "-- Intent: active accounts, or pending accounts that aren't flagged\nSELECT id, status, is_flagged\nFROM accounts\nWHERE status = 'active' OR status = 'pending' AND is_flagged = false;\n\n-- What it actually means (AND binds tighter than OR):\nSELECT id, status, is_flagged\nFROM accounts\nWHERE status = 'active' OR (status = 'pending' AND is_flagged = false);\n\n-- What was probably intended:\nSELECT id, status, is_flagged\nFROM accounts\nWHERE (status = 'active' OR status = 'pending') AND is_flagged = false;",
+          "explanation": "The first query silently includes every flagged 'active' account, because the AND clause binds only to the 'pending' branch -- `status = 'active'` stands entirely on its own, unaffected by `is_flagged` at all. This is a genuinely dangerous class of bug precisely because the query runs without error and returns a plausible-looking result set; nothing about it signals that it's wrong except that it quietly includes rows you didn't intend. The second query is a parenthesized version of exactly what the unparenthesized version already means, included to make the true grouping visible. The third query is what was actually wanted -- 'active or pending, and additionally not flagged, in either case' -- and it requires explicit parentheses around the OR to override AND's default tighter binding."
+        },
+        {
+          "title": "INNER JOIN vs LEFT JOIN: What Happens to Unmatched Rows",
+          "language": "sql",
+          "code": "-- authors: (1, 'Amara Chen'), (2, 'Ben Osei' -- has zero posts)\n-- posts:   (1, 'Intro to SQL', author_id=1)\n\nSELECT authors.name, posts.title\nFROM authors\nINNER JOIN posts ON posts.author_id = authors.id;\n-- Amara Chen  | Intro to SQL\n-- (Ben Osei does not appear at all)\n\nSELECT authors.name, posts.title\nFROM authors\nLEFT JOIN posts ON posts.author_id = authors.id;\n-- Amara Chen | Intro to SQL\n-- Ben Osei   | NULL",
+          "explanation": "INNER JOIN only keeps combined rows where the ON condition is satisfied by an actual matching row on both sides -- since no row in `posts` has `author_id = 2`, there is no pairing for Ben Osei to appear in at all, and he's dropped from the result entirely, silently, with no error or warning. LEFT JOIN instead guarantees every row from the left table (`authors`) survives into the result regardless of whether a match exists on the right, substituting NULL for every column that would have come from the unmatched right-hand side. Choosing the wrong one is a common, quiet bug: if your actual question is 'how many authors have never published anything,' an INNER JOIN can never answer it, because the very rows you're looking for -- authors with no matching posts -- are exactly the ones it excludes before you'd ever get a chance to filter on them."
+        },
+        {
+          "title": "GROUP BY with HAVING: Customers With More Than 3 Orders",
+          "language": "sql",
+          "code": "-- This fails: WHERE cannot reference an aggregate.\nSELECT customer_id, COUNT(*) AS order_count\nFROM orders\nWHERE COUNT(*) > 3\nGROUP BY customer_id;\n-- ERROR:  aggregate functions are not allowed in WHERE\n\n-- This works: HAVING filters groups after aggregation.\nSELECT customer_id, COUNT(*) AS order_count\nFROM orders\nWHERE order_date >= '2026-01-01'\nGROUP BY customer_id\nHAVING COUNT(*) > 3\nORDER BY order_count DESC;",
+          "explanation": "The first query fails for a structural reason, not a typo: at the point WHERE is logically evaluated, individual rows haven't been grouped or aggregated yet, so `COUNT(*)` has no group to count over and simply isn't a value that exists at that stage of execution. The second query fixes this by moving the aggregate filter to HAVING, which runs after GROUP BY has formed the per-customer groups and computed `COUNT(*)` for each one. Note the WHERE clause is still doing useful work in the corrected version -- `order_date >= '2026-01-01'` throws out rows that should never even be considered before grouping happens at all, which is both logically correct (those orders shouldn't count toward this year's total) and more efficient than aggregating first and discarding groups afterward."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "WHERE and HAVING are interchangeable ways to filter a query -- just use whichever one comes to mind first.",
+          "clarification": "They filter at different logical stages and, correspondingly, on different things. WHERE filters individual rows before any grouping or aggregation happens, and specifically cannot reference an aggregate function's result, because no aggregate has been computed yet at that point. HAVING filters already-formed groups after GROUP BY and aggregation have run, and it's the only clause that can test an aggregate like `COUNT(*)` or `SUM(...)`. A query can legitimately use both together -- WHERE to cheaply exclude rows before they're even grouped, HAVING to filter on what the surviving rows aggregate to."
+        },
+        {
+          "description": "INNER JOIN and LEFT JOIN return the same rows as long as every row on the left happens to have a match on the right today, so it doesn't really matter which one you default to using.",
+          "clarification": "That's true only for the data you currently have, which makes it a fragile assumption rather than a property of the query. The moment a new row is inserted on the left side without a corresponding match on the right -- a customer who hasn't placed an order yet, an author who hasn't published yet -- an INNER JOIN silently drops that row from every query built on this assumption, while a LEFT JOIN would have kept it with NULLs. The safer habit is to reason explicitly about which relationship you actually mean: use INNER JOIN when a match is genuinely required for the row to make sense in the output, and LEFT JOIN when the left-side row is meaningful on its own and an absent match is itself part of the answer you're looking for."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "databases-sql-querying-ex1",
+          "type": "predictOutput",
+          "prompt": "Given `authors: (1, 'Amara'), (2, 'Ben')` where Ben has no rows in `posts`, and `posts: (1, 'Intro to SQL', author_id=1)`, what does each of these two queries return?",
+          "code": "SELECT authors.name, posts.title\nFROM authors\nINNER JOIN posts ON posts.author_id = authors.id;\n\nSELECT authors.name, posts.title\nFROM authors\nLEFT JOIN posts ON posts.author_id = authors.id;",
+          "hints": [
+            "INNER JOIN only keeps combined rows where a match actually exists on both sides -- what happens to a left-side row with no match at all?",
+            "LEFT JOIN guarantees every row from the left table appears at least once, filling in NULL for right-side columns when there's no match.",
+            "Work out, for Ben specifically, whether he appears in each query's result, and if so, what posts.title shows for him."
+          ],
+          "expectedAnswer": "INNER JOIN: one row, ('Amara', 'Intro to SQL') -- Ben is excluded entirely because he has no matching post. LEFT JOIN: two rows, ('Amara', 'Intro to SQL') and ('Ben', NULL) -- Ben survives because LEFT JOIN preserves every left-side row and fills unmatched right-side columns with NULL.",
+          "solutionExplanation": "INNER JOIN conceptually pairs every authors row with every posts row and keeps only the pairs where `posts.author_id = authors.id` holds true. Since no row in `posts` has `author_id = 2`, there is no pair involving Ben at all, so he's absent from the result -- not shown with a NULL, simply not present as a row. LEFT JOIN instead starts from 'keep every row in authors, no matter what,' and only uses the ON condition to decide what (if anything) to attach from posts. Amara matches normally and gets her post's title attached. Ben has no match, so his row still appears -- because LEFT JOIN guarantees it -- but every column that would have come from `posts` is NULL, since there's genuinely no post row to pull a title from."
+        },
+        {
+          "id": "databases-sql-querying-ex2",
+          "type": "debugging",
+          "prompt": "This query is meant to list customers who have placed more than 3 orders, but it fails to run at all. Find the bug and fix it.",
+          "code": "SELECT customer_id, COUNT(*) AS order_count\nFROM orders\nWHERE COUNT(*) > 3\nGROUP BY customer_id;",
+          "hints": [
+            "Think about the logical order a SELECT query executes in -- does grouping and aggregation happen before or after WHERE is evaluated?",
+            "COUNT(*) is an aggregate computed per group. At the point WHERE runs, have any groups been formed yet?",
+            "There's a specific clause designed to filter on an aggregate's result, evaluated after GROUP BY -- it isn't WHERE."
+          ],
+          "solutionCode": "SELECT customer_id, COUNT(*) AS order_count\nFROM orders\nGROUP BY customer_id\nHAVING COUNT(*) > 3;",
+          "solutionExplanation": "WHERE is evaluated before GROUP BY forms any groups and before any aggregate function has a group to compute over, so `WHERE COUNT(*) > 3` asks PostgreSQL to compare against a value that doesn't exist yet at that stage of execution, which is why it errors outright rather than just returning an unexpected result. Moving the condition into a HAVING clause -- which runs after GROUP BY and aggregation -- fixes it: by the time HAVING is evaluated, `COUNT(*)` is a real, computed value for each group of same-customer_id rows, and HAVING can correctly keep only the groups where that count exceeds 3."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "databases-sql-querying-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "An `orders` table has some rows referencing `customer_id` values that don't exist in `customers` (perhaps from a data migration issue). A query does `SELECT customers.name, orders.id FROM customers INNER JOIN orders ON orders.customer_id = customers.id`. What happens to orphaned orders rows?",
+          "options": [
+            "They appear in the result with customers.name shown as NULL.",
+            "They are silently excluded from the result, because INNER JOIN only keeps rows that have a match on both sides.",
+            "The query raises a foreign key violation error, since the join condition can't be satisfied.",
+            "They appear once for every row in customers, since INNER JOIN falls back to a full cross join when no match exists."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "INNER JOIN's defining behavior is to keep only combined rows where the ON condition is actually satisfied by matching rows on both sides -- an orphaned order with no matching customer row produces no satisfying pair, so it's dropped from the output with no error and no NULL placeholder, simply absent. Option A describes LEFT JOIN's behavior, not INNER JOIN's. Option C is wrong because a JOIN is a read-time operation with no relationship to whether a foreign key constraint exists or was ever enforced -- an unmatched join condition is a normal, silent outcome, not an error. Option D describes a cross join with no ON condition at all, which is a different operation entirely."
+        },
+        {
+          "id": "databases-sql-querying-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain the logical order in which a SELECT query's clauses actually execute -- not the order you type them in -- and use it to explain why an aggregate like COUNT(*) can be used in HAVING but not in WHERE.",
+          "modelAnswer": "Although you write a SELECT statement in the order SELECT, FROM, WHERE, GROUP BY, HAVING, ORDER BY, LIMIT, that is not the order in which the database actually evaluates it. Logically, execution proceeds roughly as: FROM and any JOINs first build the combined set of candidate rows; WHERE then filters those individual rows down, one at a time, with no knowledge of any grouping yet; GROUP BY then collapses the surviving rows into groups based on the specified columns; HAVING filters those already-formed groups, typically based on an aggregate computed over each one; SELECT then computes the actual output columns and expressions (which is why you generally can't reference a SELECT-list alias inside WHERE -- that alias doesn't exist as a value until the SELECT step, which runs after WHERE); and finally ORDER BY and LIMIT sort and truncate the finished result. This order explains the WHERE-versus-HAVING asymmetry directly: an aggregate function like COUNT(*) only has a meaningful value once rows have been grouped, which happens at the GROUP BY step -- and WHERE executes before that step even begins. Asking WHERE to filter on COUNT(*) is asking it to reference something that, at the point it runs, simply doesn't exist yet. HAVING, by contrast, executes after GROUP BY has formed groups and after aggregate functions have been computed per group, so it's specifically positioned at the one point in the pipeline where filtering on an aggregate result is possible at all."
+        }
+      ]
+    },
+    {
+      "id": "databases-constraints-and-null",
+      "title": "Constraints and NULL Semantics",
+      "description": "Constraints let the database itself enforce business rules on every write regardless of which code path performs it, while NULL's three-valued logic -- unknown, not true or false -- changes how comparisons, boolean logic, and aggregates behave in ways that catch almost every SQL beginner at least once.",
+      "moduleId": "relational_modeling_and_sql",
+      "topicId": "relational_modeling_and_sql",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 35,
+      "prerequisites": ["databases-relational-modeling", "databases-sql-querying"],
+      "learningObjectives": [
+        "Use PRIMARY KEY, FOREIGN KEY, UNIQUE, CHECK, and NOT NULL constraints to enforce data integrity at the database level.",
+        "Explain why NULL represents 'unknown' rather than a normal value like zero or an empty string.",
+        "Predict the outcome of comparisons and boolean expressions involving NULL, including inside WHERE clauses.",
+        "Explain why NULL values are excluded from most aggregate calculations, and why COUNT(*) and COUNT(column) can differ.",
+        "Use IS NULL / IS NOT NULL correctly, and explain why `= NULL` never matches any row."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "Constraints as Enforced Business Rules",
+            "body": "A constraint is a rule the database itself checks on every write, regardless of which application, script, or person is doing the writing. You've already seen PRIMARY KEY (unique + not null) and FOREIGN KEY (must reference an existing row). `UNIQUE` is the same uniqueness guarantee as a primary key, without the not-null requirement and without being the table's single main key -- useful for secondary uniqueness rules like an email address or a SKU. `NOT NULL` simply forbids NULL in a column, which you should apply to any column where 'unknown' genuinely isn't a valid state for your application's logic.\n\n`CHECK` is the most general of the bunch: it's an arbitrary boolean expression that every row must satisfy.\n\n```sql\nCREATE TABLE products (\n    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,\n    name TEXT NOT NULL,\n    price NUMERIC(10, 2) NOT NULL CHECK (price >= 0),\n    sku TEXT NOT NULL UNIQUE\n);\n```\n\nA row with a negative `price` is rejected the instant anything tries to write it, whether that's a careful application, a careless one-off migration script, or a typo in an ad-hoc UPDATE run directly against production. This is the core value proposition of constraints as a category: they move a business rule from 'something every piece of code that touches this table needs to remember to check' to 'something that is simply impossible to violate,' which is a categorically stronger guarantee. Naming a constraint explicitly (`CONSTRAINT positive_price CHECK (price >= 0)`) is good practice too -- it makes the error message that PostgreSQL raises on violation immediately identify which rule was broken, instead of an anonymous, auto-generated constraint name."
+          },
+          {
+            "heading": "NULL Means Unknown, Not Empty or Zero",
+            "body": "NULL is one of the most persistently misunderstood ideas in SQL, and the misunderstanding usually comes from treating it as just another possible value -- 'the empty one.' It isn't. An empty string `''` is a perfectly specific, known value: a string containing zero characters. The number `0` is an equally specific, known value. NULL means something categorically different: the value is *unknown*, *missing*, or *not applicable* -- the database genuinely does not know what belongs in that cell.\n\nThat distinction has real consequences. A `middle_name` column holding `''` is asserting a known fact: this person has no middle name (or an empty one, depending on your domain rules). The same column holding NULL is asserting something else entirely: we don't know their middle name, or it doesn't apply to them, and the difference matters -- collapsing them into 'basically the same thing' throws away information you might genuinely have or need."
+          },
+          {
+            "heading": "Three-Valued Logic: TRUE, FALSE, and UNKNOWN",
+            "body": "Because NULL means 'unknown,' any comparison involving it doesn't produce TRUE or FALSE -- it produces a third logical value, UNKNOWN. `age = 30` where `age` is NULL doesn't evaluate to FALSE (which would claim to know the age isn't 30); it evaluates to UNKNOWN, because the age simply isn't known at all, so no comparison against it can be answered either way. This propagates: `5 = NULL` is UNKNOWN, `NULL = NULL` is UNKNOWN (not TRUE -- two unknowns aren't necessarily equal to each other), and any arithmetic touching NULL (`NULL + 1`) produces NULL.\n\nWHERE (and HAVING, and JOIN ON conditions) keep a row only when its condition evaluates to TRUE -- UNKNOWN is treated the same as FALSE for this purpose, meaning it excludes the row. This is the single most common source of NULL-related surprise: `SELECT * FROM people WHERE age != 30` looks like it should return 'everyone whose age isn't 30, obviously including anyone with an unknown age, since an unknown age certainly isn't confirmed to be 30' -- but it doesn't. Every row where `age` is NULL evaluates `age != 30` to UNKNOWN, and UNKNOWN rows get filtered out right alongside the FALSE ones. If you want rows with an unknown age included, you must ask for that explicitly: `WHERE age != 30 OR age IS NULL`."
+          },
+          {
+            "heading": "The NOT IN / NULL Trap and Other Footguns",
+            "body": "The most dangerous NULL-related bug in everyday SQL involves `NOT IN` against a subquery whose results might contain a NULL. `WHERE id NOT IN (SELECT banned_id FROM banned_ids)` is logically equivalent to a chain of `id <> x1 AND id <> x2 AND id <> x3 ...` for every value the subquery returns. If even *one* of those values is NULL, that one comparison evaluates to UNKNOWN, and `AND`'s truth table says TRUE AND UNKNOWN is UNKNOWN -- which poisons the *entire* chain to UNKNOWN, no matter how many of the other comparisons were confidently TRUE. The practical result: if the `banned_ids` subquery returns even a single NULL, the whole `NOT IN` filter evaluates to UNKNOWN for every row, and the query returns **zero rows**, silently, with no error to alert you that something went wrong.\n\nThe robust fix is `NOT EXISTS`, which is immune to this because it doesn't build a chain of equality comparisons against individual values at all -- it just asks 'does at least one matching row exist,' a question NULL can't poison the same way:\n\n```sql\nSELECT * FROM users u\nWHERE NOT EXISTS (\n    SELECT 1 FROM banned_ids b WHERE b.banned_id = u.id\n);\n```\n\n`COALESCE(expression, fallback)` is the standard tool for defaulting a NULL to a concrete value when you specifically want 'unknown' treated as some particular known value for a calculation -- e.g. `COALESCE(discount_percent, 0)` to treat a missing discount as explicitly zero rather than propagating unknown-ness into the rest of the expression."
+          },
+          {
+            "heading": "NULL and Aggregates: Why COUNT(*) and COUNT(column) Differ",
+            "body": "Aggregate functions -- `SUM`, `AVG`, `MIN`, `MAX`, and `COUNT(column)` -- all ignore NULL values when computing their result, treating them as though those rows simply weren't there for the purposes of that specific calculation. `COUNT(*)`, notably, is the one exception: it counts *rows*, regardless of what any particular column contains, NULL or not.\n\n```sql\n-- people: (1, age=25), (2, age=NULL), (3, age=35)\nSELECT COUNT(*), COUNT(age), AVG(age) FROM people;\n-- COUNT(*) = 3   (all three rows exist)\n-- COUNT(age) = 2 (only two rows have a known age)\n-- AVG(age) = 30  (25 + 35) / 2 -- NOT (25 + 0 + 35) / 3\n```\n\nThat last line is worth sitting with: `AVG(age)` computed 30, the average of the *known* ages, silently excluding the NULL row from both the sum and the count it divided by -- it did not treat the missing age as zero. This is usually the behavior you want (an unknown age shouldn't drag the average toward zero as if the person were confirmed to be zero years old), but it's exactly the kind of thing to double check deliberately whenever NULLs are possible in a column you're aggregating, because the alternative interpretation -- 'missing means zero' -- is a real, different, and sometimes-desired answer that AVG will never give you on its own. If you do want that behavior, you'd write `AVG(COALESCE(age, 0))` explicitly, forcing the NULLs to a concrete zero before the aggregate ever sees them."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "CHECK and UNIQUE Constraints Rejecting Bad Data",
+          "language": "sql",
+          "code": "CREATE TABLE products (\n    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,\n    name TEXT NOT NULL,\n    price NUMERIC(10, 2) NOT NULL CHECK (price >= 0),\n    sku TEXT NOT NULL UNIQUE\n);\n\nINSERT INTO products (name, price, sku) VALUES ('Keyboard', 49.99, 'KB-001');  -- OK\n\nINSERT INTO products (name, price, sku) VALUES ('Broken Mouse', -5.00, 'MS-002');\n-- ERROR:  new row for relation \"products\" violates check constraint \"products_price_check\"\n-- DETAIL:  Failing row contains (2, Broken Mouse, -5.00, MS-002).\n\nINSERT INTO products (name, price, sku) VALUES ('Keyboard Pro', 89.99, 'KB-001');\n-- ERROR:  duplicate key value violates unique constraint \"products_sku_key\"\n-- DETAIL:  Key (sku)=(KB-001) already exists.",
+          "explanation": "Both rejected inserts fail before the row is ever stored, and both DETAIL lines identify exactly which value and which constraint were the problem -- information that would otherwise require the application to have already validated the same rule itself, correctly, in every single place it inserts or updates a product. The CHECK constraint enforces a rule that's specific to this domain (`price >= 0`) and has no equivalent built-in constraint type, which is exactly CHECK's purpose: expressing an arbitrary boolean invariant that must hold for every row, phrased once, in the schema, rather than scattered across every code path that could produce a `products` row."
+        },
+        {
+          "title": "Why `WHERE column = NULL` Never Matches",
+          "language": "sql",
+          "code": "-- people: (1, age=25), (2, age=NULL), (3, age=35)\n\nSELECT * FROM people WHERE age = NULL;\n-- returns ZERO rows -- even row 2, whose age genuinely IS NULL\n\nSELECT * FROM people WHERE age IS NULL;\n-- returns exactly row 2",
+          "explanation": "`age = NULL` doesn't ask 'is age unknown' -- it asks the comparison operator `=` to evaluate `age` against NULL, and per three-valued logic, any `= NULL` comparison evaluates to UNKNOWN, never TRUE, for every single row, including the row where age actually is NULL. WHERE only keeps rows where the condition is TRUE, so this query returns nothing, silently, with no error -- a classic, quiet bug for anyone assuming `=` works the same way it does for every other value. `IS NULL` is a fundamentally different operator, purpose-built specifically to test for NULL-ness directly rather than comparing values, and it's the only correct way to ask this question in SQL."
+        },
+        {
+          "title": "The NOT IN NULL Trap",
+          "language": "sql",
+          "code": "-- banned_emails: ('spam@example.com'), (NULL)  -- a bad row snuck in\n-- users: (1, 'amara@example.com'), (2, 'spam@example.com')\n\nSELECT * FROM users WHERE email NOT IN (SELECT email FROM banned_emails);\n-- returns ZERO rows -- even amara@example.com, which is clearly not banned!\n\nSELECT * FROM users u\nWHERE NOT EXISTS (\n    SELECT 1 FROM banned_emails b WHERE b.email = u.email\n);\n-- returns exactly Amara's row, as intended",
+          "explanation": "The NOT IN version expands, conceptually, to `email <> 'spam@example.com' AND email <> NULL` for every user row. For Amara, the first comparison is TRUE (her email isn't the spam one), but the second comparison, against the stray NULL row, is UNKNOWN -- and TRUE AND UNKNOWN is UNKNOWN, not TRUE, so her row is filtered out along with everyone else's, even though she's obviously not on the banned list. This failure mode is especially dangerous because it doesn't error -- it just quietly returns fewer rows than it should, for a reason that has nothing to do with the specific WHERE condition anyone is looking at. NOT EXISTS avoids the trap entirely because it never builds a chain of per-value equality comparisons against the subquery's results; it only asks whether a matching row exists, and a NULL row in `banned_emails` simply never matches anyone's real email, so it's correctly ignored rather than poisoning the whole filter."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "NULL is basically the same as an empty string or zero -- it's just a way of saying a column has 'no value.'",
+          "clarification": "An empty string and zero are specific, known values -- a string of length zero, and the number zero, respectively -- and comparisons or arithmetic against them behave exactly like comparisons or arithmetic against any other known value. NULL means the value is unknown, missing, or not applicable, and that changes the semantics of everything touching it: `NULL = NULL` is UNKNOWN (not TRUE), `NULL + 1` is NULL, and aggregate functions skip NULLs rather than treating them as zero. Treating NULL as 'the empty version of a value' leads directly to bugs like assuming `WHERE age != 30` includes people with an unknown age, or assuming `AVG(price)` treats a NULL price as a zero-cost item -- neither is true."
+        },
+        {
+          "description": "`WHERE column = NULL` is a normal comparison that matches rows where the column happens to be NULL, the same way `WHERE column = 5` matches rows where the column is 5.",
+          "clarification": "SQL's three-valued logic makes any `= NULL` comparison evaluate to UNKNOWN rather than TRUE, for every row, without exception -- including rows where the column genuinely is NULL. WHERE only keeps rows whose condition is TRUE, so `column = NULL` returns zero rows, always, regardless of the data. The only correct way to test for NULL-ness is the dedicated `IS NULL` (or `IS NOT NULL`) operator, which checks the actual unknown-ness state directly rather than performing an equality comparison against it."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "databases-constraints-and-null-ex1",
+          "type": "predictOutput",
+          "prompt": "Given the table `people` with rows `(1, age=25), (2, age=NULL), (3, age=35), (4, age=NULL)`, what does this query return?",
+          "code": "SELECT COUNT(*) AS total_rows, COUNT(age) AS known_ages, AVG(age) AS avg_known_age\nFROM people;",
+          "hints": [
+            "COUNT(*) counts rows regardless of what any column contains. COUNT(column) counts only rows where that specific column is NOT NULL.",
+            "AVG(age) is computed only over the rows where age is known -- NULLs are excluded from both the sum and the divisor, not treated as zero.",
+            "Work out how many rows have a known age, and what their sum and average actually are, ignoring the two NULL rows entirely."
+          ],
+          "expectedAnswer": "total_rows = 4, known_ages = 2, avg_known_age = 30. COUNT(*) counts all four rows regardless of NULLs. COUNT(age) only counts the two rows where age is not NULL (rows 1 and 3). AVG(age) computes (25 + 35) / 2 = 30, entirely ignoring the two NULL-age rows -- it does not divide by 4, and does not treat the NULLs as zero.",
+          "solutionExplanation": "COUNT(*) is the one aggregate that counts rows unconditionally, so it reports 4 regardless of which columns contain NULL. COUNT(age), by contrast, only counts rows where age is NOT NULL -- rows 2 and 4 are excluded, leaving 2. AVG(age) similarly ignores NULL rows entirely rather than treating them as zero: it sums only the known ages (25 + 35 = 60) and divides by the count of known ages (2), giving 30 -- not 60 / 4 = 15, which is what you'd get if NULL were silently treated as zero."
+        },
+        {
+          "id": "databases-constraints-and-null-ex2",
+          "type": "debugging",
+          "prompt": "This query is meant to find all users whose email is not on the banned_emails list, but it's returning zero rows even though most users clearly aren't banned. Find and fix the bug.",
+          "code": "-- banned_emails contains ('spam@example.com') and one bad row (NULL),\n-- accidentally inserted by a broken import script.\n\nSELECT * FROM users\nWHERE email NOT IN (SELECT email FROM banned_emails);",
+          "hints": [
+            "NOT IN expands, conceptually, into a chain of `email <> x` comparisons ANDed together for every value the subquery returns -- what does AND do when one of those comparisons is UNKNOWN rather than TRUE or FALSE?",
+            "One of the values NOT IN is comparing against is NULL. What does `email <> NULL` evaluate to, for every single user, regardless of their actual email?",
+            "There's a different construct that checks whether a matching row exists, rather than comparing against every individual value -- it doesn't have this NULL-poisoning problem."
+          ],
+          "solutionCode": "SELECT * FROM users u\nWHERE NOT EXISTS (\n    SELECT 1 FROM banned_emails b WHERE b.email = u.email\n);",
+          "solutionExplanation": "NOT IN against a subquery is logically equivalent to ANDing together an `email <> value` comparison for every value the subquery returns. Because one of those values is NULL, the comparison `email <> NULL` evaluates to UNKNOWN for every single user, no matter their actual email -- and ANDing anything with UNKNOWN produces UNKNOWN, not TRUE, which means the overall WHERE condition is UNKNOWN (treated as excluding the row) for every user, hence zero rows. NOT EXISTS sidesteps this completely: it only asks whether at least one row in banned_emails matches this user's email by equality, and a NULL row in banned_emails never equals any real email, so it's correctly ignored rather than poisoning the result for every row."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "databases-constraints-and-null-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "A `people` table has some rows where `age` is NULL. What does `SELECT * FROM people WHERE age != 30` return, with respect to those NULL-age rows?",
+          "options": [
+            "It includes every NULL-age row, since an unknown age is certainly not confirmed to equal 30.",
+            "It excludes every NULL-age row, because `age != 30` evaluates to UNKNOWN (not TRUE) when age is NULL, and WHERE only keeps rows whose condition is TRUE.",
+            "It raises an error, because you cannot compare a NULL column using != without first checking IS NOT NULL.",
+            "It includes NULL-age rows only if there is also at least one row where age actually equals 30."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B is correct: three-valued logic means any comparison against NULL, including !=, evaluates to UNKNOWN rather than TRUE or FALSE, and WHERE treats UNKNOWN the same as FALSE -- it filters the row out. Option A describes the intuitive but incorrect expectation that unknown values default to satisfying inequality checks; they don't, because SQL doesn't infer 'unknown but definitely not 30' -- it simply can't evaluate the comparison at all. Option C is wrong because the comparison is syntactically and semantically legal; it just doesn't do what you might hope. Option D is wrong because the presence or absence of other rows has no bearing on how a given row's own comparison evaluates."
+        },
+        {
+          "id": "databases-constraints-and-null-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain why NOT IN can silently produce zero rows when its subquery includes a NULL, and why NOT EXISTS avoids this trap. Use three-valued logic in your answer.",
+          "modelAnswer": "SQL's NOT IN against a subquery is logically equivalent to a chain of inequality comparisons -- `x <> v1 AND x <> v2 AND x <> v3 ...` -- for every value v the subquery produces, all combined with AND. SQL uses three-valued logic, where any comparison involving NULL evaluates not to TRUE or FALSE but to a third value, UNKNOWN, because NULL means the value being compared against is itself unknown, and no comparison against an unknown quantity can be confidently answered either way. If even one of the subquery's returned values is NULL, the corresponding comparison `x <> NULL` evaluates to UNKNOWN for every row being tested, no matter what x actually is. Under AND's truth table, TRUE AND UNKNOWN is UNKNOWN, not TRUE -- so as soon as one UNKNOWN comparison enters the chain, the entire ANDed expression collapses to UNKNOWN for every single row, regardless of how many of the other individual comparisons were confidently TRUE. WHERE only keeps rows where the final condition is TRUE, and it discards UNKNOWN exactly like FALSE, so the whole query returns zero rows -- silently, with no error, which is what makes this bug so easy to miss in practice. NOT EXISTS is immune to this because it isn't built from a chain of per-value equality comparisons at all -- it asks a fundamentally different, existential question: does at least one row in the subquery match this row, by whatever join condition you specify. A NULL row in the subquery simply never satisfies an equality-based match condition against any real value, so it's correctly excluded from consideration rather than corrupting the logical combination of every other comparison."
+        }
+      ]
+    }
+  ]
+}

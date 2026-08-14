@@ -1,0 +1,370 @@
+{
+  "learningPathId": "ai-ml",
+  "moduleId": "training_and_evaluation",
+  "title": "Training & Evaluation",
+  "order": 2,
+  "concepts": [
+    {
+      "id": "ai-ml-gradient-descent",
+      "title": "Gradient Descent: How Learning Actually Happens",
+      "description": "Gradient descent replaces blind trial-and-error parameter search with calculus: compute the exact local direction that reduces loss fastest, and step that way -- it's the optimization procedure underneath virtually every model trained today.",
+      "moduleId": "training_and_evaluation",
+      "topicId": "training_and_evaluation",
+      "difficulty": "advanced",
+      "estimatedMinutes": 45,
+      "prerequisites": ["ai-ml-train-predict-loss"],
+      "learningObjectives": [
+        "Explain what a gradient is in this context at an intuitive level, without needing to derive it symbolically by hand.",
+        "Explain why the gradient points toward steepest increase, and why parameters are updated in the opposite direction.",
+        "Explain the role of the learning rate and predict the failure modes of setting it too high or too low.",
+        "Distinguish batch, stochastic, and mini-batch gradient descent and explain the practical tradeoff each makes.",
+        "Implement a minimal gradient descent loop for a one-parameter loss and trace how the parameter converges.",
+        "Explain why gradient descent can get stuck near local minima or saddle points, and why this is less catastrophic in practice for large models than the theory alone would suggest."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "From Random Nudging to an Informed Direction",
+            "body": "The toy training loop from the previous concept worked, but it wastes almost all of its effort: most random nudges get thrown away, and the ones that do help are found purely by luck, not by any understanding of the loss surface's shape. **Gradient descent** replaces 'try a random direction and check' with something dramatically more efficient: use calculus to compute, exactly, which direction increases the loss the fastest from your current position -- called the **gradient** -- and then step in precisely the opposite direction, since that's guaranteed to be the direction of steepest local *decrease*.\n\nThe standard mental picture, and a genuinely useful one, is a hiker standing on a hillside in thick fog, trying to reach the valley floor (the minimum loss) with no map -- only able to feel the slope of the ground directly under their feet. They can't see the whole landscape, but they can feel which way is downhill right where they're standing, take a step in that direction, and repeat. That's gradient descent, essentially completely: at each position (each set of parameter values), compute the local slope (the gradient), and step downhill along it. Like the hiker, gradient descent never sees the global shape of the loss surface -- only the local slope at wherever it currently is -- a limitation with real consequences, covered later in this concept."
+          },
+          {
+            "heading": "The Gradient, Intuitively (and a Little Formally)",
+            "body": "For a single parameter `w`, the derivative of the loss with respect to `w`, written `dL/dw`, answers a very concrete question: if you nudged `w` up by a tiny amount and held everything else fixed, would the loss go up or down, and roughly how fast? A positive derivative means increasing `w` increases loss, so you should decrease `w`; a negative derivative means increasing `w` decreases loss, so you should increase `w`. With multiple parameters, the **gradient** is simply the vector of these partial derivatives, one per parameter, and it points in the direction of steepest *increase* in the loss -- which is exactly why the update rule subtracts it, rather than adding it:\n\n```python\ntheta_new = theta_old - learning_rate * gradient\n```\n\nYou can approximate a derivative numerically, without doing any symbolic calculus, using **finite differences** -- nudge the parameter by a tiny amount in both directions and see how much the loss changes:\n\n```python\ndef numerical_gradient(loss_fn, w, epsilon=1e-5):\n    return (loss_fn(w + epsilon) - loss_fn(w - epsilon)) / (2 * epsilon)\n```\n\nReal training frameworks don't compute gradients this way at scale -- they use **automatic differentiation**, which applies the chain rule symbolically through every operation in the computation, giving exact derivatives far more efficiently than repeatedly re-evaluating the loss at nearby points. Finite differences remain useful as a debugging technique (**gradient checking**): compare a framework's automatically computed gradient against a slow, brute-force finite-difference approximation to catch bugs in a hand-written gradient computation."
+          },
+          {
+            "heading": "The Learning Rate: The Single Most Consequential Hyperparameter",
+            "body": "The **learning rate** (often written `lr` or `alpha`) scales how big a step you take along the gradient direction, and getting it badly wrong breaks training in two very different, equally common ways. Set it **too small**, and each step barely moves `theta` at all -- training technically works and will eventually converge given enough steps, but 'eventually' might mean far more compute and wall-clock time than you have; a training run that looks 'stuck' after a reasonable number of steps is more often a learning-rate problem than a fundamentally broken model, and it's frequently mistaken for 'the model doesn't work' when the same setup would converge fine given a larger step size or more steps.\n\nSet it **too large**, and each step can overshoot the minimum entirely, landing on the other side of the valley with a higher loss than before, then overshooting back the other way on the next step -- the loss oscillates or even diverges, growing without bound, instead of settling down. This is a genuinely different failure mode from underfitting or a bad architecture, and it's diagnosed by watching the loss curve directly: a loss that bounces wildly or trends upward over training steps is very often a straightforward learning-rate-too-high problem, not a sign the whole approach is wrong. In practice, the learning rate is usually the very first hyperparameter engineers tune, often by trying a small handful of values across a few orders of magnitude (0.1, 0.01, 0.001, ...) rather than guessing precisely; **learning rate schedules**, which start with a larger rate for fast early progress and decay it over training for more careful fine-tuning near the end, are a common refinement once the basic order of magnitude is right."
+          },
+          {
+            "heading": "Batch, Stochastic, and Mini-Batch Variants",
+            "body": "The gradient in the formulas above is computed from the loss, but which data that loss is measured over is itself a choice with real tradeoffs. **Batch gradient descent** computes the loss (and its gradient) using the entire training set before taking a single step -- this gives the most accurate estimate of the true gradient at each step, but for a large dataset it means one extremely expensive step, it doesn't fit in memory once the dataset is large enough, and you get comparatively few update steps per unit of compute spent. **Stochastic gradient descent (SGD)**, in its purest form, computes the gradient from a single training example at a time -- each individual step is nearly free to compute and you get vastly more update steps for the same amount of data processed, but each individual gradient estimate is noisy, based on just one example, so the path toward the minimum is jittery rather than smooth, though that same noise can sometimes help the optimizer bounce out of small, unhelpful local minima.\n\n**Mini-batch gradient descent** is the practical default used almost everywhere in modern deep learning: compute the gradient from a small batch of examples, commonly somewhere from 32 to a few hundred, rather than one example or the whole dataset. This strikes a workable balance -- the gradient estimate is far less noisy than single-example SGD, while still being cheap enough per step to take many update steps, and critically, the underlying matrix operations for a batch of, say, 64 examples map extremely efficiently onto GPU hardware, which is specifically optimized for exactly this kind of batched numeric computation. When you see a `batch_size` hyperparameter in any deep learning framework, this is precisely what it controls -- how many examples' worth of loss get averaged together before each single parameter update."
+          },
+          {
+            "heading": "Local Minima, Saddle Points, and Why It Usually Works Anyway",
+            "body": "Gradient descent only ever looks at the local slope at its current position -- it has no way to know whether the downhill direction it's following leads to the single best possible solution, the **global minimum**, or merely a **local minimum**: a point lower than everywhere immediately nearby, but not the lowest point overall. For a simple linear regression with MSE loss, the loss surface happens to be **convex**, bowl-shaped with exactly one minimum, so this concern doesn't really arise. But for anything more expressive -- and certainly for neural networks with many layers -- the loss surface is **non-convex**, riddled with local minima, flat **plateaus** where the gradient is near zero in every direction without actually being at a minimum, and **saddle points**, where the surface curves up in some directions and down in others, and gradient descent can slow to a crawl nearby without technically being stuck.\n\nThe honest, slightly uncomfortable truth is that gradient descent comes with no mathematical guarantee of finding the globally best solution for non-convex problems -- and yet, empirically, it works remarkably well for large neural networks in practice. Part of the explanation is dimensionality: in the very high-dimensional parameter spaces typical of modern neural networks, points that are local minima in every single direction simultaneously turn out to be far rarer than low-dimensional intuition suggests, and many of the local minima that do exist tend to have loss values close to each other and close to the best achievable value, rather than being dramatically worse traps. Practical techniques help directly too: **momentum** carries some of the previous step's direction forward, helping push through small bumps and shallow dips instead of stalling in them; adaptive optimizers like **Adam** adjust the effective learning rate per parameter based on the recent history of gradients, smoothing out some of the pathologies of a single fixed learning rate; and random weight initialization means different training runs start from different points on the loss surface, so retraining is itself a crude way to avoid a particularly bad initialization. The realistic goal to hold in your head is 'gradient descent reliably finds a good solution,' not 'gradient descent is mathematically guaranteed to find the best solution' -- and for the overwhelming majority of real applications, a good solution found reliably beats a theoretically perfect one you have no practical way to guarantee finding anyway."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Approximating a Gradient with Finite Differences",
+          "language": "python",
+          "code": "def loss(w):\n    return (w - 3) ** 2   # minimized at w = 3\n\ndef numerical_gradient(loss_fn, w, epsilon=1e-5):\n    return (loss_fn(w + epsilon) - loss_fn(w - epsilon)) / (2 * epsilon)\n\nfor w in [0, 1, 3, 5]:\n    print(w, numerical_gradient(loss, w))\n# 0 -6.000000...   (steep downhill toward w=3)\n# 1 -4.000000...\n# 3  0.000000...   (at the minimum, the slope is flat)\n# 5  4.000000...   (uphill if w increases further; gradient descent would decrease w)",
+          "explanation": "The exact analytic derivative of (w - 3) ** 2 is 2 * (w - 3), and the finite-difference approximation above lands extremely close to that exact value at every point tested, without ever writing down or knowing the calculus rule for differentiating a square -- it purely evaluates the loss function itself at two nearby points and measures the slope between them. Notice the sign flips exactly at w=3, the true minimum, and the gradient is exactly zero there, consistent with 'at a minimum, nudging the parameter in either direction, to first order, doesn't change the loss.' Also notice the magnitude grows the farther w is from 3 -- for this particular quadratic loss, the gradient is literally proportional to the distance from the minimum, which is part of why gradient descent naturally takes larger steps when it's far from the answer and smaller steps as it gets close, even with a fixed learning rate."
+        },
+        {
+          "title": "A Minimal Gradient Descent Loop for Linear Regression",
+          "language": "python",
+          "code": "x_data = [1, 2, 3, 4]\ny_data = [3, 5, 7, 9]   # true relationship: y = 2x + 1\n\nw, b = 0.0, 0.0\nlr = 0.01\nn = len(x_data)\n\nfor step in range(1000):\n    y_pred = [w * x + b for x in x_data]\n    errors = [yp - yt for yp, yt in zip(y_pred, y_data)]\n\n    dw = (2 / n) * sum(e * x for e, x in zip(errors, x_data))\n    db = (2 / n) * sum(errors)\n\n    w -= lr * dw\n    b -= lr * db\n\nprint(round(w, 3), round(b, 3))   # w close to 2.0, b close to 1.0",
+          "explanation": "dw and db are the analytic partial derivatives of the mean squared error loss with respect to w and b respectively -- derived once, by hand, using the chain rule, and then evaluated fresh on every iteration using the current w and b. This is the calculus-informed replacement for the random-nudge loop from the previous concept: instead of guessing a direction and checking whether it helped, this loop computes the exact direction that reduces loss fastest and steps directly along it, scaled by the learning rate. Notice y_pred and errors are recomputed at the top of every loop iteration, using whatever w and b currently are -- a detail that matters enormously, because using stale predictions computed before the most recent parameter update is exactly the bug explored in this concept's exercises."
+        },
+        {
+          "title": "Learning Rate Too High: Divergence in Action",
+          "language": "python",
+          "code": "def loss(w):\n    return (w - 3) ** 2\n\ndef grad(w):\n    return 2 * (w - 3)\n\nw = 0.0\nlr = 1.2   # far too large for this loss surface\n\nfor step in range(4):\n    w = w - lr * grad(w)\n    print(f\"step {step}: w={w:.2f}, loss={loss(w):.2f}\")\n\n# step 0: w=7.20, loss=17.64\n# step 1: w=-7.68, loss=114.05\n# step 2: w=18.43, loss=238.28\n# step 3: w=-33.17, loss=1303.83   -- growing without bound instead of shrinking",
+          "explanation": "With lr=1.2 on this particular quadratic, every step overshoots the minimum at w=3 by a wider margin than it started, flipping to the opposite side of the valley and landing farther away each time rather than closer -- the textbook signature of a learning rate too high for the curvature of the loss surface it's being applied to. This is a completely different failure from a model that's simply 'bad at the task': the update rule and the loss function are both correct here, and reducing lr alone, say to 0.1, makes this exact same code converge smoothly. Whenever a loss curve grows or oscillates instead of settling down, checking the learning rate first is almost always the right instinct before suspecting the architecture, the features, or the data."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "Gradient descent tries a large number of possible parameter values, or a grid of them, and picks whichever gives the lowest loss.",
+          "clarification": "It never evaluates the whole space at all. It computes a local direction, the gradient, from the current position only, using derivatives, and takes one step at a time. It never 'sees' the global shape of the loss surface, only the local slope at wherever it currently stands -- which is precisely why it can get stuck in local minima, and why the starting point (initialization) and learning rate matter so much to the outcome."
+        },
+        {
+          "description": "A smaller learning rate is always safer and strictly better, since it avoids the risk of overshooting.",
+          "clarification": "Too small a learning rate isn't 'safe,' it's just slow, and slow has real costs -- more compute, more wall-clock time, and a very real practical risk of a training run being stopped, by a deadline, an early-stopping criterion, or a compute budget, before it has actually converged, which looks indistinguishable from a model that 'doesn't work' even though the same setup would have converged fine given enough steps. Effective learning rate choice is a genuine tradeoff, not a monotonic 'lower is safer' dial, which is exactly why schedules that start higher and decay over training are common."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "ai-ml-gradient-descent-ex1",
+          "type": "predictOutput",
+          "prompt": "What does this print after both steps of the loop run?",
+          "code": "def grad(w):\n    return 2 * (w - 3)\n\nw = 0.0\nlr = 0.1\n\nfor step in range(2):\n    w = w - lr * grad(w)\n    print(f\"step {step}: w = {w}\")",
+          "hints": [
+            "Compute the gradient at w=0 first, using grad(w) = 2 * (w - 3), then apply the update rule once to get step 0's new w.",
+            "For step 1, plug the UPDATED w from step 0 into grad(w) again -- gradient descent always uses the most recent w, never the original w=0.",
+            "Each step's update is w_new = w_old - lr * grad(w_old); do this arithmetic twice in sequence."
+          ],
+          "expectedAnswer": "step 0: w = 0.6\nstep 1: w = 1.08",
+          "solutionExplanation": "Step 0: grad(0) = 2*(0-3) = -6, so w = 0 - 0.1*(-6) = 0 + 0.6 = 0.6. Step 1: grad(0.6) = 2*(0.6-3) = 2*(-2.4) = -4.8, so w = 0.6 - 0.1*(-4.8) = 0.6 + 0.48 = 1.08. Notice w is steadily climbing toward 3, the true minimizer of (w-3)^2, and the step size is shrinking as w gets closer (the gradient's magnitude shrinks as w approaches 3), which is exactly the expected behavior of gradient descent on a convex bowl-shaped loss."
+        },
+        {
+          "id": "ai-ml-gradient-descent-ex2",
+          "type": "debugging",
+          "prompt": "This loop is supposed to make the loss shrink toward 0 as w approaches 3, but instead the printed loss grows every single step. Find and fix the bug.",
+          "code": "def grad(w):\n    return 2 * (w - 3)\n\nw = 0.0\nlr = 0.1\n\nfor step in range(5):\n    w = w + lr * grad(w)   # bug is on this line\n    loss = (w - 3) ** 2\n    print(f\"step {step}: w={w:.3f}, loss={loss:.3f}\")",
+          "hints": [
+            "Reason about which direction w is actually moving each step -- toward 3 (the minimizer), or away from it?",
+            "Recall the gradient descent update rule from the explanation: are you supposed to move in the SAME direction as the gradient, or the opposite direction?",
+            "Compare the sign in this update line to theta_new = theta_old - lr * gradient -- something doesn't match."
+          ],
+          "solutionCode": "def grad(w):\n    return 2 * (w - 3)\n\nw = 0.0\nlr = 0.1\n\nfor step in range(5):\n    w = w - lr * grad(w)   # fixed: subtract, to move opposite the gradient\n    loss = (w - 3) ** 2\n    print(f\"step {step}: w={w:.3f}, loss={loss:.3f}\")",
+          "solutionExplanation": "The gradient points in the direction of steepest INCREASE in loss, so gradient descent is defined to move in the opposite direction, subtracting lr * grad(w) from w. The buggy code adds instead of subtracts, which is gradient ASCENT -- deliberately moving toward higher loss. At w=0, grad(0)=-6, so `w + lr*grad(w)` computes 0 + 0.1*(-6) = -0.6, moving w further from 3 (and further negative) rather than closer to it, and the loss (w-3)^2 grows accordingly on every subsequent step. Changing the `+` to `-` restores the correct update rule, and w now moves steadily toward 3 with shrinking loss, exactly like the earlier worked example."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "ai-ml-gradient-descent-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "You're training a model and notice the loss oscillates wildly between very large and very small values every step, never settling down. Which hyperparameter is the most likely culprit, and how should you adjust it?",
+          "options": [
+            "Learning rate -- it's likely far too high, causing the update to repeatedly overshoot the minimum; try lowering it.",
+            "Batch size -- it's likely far too high, and reducing it will directly stabilize the loss curve.",
+            "Number of features -- there are too many features, and reducing dimensionality will fix the oscillation.",
+            "The loss function -- MSE is malfunctioning and should be replaced with cross-entropy."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "Wild oscillation between very large and very small loss values step-to-step is the textbook signature of a learning rate too large for the curvature of the loss surface -- each step overshoots the minimum by a growing margin, bouncing back and forth. Option B is wrong because batch size mainly affects how noisy the gradient estimate is, not whether updates overshoot -- a large batch size actually gives a smoother, more accurate gradient. Option C is a real overfitting-adjacent concern but doesn't cause step-to-step loss oscillation on its own. Option D is wrong because 'MSE is malfunctioning' isn't a real failure mode -- MSE is a fixed, correct formula; the described symptom is about the optimization step size, not the loss function's definition."
+        },
+        {
+          "id": "ai-ml-gradient-descent-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain gradient descent to a colleague who understands what a loss function is but has never heard the term, using the 'hiking downhill' intuition, and explicitly address what the learning rate controls and what can go wrong at both extremes of its value.",
+          "modelAnswer": "Picture the loss function as a landscape, where your current parameter values determine your position and the height of the ground beneath you is the loss at that position -- lower is better. Gradient descent is like a hiker in thick fog trying to reach the valley floor with no map, able only to feel the slope of the ground directly underfoot. At each position, the hiker feels which direction is downhill (that's the gradient, pointing toward steepest uphill, so you move the opposite way) and takes a step in that direction, then repeats from the new position. Mechanically, this means computing the derivative of the loss with respect to every parameter, which tells you, for a tiny nudge in each parameter, whether loss would go up or down and how fast, and then updating every parameter by moving a small amount in the downhill direction. The learning rate controls exactly how big that step is. Set it too small and the hiker takes tiny, timid steps -- training still eventually reaches a good spot, but it can take an impractically long time, and a run that looks 'stuck' after a reasonable number of steps is very often just this, not a broken model. Set it too large and the hiker takes such big strides that they leap clean over the valley floor and land partway up the opposite slope, sometimes even higher than where they started -- the loss doesn't settle down at all, it oscillates or grows without bound, which is a completely different and very recognizable failure mode from a model that's just performing poorly. Getting the learning rate into a reasonable range -- not so small that progress crawls, not so large that steps overshoot -- is usually the very first thing to tune before touching anything else about a training setup."
+        }
+      ]
+    },
+    {
+      "id": "ai-ml-splits-overfitting",
+      "title": "Train/Validation/Test Splits and the Overfitting-Underfitting Tradeoff",
+      "description": "Evaluating a model on data it trained on always looks better than reality; disciplined train/validation/test splits, and recognizing the overfitting-vs-underfitting signature in a learning curve, are what stand between a model that works and one that only looks like it does.",
+      "moduleId": "training_and_evaluation",
+      "topicId": "training_and_evaluation",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 35,
+      "prerequisites": ["ai-ml-gradient-descent"],
+      "learningObjectives": [
+        "Explain why evaluating a model on the data it was trained on gives a misleadingly optimistic estimate of real-world performance.",
+        "Define the distinct roles of the train, validation, and test sets, and explain why using the test set to make development decisions invalidates it.",
+        "Define overfitting and underfitting in terms of the gap between train and validation performance, and identify each from a description of a learning curve.",
+        "Describe at least three concrete techniques to reduce overfitting and explain when each applies.",
+        "Explain why validation performance drives development decisions while test performance is used only once, at the end, to report a final honest number."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "Why You Can't Grade Your Own Homework",
+            "body": "Evaluating a model on the exact data it was trained on measures how well the model has memorized those specific examples, not how well it generalizes to new examples it hasn't seen. A model with enough capacity can, in principle, achieve near-perfect training performance by essentially memorizing every training example's idiosyncrasies, including whatever noise happens to be in them -- and that memorization looks identical, on training data alone, to genuine learning of the real underlying pattern. Since the entire practical goal of machine learning is performance on unseen future data, not the data already collected, you need data the model has never touched during training in order to measure the thing you actually care about. This single idea is the reason held-out evaluation sets exist at all."
+          },
+          {
+            "heading": "Three Splits, Three Distinct Jobs",
+            "body": "A standard workflow divides data into three disjoint sets, each with a specific, non-interchangeable job. The **training set** is what the model's parameters are actually fit against. The **validation set** is a stand-in for future, unseen data, used repeatedly throughout development to make decisions: which hyperparameters to use, which model architecture performs better, when to stop training. The **test set** is touched exactly once, at the very end of the entire development process, purely to report a final, honest performance number.\n\nThat last rule -- touch the test set exactly once -- is stricter than it sounds, and violating it is a common, subtle mistake. If you tune anything, even something as small as a single hyperparameter, based on test set performance, and then report that same test performance as your result, you've implicitly fit your decisions to the test set, contaminating it -- the same failure mode as training-set evaluation, just one level removed and easier to miss. Typical practice reserves the validation set for every single decision made during development, and only evaluates on the test set after every decision has already been locked in. Common split proportions are roughly 70/15/15 or 80/10/10 for train/validation/test, though with very large datasets, fixed absolute sizes for validation and test (say, 10,000 examples each) are common instead of fixed percentages; **k-fold cross-validation**, which rotates which portion of the training data serves as validation across several folds, is a useful alternative when data is scarce enough that a single held-out validation slice would be too small to trust."
+          },
+          {
+            "heading": "Underfitting: The Model Is Too Simple to Even Learn the Training Data",
+            "body": "**Underfitting** shows up as poor performance on both the training set and the validation set, with little to no gap between them -- the model hasn't even managed to capture the pattern in the data it was directly trained on, let alone generalize it. This typically means the model lacks the capacity to represent the real underlying relationship (fitting a straight line to data that's clearly curved, for example) or simply hasn't been trained for long enough to fit even the pattern it's capable of representing. The fixes point in the opposite direction from overfitting fixes: increase model capacity (more features, a more expressive model architecture), train for longer, or reduce regularization that might currently be constraining the model too tightly."
+          },
+          {
+            "heading": "Overfitting: The Model Memorized Noise Instead of Learning the Pattern",
+            "body": "**Overfitting** shows up as a gap between low training loss and noticeably higher validation loss -- the model has enough capacity to fit not just the genuine underlying pattern in the training data, but also that specific training set's particular noise and idiosyncrasies, which by definition don't generalize to new data. The classic diagnostic learning-curve shape: validation loss decreases early in training alongside training loss, then turns around and starts increasing again while training loss keeps falling -- the point where that turn happens is exactly where the model started trading genuine generalization for pure memorization.\n\nSeveral concrete techniques address overfitting, and picking the right one depends on the situation: **more training data** directly reduces the model's ability to just memorize noise, since noise doesn't repeat consistently across a larger sample the way a real pattern does; **regularization** (L1/L2 penalties, dropout in neural networks) explicitly discourages the model from fitting overly specific, complex patterns by penalizing large or intricate parameter values; a **simpler model or fewer features** directly reduces capacity to memorize; **early stopping** halts training at the point validation loss is lowest, rather than continuing until training loss is lowest, deliberately choosing the checkpoint that generalizes best over the one that fits the training data hardest; and **data augmentation** (for images, audio, and similar modalities) artificially expands the effective training set by generating realistic variations of existing examples."
+          },
+          {
+            "heading": "Reading a Learning Curve Like a Diagnosis",
+            "body": "A genuinely high-leverage habit, practiced daily by working ML engineers, is plotting training loss and validation loss together over training steps or epochs and reading the shape as a diagnosis rather than just a status update. If both curves are high and close together, that's underfitting -- the model needs more capacity, more training, or less regularization. If training loss is low but validation loss is meaningfully higher and diverging further as training continues, that's overfitting -- the model needs regularization, more data, a simpler architecture, or to be stopped earlier. If both curves are low and close together, that's the goal state: the model has learned the real pattern well enough to generalize, without having the excess capacity (or lack of it) to significantly diverge from what the training data showed it. Getting comfortable reading this one picture correctly is worth more than memorizing any specific fix in isolation, because it tells you which category of fix is even worth trying."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "The Illusion of Perfect Training Accuracy",
+          "language": "python",
+          "code": "import numpy as np\n\nrng = np.random.default_rng(0)\nx_train = np.linspace(0, 1, 8)\ny_train = np.sin(2 * np.pi * x_train) + rng.normal(0, 0.1, size=8)\n\n# Fit a degree-7 polynomial to just 8 noisy points\ncoeffs = np.polyfit(x_train, y_train, deg=7)\ntrain_pred = np.polyval(coeffs, x_train)\ntrain_error = np.mean((train_pred - y_train) ** 2)\n\nx_test = np.linspace(0, 1, 50)\ny_test = np.sin(2 * np.pi * x_test)\ntest_pred = np.polyval(coeffs, x_test)\ntest_error = np.mean((test_pred - y_test) ** 2)\n\nprint(round(train_error, 6))   # extremely small: near-perfect fit to the 8 points\nprint(round(test_error, 4))    # dramatically larger: wild predictions between/beyond them",
+          "explanation": "A degree-7 polynomial has 8 free coefficients -- exactly enough to pass through all 8 noisy training points almost perfectly, including whatever random noise happened to land on each one, which is exactly why train_error comes out tiny. But the true underlying pattern is a smooth sine wave, and a polynomial with that much flexibility doesn't just capture the sine wave, it also contorts itself to match noise that has nothing to do with the real pattern, and those contortions swing wildly between and beyond the training points. Evaluated against x_test, a much finer grid covering the same range, the fitted polynomial's wild oscillations show up as a much larger test_error, even though it looked essentially flawless by every measure available on the training data alone. This is overfitting made numeric: a training-only evaluation would have reported this as a great model."
+        },
+        {
+          "title": "Early Stopping Based on Validation Loss, Not Train Loss",
+          "language": "python",
+          "code": "best_val_loss = float(\"inf\")\nbest_state = None\npatience, epochs_without_improvement = 5, 0\n\nfor epoch in range(max_epochs):\n    train_loss = run_training_epoch(model, train_data)\n    val_loss = evaluate(model, val_data)\n\n    if val_loss < best_val_loss:\n        best_val_loss = val_loss\n        best_state = model.get_weights()   # checkpoint the BEST validation state\n        epochs_without_improvement = 0\n    else:\n        epochs_without_improvement += 1\n\n    if epochs_without_improvement >= patience:\n        break   # stop once validation hasn't improved for `patience` epochs in a row\n\nmodel.set_weights(best_state)   # restore the best checkpoint, not the last one",
+          "explanation": "The checkpoint saved as best_state is deliberately tied to val_loss, not train_loss -- train_loss will frequently keep improving epoch after epoch even once the model has started overfitting, since it's measuring fit against data the model has already seen and can keep memorizing further. val_loss, measured against data the model never trains on, is what actually reveals the point where additional training stops helping generalization and starts hurting it, typically a clear V-shape: decreasing, then turning around and increasing again. Restoring best_state at the very end, rather than whatever the model's weights happen to be after the loop simply exits, is the detail that makes early stopping actually work -- without it, you'd have correctly detected the best epoch but then thrown that information away and kept the worse final weights anyway."
+        },
+        {
+          "title": "A Data Leak via an Improper Split",
+          "language": "python",
+          "code": "import random\n\n# rows: one per (user_id, session) -- the SAME user can appear in many rows\nrows = load_session_rows()   # e.g. 100,000 rows, only 8,000 distinct users\n\nrandom.shuffle(rows)\nsplit_point = int(0.8 * len(rows))\ntrain_rows, val_rows = rows[:split_point], rows[split_point:]\n\n# BUG: a given user_id can easily end up in BOTH train_rows and val_rows",
+          "explanation": "Shuffling and splitting at the row level looks like an ordinary, correct random split, but it ignores that many rows share the same user_id -- and a model can partially 'recognize' a specific user's idiosyncratic behavior from their sessions in the training set, then look artificially good when evaluated on that same user's other sessions that landed in validation, purely because it's seen that person before, not because it's actually generalizing to new users. The validation metric ends up measuring something closer to 'how well did the model memorize known users' quirks' rather than 'how well will this perform on a genuinely new user in production' -- exactly the kind of leakage that inflates validation numbers without inflating real-world performance. The fix is to split by the unit that should generalize -- here, by user_id -- so every session belonging to a given user lands entirely in train or entirely in validation, never split across both."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "As long as accuracy on the training set keeps going up, the model is getting better.",
+          "clarification": "This measures memorization of the exact training examples, not generalization. Rising train accuracy alongside flat or worsening validation accuracy is the textbook overfitting signature. The metric that actually matters for 'is the model improving' is validation performance, not training performance -- precisely because training performance is trivially inflatable just by adding model capacity, regardless of whether that capacity is being used to learn anything real."
+        },
+        {
+          "description": "It's fine to try several models or settings, check test set performance after each one, and keep whichever version scored best on the test set -- that's the whole point of having a test set.",
+          "clarification": "That's exactly the misuse that turns the test set into a second validation set, contaminating it by fitting development decisions to it -- the same failure mode as training on it directly, just less obvious and easier to accidentally justify. The entire value of a test set depends on never using it to make a decision. Every decision -- hyperparameters, architecture, when to stop -- must be made using the validation set, with the test set touched exactly once, at the very end, purely to report a number that wasn't optimized against."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "ai-ml-splits-overfitting-ex1",
+          "type": "predictOutput",
+          "prompt": "What does this print?",
+          "code": "def diagnose(train_loss, val_loss, threshold=0.05):\n    gap = val_loss - train_loss\n    if train_loss > 0.3:\n        return \"underfitting\"\n    elif gap > threshold:\n        return \"overfitting\"\n    else:\n        return \"good fit\"\n\nepoch_10 = diagnose(train_loss=0.05, val_loss=0.06)\nepoch_50 = diagnose(train_loss=0.02, val_loss=0.25)\nepoch_100 = diagnose(train_loss=0.40, val_loss=0.42)\n\nprint(epoch_10, epoch_50, epoch_100)",
+          "hints": [
+            "Evaluate each call in the order the if/elif chain checks them: first, is train_loss > 0.3? That's checked before the gap is even considered.",
+            "For epoch_50, train_loss is small, so move to the elif and compute gap = val_loss - train_loss, then compare it to the threshold (0.05).",
+            "For epoch_100, notice train_loss alone is already above 0.3 -- that short-circuits straight to 'underfitting', even though the gap here also looks fairly large."
+          ],
+          "expectedAnswer": "good fit overfitting underfitting",
+          "solutionExplanation": "epoch_10: train_loss=0.05 is not > 0.3, so check the elif; gap = 0.06-0.05 = 0.01, which is not > 0.05, so it falls to 'good fit'. epoch_50: train_loss=0.02 is not > 0.3; gap = 0.25-0.02 = 0.23, which IS > 0.05, so 'overfitting'. epoch_100: train_loss=0.40 IS > 0.3, so the function returns 'underfitting' immediately from the first branch -- the gap (0.42-0.40=0.02) is never even checked, because the if/elif structure short-circuits on the first true condition. This mirrors real diagnosis: a model that's still bad on training data is underfitting regardless of how its validation loss compares, since a small train/val gap doesn't mean much if the training performance itself is poor."
+        },
+        {
+          "id": "ai-ml-splits-overfitting-ex2",
+          "type": "debugging",
+          "prompt": "This code is meant to track which training epoch had the best (lowest) validation loss, for later checkpoint restoration, but it consistently picks the worst epoch instead. Find and fix the bug.",
+          "code": "history = [(0.9, 0.95), (0.5, 0.6), (0.2, 0.4), (0.05, 0.5), (0.02, 0.7)]\n# each tuple is (train_loss, val_loss) for one epoch\n\nbest_val_loss = 0\nbest_epoch = None\n\nfor epoch, (train_loss, val_loss) in enumerate(history):\n    if val_loss > best_val_loss:\n        best_val_loss = val_loss\n        best_epoch = epoch\n\nprint(f\"Best epoch was {best_epoch} with val_loss={best_val_loss}\")",
+          "hints": [
+            "We want the epoch with the LOWEST validation loss -- does `val_loss > best_val_loss` end up tracking the lowest value as the loop proceeds, or the highest?",
+            "What should best_val_loss be initialized to, so that the very first real comparison has a chance of succeeding for any realistic loss value, including small ones close to zero?",
+            "Flip both the initial value and the comparison operator so the code tracks a minimum instead of a maximum."
+          ],
+          "solutionCode": "history = [(0.9, 0.95), (0.5, 0.6), (0.2, 0.4), (0.05, 0.5), (0.02, 0.7)]\n\nbest_val_loss = float(\"inf\")\nbest_epoch = None\n\nfor epoch, (train_loss, val_loss) in enumerate(history):\n    if val_loss < best_val_loss:\n        best_val_loss = val_loss\n        best_epoch = epoch\n\nprint(f\"Best epoch was {best_epoch} with val_loss={best_val_loss}\")\n# Best epoch was 2 with val_loss=0.4",
+          "solutionExplanation": "Initializing best_val_loss to 0 and using `val_loss > best_val_loss` builds a running MAXIMUM, not a minimum -- it keeps replacing best_val_loss with whatever is bigger, ending up tracking the worst (highest) validation loss in the whole history, exactly backwards from the goal of finding the best (lowest) one. The fix initializes best_val_loss to positive infinity, so literally any real loss value will be lower on the very first comparison, and flips the comparison to `<`, so the loop now correctly keeps whichever val_loss is smaller than everything seen so far. Run against the given history, this correctly identifies epoch 2 (val_loss=0.4) as the best checkpoint -- exactly the point right before validation loss starts climbing again at epochs 3 and 4, the textbook overfitting turn."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "ai-ml-splits-overfitting-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "A model reaches 99% accuracy on its training set but only 61% accuracy on its validation set. What does this pattern most likely indicate, and what's a reasonable next step?",
+          "options": [
+            "Underfitting -- increase model capacity and train for more epochs.",
+            "Overfitting -- the model has memorized training-set-specific patterns that don't generalize; consider regularization, more data, or a simpler model.",
+            "The validation set is broken and should be discarded in favor of trusting the training accuracy.",
+            "This is expected and healthy behavior; no action is needed."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "A large gap between excellent training performance and much weaker validation performance is the defining signature of overfitting -- the model fit the training set's specific noise and idiosyncrasies rather than (or in addition to) the genuine underlying pattern. Option A is backwards: underfitting looks like poor performance on BOTH sets, not a large gap between them. Option C has it exactly reversed -- the validation set is doing its job by revealing a problem the training accuracy alone was hiding; discarding it would remove the only signal that caught the issue. Option D is wrong because a 38-point gap between train and validation accuracy is a serious red flag, not healthy behavior, and shipping this model would likely disappoint in production."
+        },
+        {
+          "id": "ai-ml-splits-overfitting-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain why machine learning practice insists on a three-way train/validation/test split rather than just a single train/test split, and what specifically goes wrong if you skip the validation set and instead tune your model directly against test set performance.",
+          "modelAnswer": "A model needs data it was never trained on to get any honest read on how well it generalizes, since evaluating on training data mostly just measures memorization. But real development involves far more than one single training run -- you try different hyperparameters, different architectures, different feature sets, and different stopping points, and each of those choices needs to be evaluated against something. If you only have a train/test split and use the test set to guide those choices, picking whichever variant scores best on the test set, you've turned the test set into exactly the same kind of thing the training set already is: something the model's development process has been fit against, directly or indirectly. Every decision you made 'because it scored better on the test set' is now baked into a final result that reuses that same test set to report performance, so the reported number is inflated by the same kind of overfitting risk that motivated having held-out data in the first place, just one level removed and much easier to miss because it doesn't look like training. The three-way split solves this by giving the trial-and-error part of development its own dedicated held-out set, the validation set, so every hyperparameter and architecture decision can be checked against unseen-to-training data as many times as needed, while reserving the test set for exactly one evaluation, at the very end, after every decision has already been locked in using validation performance alone. That's the only way the final reported number reflects performance on data that genuinely had no influence, direct or indirect, over any choice made while building the model."
+        }
+      ]
+    },
+    {
+      "id": "ai-ml-evaluation-metrics",
+      "title": "Evaluation Metrics: Accuracy, Precision, Recall, and F1",
+      "description": "Accuracy alone lies under class imbalance; precision, recall, and F1 each answer a different, sharper question about a classifier's mistakes, and choosing the right one -- for the right cost tradeoff -- matters more than squeezing out another fraction of a percent of raw correctness.",
+      "moduleId": "training_and_evaluation",
+      "topicId": "training_and_evaluation",
+      "difficulty": "advanced",
+      "estimatedMinutes": 40,
+      "prerequisites": ["ai-ml-splits-overfitting"],
+      "learningObjectives": [
+        "Construct a confusion matrix from predictions and true labels and read off true positives, false positives, true negatives, and false negatives.",
+        "Explain why accuracy can be a dangerously misleading metric under class imbalance, with a concrete numeric example.",
+        "Define precision and recall in terms of the confusion matrix, and explain the real-world tradeoff each optimizes for.",
+        "Compute F1 score from precision and recall and explain why it's a harmonic mean rather than a simple average.",
+        "Choose an appropriate metric given a stated business cost of false positives versus false negatives.",
+        "Explain, at a conceptual level, where deep learning fits relative to classical ML techniques and what problem shapes favor each."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "The Confusion Matrix: The Source of Almost Every Classification Metric",
+            "body": "For a binary classification problem, every prediction falls into exactly one of four buckets, once you fix which class counts as 'positive': a **true positive (TP)** is an actual positive correctly predicted positive; a **false positive (FP)** is an actual negative incorrectly predicted positive (a false alarm); a **false negative (FN)** is an actual positive incorrectly predicted negative (a miss); and a **true negative (TN)** is an actual negative correctly predicted negative. Arranged in a 2x2 table, this is the **confusion matrix**, and it's worth internalizing as the single source almost every classification metric in this concept is derived from -- accuracy, precision, recall, and F1 are all just different ratios of these same four counts. Memorizing this table, and being able to reconstruct any metric's formula from it on the spot, beats memorizing formulas independently, because the formulas are easy to mix up (which count belongs in a denominator, exactly) while the table's definitions are much harder to confuse once they're solid."
+          },
+          {
+            "heading": "Why Accuracy Lies Under Class Imbalance",
+            "body": "**Accuracy** is the simplest metric -- the fraction of all predictions that were correct, `(TP + TN) / total` -- and it is also the single most common source of a badly misleading headline number in real-world classification work. Consider fraud detection, where perhaps 0.5% of transactions are actually fraudulent: a 'model' that predicts 'not fraud' for absolutely every single transaction, with zero actual logic inside it, achieves 99.5% accuracy, because it's correct on all the overwhelming majority of genuinely non-fraudulent transactions and simply gets the rare fraud cases wrong. That 99.5% number would look outstanding in a slide deck, and it describes a completely useless model that catches precisely zero fraud, which is presumably the entire reason the system was built.\n\nThis isn't a contrived edge case -- fraud, rare disease screening, manufacturing defect detection, and customer churn are all naturally imbalanced problems where the minority class is usually the class that actually matters most. The practical habit this should build is automatic and non-negotiable: check the class distribution before trusting any accuracy number, and treat a suspiciously high accuracy on an imbalanced problem as a prompt to look at precision and recall immediately, not as a reason to celebrate."
+          },
+          {
+            "heading": "Precision and Recall: Two Different Questions About Your Mistakes",
+            "body": "**Precision**, `TP / (TP + FP)`, answers: of everything the model flagged as positive, how much was actually correct? It's the metric that captures the cost of false positives -- crying wolf, flagging things that turn out fine. **Recall**, `TP / (TP + FN)`, answers a different question: of everything that was actually positive, how much did the model actually catch? It's the metric that captures the cost of false negatives -- missing real cases that mattered.\n\nWhich one to prioritize depends entirely on which kind of mistake is more expensive in the real system. A spam filter's false positive is a real, important email incorrectly buried in a spam folder -- annoying and occasionally costly, which argues for favoring precision, tolerating some spam getting through rather than risk burying real mail. A cancer screening test's false negative is a real cancer case that goes undetected and untreated -- far more dangerous than an unnecessary follow-up test, which argues for favoring recall, even at the cost of more false alarms. This is a genuine, structural tradeoff, not a bug to engineer away: for a fixed trained model, adjusting the decision threshold used to convert a predicted probability into a hard positive/negative call moves precision and recall in opposite directions, and you can almost always buy more of one by giving up some of the other."
+          },
+          {
+            "heading": "F1: A Single Number That Punishes Imbalance Between the Two",
+            "body": "**F1 score**, `2 * (precision * recall) / (precision + recall)`, is the harmonic mean of precision and recall, and the choice of harmonic mean rather than a simple arithmetic average is deliberate and important. A harmonic mean is dragged down hard by whichever of the two inputs is smaller, so a model can't achieve a good F1 by being excellent at one of precision/recall while being terrible at the other. Concretely: a model with precision=1.0 and recall=0.01 has an arithmetic mean of about 0.5, which looks passable at a glance -- but its F1 works out to roughly 0.02, correctly flagging the model as nearly useless despite the deceptively decent-looking average. F1 is most useful specifically as a single summary number when you care roughly equally about both kinds of mistake and want one score you can use to compare models or threshold choices without staring at two numbers side by side.\n\nA generalization, **F-beta**, lets you weight recall more or less heavily than precision when the two genuinely aren't equally important, without going all the way back to looking at raw precision and recall separately. For problems with more than two classes, **macro-averaging** (compute each metric per class, then average those per-class scores equally) and **micro-averaging** (pool all classes' TP/FP/FN counts together first, then compute one overall metric) handle multi-class settings differently -- macro treats every class as equally important regardless of how common it is, while micro is dominated by whichever classes have the most examples -- a distinction worth knowing exists even without going deep on it here."
+          },
+          {
+            "heading": "Where Deep Learning Fits Relative to Classical ML",
+            "body": "Everything in this concept -- confusion matrices, precision, recall, F1 -- applies identically regardless of what kind of model produced the predictions; evaluation is representation-agnostic. But it's worth placing deep learning relative to classical ML (linear and logistic regression, decision trees, gradient-boosted trees, support vector machines) while the earlier concept's point about feature representation is still fresh. Classical ML generally needs you to hand-engineer good features, as covered earlier in this module, and it tends to be the practical default for structured, tabular data, especially at small-to-medium data volumes, where it's frequently just as accurate as a deep neural network, trains in seconds to minutes rather than hours or days, and is far easier to interpret and debug. Gradient-boosted trees in particular remain the go-to choice for most tabular business problems -- fraud, churn, pricing, credit risk -- specifically because they handle mixed numeric/categorical features and messy real-world data well without extensive preprocessing.\n\nDeep learning's core advantage is learning its own useful feature representations directly from raw, unstructured, high-dimensional data -- pixels, audio waveforms, raw text tokens -- where hand-engineering features by hand is impractical or effectively impossible; this is exactly why deep learning dominates computer vision, speech, and natural language tasks. That advantage comes at a real cost: deep learning typically needs much more data, much more compute, and longer training and iteration cycles, and produces models that are harder to interpret than a decision tree or a linear model's weights. A practical rule of thumb worth internalizing: if your data is naturally tabular and you have a modest amount of it, try classical ML, specifically gradient-boosted trees, first as a strong, fast baseline before reaching for a neural network; reach for deep learning when the raw input is genuinely unstructured, or the dataset is large and rich enough that learned representations have a real chance to pay off their added cost and complexity."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Building a Confusion Matrix by Hand",
+          "language": "python",
+          "code": "y_true = [1, 0, 1, 1, 0, 0, 1, 0]\ny_pred = [1, 0, 0, 1, 1, 0, 1, 0]\n\ntp = fp = tn = fn = 0\nfor t, p in zip(y_true, y_pred):\n    if t == 1 and p == 1:\n        tp += 1\n    elif t == 0 and p == 1:\n        fp += 1\n    elif t == 0 and p == 0:\n        tn += 1\n    elif t == 1 and p == 0:\n        fn += 1\n\nprint(f\"TP={tp} FP={fp} TN={tn} FN={fn}\")\naccuracy = (tp + tn) / len(y_true)\nprecision = tp / (tp + fp)\nrecall = tp / (tp + fn)\nprint(round(accuracy, 2), round(precision, 2), round(recall, 2))",
+          "explanation": "Every metric in this concept is downstream of exactly these four counts, which is why building the confusion matrix by hand, even just once, is worth more than memorizing the formulas directly. Reading the code as a definition rather than just an implementation: tp counts examples that were actually positive and got correctly flagged positive; fp counts examples that were actually negative but got incorrectly flagged positive, a false alarm; fn counts examples that were actually positive but got missed; tn counts correctly-identified negatives. accuracy uses all four counts, both kinds of 'correct' over everything; precision and recall each only look at three of the four -- and specifically, they differ in whether they pair tp with fp or with fn, which is exactly the distinction the next exercise is designed to test."
+        },
+        {
+          "title": "The 99.5% Accuracy Trap",
+          "language": "python",
+          "code": "n_total = 1000\nn_fraud = 5   # 0.5% of transactions are actually fraud\n\ny_true = [1] * n_fraud + [0] * (n_total - n_fraud)\ny_pred_dumb = [0] * n_total   # a \"model\" that always predicts \"not fraud\"\n\naccuracy = sum(t == p for t, p in zip(y_true, y_pred_dumb)) / n_total\ntp = sum(1 for t, p in zip(y_true, y_pred_dumb) if t == 1 and p == 1)\nfn = sum(1 for t, p in zip(y_true, y_pred_dumb) if t == 1 and p == 0)\nrecall = tp / (tp + fn)\n\nprint(f\"accuracy={accuracy:.3f}  recall={recall:.3f}\")\n# accuracy=0.995  recall=0.000",
+          "explanation": "This 'model' contains zero logic -- it always predicts the majority class, no matter what -- and yet it reports 99.5% accuracy, a number that on its own would look like a resounding success in a slide deck. Recall tells the truth immediately: 0.000, because it caught exactly none of the five actual fraud cases, which is presumably the entire reason anyone built this system in the first place. This isn't a contrived edge case -- fraud, disease screening, defect detection, and churn are all naturally imbalanced problems where the minority class is usually the one that matters most, which is exactly why accuracy alone is such a dangerous default metric to report without first checking the class balance it's being computed over."
+        },
+        {
+          "title": "Precision/Recall Tradeoff via Threshold",
+          "language": "python",
+          "code": "y_true = [1, 1, 0, 1, 0, 0, 1, 0]\npredicted_probabilities = [0.9, 0.4, 0.3, 0.6, 0.2, 0.55, 0.35, 0.1]\n\nfor threshold in [0.5, 0.3]:\n    y_pred = [1 if p >= threshold else 0 for p in predicted_probabilities]\n    tp = sum(1 for t, p in zip(y_true, y_pred) if t == 1 and p == 1)\n    fp = sum(1 for t, p in zip(y_true, y_pred) if t == 0 and p == 1)\n    fn = sum(1 for t, p in zip(y_true, y_pred) if t == 1 and p == 0)\n    precision = tp / (tp + fp) if (tp + fp) else 0\n    recall = tp / (tp + fn) if (tp + fn) else 0\n    print(f\"threshold={threshold}: precision={precision:.2f} recall={recall:.2f}\")\n\n# threshold=0.5: precision=1.00 recall=0.50\n# threshold=0.3: precision=0.67 recall=1.00",
+          "explanation": "Nothing about the underlying model changed between these two lines -- predicted_probabilities is identical in both cases. Only the decision threshold, the cutoff used to convert a probability into a hard 0/1 prediction, changed, from 0.5 down to 0.3. Lowering the threshold means the model flags more examples as positive overall, which can only help or maintain recall (it catches at least as many of the real positives as before, since it's now more willing to say 'positive') while it can only hurt or maintain precision (every additional positive prediction is a new chance to be wrong about a case that was actually negative). This single knob, with no retraining, no new features, no new model, is the most direct, tangible way to see the precision/recall tradeoff in action, and it's exactly what's being adjusted whenever a real system exposes a sensitivity slider or a confidence cutoff."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "A model with 99% accuracy is almost always a great model.",
+          "clarification": "Accuracy alone says nothing about class balance or which kind of mistake the model makes. Under a 99:1 class imbalance, a model that always predicts the majority class also gets 99% accuracy while being completely useless for the minority class, which is usually the class that actually mattered -- fraud, disease, defects. Always check the class distribution and look at precision/recall or a confusion matrix before trusting an accuracy number, especially a suspiciously high one."
+        },
+        {
+          "description": "Precision and recall can both be maximized at the same time by simply building a better model -- no tradeoff needed.",
+          "clarification": "For a fixed model, adjusting the decision threshold moves precision and recall in opposite directions -- there's an inherent tradeoff at any given point along a model's precision-recall curve. A genuinely better model can shift the whole curve outward, better precision at the same recall, or vice versa, but at any single fixed model and a single chosen threshold, 'just increase both' isn't free -- a threshold has to be chosen that reflects which type of error, false positive or false negative, is more costly for the actual problem."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "ai-ml-evaluation-metrics-ex1",
+          "type": "predictOutput",
+          "prompt": "What does this print?",
+          "code": "y_true = [1, 0, 1, 1, 0, 1, 0, 0]\ny_pred = [1, 0, 0, 1, 1, 1, 0, 0]\n\ntp = sum(1 for t, p in zip(y_true, y_pred) if t == 1 and p == 1)\nfp = sum(1 for t, p in zip(y_true, y_pred) if t == 0 and p == 1)\nfn = sum(1 for t, p in zip(y_true, y_pred) if t == 1 and p == 0)\ntn = sum(1 for t, p in zip(y_true, y_pred) if t == 0 and p == 0)\n\nprecision = tp / (tp + fp)\nrecall = tp / (tp + fn)\n\nprint(tp, fp, fn, tn)\nprint(round(precision, 2), round(recall, 2))",
+          "hints": [
+            "Go through the 8 pairs one at a time and classify each as TP/FP/FN/TN, checking the true label first, then whether the prediction matches it.",
+            "Once you have the four counts, plug them into precision = tp/(tp+fp) and recall = tp/(tp+fn) -- notice both denominators reuse tp but add a different other count.",
+            "Sanity check: tp+fp+fn+tn should add up to exactly 8, the total number of examples."
+          ],
+          "expectedAnswer": "3 1 1 3\n0.75 0.75",
+          "solutionExplanation": "Walking through the 8 pairs (t,p): (1,1)=TP, (0,0)=TN, (1,0)=FN, (1,1)=TP, (0,1)=FP, (1,1)=TP, (0,0)=TN, (0,0)=TN. That gives TP=3, FP=1, FN=1, TN=3, which sums to 8 as expected. precision = 3/(3+1) = 0.75, and recall = 3/(3+1) = 0.75 -- they happen to come out equal here only because FP and FN happen to both equal 1 in this particular example, not because precision and recall are generally the same thing."
+        },
+        {
+          "id": "ai-ml-evaluation-metrics-ex2",
+          "type": "debugging",
+          "prompt": "This function is supposed to compute precision and recall, but a code reviewer flagged that the two values look suspiciously swapped compared to what the formulas should give. Find and fix the bug.",
+          "code": "def evaluate(y_true, y_pred):\n    tp = sum(1 for t, p in zip(y_true, y_pred) if t == 1 and p == 1)\n    fp = sum(1 for t, p in zip(y_true, y_pred) if t == 0 and p == 1)\n    fn = sum(1 for t, p in zip(y_true, y_pred) if t == 1 and p == 0)\n\n    precision = tp / (tp + fn)  # bug\n    recall = tp / (tp + fp)     # bug\n\n    return precision, recall\n\ny_true = [1, 1, 1, 0, 0]\ny_pred = [1, 0, 1, 1, 0]\n\nprint(evaluate(y_true, y_pred))",
+          "hints": [
+            "Write out, in words, what precision is supposed to answer: 'of everything I flagged positive, how much was right?' -- which count, fp or fn, belongs in its denominator alongside tp?",
+            "Do the same for recall: 'of everything that was actually positive, how much did I catch?' -- which of fp/fn represents positives that were missed?",
+            "Compare the two denominators in the code to those definitions: tp+fp belongs to precision, tp+fn belongs to recall -- the code has them backwards."
+          ],
+          "solutionCode": "def evaluate(y_true, y_pred):\n    tp = sum(1 for t, p in zip(y_true, y_pred) if t == 1 and p == 1)\n    fp = sum(1 for t, p in zip(y_true, y_pred) if t == 0 and p == 1)\n    fn = sum(1 for t, p in zip(y_true, y_pred) if t == 1 and p == 0)\n\n    precision = tp / (tp + fp)  # fixed\n    recall = tp / (tp + fn)     # fixed\n\n    return precision, recall\n\ny_true = [1, 1, 1, 0, 0]\ny_pred = [1, 0, 1, 1, 0]\n\nprint(evaluate(y_true, y_pred))",
+          "solutionExplanation": "Precision answers 'of everything flagged positive, how much was actually right,' so its denominator must be tp+fp -- every positive prediction, right or wrong. Recall answers 'of everything actually positive, how much was caught,' so its denominator must be tp+fn -- every actual positive, caught or missed. The buggy code has these swapped: it divides tp by tp+fn to get 'precision' and by tp+fp to get 'recall', silently computing each other's formula under the wrong name. With y_true=[1,1,1,0,0] and y_pred=[1,0,1,1,0]: tp=2, fp=1, fn=1, so the corrected precision=2/3=0.67 and recall=2/3=0.67 -- in this particular example they land on the same value, which is exactly why the bug could easily go unnoticed without deliberately checking the formulas against their definitions rather than just checking that the numbers look plausible."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "ai-ml-evaluation-metrics-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "A hospital deploys a model to flag patients for further cancer screening. A false negative (missing an actual cancer case) is far more costly than a false positive (an unnecessary follow-up test). Which metric should be weighted most heavily when choosing this model's decision threshold?",
+          "options": [
+            "Precision, because it's important to avoid burdening healthy patients with unnecessary follow-ups.",
+            "Recall, because minimizing false negatives -- catching as many real cancer cases as possible -- matters most here, even at the cost of more false positives.",
+            "Accuracy, because it summarizes overall correctness in a single number.",
+            "It doesn't matter which metric is used, since all classification metrics move together."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Recall directly measures the fraction of actual positive cases caught, which is exactly what matters when false negatives (missed cancer cases) are far more costly than false positives (unnecessary follow-ups) -- favoring recall means accepting more false alarms in exchange for missing fewer real cases. Option A optimizes for the wrong side of the stated tradeoff -- precision minimizes false positives, which is explicitly the less costly error here. Option C is a poor fit because accuracy treats both error types as equally costly and, on top of that, can look deceptively fine even while missing most real cancer cases if the disease is rare. Option D is false -- precision and recall are shown throughout this concept to move in opposite directions as the decision threshold changes, which is the entire reason a deliberate choice is needed."
+        },
+        {
+          "id": "ai-ml-evaluation-metrics-assess-explain1",
+          "type": "explanation",
+          "prompt": "A colleague asks why you can't just report a single 'accuracy' number for every classification model and call it done. Explain the limitations of accuracy, walk through what precision, recall, and F1 each specifically capture that accuracy doesn't, and describe a realistic scenario where optimizing for the wrong one of these would cause real harm.",
+          "modelAnswer": "Accuracy treats every correct prediction as equally good and every mistake as equally bad, and collapses all of that into one number: the fraction of predictions that were right overall. That's a reasonable summary only when the classes are roughly balanced and the two kinds of mistake -- false positives and false negatives -- are roughly equally costly. The moment either of those assumptions breaks, which is extremely common in real problems, accuracy can look excellent while the model is nearly useless: a model that always predicts the majority class in a 99:1 imbalanced problem gets 99% accuracy while catching zero of the minority class it presumably needed to catch. Precision and recall exist specifically to separate the two kinds of mistake that accuracy blends together. Precision asks, of everything flagged positive, how much was actually right, which captures the cost of false positives -- false alarms. Recall asks, of everything actually positive, how much did the model catch, which captures the cost of false negatives -- misses. F1 combines the two into a single number using a harmonic mean specifically because a harmonic mean is punished hard by whichever of precision or recall is weak, preventing a model from looking good on F1 by being excellent at one and terrible at the other. A concrete scenario where getting this wrong causes real harm: a hospital cancer-screening model tuned to maximize precision, minimizing unnecessary follow-up tests, would end up missing a much larger share of actual cancer cases in exchange for fewer false alarms -- exactly backwards from what the situation calls for, since a missed cancer diagnosis is categorically more dangerous than an unnecessary but harmless follow-up test. The right choice of metric, and the right threshold along that metric's tradeoff curve, has to reflect the real-world cost of each type of mistake, not just whichever number happens to look highest."
+        }
+      ]
+    }
+  ]
+}
