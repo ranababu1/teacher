@@ -1,3 +1,4 @@
+import '../../../core/errors/app_exception.dart';
 import '../../curriculum/domain/models/exercise.dart';
 import 'models/teacher_response.dart';
 
@@ -16,4 +17,11 @@ abstract class AIProvider {
   Future<Exercise> generateExercise(ExerciseRequest request);
 
   Future<ExplanationEvaluation> evaluateExplanation(ExplanationRequest request);
+
+  /// A minimal round trip that succeeds only if the whole path — network,
+  /// API key, and the AI service itself — is actually working. Used by
+  /// Settings' "Test AI Connection" action; throws the same typed
+  /// [AppException]s as every other method so callers get one consistent
+  /// set of specific, plain-language failure reasons.
+  Future<void> testConnection();
 }

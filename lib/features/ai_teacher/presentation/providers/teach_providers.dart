@@ -12,6 +12,7 @@ import '../../domain/ai_provider.dart';
 import '../../domain/models/teacher_response.dart';
 import '../../domain/teach_use_case.dart';
 import '../../domain/teaching_context_builder.dart';
+import '../../domain/test_ai_connection_use_case.dart';
 import 'api_key_providers.dart';
 import 'misconception_providers.dart';
 
@@ -41,8 +42,14 @@ class _UnavailableAiProvider implements AIProvider {
     ExplanationRequest request,
   ) async => _throwUnavailable();
 
+  @override
+  Future<void> testConnection() async => _throwUnavailable();
+
   Never _throwUnavailable() {
-    throw const AIUnavailableException('No Gemini API key configured yet.');
+    throw const AIUnavailableException(
+      'No Gemini API key configured yet.',
+      'No Gemini API key is set yet. Add one above to use AI features.',
+    );
   }
 }
 
@@ -92,6 +99,15 @@ final aiRequestLoggingEnabledProvider = Provider<bool>((ref) {
 final teachUseCaseProvider = Provider<TeachUseCase>((ref) {
   return TeachUseCase(
     contextBuilder: ref.watch(teachingContextBuilderProvider),
+    aiProvider: ref.watch(aiProviderProvider),
+    requestLoggingEnabled: ref.watch(aiRequestLoggingEnabledProvider),
+  );
+});
+
+final testAiConnectionUseCaseProvider = Provider<TestAiConnectionUseCase>((
+  ref,
+) {
+  return TestAiConnectionUseCase(
     aiProvider: ref.watch(aiProviderProvider),
     requestLoggingEnabled: ref.watch(aiRequestLoggingEnabledProvider),
   );

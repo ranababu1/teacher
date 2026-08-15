@@ -134,6 +134,19 @@ class GeminiProvider implements AIProvider {
     });
   }
 
+  @override
+  Future<void> testConnection() async {
+    final json = await _client.generateContent(
+      model: _model,
+      systemInstruction:
+          'You are a connectivity test. Respond only with the JSON object '
+          '{"explanation": "ok"} and nothing else.',
+      userContent: 'ping',
+      responseSchema: teacherResponseSchema,
+    );
+    _reqString(json, 'explanation');
+  }
+
   /// Runs [attempt] (a full generate-and-parse round trip); if it fails
   /// because the response couldn't be parsed into the expected shape,
   /// runs it exactly one more time. A second failure propagates as-is.

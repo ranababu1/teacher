@@ -10,6 +10,7 @@ import 'package:teacher/features/ai_teacher/domain/models/teacher_response.dart'
 import 'package:teacher/features/ai_teacher/domain/models/teaching_context.dart';
 import 'package:teacher/features/ai_teacher/domain/teach_use_case.dart';
 import 'package:teacher/features/ai_teacher/domain/teaching_context_builder.dart';
+import 'package:teacher/features/ai_teacher/domain/test_ai_connection_use_case.dart';
 import 'package:teacher/features/curriculum/domain/curriculum_repository.dart';
 import 'package:teacher/features/curriculum/domain/models/concept.dart';
 import 'package:teacher/features/curriculum/domain/models/difficulty.dart';
@@ -170,6 +171,15 @@ class _FakeAIProvider implements AIProvider {
   ) async {
     lastExplanationRequest = request;
     return explanationResult;
+  }
+
+  bool testConnectionCalled = false;
+  Object? testConnectionError;
+
+  @override
+  Future<void> testConnection() async {
+    testConnectionCalled = true;
+    if (testConnectionError != null) throw testConnectionError!;
   }
 }
 
@@ -341,6 +351,35 @@ void main() {
       final context = aiProvider.lastExerciseRequest?.context;
       expect(context, isA<TeachingContext>());
       expect((context as TeachingContext).concept.id, 'python-closures');
+    });
+  });
+
+  group('TestAiConnectionUseCase', () {
+    test('delegates to AIProvider.testConnection and completes on success', () async {
+      final useCase = TestAiConnectionUseCase(aiProvider: aiProvider);
+
+      await useCase.call();
+
+      expect(aiProvider.testConnectionCalled, isTrue);
+    });
+
+    test('propagates whatever the provider throws', () async {
+      aiProvider.testConnectionError = const AIUnavailableException(
+        'boom',
+        "Your Gemini API key isn't working. Check it in Settings.",
+      );
+      final useCase = TestAiConnectionUseCase(aiProvider: aiProvider);
+
+      await expectLater(
+        useCase.call(),
+        throwsA(
+          isA<AIUnavailableException>().having(
+            (e) => e.userMessage,
+            'userMessage',
+            "Your Gemini API key isn't working. Check it in Settings.",
+          ),
+        ),
+      );
     });
   });
 }
