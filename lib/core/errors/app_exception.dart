@@ -22,12 +22,15 @@ class NetworkUnavailableException extends AppException {
 }
 
 class AIUnavailableException extends AppException {
-  const AIUnavailableException([String message = 'AI provider unavailable'])
-    : super(
-        message,
+  /// [userMessage] defaults to a generic message but callers that know the
+  /// specific cause (bad API key, rate limit, server overload — see
+  /// `gemini_error_classifier.dart`) should pass a more accurate one.
+  const AIUnavailableException([
+    String message = 'AI provider unavailable',
+    String userMessage =
         "The AI teacher isn't available right now. You can keep learning — "
         'AI features will resume once the connection is restored.',
-      );
+  ]) : super(message, userMessage);
 }
 
 class InvalidAIResponseException extends AppException {

@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 
 import '../../../core/errors/app_exception.dart';
 import '../../../core/services/app_logger.dart';
+import 'gemini_error_classifier.dart';
 
 /// Thin, domain-agnostic wrapper around Gemini's `generateContent` REST
 /// endpoint.
@@ -99,6 +100,10 @@ class GeminiApiClient {
         return AIUnavailableException(
           'Gemini API returned HTTP ${e.response?.statusCode}: '
           '${e.response?.data}',
+          classifyGeminiError(
+            statusCode: e.response?.statusCode,
+            responseBody: e.response?.data,
+          ),
         );
       case DioExceptionType.badCertificate:
       case DioExceptionType.cancel:
