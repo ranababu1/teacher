@@ -7,6 +7,7 @@ import '../../../../shared/widgets/async_value_view.dart';
 import '../../../../shared/widgets/code_block.dart';
 import '../../../../shared/widgets/difficulty_chip.dart';
 import '../../../../shared/widgets/markdown_text.dart';
+import '../../../ai_teacher/presentation/providers/misconception_providers.dart';
 import '../../../ai_teacher/presentation/widgets/ai_teacher_panel.dart';
 import '../../../assessment/domain/models/practice_item.dart';
 import '../../../assessment/presentation/widgets/exercise_player.dart';
@@ -92,10 +93,8 @@ class _LessonScreenState extends ConsumerState<LessonScreen> {
                   const SizedBox(height: 24),
                   _ExamplesSection(concept: concept),
                 ],
-                if (concept.misconceptions.isNotEmpty) ...[
-                  const SizedBox(height: 24),
-                  _MisconceptionsSection(concept: concept),
-                ],
+                const SizedBox(height: 24),
+                _MisconceptionsSection(concept: concept),
                 const SizedBox(height: 24),
                 AiTeacherPanel(conceptId: concept.id),
                 if (concept.exercises.isNotEmpty) ...[
@@ -325,14 +324,22 @@ class _ExamplesSection extends StatelessWidget {
   }
 }
 
-class _MisconceptionsSection extends StatelessWidget {
+class _MisconceptionsSection extends ConsumerWidget {
   const _MisconceptionsSection({required this.concept});
 
   final Concept concept;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final detected =
+        ref.watch(unresolvedMisconceptionsProvider(concept.id)).valueOrNull ??
+        const [];
+
+    if (concept.misconceptions.isEmpty && detected.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -376,6 +383,46 @@ class _MisconceptionsSection extends StatelessWidget {
                     const SizedBox(width: 8),
                     Expanded(child: Text(misconception.clarification)),
                   ],
+                ),
+              ],
+            ),
+          ),
+        for (final misconception in detected)
+          Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.tertiaryContainer.withValues(
+                alpha: 0.3,
+              ),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.psychology_alt_outlined,
+                  size: 16,
+                  color: theme.colorScheme.tertiary,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        misconception.description,
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Flagged by the AI teacher during a recent conversation',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),

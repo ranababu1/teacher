@@ -11,6 +11,7 @@ import '../../data/gemini_provider.dart';
 import '../../domain/ai_provider.dart';
 import '../../domain/models/teacher_response.dart';
 import '../../domain/teach_use_case.dart';
+import '../../domain/teaching_context_builder.dart';
 import 'api_key_providers.dart';
 import 'misconception_providers.dart';
 
@@ -69,16 +70,29 @@ final aiProviderProvider = Provider<AIProvider>((ref) {
   );
 });
 
-final teachUseCaseProvider = Provider<TeachUseCase>((ref) {
-  final loggingEnabled =
-      ref.watch(settingsControllerProvider).valueOrNull?.aiRequestLogging ??
-      false;
-
-  return TeachUseCase(
+/// Shared by every AI Teacher use case so context assembly can't drift
+/// between them.
+final teachingContextBuilderProvider = Provider<TeachingContextBuilder>((
+  ref,
+) {
+  return TeachingContextBuilder(
     curriculumRepository: ref.watch(curriculumRepositoryProvider),
     masteryRepository: ref.watch(conceptMasteryRepositoryProvider),
     misconceptionRepository: ref.watch(misconceptionRepositoryProvider),
+  );
+});
+
+/// Whether AI request logging is enabled — watched by every AI Teacher use
+/// case provider (here and in `grading_providers.dart`).
+final aiRequestLoggingEnabledProvider = Provider<bool>((ref) {
+  return ref.watch(settingsControllerProvider).valueOrNull?.aiRequestLogging ??
+      false;
+});
+
+final teachUseCaseProvider = Provider<TeachUseCase>((ref) {
+  return TeachUseCase(
+    contextBuilder: ref.watch(teachingContextBuilderProvider),
     aiProvider: ref.watch(aiProviderProvider),
-    requestLoggingEnabled: loggingEnabled,
+    requestLoggingEnabled: ref.watch(aiRequestLoggingEnabledProvider),
   );
 });
