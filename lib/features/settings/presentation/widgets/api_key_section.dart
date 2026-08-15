@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/services/connectivity_provider.dart';
 import '../../../ai_teacher/presentation/providers/api_key_providers.dart';
 
 /// Lets the learner enter their own Gemini API key, stored via the
@@ -45,6 +46,8 @@ class _ApiKeySectionState extends ConsumerState<ApiKeySection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        const _ConnectivityIndicator(),
+        const SizedBox(height: 10),
         ListTile(
           contentPadding: EdgeInsets.zero,
           leading: Icon(
@@ -115,6 +118,38 @@ class _ApiKeySectionState extends ConsumerState<ApiKeySection> {
               ),
             ],
           ),
+      ],
+    );
+  }
+}
+
+/// A small live dot showing whether the device currently has a network
+/// connection — reflects [isOnlineProvider], not whether Gemini itself is
+/// reachable (use "Test AI Connection" for that). Deliberately uses a
+/// literal green/red rather than the app's brand colors: this is a
+/// universal connectivity convention users already recognize, and the
+/// theme has no "success" color to reuse for it.
+class _ConnectivityIndicator extends ConsumerWidget {
+  const _ConnectivityIndicator();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isOnline = ref.watch(isOnlineProvider);
+    final theme = Theme.of(context);
+    final color = isOnline ? Colors.green.shade600 : theme.colorScheme.error;
+
+    return Row(
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          isOnline ? 'Internet connected' : 'No internet connection',
+          style: theme.textTheme.bodySmall?.copyWith(color: color),
+        ),
       ],
     );
   }
