@@ -3,6 +3,7 @@ import 'package:teacher/core/errors/app_exception.dart';
 import 'package:teacher/features/ai_teacher/domain/ai_provider.dart';
 import 'package:teacher/features/ai_teacher/domain/assess_use_case.dart';
 import 'package:teacher/features/ai_teacher/domain/evaluate_explanation_use_case.dart';
+import 'package:teacher/features/ai_teacher/domain/generate_exercise_use_case.dart';
 import 'package:teacher/features/ai_teacher/domain/misconception_repository.dart';
 import 'package:teacher/features/ai_teacher/domain/models/detected_misconception.dart';
 import 'package:teacher/features/ai_teacher/domain/models/teacher_response.dart';
@@ -13,6 +14,7 @@ import 'package:teacher/features/curriculum/domain/curriculum_repository.dart';
 import 'package:teacher/features/curriculum/domain/models/concept.dart';
 import 'package:teacher/features/curriculum/domain/models/difficulty.dart';
 import 'package:teacher/features/curriculum/domain/models/exercise.dart';
+import 'package:teacher/features/curriculum/domain/models/item_type.dart';
 import 'package:teacher/features/curriculum/domain/models/learning_path.dart';
 import 'package:teacher/features/progress/domain/concept_mastery_repository.dart';
 import 'package:teacher/features/progress/domain/models/concept_mastery.dart';
@@ -136,6 +138,13 @@ class _FakeAIProvider implements AIProvider {
     feedback: 'good',
     detectedMisconceptions: [],
   );
+  ExerciseRequest? lastExerciseRequest;
+  Exercise generatedExercise = const Exercise(
+    id: 'generated-1',
+    type: ItemType.shortAnswer,
+    prompt: 'Generated prompt',
+    hints: [],
+  );
 
   @override
   Future<TeacherResponse> teach(TeacherRequest request) async {
@@ -151,7 +160,8 @@ class _FakeAIProvider implements AIProvider {
 
   @override
   Future<Exercise> generateExercise(ExerciseRequest request) async {
-    throw UnimplementedError();
+    lastExerciseRequest = request;
+    return generatedExercise;
   }
 
   @override
@@ -307,6 +317,30 @@ void main() {
         misconceptionRepository.recordedDescriptions,
         ['Assumes static always means final'],
       );
+    });
+  });
+
+  group('GenerateExerciseUseCase', () {
+    test('returns the AI-authored exercise, passing the assembled context', () async {
+      aiProvider.generatedExercise = const Exercise(
+        id: 'generated-closures-1',
+        type: ItemType.predictOutput,
+        prompt: 'What does this print?',
+        hints: ['Think about scope'],
+        code: 'x = 1',
+      );
+      final useCase = GenerateExerciseUseCase(
+        contextBuilder: contextBuilder,
+        aiProvider: aiProvider,
+      );
+
+      final exercise = await useCase.call(conceptId: 'python-closures');
+
+      expect(exercise.id, 'generated-closures-1');
+      expect(exercise.prompt, 'What does this print?');
+      final context = aiProvider.lastExerciseRequest?.context;
+      expect(context, isA<TeachingContext>());
+      expect((context as TeachingContext).concept.id, 'python-closures');
     });
   });
 }
