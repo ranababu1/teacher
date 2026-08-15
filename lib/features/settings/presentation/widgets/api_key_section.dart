@@ -58,16 +58,13 @@ class _ApiKeySectionState extends ConsumerState<ApiKeySection> {
       _testMessage = null;
     });
 
-    if (!ref.read(isOnlineProvider)) {
-      if (!mounted) return;
-      setState(() {
-        _testing = false;
-        _testSucceeded = false;
-        _testMessage = 'No internet connection. Check your WiFi or mobile data.';
-      });
-      return;
-    }
-
+    // Deliberately does not short-circuit on `isOnlineProvider` first: that
+    // signal is only OS-reported link status (see connectivity_provider.dart)
+    // and can read `false` for a brief moment on real devices — WiFi
+    // power-save/roam checks, mobile radio idling between requests — even
+    // seconds after the indicator showed green. Always attempting the real
+    // call means a genuinely offline device still gets an accurate result,
+    // from the actual failed connection, not a heuristic guess.
     try {
       await ref.read(testAiConnectionUseCaseProvider).call();
       if (!mounted) return;
