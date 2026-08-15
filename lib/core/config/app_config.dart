@@ -30,9 +30,17 @@ class AppConfig {
     this.environment = AppEnvironment.development,
     this.apiBaseUrl = '',
     this.featureFlags = const FeatureFlags(),
+    this.geminiApiBaseUrl = 'https://generativelanguage.googleapis.com',
+    this.geminiModel = 'gemini-3.7-flash',
   });
 
   final AppEnvironment environment;
   final String apiBaseUrl;
   final FeatureFlags featureFlags;
+
+  /// Gemini REST API base URL and model id. Kept here, not hardcoded in
+  /// [features/ai_teacher], so bumping the model later is a one-line change.
+  /// See instructions.md section 28.
+  final String geminiApiBaseUrl;
+  final String geminiModel;
 }

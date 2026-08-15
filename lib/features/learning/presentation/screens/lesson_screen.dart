@@ -7,6 +7,7 @@ import '../../../../shared/widgets/async_value_view.dart';
 import '../../../../shared/widgets/code_block.dart';
 import '../../../../shared/widgets/difficulty_chip.dart';
 import '../../../../shared/widgets/markdown_text.dart';
+import '../../../ai_teacher/presentation/widgets/ai_teacher_panel.dart';
 import '../../../assessment/domain/models/practice_item.dart';
 import '../../../assessment/presentation/widgets/exercise_player.dart';
 import '../../../curriculum/domain/models/concept.dart';
@@ -95,6 +96,8 @@ class _LessonScreenState extends ConsumerState<LessonScreen> {
                   const SizedBox(height: 24),
                   _MisconceptionsSection(concept: concept),
                 ],
+                const SizedBox(height: 24),
+                AiTeacherPanel(conceptId: concept.id),
                 if (concept.exercises.isNotEmpty) ...[
                   const SizedBox(height: 28),
                   _SectionHeading(title: 'Try It'),
