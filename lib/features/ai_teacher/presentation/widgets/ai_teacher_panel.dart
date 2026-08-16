@@ -348,7 +348,7 @@ class _NotConfiguredCard extends StatelessWidget {
           Align(
             alignment: Alignment.centerRight,
             child: FilledButton.tonalIcon(
-              onPressed: () => context.go(Routes.settings),
+              onPressed: () => context.go(Routes.profileSettings),
               icon: const Icon(Icons.settings_outlined, size: 18),
               label: const Text('Go to Settings'),
             ),

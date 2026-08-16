@@ -47,9 +47,9 @@ class AppShell extends StatelessWidget {
       showOnPhone: true,
     ),
     (
-      icon: Icons.settings_outlined,
-      selectedIcon: Icons.settings,
-      label: 'Settings',
+      icon: Icons.person_outline,
+      selectedIcon: Icons.person,
+      label: 'Profile',
       showOnPhone: true,
     ),
   ];

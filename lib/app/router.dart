@@ -14,6 +14,7 @@ import '../features/practice/presentation/screens/practice_screen.dart';
 import '../features/practice/presentation/screens/practice_session_screen.dart';
 import '../features/profile/presentation/providers/profile_providers.dart';
 import '../features/profile/presentation/screens/onboarding_screen.dart';
+import '../features/profile/presentation/screens/profile_screen.dart';
 import '../features/progress/presentation/screens/progress_screen.dart';
 import '../features/review/presentation/screens/review_screen.dart';
 import '../features/review/presentation/screens/review_session_screen.dart';
@@ -153,8 +154,14 @@ final routerProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: Routes.settings,
-                builder: (context, state) => const SettingsScreen(),
+                path: Routes.profile,
+                builder: (context, state) => const ProfileScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'settings',
+                    builder: (context, state) => const SettingsScreen(),
+                  ),
+                ],
               ),
             ],
           ),

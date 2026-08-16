@@ -205,7 +205,7 @@ class _NotConfiguredHint extends StatelessWidget {
             ),
           ),
           TextButton(
-            onPressed: () => context.go(Routes.settings),
+            onPressed: () => context.go(Routes.profileSettings),
             child: const Text('Settings'),
           ),
         ],
