@@ -7,6 +7,7 @@ import '../../../../core/constants/routes.dart';
 import '../../../../shared/widgets/fade_slide_in.dart';
 import '../../../../shared/widgets/labeled_progress_bar.dart';
 import '../../../curriculum/presentation/curriculum_providers.dart';
+import '../../../practice/presentation/providers/practice_providers.dart';
 import '../../../progress/domain/models/path_progress_summary.dart';
 import '../../../progress/presentation/providers/progress_providers.dart';
 import '../../../review/presentation/providers/review_providers.dart';
@@ -23,6 +24,7 @@ class DashboardScreen extends ConsumerWidget {
       _ContinueLearningCard(),
       _LearningProgressSection(),
       _ReviewQueueCard(),
+      _PracticeQueueCard(),
       _RecommendedNextStepCard(),
       _RecentActivitySection(),
     ];
@@ -292,6 +294,26 @@ class _ReviewQueueCard extends ConsumerWidget {
         onTap: () => context.go(Routes.review),
         leading: const Icon(Icons.replay_circle_filled_outlined),
         title: Text('$count concept${count == 1 ? '' : 's'} due for review'),
+        trailing: const Icon(Icons.chevron_right),
+      ),
+    );
+  }
+}
+
+class _PracticeQueueCard extends ConsumerWidget {
+  const _PracticeQueueCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final queueValue = ref.watch(practiceQueueProvider);
+    final count = queueValue.valueOrNull?.length ?? 0;
+    if (count == 0) return const SizedBox.shrink();
+
+    return Card(
+      child: ListTile(
+        onTap: () => context.go(Routes.practice),
+        leading: const Icon(Icons.edit_note_outlined),
+        title: Text('$count concept${count == 1 ? '' : 's'} ready to practice'),
         trailing: const Icon(Icons.chevron_right),
       ),
     );

@@ -8,32 +8,49 @@ class AppShell extends StatelessWidget {
 
   final StatefulNavigationShell navigationShell;
 
+  /// Order matches the router's StatefulShellBranch order exactly — indices
+  /// here ARE branch indices. [showOnPhone] is derived from this single
+  /// list (not a hand-maintained parallel one) so the phone bottom bar's
+  /// subset can never drift out of sync with it. Practice and Review stay
+  /// reachable on phones via Dashboard cards instead of a persistent tab —
+  /// six always-labeled destinations overflow/cramp on phone widths; see
+  /// instructions.md sections 7 and 41.
   static const _destinations = [
     (
       icon: Icons.space_dashboard_outlined,
       selectedIcon: Icons.space_dashboard,
       label: 'Dashboard',
+      showOnPhone: true,
     ),
-    (icon: Icons.school_outlined, selectedIcon: Icons.school, label: 'Learn'),
+    (
+      icon: Icons.school_outlined,
+      selectedIcon: Icons.school,
+      label: 'Learn',
+      showOnPhone: true,
+    ),
     (
       icon: Icons.edit_note_outlined,
       selectedIcon: Icons.edit_note,
       label: 'Practice',
+      showOnPhone: false,
     ),
     (
       icon: Icons.replay_circle_filled_outlined,
       selectedIcon: Icons.replay_circle_filled,
       label: 'Review',
+      showOnPhone: false,
     ),
     (
       icon: Icons.insights_outlined,
       selectedIcon: Icons.insights,
       label: 'Progress',
+      showOnPhone: true,
     ),
     (
       icon: Icons.settings_outlined,
       selectedIcon: Icons.settings,
       label: 'Settings',
+      showOnPhone: true,
     ),
   ];
 
@@ -72,17 +89,26 @@ class AppShell extends StatelessWidget {
       );
     }
 
+    final phoneEntries = [
+      for (final e in _destinations.indexed) if (e.$2.showOnPhone) e,
+    ];
+    final branchIndices = [for (final e in phoneEntries) e.$1];
+    final phoneSelected = branchIndices.indexOf(navigationShell.currentIndex);
+
     return Scaffold(
       body: navigationShell,
       bottomNavigationBar: NavigationBar(
-        selectedIndex: navigationShell.currentIndex,
-        onDestinationSelected: _onDestinationSelected,
+        // Defaults to Dashboard when the current branch (Practice/Review)
+        // has no visible tab of its own on phones — the bar never
+        // disappears, and every visible destination stays functional.
+        selectedIndex: phoneSelected == -1 ? 0 : phoneSelected,
+        onDestinationSelected: (i) => _onDestinationSelected(branchIndices[i]),
         destinations: [
-          for (final d in _destinations)
+          for (final e in phoneEntries)
             NavigationDestination(
-              icon: Icon(d.icon),
-              selectedIcon: Icon(d.selectedIcon),
-              label: d.label,
+              icon: Icon(e.$2.icon),
+              selectedIcon: Icon(e.$2.selectedIcon),
+              label: e.$2.label,
             ),
         ],
       ),
