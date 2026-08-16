@@ -1,29 +1,23 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../curriculum/domain/models/concept.dart';
 import '../../../curriculum/presentation/curriculum_providers.dart';
 import '../../../progress/domain/models/student_progress.dart';
 import '../../../progress/presentation/providers/progress_providers.dart';
+import '../../domain/continue_learning_service.dart';
+import '../../domain/models/continue_learning_state.dart';
 import '../../domain/models/dashboard_recommendation.dart';
 import '../../domain/recommendation_service.dart';
 
-/// The concept the learner most recently opened, if any — drives the
-/// "Continue Learning" card. See instructions.md section 8.
-final continueLearningProvider = FutureProvider<Concept?>((ref) async {
+/// Drives the "Continue Learning" card. See instructions.md section 8.
+final continueLearningProvider = FutureProvider<ContinueLearningState>((
+  ref,
+) async {
   final allProgress = await ref.watch(allStudentProgressProvider.future);
-  if (allProgress.isEmpty) return null;
-
-  final sorted = [...allProgress]
-    ..sort((a, b) {
-      final aTime = a.lastAccessedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-      final bTime = b.lastAccessedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-      return bTime.compareTo(aTime);
-    });
-
-  final mostRecent = sorted.first;
-  return ref
-      .watch(curriculumRepositoryProvider)
-      .getConcept(mostRecent.conceptId);
+  final paths = await ref.watch(learningPathsProvider.future);
+  return ContinueLearningService().resolve(
+    allProgress: allProgress,
+    paths: paths,
+  );
 });
 
 final dashboardRecommendationProvider =

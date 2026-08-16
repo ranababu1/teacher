@@ -10,6 +10,7 @@ import '../../../curriculum/presentation/curriculum_providers.dart';
 import '../../../progress/domain/models/path_progress_summary.dart';
 import '../../../progress/presentation/providers/progress_providers.dart';
 import '../../../review/presentation/providers/review_providers.dart';
+import '../../domain/models/continue_learning_state.dart';
 import '../providers/dashboard_providers.dart';
 
 class DashboardScreen extends ConsumerWidget {
@@ -68,57 +69,62 @@ class _ContinueLearningCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final conceptValue = ref.watch(continueLearningProvider);
-    final concept = conceptValue.valueOrNull;
+    final stateValue = ref.watch(continueLearningProvider);
+    final state = stateValue.valueOrNull;
 
-    if (conceptValue.isLoading) {
+    if (stateValue.isLoading) {
       return const SizedBox.shrink();
     }
-    if (concept == null) {
-      return const _EmptyContinueCard();
-    }
 
-    return _HeroGradientCard(
-      onTap: () => context.go(
-        Routes.lesson(concept.learningPathId, concept.moduleId, concept.id),
-      ),
-      children: [
-        const Text(
-          'Continue Learning',
-          style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600),
+    return switch (state) {
+      null || ContinueLearningEmpty() => const _EmptyContinueCard(),
+      ContinueLearningConcept(concept: final concept) => _HeroGradientCard(
+        onTap: () => context.go(
+          Routes.lesson(concept.learningPathId, concept.moduleId, concept.id),
         ),
-        const SizedBox(height: 8),
-        Text(
-          concept.title,
-          style: Theme.of(context).textTheme.titleLarge
-              ?.copyWith(color: Colors.white),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          concept.description,
-          style: Theme.of(context).textTheme.bodyMedium
-              ?.copyWith(color: Colors.white70),
-        ),
-        const SizedBox(height: 12),
-        Align(
-          alignment: Alignment.centerRight,
-          child: FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: Theme.of(context).colorScheme.primary,
+        children: [
+          const Text(
+            'Continue Learning',
+            style: TextStyle(
+              color: Colors.white70,
+              fontWeight: FontWeight.w600,
             ),
-            onPressed: () => context.go(
-              Routes.lesson(
-                concept.learningPathId,
-                concept.moduleId,
-                concept.id,
-              ),
-            ),
-            child: const Text('Continue'),
           ),
-        ),
-      ],
-    );
+          const SizedBox(height: 8),
+          Text(
+            concept.title,
+            style: Theme.of(context).textTheme.titleLarge
+                ?.copyWith(color: Colors.white),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            concept.description,
+            style: Theme.of(context).textTheme.bodyMedium
+                ?.copyWith(color: Colors.white70),
+          ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: Theme.of(context).colorScheme.primary,
+              ),
+              onPressed: () => context.go(
+                Routes.lesson(
+                  concept.learningPathId,
+                  concept.moduleId,
+                  concept.id,
+                ),
+              ),
+              child: const Text('Continue'),
+            ),
+          ),
+        ],
+      ),
+      ContinueLearningPathCompleted(pathTitle: final title) =>
+        _PathCompletedCard(pathTitle: title),
+    };
   }
 }
 
@@ -131,7 +137,7 @@ class _EmptyContinueCard extends StatelessWidget {
       onTap: () => context.go(Routes.learn),
       children: [
         const Text(
-          "Let's learn Python.",
+          "Let's start learning.",
           style: TextStyle(
             color: Colors.white,
             fontSize: 22,
@@ -141,6 +147,46 @@ class _EmptyContinueCard extends StatelessWidget {
         const SizedBox(height: 8),
         const Text(
           'Pick a learning path to get started.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerRight,
+          child: FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: Theme.of(context).colorScheme.primary,
+            ),
+            onPressed: () => context.go(Routes.learn),
+            child: const Text('Browse Learning Paths'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PathCompletedCard extends StatelessWidget {
+  const _PathCompletedCard({required this.pathTitle});
+
+  final String pathTitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return _HeroGradientCard(
+      onTap: () => context.go(Routes.learn),
+      children: [
+        Text(
+          "You've completed $pathTitle! 🎉",
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 22,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Great work. Ready for another course?',
           style: TextStyle(color: Colors.white70),
         ),
         const SizedBox(height: 12),
