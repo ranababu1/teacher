@@ -364,6 +364,21 @@ class _RecommendedNextStepCard extends ConsumerWidget {
     final recommendation = recommendationValue.valueOrNull;
     if (recommendation == null) return const SizedBox.shrink();
 
+    // Right after onboarding (a started path, zero progress, no mastery
+    // rows yet), Continue Learning's fallback and this recommendation can
+    // independently resolve to the exact same concept — don't show it
+    // twice. Once real progress/mastery exists the two naturally diverge
+    // and both stay useful.
+    final continueValue = ref.watch(continueLearningProvider);
+    if (continueValue.isLoading) return const SizedBox.shrink();
+    final continueState = continueValue.valueOrNull;
+    final continueConceptId = continueState is ContinueLearningConcept
+        ? continueState.concept.id
+        : null;
+    if (recommendation.concept.id == continueConceptId) {
+      return const SizedBox.shrink();
+    }
+
     final colorScheme = Theme.of(context).colorScheme;
 
     return Card(
