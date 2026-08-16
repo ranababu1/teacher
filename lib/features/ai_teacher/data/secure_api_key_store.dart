@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../../settings/domain/settings_models.dart';
 import '../domain/api_key_repository.dart';
 
 /// Backed by the platform's hardware-rooted secure storage — Android
@@ -16,16 +18,26 @@ class SecureApiKeyStore implements ApiKeyRepository {
   const SecureApiKeyStore();
 
   static const _storage = FlutterSecureStorage();
-  static const _geminiKeyStorageKey = 'gemini_api_key';
+
+  // gemini keeps this exact pre-existing literal so keys already stored by
+  // installed users keep working with no migration step.
+  @visibleForTesting
+  static const storageKeys = {
+    AiProviderKind.gemini: 'gemini_api_key',
+    AiProviderKind.openai: 'openai_api_key',
+    AiProviderKind.anthropic: 'anthropic_api_key',
+    AiProviderKind.deepseek: 'deepseek_api_key',
+  };
 
   @override
-  Future<String?> getGeminiApiKey() => _storage.read(key: _geminiKeyStorageKey);
+  Future<String?> getApiKey(AiProviderKind provider) =>
+      _storage.read(key: storageKeys[provider]!);
 
   @override
-  Future<void> setGeminiApiKey(String apiKey) =>
-      _storage.write(key: _geminiKeyStorageKey, value: apiKey);
+  Future<void> setApiKey(AiProviderKind provider, String apiKey) =>
+      _storage.write(key: storageKeys[provider]!, value: apiKey);
 
   @override
-  Future<void> clearGeminiApiKey() =>
-      _storage.delete(key: _geminiKeyStorageKey);
+  Future<void> clearApiKey(AiProviderKind provider) =>
+      _storage.delete(key: storageKeys[provider]!);
 }

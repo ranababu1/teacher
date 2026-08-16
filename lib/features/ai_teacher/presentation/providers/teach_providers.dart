@@ -59,7 +59,9 @@ class _UnavailableAiProvider implements AIProvider {
 /// [AppConfig]'s Gemini settings, or the explanation-depth preference
 /// change, since it watches all three.
 final aiProviderProvider = Provider<AIProvider>((ref) {
-  final apiKey = ref.watch(geminiApiKeyControllerProvider).valueOrNull;
+  final apiKey = ref
+      .watch(apiKeyControllerProvider(AiProviderKind.gemini))
+      .valueOrNull;
   if (apiKey == null || apiKey.isEmpty) {
     return const _UnavailableAiProvider();
   }

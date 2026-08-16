@@ -5,10 +5,13 @@ import '../../../../core/errors/app_exception.dart';
 import '../../../../core/services/connectivity_provider.dart';
 import '../../../ai_teacher/presentation/providers/api_key_providers.dart';
 import '../../../ai_teacher/presentation/providers/teach_providers.dart';
+import '../../domain/settings_models.dart';
+import '../providers/settings_providers.dart';
 
-/// Lets the learner enter their own Gemini API key, stored via the
-/// platform's secure storage — never bundled with the app. See
-/// instructions.md section 27 and features/ai_teacher/data/secure_api_key_store.dart.
+/// Lets the learner pick an AI provider and enter their own API key for it,
+/// stored via the platform's secure storage — never bundled with the app.
+/// See instructions.md section 27 and
+/// features/ai_teacher/data/secure_api_key_store.dart.
 class ApiKeySection extends ConsumerStatefulWidget {
   const ApiKeySection({super.key});
 
@@ -30,10 +33,20 @@ class _ApiKeySectionState extends ConsumerState<ApiKeySection> {
     super.dispose();
   }
 
-  Future<void> _save() async {
+  void _resetLocalState() {
+    _controller.clear();
+    setState(() {
+      _editing = false;
+      _testing = false;
+      _testSucceeded = null;
+      _testMessage = null;
+    });
+  }
+
+  Future<void> _save(AiProviderKind provider) async {
     final apiKey = _controller.text.trim();
     if (apiKey.isEmpty) return;
-    await ref.read(geminiApiKeyControllerProvider.notifier).save(apiKey);
+    await ref.read(apiKeyControllerProvider(provider).notifier).save(apiKey);
     _controller.clear();
     setState(() {
       _editing = false;
@@ -42,8 +55,8 @@ class _ApiKeySectionState extends ConsumerState<ApiKeySection> {
     });
   }
 
-  Future<void> _clear() async {
-    await ref.read(geminiApiKeyControllerProvider.notifier).clear();
+  Future<void> _clear(AiProviderKind provider) async {
+    await ref.read(apiKeyControllerProvider(provider).notifier).clear();
     setState(() {
       _testSucceeded = null;
       _testMessage = null;
@@ -88,7 +101,21 @@ class _ApiKeySectionState extends ConsumerState<ApiKeySection> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final keyValue = ref.watch(geminiApiKeyControllerProvider);
+    final provider =
+        ref.watch(settingsControllerProvider).valueOrNull?.aiProviderKind ??
+        AiProviderKind.gemini;
+    final providerName = provider.displayName;
+
+    ref.listen<AiProviderKind?>(
+      settingsControllerProvider.select((s) => s.valueOrNull?.aiProviderKind),
+      (previous, next) {
+        if (previous != null && next != null && previous != next) {
+          _resetLocalState();
+        }
+      },
+    );
+
+    final keyValue = ref.watch(apiKeyControllerProvider(provider));
     final hasKey = keyValue.valueOrNull?.isNotEmpty ?? false;
 
     return Column(
@@ -98,19 +125,38 @@ class _ApiKeySectionState extends ConsumerState<ApiKeySection> {
         const SizedBox(height: 10),
         ListTile(
           contentPadding: EdgeInsets.zero,
+          title: const Text('AI provider'),
+          trailing: DropdownButton<AiProviderKind>(
+            value: provider,
+            onChanged: (value) {
+              if (value != null) {
+                ref
+                    .read(settingsControllerProvider.notifier)
+                    .setAiProviderKind(value);
+              }
+            },
+            items: AiProviderKind.values
+                .map(
+                  (p) => DropdownMenuItem(value: p, child: Text(p.displayName)),
+                )
+                .toList(),
+          ),
+        ),
+        ListTile(
+          contentPadding: EdgeInsets.zero,
           leading: Icon(
             hasKey ? Icons.smart_toy : Icons.smart_toy_outlined,
             color: hasKey
                 ? theme.colorScheme.primary
                 : theme.colorScheme.onSurfaceVariant,
           ),
-          title: const Text('Gemini API key'),
+          title: Text('$providerName API key'),
           subtitle: Text(
             keyValue.isLoading
                 ? 'Checking...'
                 : hasKey
                 ? 'Configured — stored securely on this device, never uploaded anywhere '
-                      'except directly to Gemini.'
+                      'except directly to $providerName.'
                 : "Not configured. Add your own key below — it's stored using this "
                       'device\'s hardware-backed keystore, not bundled with the app.',
           ),
@@ -168,7 +214,10 @@ class _ApiKeySectionState extends ConsumerState<ApiKeySection> {
                   onPressed: () => setState(() => _editing = true),
                   child: const Text('Change'),
                 ),
-                TextButton(onPressed: _clear, child: const Text('Remove')),
+                TextButton(
+                  onPressed: () => _clear(provider),
+                  child: const Text('Remove'),
+                ),
               ],
             ),
           )
@@ -180,7 +229,7 @@ class _ApiKeySectionState extends ConsumerState<ApiKeySection> {
                 controller: _controller,
                 obscureText: _obscure,
                 decoration: InputDecoration(
-                  hintText: 'Paste your Gemini API key',
+                  hintText: 'Paste your $providerName API key',
                   border: const OutlineInputBorder(),
                   suffixIcon: IconButton(
                     icon: Icon(
@@ -203,7 +252,10 @@ class _ApiKeySectionState extends ConsumerState<ApiKeySection> {
                         onPressed: () => setState(() => _editing = false),
                         child: const Text('Cancel'),
                       ),
-                    FilledButton(onPressed: _save, child: const Text('Save')),
+                    FilledButton(
+                      onPressed: () => _save(provider),
+                      child: const Text('Save'),
+                    ),
                   ],
                 ),
               ),
@@ -215,9 +267,9 @@ class _ApiKeySectionState extends ConsumerState<ApiKeySection> {
 }
 
 /// A small live dot showing whether the device currently has a network
-/// connection — reflects [isOnlineProvider], not whether Gemini itself is
-/// reachable (use "Test AI Connection" for that). Deliberately uses a
-/// literal green/red rather than the app's brand colors: this is a
+/// connection — reflects [isOnlineProvider], not whether the AI provider
+/// itself is reachable (use "Test AI Connection" for that). Deliberately
+/// uses a literal green/red rather than the app's brand colors: this is a
 /// universal connectivity convention users already recognize, and the
 /// theme has no "success" color to reuse for it.
 class _ConnectivityIndicator extends ConsumerWidget {
