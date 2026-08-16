@@ -15,6 +15,14 @@ final attemptsRepositoryProvider = Provider<AttemptsRepository>((ref) {
   return AttemptsRepositoryImpl(ref.watch(appDatabaseProvider));
 });
 
+/// Every attempt ever recorded — shared by the profile stats provider and
+/// the pending-tests provider so the unbounded query runs once per data
+/// revision, not twice.
+final allAttemptsProvider = FutureProvider<List<Attempt>>((ref) {
+  ref.watch(dataRevisionProvider);
+  return ref.watch(attemptsRepositoryProvider).getAllAttempts();
+});
+
 final recordAttemptUseCaseProvider = Provider<RecordAttemptUseCase>((ref) {
   return RecordAttemptUseCase(
     attemptsRepository: ref.watch(attemptsRepositoryProvider),

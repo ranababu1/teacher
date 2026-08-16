@@ -14,4 +14,6 @@ abstract class AttemptsRepository {
   Future<List<Attempt>> getAttemptsForConcept(String conceptId);
 
   Future<List<Attempt>> getRecentAttempts({int limit = 20});
+
+  Future<List<Attempt>> getAllAttempts();
 }

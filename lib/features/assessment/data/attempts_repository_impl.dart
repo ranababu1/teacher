@@ -66,6 +66,15 @@ class AttemptsRepositoryImpl implements AttemptsRepository {
     return rows.map(_toDomain).toList();
   }
 
+  @override
+  Future<List<Attempt>> getAllAttempts() async {
+    final rows =
+        await (_db.select(_db.attemptsTable)
+              ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+            .get();
+    return rows.map(_toDomain).toList();
+  }
+
   Attempt _toDomain(AttemptsTableData row) {
     return Attempt(
       id: row.id,
