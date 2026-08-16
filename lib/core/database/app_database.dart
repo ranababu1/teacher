@@ -36,6 +36,24 @@ class AppDatabase extends _$AppDatabase {
     onUpgrade: (m, from, to) async {
       if (from < 2) {
         await m.createTable(learningPathProgressTable);
+        // Backfill: any path with existing concept-level progress from
+        // before this migration counts as already started, so upgrading
+        // never locks a learner out of a course they were already
+        // partway through.
+        final existingPathIds =
+            await (selectOnly(studentProgressTable)
+                  ..addColumns([studentProgressTable.learningPathId])
+                  ..groupBy([studentProgressTable.learningPathId]))
+                .map((row) => row.read(studentProgressTable.learningPathId))
+                .get();
+        for (final pathId in existingPathIds.whereType<String>()) {
+          await into(learningPathProgressTable).insert(
+            LearningPathProgressTableCompanion.insert(
+              learningPathId: pathId,
+              startedAt: DateTime.now(),
+            ),
+          );
+        }
       }
     },
   );
