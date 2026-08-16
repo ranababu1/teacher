@@ -2988,6 +2988,245 @@ class SettingsTableCompanion extends UpdateCompanion<SettingsTableData> {
   }
 }
 
+class $LearningPathProgressTableTable extends LearningPathProgressTable
+    with
+        TableInfo<
+          $LearningPathProgressTableTable,
+          LearningPathProgressTableData
+        > {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $LearningPathProgressTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _learningPathIdMeta = const VerificationMeta(
+    'learningPathId',
+  );
+  @override
+  late final GeneratedColumn<String> learningPathId = GeneratedColumn<String>(
+    'learning_path_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _startedAtMeta = const VerificationMeta(
+    'startedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> startedAt = GeneratedColumn<DateTime>(
+    'started_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [learningPathId, startedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'learning_path_progress_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<LearningPathProgressTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('learning_path_id')) {
+      context.handle(
+        _learningPathIdMeta,
+        learningPathId.isAcceptableOrUnknown(
+          data['learning_path_id']!,
+          _learningPathIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_learningPathIdMeta);
+    }
+    if (data.containsKey('started_at')) {
+      context.handle(
+        _startedAtMeta,
+        startedAt.isAcceptableOrUnknown(data['started_at']!, _startedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_startedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {learningPathId};
+  @override
+  LearningPathProgressTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return LearningPathProgressTableData(
+      learningPathId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}learning_path_id'],
+      )!,
+      startedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}started_at'],
+      )!,
+    );
+  }
+
+  @override
+  $LearningPathProgressTableTable createAlias(String alias) {
+    return $LearningPathProgressTableTable(attachedDatabase, alias);
+  }
+}
+
+class LearningPathProgressTableData extends DataClass
+    implements Insertable<LearningPathProgressTableData> {
+  final String learningPathId;
+  final DateTime startedAt;
+  const LearningPathProgressTableData({
+    required this.learningPathId,
+    required this.startedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['learning_path_id'] = Variable<String>(learningPathId);
+    map['started_at'] = Variable<DateTime>(startedAt);
+    return map;
+  }
+
+  LearningPathProgressTableCompanion toCompanion(bool nullToAbsent) {
+    return LearningPathProgressTableCompanion(
+      learningPathId: Value(learningPathId),
+      startedAt: Value(startedAt),
+    );
+  }
+
+  factory LearningPathProgressTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return LearningPathProgressTableData(
+      learningPathId: serializer.fromJson<String>(json['learningPathId']),
+      startedAt: serializer.fromJson<DateTime>(json['startedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'learningPathId': serializer.toJson<String>(learningPathId),
+      'startedAt': serializer.toJson<DateTime>(startedAt),
+    };
+  }
+
+  LearningPathProgressTableData copyWith({
+    String? learningPathId,
+    DateTime? startedAt,
+  }) => LearningPathProgressTableData(
+    learningPathId: learningPathId ?? this.learningPathId,
+    startedAt: startedAt ?? this.startedAt,
+  );
+  LearningPathProgressTableData copyWithCompanion(
+    LearningPathProgressTableCompanion data,
+  ) {
+    return LearningPathProgressTableData(
+      learningPathId: data.learningPathId.present
+          ? data.learningPathId.value
+          : this.learningPathId,
+      startedAt: data.startedAt.present ? data.startedAt.value : this.startedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LearningPathProgressTableData(')
+          ..write('learningPathId: $learningPathId, ')
+          ..write('startedAt: $startedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(learningPathId, startedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is LearningPathProgressTableData &&
+          other.learningPathId == this.learningPathId &&
+          other.startedAt == this.startedAt);
+}
+
+class LearningPathProgressTableCompanion
+    extends UpdateCompanion<LearningPathProgressTableData> {
+  final Value<String> learningPathId;
+  final Value<DateTime> startedAt;
+  final Value<int> rowid;
+  const LearningPathProgressTableCompanion({
+    this.learningPathId = const Value.absent(),
+    this.startedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  LearningPathProgressTableCompanion.insert({
+    required String learningPathId,
+    required DateTime startedAt,
+    this.rowid = const Value.absent(),
+  }) : learningPathId = Value(learningPathId),
+       startedAt = Value(startedAt);
+  static Insertable<LearningPathProgressTableData> custom({
+    Expression<String>? learningPathId,
+    Expression<DateTime>? startedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (learningPathId != null) 'learning_path_id': learningPathId,
+      if (startedAt != null) 'started_at': startedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  LearningPathProgressTableCompanion copyWith({
+    Value<String>? learningPathId,
+    Value<DateTime>? startedAt,
+    Value<int>? rowid,
+  }) {
+    return LearningPathProgressTableCompanion(
+      learningPathId: learningPathId ?? this.learningPathId,
+      startedAt: startedAt ?? this.startedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (learningPathId.present) {
+      map['learning_path_id'] = Variable<String>(learningPathId.value);
+    }
+    if (startedAt.present) {
+      map['started_at'] = Variable<DateTime>(startedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LearningPathProgressTableCompanion(')
+          ..write('learningPathId: $learningPathId, ')
+          ..write('startedAt: $startedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -3001,6 +3240,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $ReviewScheduleTableTable reviewScheduleTable =
       $ReviewScheduleTableTable(this);
   late final $SettingsTableTable settingsTable = $SettingsTableTable(this);
+  late final $LearningPathProgressTableTable learningPathProgressTable =
+      $LearningPathProgressTableTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -3012,6 +3253,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     misconceptionsTable,
     reviewScheduleTable,
     settingsTable,
+    learningPathProgressTable,
   ];
 }
 
@@ -4586,6 +4828,170 @@ typedef $$SettingsTableTableProcessedTableManager =
       SettingsTableData,
       PrefetchHooks Function()
     >;
+typedef $$LearningPathProgressTableTableCreateCompanionBuilder =
+    LearningPathProgressTableCompanion Function({
+      required String learningPathId,
+      required DateTime startedAt,
+      Value<int> rowid,
+    });
+typedef $$LearningPathProgressTableTableUpdateCompanionBuilder =
+    LearningPathProgressTableCompanion Function({
+      Value<String> learningPathId,
+      Value<DateTime> startedAt,
+      Value<int> rowid,
+    });
+
+class $$LearningPathProgressTableTableFilterComposer
+    extends Composer<_$AppDatabase, $LearningPathProgressTableTable> {
+  $$LearningPathProgressTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get learningPathId => $composableBuilder(
+    column: $table.learningPathId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get startedAt => $composableBuilder(
+    column: $table.startedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$LearningPathProgressTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $LearningPathProgressTableTable> {
+  $$LearningPathProgressTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get learningPathId => $composableBuilder(
+    column: $table.learningPathId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get startedAt => $composableBuilder(
+    column: $table.startedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$LearningPathProgressTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $LearningPathProgressTableTable> {
+  $$LearningPathProgressTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get learningPathId => $composableBuilder(
+    column: $table.learningPathId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get startedAt =>
+      $composableBuilder(column: $table.startedAt, builder: (column) => column);
+}
+
+class $$LearningPathProgressTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $LearningPathProgressTableTable,
+          LearningPathProgressTableData,
+          $$LearningPathProgressTableTableFilterComposer,
+          $$LearningPathProgressTableTableOrderingComposer,
+          $$LearningPathProgressTableTableAnnotationComposer,
+          $$LearningPathProgressTableTableCreateCompanionBuilder,
+          $$LearningPathProgressTableTableUpdateCompanionBuilder,
+          (
+            LearningPathProgressTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $LearningPathProgressTableTable,
+              LearningPathProgressTableData
+            >,
+          ),
+          LearningPathProgressTableData,
+          PrefetchHooks Function()
+        > {
+  $$LearningPathProgressTableTableTableManager(
+    _$AppDatabase db,
+    $LearningPathProgressTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$LearningPathProgressTableTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$LearningPathProgressTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$LearningPathProgressTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> learningPathId = const Value.absent(),
+                Value<DateTime> startedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => LearningPathProgressTableCompanion(
+                learningPathId: learningPathId,
+                startedAt: startedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String learningPathId,
+                required DateTime startedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => LearningPathProgressTableCompanion.insert(
+                learningPathId: learningPathId,
+                startedAt: startedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$LearningPathProgressTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $LearningPathProgressTableTable,
+      LearningPathProgressTableData,
+      $$LearningPathProgressTableTableFilterComposer,
+      $$LearningPathProgressTableTableOrderingComposer,
+      $$LearningPathProgressTableTableAnnotationComposer,
+      $$LearningPathProgressTableTableCreateCompanionBuilder,
+      $$LearningPathProgressTableTableUpdateCompanionBuilder,
+      (
+        LearningPathProgressTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $LearningPathProgressTableTable,
+          LearningPathProgressTableData
+        >,
+      ),
+      LearningPathProgressTableData,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -4602,4 +5008,9 @@ class $AppDatabaseManager {
       $$ReviewScheduleTableTableTableManager(_db, _db.reviewScheduleTable);
   $$SettingsTableTableTableManager get settingsTable =>
       $$SettingsTableTableTableManager(_db, _db.settingsTable);
+  $$LearningPathProgressTableTableTableManager get learningPathProgressTable =>
+      $$LearningPathProgressTableTableTableManager(
+        _db,
+        _db.learningPathProgressTable,
+      );
 }

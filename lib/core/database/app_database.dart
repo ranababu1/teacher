@@ -3,6 +3,7 @@ import 'package:drift_flutter/drift_flutter.dart';
 
 import 'tables/attempts_table.dart';
 import 'tables/concept_mastery_table.dart';
+import 'tables/learning_path_progress_table.dart';
 import 'tables/misconceptions_table.dart';
 import 'tables/review_schedule_table.dart';
 import 'tables/settings_table.dart';
@@ -18,6 +19,7 @@ part 'app_database.g.dart';
     MisconceptionsTable,
     ReviewScheduleTable,
     SettingsTable,
+    LearningPathProgressTable,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -26,7 +28,17 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.connection);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+    onCreate: (m) => m.createAll(),
+    onUpgrade: (m, from, to) async {
+      if (from < 2) {
+        await m.createTable(learningPathProgressTable);
+      }
+    },
+  );
 }
 
 QueryExecutor _openConnection() {
