@@ -72,6 +72,11 @@ class SettingsController extends AsyncNotifier<AppSettings> {
     _update((s) => s.copyWith(aiRequestLogging: enabled));
   }
 
+  Future<void> setAiProviderKind(AiProviderKind kind) async {
+    await ref.read(settingsRepositoryProvider).setAiProviderKind(kind);
+    _update((s) => s.copyWith(aiProviderKind: kind));
+  }
+
   void _update(AppSettings Function(AppSettings) transform) {
     final current = state.valueOrNull;
     if (current != null) {

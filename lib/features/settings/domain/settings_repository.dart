@@ -22,4 +22,6 @@ abstract class SettingsRepository {
   Future<void> setDebugMode(bool enabled);
 
   Future<void> setAiRequestLogging(bool enabled);
+
+  Future<void> setAiProviderKind(AiProviderKind kind);
 }

@@ -18,6 +18,7 @@ class SettingsRepositoryImpl implements SettingsRepository {
   static const _keyFlashcardFixedTimes = 'flashcard_fixed_times';
   static const _keyDebugMode = 'debug_mode';
   static const _keyAiRequestLogging = 'ai_request_logging';
+  static const _keyAiProviderKind = 'ai_provider_kind';
 
   Future<String?> _read(String key) async {
     final row = await (_db.select(
@@ -54,6 +55,7 @@ class SettingsRepositoryImpl implements SettingsRepository {
     final flashcardFixedTimesRaw = await _read(_keyFlashcardFixedTimes);
     final debugRaw = await _read(_keyDebugMode);
     final aiLoggingRaw = await _read(_keyAiRequestLogging);
+    final aiProviderKindRaw = await _read(_keyAiProviderKind);
 
     return AppSettings(
       themeModeKey: themeModeKey,
@@ -86,6 +88,10 @@ class SettingsRepositoryImpl implements SettingsRepository {
       aiRequestLogging: aiLoggingRaw == null
           ? defaults.aiRequestLogging
           : aiLoggingRaw == 'true',
+      aiProviderKind: AiProviderKind.values.firstWhere(
+        (k) => k.name == aiProviderKindRaw,
+        orElse: () => defaults.aiProviderKind,
+      ),
     );
   }
 
@@ -128,4 +134,8 @@ class SettingsRepositoryImpl implements SettingsRepository {
   @override
   Future<void> setAiRequestLogging(bool enabled) =>
       _write(_keyAiRequestLogging, enabled.toString());
+
+  @override
+  Future<void> setAiProviderKind(AiProviderKind kind) =>
+      _write(_keyAiProviderKind, kind.name);
 }
