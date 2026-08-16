@@ -2,6 +2,23 @@ enum ExplanationDepth { concise, standard, deep }
 
 enum DifficultyPreference { relaxed, standard, challenging }
 
+/// How many weekly-flashcard notifications to send per day.
+enum FlashcardVolume {
+  low,
+  medium,
+  high;
+
+  int get notificationsPerDay => switch (this) {
+    FlashcardVolume.low => 2,
+    FlashcardVolume.medium => 4,
+    FlashcardVolume.high => 8,
+  };
+}
+
+/// Whether flashcard notification times are picked randomly each day
+/// within waking hours, or fixed by the learner.
+enum FlashcardFrequencyMode { random, fixed }
+
 /// All learner-configurable settings, typed and defaulted.
 ///
 /// See instructions.md section 36.
@@ -12,6 +29,9 @@ class AppSettings {
     required this.dailyTargetMinutes,
     required this.difficultyPreference,
     required this.weeklyFlashcardsEnabled,
+    required this.flashcardVolume,
+    required this.flashcardFrequencyMode,
+    required this.flashcardFixedTimes,
     required this.debugMode,
     required this.aiRequestLogging,
   });
@@ -21,6 +41,12 @@ class AppSettings {
   final int dailyTargetMinutes;
   final DifficultyPreference difficultyPreference;
   final bool weeklyFlashcardsEnabled;
+  final FlashcardVolume flashcardVolume;
+  final FlashcardFrequencyMode flashcardFrequencyMode;
+
+  /// Only used when [flashcardFrequencyMode] is [FlashcardFrequencyMode.fixed].
+  /// Each entry is a "HH:mm" 24-hour local time.
+  final List<String> flashcardFixedTimes;
   final bool debugMode;
   final bool aiRequestLogging;
 
@@ -30,6 +56,9 @@ class AppSettings {
     dailyTargetMinutes: 20,
     difficultyPreference: DifficultyPreference.standard,
     weeklyFlashcardsEnabled: false,
+    flashcardVolume: FlashcardVolume.medium,
+    flashcardFrequencyMode: FlashcardFrequencyMode.random,
+    flashcardFixedTimes: ['09:00', '13:00', '17:00', '20:00'],
     debugMode: false,
     aiRequestLogging: false,
   );
@@ -40,6 +69,9 @@ class AppSettings {
     int? dailyTargetMinutes,
     DifficultyPreference? difficultyPreference,
     bool? weeklyFlashcardsEnabled,
+    FlashcardVolume? flashcardVolume,
+    FlashcardFrequencyMode? flashcardFrequencyMode,
+    List<String>? flashcardFixedTimes,
     bool? debugMode,
     bool? aiRequestLogging,
   }) {
@@ -50,6 +82,10 @@ class AppSettings {
       difficultyPreference: difficultyPreference ?? this.difficultyPreference,
       weeklyFlashcardsEnabled:
           weeklyFlashcardsEnabled ?? this.weeklyFlashcardsEnabled,
+      flashcardVolume: flashcardVolume ?? this.flashcardVolume,
+      flashcardFrequencyMode:
+          flashcardFrequencyMode ?? this.flashcardFrequencyMode,
+      flashcardFixedTimes: flashcardFixedTimes ?? this.flashcardFixedTimes,
       debugMode: debugMode ?? this.debugMode,
       aiRequestLogging: aiRequestLogging ?? this.aiRequestLogging,
     );

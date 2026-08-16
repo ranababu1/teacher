@@ -13,6 +13,12 @@ abstract class SettingsRepository {
 
   Future<void> setWeeklyFlashcardsEnabled(bool enabled);
 
+  Future<void> setFlashcardVolume(FlashcardVolume volume);
+
+  Future<void> setFlashcardFrequencyMode(FlashcardFrequencyMode mode);
+
+  Future<void> setFlashcardFixedTimes(List<String> times);
+
   Future<void> setDebugMode(bool enabled);
 
   Future<void> setAiRequestLogging(bool enabled);

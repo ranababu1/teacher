@@ -13,6 +13,9 @@ class SettingsRepositoryImpl implements SettingsRepository {
   static const _keyDailyTargetMinutes = 'daily_target_minutes';
   static const _keyDifficultyPreference = 'difficulty_preference';
   static const _keyWeeklyFlashcards = 'weekly_flashcards_enabled';
+  static const _keyFlashcardVolume = 'flashcard_volume';
+  static const _keyFlashcardFrequencyMode = 'flashcard_frequency_mode';
+  static const _keyFlashcardFixedTimes = 'flashcard_fixed_times';
   static const _keyDebugMode = 'debug_mode';
   static const _keyAiRequestLogging = 'ai_request_logging';
 
@@ -44,6 +47,11 @@ class SettingsRepositoryImpl implements SettingsRepository {
     final dailyTargetRaw = await _read(_keyDailyTargetMinutes);
     final difficultyRaw = await _read(_keyDifficultyPreference);
     final flashcardsRaw = await _read(_keyWeeklyFlashcards);
+    final flashcardVolumeRaw = await _read(_keyFlashcardVolume);
+    final flashcardFrequencyModeRaw = await _read(
+      _keyFlashcardFrequencyMode,
+    );
+    final flashcardFixedTimesRaw = await _read(_keyFlashcardFixedTimes);
     final debugRaw = await _read(_keyDebugMode);
     final aiLoggingRaw = await _read(_keyAiRequestLogging);
 
@@ -62,6 +70,18 @@ class SettingsRepositoryImpl implements SettingsRepository {
       weeklyFlashcardsEnabled: flashcardsRaw == null
           ? defaults.weeklyFlashcardsEnabled
           : flashcardsRaw == 'true',
+      flashcardVolume: FlashcardVolume.values.firstWhere(
+        (v) => v.name == flashcardVolumeRaw,
+        orElse: () => defaults.flashcardVolume,
+      ),
+      flashcardFrequencyMode: FlashcardFrequencyMode.values.firstWhere(
+        (m) => m.name == flashcardFrequencyModeRaw,
+        orElse: () => defaults.flashcardFrequencyMode,
+      ),
+      flashcardFixedTimes:
+          flashcardFixedTimesRaw == null || flashcardFixedTimesRaw.isEmpty
+          ? defaults.flashcardFixedTimes
+          : flashcardFixedTimesRaw.split(','),
       debugMode: debugRaw == null ? defaults.debugMode : debugRaw == 'true',
       aiRequestLogging: aiLoggingRaw == null
           ? defaults.aiRequestLogging
@@ -88,6 +108,18 @@ class SettingsRepositoryImpl implements SettingsRepository {
   @override
   Future<void> setWeeklyFlashcardsEnabled(bool enabled) =>
       _write(_keyWeeklyFlashcards, enabled.toString());
+
+  @override
+  Future<void> setFlashcardVolume(FlashcardVolume volume) =>
+      _write(_keyFlashcardVolume, volume.name);
+
+  @override
+  Future<void> setFlashcardFrequencyMode(FlashcardFrequencyMode mode) =>
+      _write(_keyFlashcardFrequencyMode, mode.name);
+
+  @override
+  Future<void> setFlashcardFixedTimes(List<String> times) =>
+      _write(_keyFlashcardFixedTimes, times.join(','));
 
   @override
   Future<void> setDebugMode(bool enabled) =>

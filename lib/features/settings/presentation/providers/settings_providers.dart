@@ -45,6 +45,23 @@ class SettingsController extends AsyncNotifier<AppSettings> {
     _update((s) => s.copyWith(weeklyFlashcardsEnabled: enabled));
   }
 
+  Future<void> setFlashcardVolume(FlashcardVolume volume) async {
+    await ref.read(settingsRepositoryProvider).setFlashcardVolume(volume);
+    _update((s) => s.copyWith(flashcardVolume: volume));
+  }
+
+  Future<void> setFlashcardFrequencyMode(FlashcardFrequencyMode mode) async {
+    await ref
+        .read(settingsRepositoryProvider)
+        .setFlashcardFrequencyMode(mode);
+    _update((s) => s.copyWith(flashcardFrequencyMode: mode));
+  }
+
+  Future<void> setFlashcardFixedTimes(List<String> times) async {
+    await ref.read(settingsRepositoryProvider).setFlashcardFixedTimes(times);
+    _update((s) => s.copyWith(flashcardFixedTimes: times));
+  }
+
   Future<void> setDebugMode(bool enabled) async {
     await ref.read(settingsRepositoryProvider).setDebugMode(enabled);
     _update((s) => s.copyWith(debugMode: enabled));
