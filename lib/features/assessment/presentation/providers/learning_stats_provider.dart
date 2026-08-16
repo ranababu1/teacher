@@ -3,20 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/services/data_revision_provider.dart';
 import '../../../progress/domain/models/concept_mastery.dart';
 import '../../../progress/presentation/providers/progress_providers.dart';
+import '../../domain/attempt_quality.dart';
 import '../../domain/models/attempt.dart';
 import '../../domain/models/learning_stats.dart';
 import 'assessment_providers.dart';
-
-double _qualityOf(Attempt attempt) {
-  if (attempt.isCorrect != null) return attempt.isCorrect! ? 1.0 : 0.15;
-  return switch (attempt.selfRating) {
-    1 => 0.1,
-    2 => 0.4,
-    3 => 0.75,
-    4 => 1.0,
-    _ => 0.75,
-  };
-}
 
 double? _averageDimension(
   List<ConceptMastery> masteryList,
@@ -42,7 +32,7 @@ final learningStatsProvider = FutureProvider<LearningStats>((ref) async {
       .toList();
   final assessmentAccuracy = assessmentAttempts.isEmpty
       ? null
-      : assessmentAttempts.where((a) => _qualityOf(a) >= 0.6).length /
+      : assessmentAttempts.where((a) => qualityOf(a) >= 0.6).length /
             assessmentAttempts.length;
 
   final codingPerformance = _averageDimension(
@@ -61,9 +51,9 @@ final learningStatsProvider = FutureProvider<LearningStats>((ref) async {
     final newer = recentSample.sublist(0, half);
     final older = recentSample.sublist(half);
     final newerAvg =
-        newer.map(_qualityOf).reduce((a, b) => a + b) / newer.length;
+        newer.map(qualityOf).reduce((a, b) => a + b) / newer.length;
     final olderAvg =
-        older.map(_qualityOf).reduce((a, b) => a + b) / older.length;
+        older.map(qualityOf).reduce((a, b) => a + b) / older.length;
     recentImprovementDelta = newerAvg - olderAvg;
   }
 
