@@ -7,7 +7,9 @@ import '../../../curriculum/presentation/curriculum_providers.dart';
 import '../../../progress/presentation/providers/progress_providers.dart';
 import '../../../settings/domain/settings_models.dart';
 import '../../../settings/presentation/providers/settings_providers.dart';
+import '../../data/anthropic_provider.dart';
 import '../../data/gemini_provider.dart';
+import '../../data/openai_compatible_provider.dart';
 import '../../domain/ai_provider.dart';
 import '../../domain/models/teacher_response.dart';
 import '../../domain/teach_use_case.dart';
@@ -16,14 +18,16 @@ import '../../domain/test_ai_connection_use_case.dart';
 import 'api_key_providers.dart';
 import 'misconception_providers.dart';
 
-/// Stands in for [AIProvider] before a Gemini API key has been entered, so
-/// every caller gets a consistent [AIUnavailableException] instead of a
-/// null-check crash — the UI (see `AiTeacherPanel`) checks
+/// Stands in for [AIProvider] before the selected provider's API key has
+/// been entered, so every caller gets a consistent [AIUnavailableException]
+/// instead of a null-check crash — the UI (see `AiTeacherPanel`) checks
 /// [isAiConfiguredProvider] up front and never actually calls this, but
 /// callers deeper in the stack (e.g. a future assessment flow) don't have
 /// to duplicate that check to stay safe.
 class _UnavailableAiProvider implements AIProvider {
-  const _UnavailableAiProvider();
+  const _UnavailableAiProvider(this._providerKind);
+
+  final AiProviderKind _providerKind;
 
   @override
   Future<TeacherResponse> teach(TeacherRequest request) async =>
@@ -46,24 +50,27 @@ class _UnavailableAiProvider implements AIProvider {
   Future<void> testConnection() async => _throwUnavailable();
 
   Never _throwUnavailable() {
-    throw const AIUnavailableException(
-      'No Gemini API key configured yet.',
-      'No Gemini API key is set yet. Add one above to use AI features.',
+    final name = _providerKind.displayName;
+    throw AIUnavailableException(
+      'No $name API key configured yet.',
+      'No $name API key is set yet. Add one above to use AI features.',
     );
   }
 }
 
-/// The active [AIProvider] — a real [GeminiProvider] once the learner has
-/// entered an API key (see instructions.md section 27), otherwise
-/// [_UnavailableAiProvider]. Rebuilds automatically when the key,
-/// [AppConfig]'s Gemini settings, or the explanation-depth preference
-/// change, since it watches all three.
+/// The active [AIProvider], keyed off [AppSettings.aiProviderKind] — a
+/// real provider implementation once the learner has entered an API key
+/// for the selected provider (see instructions.md section 27), otherwise
+/// [_UnavailableAiProvider]. Rebuilds automatically when the selected
+/// provider, its key, [AppConfig]'s provider settings, or the
+/// explanation-depth preference change, since it watches all of them.
 final aiProviderProvider = Provider<AIProvider>((ref) {
-  final apiKey = ref
-      .watch(apiKeyControllerProvider(AiProviderKind.gemini))
-      .valueOrNull;
+  final providerKind =
+      ref.watch(settingsControllerProvider).valueOrNull?.aiProviderKind ??
+      AiProviderKind.gemini;
+  final apiKey = ref.watch(apiKeyControllerProvider(providerKind)).valueOrNull;
   if (apiKey == null || apiKey.isEmpty) {
-    return const _UnavailableAiProvider();
+    return _UnavailableAiProvider(providerKind);
   }
 
   final config = ref.watch(appConfigProvider);
@@ -71,12 +78,34 @@ final aiProviderProvider = Provider<AIProvider>((ref) {
       ref.watch(settingsControllerProvider).valueOrNull?.explanationDepth ??
       ExplanationDepth.standard;
 
-  return GeminiProvider(
-    apiKey: apiKey,
-    model: config.geminiModel,
-    baseUrl: config.geminiApiBaseUrl,
-    explanationDepth: depth,
-  );
+  return switch (providerKind) {
+    AiProviderKind.gemini => GeminiProvider(
+      apiKey: apiKey,
+      model: config.geminiModel,
+      baseUrl: config.geminiApiBaseUrl,
+      explanationDepth: depth,
+    ),
+    AiProviderKind.openai => OpenAiCompatibleProvider(
+      apiKey: apiKey,
+      model: config.openAiModel,
+      baseUrl: config.openAiApiBaseUrl,
+      providerLabel: 'OpenAI',
+      explanationDepth: depth,
+    ),
+    AiProviderKind.anthropic => AnthropicProvider(
+      apiKey: apiKey,
+      model: config.anthropicModel,
+      baseUrl: config.anthropicApiBaseUrl,
+      explanationDepth: depth,
+    ),
+    AiProviderKind.deepseek => OpenAiCompatibleProvider(
+      apiKey: apiKey,
+      model: config.deepSeekModel,
+      baseUrl: config.deepSeekApiBaseUrl,
+      providerLabel: 'DeepSeek',
+      explanationDepth: depth,
+    ),
+  };
 });
 
 /// Shared by every AI Teacher use case so context assembly can't drift

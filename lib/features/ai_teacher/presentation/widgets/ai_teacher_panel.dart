@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/routes.dart';
 import '../../../../shared/widgets/fade_slide_in.dart';
 import '../../../../shared/widgets/markdown_text.dart';
+import '../../../settings/domain/settings_models.dart';
+import '../../../settings/presentation/providers/settings_providers.dart';
 import '../../domain/models/conversation_message.dart';
 import '../providers/ai_teacher_providers.dart';
 import '../providers/api_key_providers.dart';
@@ -50,7 +52,10 @@ class _AiTeacherPanelState extends ConsumerState<AiTeacherPanel> {
   @override
   Widget build(BuildContext context) {
     if (!ref.watch(isAiConfiguredProvider)) {
-      return const _NotConfiguredCard();
+      final providerLabel =
+          ref.watch(settingsControllerProvider).valueOrNull?.aiProviderKind.displayName ??
+          AiProviderKind.gemini.displayName;
+      return _NotConfiguredCard(providerLabel: providerLabel);
     }
 
     final theme = Theme.of(context);
@@ -304,7 +309,9 @@ class _InputRow extends StatelessWidget {
 }
 
 class _NotConfiguredCard extends StatelessWidget {
-  const _NotConfiguredCard();
+  const _NotConfiguredCard({required this.providerLabel});
+
+  final String providerLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -338,8 +345,8 @@ class _NotConfiguredCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             'Ask free-form questions about this concept and get a '
-            'context-aware answer. This needs your own Gemini API key — '
-            'add one in Settings to turn it on.',
+            'context-aware answer. This needs your own $providerLabel API '
+            'key — add one in Settings to turn it on.',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: colorScheme.onSurfaceVariant,
             ),

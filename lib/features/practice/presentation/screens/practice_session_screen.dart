@@ -12,6 +12,8 @@ import '../../../assessment/presentation/widgets/exercise_player.dart';
 import '../../../curriculum/domain/models/exercise.dart';
 import '../../../curriculum/domain/models/learning_path.dart';
 import '../../../curriculum/presentation/curriculum_providers.dart';
+import '../../../settings/domain/settings_models.dart';
+import '../../../settings/presentation/providers/settings_providers.dart';
 
 /// A focused, exercises-only view for repeat practice on a concept a
 /// learner has already been taught — no lesson prose, just "Try It" again,
@@ -118,7 +120,16 @@ class _PracticeSessionScreenState
                   ),
                 const SizedBox(height: 12),
                 if (!isAiConfigured)
-                  _NotConfiguredHint(theme: Theme.of(context))
+                  _NotConfiguredHint(
+                    theme: Theme.of(context),
+                    providerLabel:
+                        ref
+                            .watch(settingsControllerProvider)
+                            .valueOrNull
+                            ?.aiProviderKind
+                            .displayName ??
+                        AiProviderKind.gemini.displayName,
+                  )
                 else ...[
                   if (_generateError != null) ...[
                     _GenerateErrorBanner(
@@ -175,9 +186,10 @@ class _AiGeneratedLabel extends StatelessWidget {
 }
 
 class _NotConfiguredHint extends StatelessWidget {
-  const _NotConfiguredHint({required this.theme});
+  const _NotConfiguredHint({required this.theme, required this.providerLabel});
 
   final ThemeData theme;
+  final String providerLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -198,7 +210,7 @@ class _NotConfiguredHint extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Add a Gemini API key in Settings to generate fresh practice exercises.',
+              'Add a $providerLabel API key in Settings to generate fresh practice exercises.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),

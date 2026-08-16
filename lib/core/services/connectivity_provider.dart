@@ -5,8 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// interface state (WiFi/mobile/ethernet vs none), not confirmed internet
 /// reachability. A device connected to a WiFi network with no working
 /// upstream internet still reports connected here — the "Test AI
-/// Connection" action in Settings is what actually confirms Gemini itself
-/// is reachable. Emits the current state immediately, then live updates.
+/// Connection" action in Settings is what actually confirms the selected
+/// AI provider itself is reachable. Emits the current state immediately,
+/// then live updates.
 final connectivityStatusProvider = StreamProvider<List<ConnectivityResult>>((
   ref,
 ) async* {
