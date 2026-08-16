@@ -11,9 +11,11 @@ import '../../../ai_teacher/presentation/providers/misconception_providers.dart'
 import '../../../ai_teacher/presentation/widgets/ai_teacher_panel.dart';
 import '../../../assessment/domain/models/practice_item.dart';
 import '../../../assessment/presentation/widgets/exercise_player.dart';
+import '../../../../core/services/data_revision_provider.dart';
 import '../../../curriculum/domain/models/concept.dart';
 import '../../../curriculum/domain/models/learning_path.dart';
 import '../../../curriculum/presentation/curriculum_providers.dart';
+import '../../../curriculum/presentation/widgets/course_locked_state.dart';
 import '../../../progress/presentation/providers/progress_providers.dart';
 
 class LessonScreen extends ConsumerStatefulWidget {
@@ -33,38 +35,38 @@ class LessonScreen extends ConsumerStatefulWidget {
 }
 
 class _LessonScreenState extends ConsumerState<LessonScreen> {
-  @override
-  void initState() {
-    super.initState();
-    Future.microtask(() {
-      ref
+  String? _markedStartedForConceptId;
+
+  void _maybeMarkStarted() {
+    if (_markedStartedForConceptId == widget.conceptId) return;
+    _markedStartedForConceptId = widget.conceptId;
+    Future.microtask(() async {
+      await ref
           .read(studentProgressRepositoryProvider)
           .markStarted(
             conceptId: widget.conceptId,
             learningPathId: widget.pathId,
             moduleId: widget.moduleId,
           );
+      ref.read(dataRevisionProvider.notifier).bump();
     });
   }
 
   @override
-  void didUpdateWidget(LessonScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.conceptId != widget.conceptId) {
-      Future.microtask(() {
-        ref
-            .read(studentProgressRepositoryProvider)
-            .markStarted(
-              conceptId: widget.conceptId,
-              learningPathId: widget.pathId,
-              moduleId: widget.moduleId,
-            );
-      });
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
+    final isStarted =
+        ref.watch(isLearningPathStartedProvider(widget.pathId)).valueOrNull ??
+        false;
+
+    if (!isStarted) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Lesson')),
+        body: SafeArea(child: CourseLockedState(pathId: widget.pathId)),
+      );
+    }
+
+    _maybeMarkStarted();
+
     final conceptValue = ref.watch(conceptProvider(widget.conceptId));
 
     return Scaffold(

@@ -9,6 +9,7 @@ import '../../../progress/domain/models/mastery_status.dart';
 import '../../../progress/presentation/providers/progress_providers.dart';
 import '../../../progress/presentation/widgets/mastery_status_icon.dart';
 import '../curriculum_providers.dart';
+import '../widgets/course_locked_state.dart';
 
 class ModuleDetailScreen extends ConsumerWidget {
   const ModuleDetailScreen({
@@ -24,6 +25,8 @@ class ModuleDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final pathValue = ref.watch(learningPathProvider(pathId));
     final masteryValue = ref.watch(allMasteryProvider);
+    final isStarted =
+        ref.watch(isLearningPathStartedProvider(pathId)).valueOrNull ?? false;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Topic')),
@@ -35,6 +38,9 @@ class ModuleDetailScreen extends ConsumerWidget {
             final module = path?.findModule(moduleId);
             if (path == null || module == null) {
               return const Center(child: Text('Topic not found.'));
+            }
+            if (!isStarted) {
+              return CourseLockedState(pathId: pathId);
             }
             final masteryByConceptId = {
               for (final m in masteryValue.valueOrNull ?? const [])

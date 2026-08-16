@@ -23,6 +23,8 @@ class LearningPathDetailScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final pathValue = ref.watch(learningPathProvider(pathId));
     final masteryValue = ref.watch(allMasteryProvider);
+    final isStarted =
+        ref.watch(isLearningPathStartedProvider(pathId)).valueOrNull ?? false;
 
     return Scaffold(
       appBar: AppBar(
@@ -74,7 +76,33 @@ class LearningPathDetailScreen extends ConsumerWidget {
                     ],
                   ],
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
+                if (path.modules.isNotEmpty && !isStarted)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        FilledButton.icon(
+                          onPressed: () => ref
+                              .read(learningPathStarterProvider)
+                              .call(path.id),
+                          icon: const Icon(Icons.play_arrow),
+                          label: const Text('Start Course'),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Start this course to unlock its lessons.',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
                 if (path.modules.isEmpty)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 32),
@@ -113,6 +141,7 @@ class LearningPathDetailScreen extends ConsumerWidget {
                         path: path,
                         module: path.modules[i],
                         masteryByConceptId: masteryByConceptId,
+                        isStarted: isStarted,
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -131,65 +160,80 @@ class _ModuleCard extends StatelessWidget {
     required this.path,
     required this.module,
     required this.masteryByConceptId,
+    required this.isStarted,
   });
 
   final LearningPath path;
   final CurriculumModule module;
   final Map<String, ConceptMastery> masteryByConceptId;
+  final bool isStarted;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: () => context.go(Routes.module(path.id, module.id)),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      module.title,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                  ),
-                  const Icon(Icons.chevron_right),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 12,
-                runSpacing: 4,
-                children: module.concepts
-                    .map(
-                      (c) => ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 280),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            MasteryStatusIcon(
-                              status:
-                                  masteryByConceptId[c.id]?.status ??
-                                  MasteryStatus.notStarted,
-                            ),
-                            const SizedBox(width: 6),
-                            Flexible(
-                              child: Text(
-                                c.title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
+    return Opacity(
+      opacity: isStarted ? 1 : 0.5,
+      child: Card(
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () {
+            if (!isStarted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Start this course to unlock its lessons.'),
+                ),
+              );
+              return;
+            }
+            context.go(Routes.module(path.id, module.id));
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        module.title,
+                        style: Theme.of(context).textTheme.titleMedium,
                       ),
-                    )
-                    .toList(),
-              ),
-            ],
+                    ),
+                    Icon(isStarted ? Icons.chevron_right : Icons.lock_outline),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 4,
+                  children: module.concepts
+                      .map(
+                        (c) => ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 280),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              MasteryStatusIcon(
+                                status:
+                                    masteryByConceptId[c.id]?.status ??
+                                    MasteryStatus.notStarted,
+                              ),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  c.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ],
+            ),
           ),
         ),
       ),
