@@ -13,7 +13,7 @@ class ProgressScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final summariesValue = ref.watch(pathProgressSummariesProvider);
+    final summariesValue = ref.watch(startedPathProgressSummariesProvider);
     final statsValue = ref.watch(learningStatsProvider);
 
     return Scaffold(
@@ -21,35 +21,40 @@ class ProgressScreen extends ConsumerWidget {
       body: SafeArea(
         child: AsyncValueView(
           value: summariesValue,
-          onRetry: () => ref.invalidate(pathProgressSummariesProvider),
-          data: (summaries) => ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              Text(
-                'Overall Learning Progress',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 16),
-              for (final summary in summaries) ...[
-                _PathProgressCard(summary: summary),
-                const SizedBox(height: 12),
-              ],
-              const SizedBox(height: 12),
-              Text(
-                'Performance',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 12),
-              statsValue.when(
-                data: (stats) => _StatsGrid(stats: stats),
-                loading: () => const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Center(child: CircularProgressIndicator()),
+          onRetry: () => ref.invalidate(startedPathProgressSummariesProvider),
+          data: (summaries) => summaries.isEmpty
+              ? const EmptyState(
+                  message: 'Start a learning path to see your progress here.',
+                  icon: Icons.insights_outlined,
+                )
+              : ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    Text(
+                      'Overall Learning Progress',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 16),
+                    for (final summary in summaries) ...[
+                      _PathProgressCard(summary: summary),
+                      const SizedBox(height: 12),
+                    ],
+                    const SizedBox(height: 12),
+                    Text(
+                      'Performance',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 12),
+                    statsValue.when(
+                      data: (stats) => _StatsGrid(stats: stats),
+                      loading: () => const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Center(child: CircularProgressIndicator()),
+                      ),
+                      error: (_, _) => const SizedBox.shrink(),
+                    ),
+                  ],
                 ),
-                error: (_, _) => const SizedBox.shrink(),
-              ),
-            ],
-          ),
         ),
       ),
     );

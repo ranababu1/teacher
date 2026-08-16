@@ -198,7 +198,7 @@ class _LearningProgressSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final summariesValue = ref.watch(pathProgressSummariesProvider);
+    final summariesValue = ref.watch(startedPathProgressSummariesProvider);
     final summaries =
         summariesValue.valueOrNull ?? const <PathProgressSummary>[];
     if (summaries.isEmpty) return const SizedBox.shrink();

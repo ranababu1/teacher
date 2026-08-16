@@ -4,8 +4,10 @@ import '../../../../core/database/database_provider.dart';
 import '../../../../core/services/data_revision_provider.dart';
 import '../../../curriculum/presentation/curriculum_providers.dart';
 import '../../data/concept_mastery_repository_impl.dart';
+import '../../data/learning_path_progress_repository_impl.dart';
 import '../../data/student_progress_repository_impl.dart';
 import '../../domain/concept_mastery_repository.dart';
+import '../../domain/learning_path_progress_repository.dart';
 import '../../domain/models/concept_mastery.dart';
 import '../../domain/models/mastery_status.dart';
 import '../../domain/models/path_progress_summary.dart';
@@ -24,6 +26,11 @@ final studentProgressRepositoryProvider = Provider<StudentProgressRepository>((
   return StudentProgressRepositoryImpl(ref.watch(appDatabaseProvider));
 });
 
+final learningPathProgressRepositoryProvider =
+    Provider<LearningPathProgressRepository>((ref) {
+      return LearningPathProgressRepositoryImpl(ref.watch(appDatabaseProvider));
+    });
+
 final allMasteryProvider = FutureProvider<List<ConceptMastery>>((ref) {
   ref.watch(dataRevisionProvider);
   return ref.watch(conceptMasteryRepositoryProvider).getAllMastery();
@@ -40,6 +47,41 @@ final allStudentProgressProvider = FutureProvider<List<StudentProgress>>((ref) {
   ref.watch(dataRevisionProvider);
   return ref.watch(studentProgressRepositoryProvider).getAllProgress();
 });
+
+/// Learning path ids the learner has explicitly Started — the hard gate
+/// that must be satisfied before any of that path's lessons can be opened.
+final startedLearningPathIdsProvider = FutureProvider<Set<String>>((ref) {
+  ref.watch(dataRevisionProvider);
+  return ref.watch(learningPathProgressRepositoryProvider).getStartedPathIds();
+});
+
+final isLearningPathStartedProvider = FutureProvider.family<bool, String>((
+  ref,
+  pathId,
+) async {
+  final started = await ref.watch(startedLearningPathIdsProvider.future);
+  return started.contains(pathId);
+});
+
+/// The entry point UI should call to Start a course — wraps the plain
+/// repository write with telling dependent read providers to refetch, the
+/// same shape as `AttemptRecorder` in assessment_providers.dart.
+final learningPathStarterProvider = Provider<LearningPathStarter>((ref) {
+  return LearningPathStarter(ref);
+});
+
+class LearningPathStarter {
+  LearningPathStarter(this._ref);
+
+  final Ref _ref;
+
+  Future<void> call(String learningPathId) async {
+    await _ref
+        .read(learningPathProgressRepositoryProvider)
+        .markPathStarted(learningPathId);
+    _ref.read(dataRevisionProvider.notifier).bump();
+  }
+}
 
 /// Aggregated per-path progress, combining curriculum structure with
 /// persisted mastery. Concepts with no mastery row yet are `notStarted`.
@@ -71,3 +113,16 @@ final pathProgressSummariesProvider = FutureProvider<List<PathProgressSummary>>(
     }).toList();
   },
 );
+
+/// [pathProgressSummariesProvider] filtered to paths the learner has
+/// explicitly Started — feeds the Dashboard's Learning Progress section
+/// and the standalone Progress screen. The Learning Paths catalog screen
+/// intentionally stays on the unfiltered provider above.
+final startedPathProgressSummariesProvider =
+    FutureProvider<List<PathProgressSummary>>((ref) async {
+      final summaries = await ref.watch(pathProgressSummariesProvider.future);
+      final startedIds = await ref.watch(startedLearningPathIdsProvider.future);
+      return summaries
+          .where((s) => startedIds.contains(s.learningPathId))
+          .toList();
+    });
