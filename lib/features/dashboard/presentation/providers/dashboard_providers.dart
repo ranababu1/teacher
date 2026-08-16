@@ -14,15 +14,19 @@ final continueLearningProvider = FutureProvider<ContinueLearningState>((
 ) async {
   final allProgress = await ref.watch(allStudentProgressProvider.future);
   final paths = await ref.watch(learningPathsProvider.future);
+  final startedPathIds = await ref.watch(startedLearningPathIdsProvider.future);
   return ContinueLearningService().resolve(
     allProgress: allProgress,
     paths: paths,
+    startedPathIds: startedPathIds,
   );
 });
 
 final dashboardRecommendationProvider =
     FutureProvider<DashboardRecommendation?>((ref) async {
-      final paths = await ref.watch(learningPathsProvider.future);
+      final allPaths = await ref.watch(learningPathsProvider.future);
+      final startedIds = await ref.watch(startedLearningPathIdsProvider.future);
+      final paths = allPaths.where((p) => startedIds.contains(p.id)).toList();
       final masteryList = await ref.watch(allMasteryProvider.future);
       final masteryByConceptId = {for (final m in masteryList) m.conceptId: m};
 

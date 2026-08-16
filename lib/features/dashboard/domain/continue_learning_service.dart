@@ -10,8 +10,20 @@ class ContinueLearningService {
   ContinueLearningState resolve({
     required List<StudentProgress> allProgress,
     required List<LearningPath> paths,
+    required Set<String> startedPathIds,
   }) {
-    if (allProgress.isEmpty) return const ContinueLearningEmpty();
+    if (allProgress.isEmpty) {
+      // Nothing attempted yet, but if the learner has explicitly started
+      // one or more paths (e.g. via onboarding), point at the first
+      // concept of the first started path instead of a generic "pick a
+      // path" CTA, which would be factually wrong at that point.
+      for (final path in paths) {
+        if (!startedPathIds.contains(path.id)) continue;
+        final concepts = path.allConcepts;
+        if (concepts.isNotEmpty) return ContinueLearningConcept(concepts.first);
+      }
+      return const ContinueLearningEmpty();
+    }
 
     final conceptsById = <String, Concept>{
       for (final path in paths)

@@ -62,7 +62,11 @@ void main() {
   final service = ContinueLearningService();
 
   test('returns empty when nothing has ever been started', () {
-    final state = service.resolve(allProgress: const [], paths: const []);
+    final state = service.resolve(
+      allProgress: const [],
+      paths: const [],
+      startedPathIds: const {},
+    );
     expect(state, const ContinueLearningEmpty());
   });
 
@@ -77,6 +81,7 @@ void main() {
         _progress('c2', 'python', lastAccessedAt: now),
       ],
       paths: [path],
+      startedPathIds: const {},
     );
 
     expect(state, isA<ContinueLearningConcept>());
@@ -95,6 +100,7 @@ void main() {
         _progress('c2', 'python', lastAccessedAt: now, completedAt: now),
       ],
       paths: [path],
+      startedPathIds: const {},
     );
 
     expect(state, isA<ContinueLearningConcept>());
@@ -115,6 +121,7 @@ void main() {
         _progress('c3', 'python', lastAccessedAt: now, completedAt: now),
       ],
       paths: [path],
+      startedPathIds: const {},
     );
 
     expect(state, isA<ContinueLearningConcept>());
@@ -132,6 +139,7 @@ void main() {
         _progress('c2', 'python', lastAccessedAt: now, completedAt: now),
       ],
       paths: [path],
+      startedPathIds: const {},
     );
 
     expect(state, isA<ContinueLearningPathCompleted>());
@@ -142,8 +150,38 @@ void main() {
     final state = service.resolve(
       allProgress: [_progress('stale', 'python', lastAccessedAt: now)],
       paths: [_path('python', [_concept('c1')])],
+      startedPathIds: const {},
     );
 
     expect(state, const ContinueLearningEmpty());
+  });
+
+  test('resolves to the first concept of a started path when nothing has been attempted yet', () {
+    final c1 = _concept('c1');
+    final c2 = _concept('c2');
+    final path = _path('python', [c1, c2]);
+
+    final state = service.resolve(
+      allProgress: const [],
+      paths: [path],
+      startedPathIds: const {'python'},
+    );
+
+    expect(state, isA<ContinueLearningConcept>());
+    expect((state as ContinueLearningConcept).concept.id, 'c1');
+  });
+
+  test('skips a started path with no concepts in favor of the next started path', () {
+    final emptyPath = _path('coming-soon', const []);
+    final realPath = _path('python', [_concept('c1')]);
+
+    final state = service.resolve(
+      allProgress: const [],
+      paths: [emptyPath, realPath],
+      startedPathIds: const {'coming-soon', 'python'},
+    );
+
+    expect(state, isA<ContinueLearningConcept>());
+    expect((state as ContinueLearningConcept).concept.id, 'c1');
   });
 }
