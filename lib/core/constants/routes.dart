@@ -15,4 +15,6 @@ class Routes {
       '/learn/$pathId/$moduleId';
   static String lesson(String pathId, String moduleId, String conceptId) =>
       '/learn/$pathId/$moduleId/$conceptId';
+  static String practiceSession(String conceptId) => '/practice/$conceptId';
+  static String reviewSession(String conceptId) => '/review/$conceptId';
 }

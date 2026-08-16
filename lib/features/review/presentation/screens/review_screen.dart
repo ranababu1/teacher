@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/constants/routes.dart';
 import '../../../../shared/widgets/async_value_view.dart';
 import '../providers/review_providers.dart';
 
@@ -47,7 +48,9 @@ class ReviewScreen extends ConsumerWidget {
                       title: Text(concept.title),
                       subtitle: Text(concept.description),
                       trailing: FilledButton(
-                        onPressed: () => context.push('/review/${concept.id}'),
+                        onPressed: () => context.push(
+                          Routes.reviewSession(concept.id),
+                        ),
                         child: const Text('Review'),
                       ),
                     ),
