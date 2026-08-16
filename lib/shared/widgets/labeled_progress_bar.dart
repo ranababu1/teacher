@@ -12,6 +12,7 @@ class LabeledProgressBar extends StatelessWidget {
     required this.label,
     required this.progress,
     this.trailing,
+    this.color,
   });
 
   final String label;
@@ -19,6 +20,11 @@ class LabeledProgressBar extends StatelessWidget {
   /// 0.0 - 1.0
   final double progress;
   final String? trailing;
+
+  /// Overrides the default brand-gradient fill with a solid color — used
+  /// where a row needs its own identity (e.g. a per-subject color) rather
+  /// than the shared brand gradient. Omit to keep the existing look.
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
@@ -55,7 +61,10 @@ class LabeledProgressBar extends StatelessWidget {
                 widthFactor: value,
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    gradient: AppGradients.progress(theme.colorScheme),
+                    color: color,
+                    gradient: color == null
+                        ? AppGradients.progress(theme.colorScheme)
+                        : null,
                   ),
                 ),
               ),

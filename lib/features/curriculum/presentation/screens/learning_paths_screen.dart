@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/routes.dart';
+import '../../../../shared/utils/subject_style.dart';
 import '../../../../shared/widgets/async_value_view.dart';
 import '../../../../shared/widgets/difficulty_chip.dart';
 import '../../../../shared/widgets/fade_slide_in.dart';
@@ -28,10 +29,15 @@ class LearningPathsScreen extends ConsumerWidget {
           onRetry: () => ref.invalidate(learningPathsProvider),
           data: (paths) {
             final summaries = summariesValue.valueOrNull;
-            return ListView.separated(
+            return GridView.builder(
               padding: const EdgeInsets.all(16),
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 320,
+                mainAxisExtent: 190,
+                mainAxisSpacing: 12,
+                crossAxisSpacing: 12,
+              ),
               itemCount: paths.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
                 final path = paths[index];
                 final summary = summaries?.firstWhere(
@@ -68,52 +74,74 @@ class _LearningPathCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final color = subjectColor(path.id, theme.brightness);
+
     return Opacity(
       opacity: _isComingSoon ? 0.7 : 1,
       child: Card(
+        clipBehavior: Clip.antiAlias,
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
           onTap: () => context.go(Routes.learningPath(path.id)),
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(14),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(subjectIcon(path.iconName), color: color),
+                    ),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         path.title,
-                        style: theme.textTheme.titleLarge,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleSmall,
                       ),
                     ),
-                    if (_isComingSoon)
-                      Chip(
-                        label: const Text('Coming Soon'),
-                        backgroundColor: theme.colorScheme.surfaceContainerHigh,
-                        labelStyle: theme.textTheme.labelMedium,
-                        visualDensity: VisualDensity.compact,
-                      )
-                    else
-                      DifficultyChip(difficulty: path.difficulty),
                   ],
                 ),
                 const SizedBox(height: 8),
-                Text(path.description, style: theme.textTheme.bodyMedium),
-                const SizedBox(height: 14),
+                Text(
+                  path.description,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const Spacer(),
                 if (_isComingSoon)
-                  Text(
-                    'Curriculum in the works — check back soon.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
+                  Chip(
+                    label: const Text('Coming Soon'),
+                    backgroundColor: theme.colorScheme.surfaceContainerHigh,
+                    labelStyle: theme.textTheme.labelMedium,
+                    visualDensity: VisualDensity.compact,
                   )
                 else
-                  LabeledProgressBar(
-                    label:
-                        '${path.conceptCount} concepts · ~${path.estimatedHours}h',
-                    progress: summary?.overallPercent ?? 0,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: LabeledProgressBar(
+                          label: '${path.conceptCount} concepts',
+                          progress: summary?.overallPercent ?? 0,
+                          color: color,
+                        ),
+                      ),
+                    ],
                   ),
+                if (!_isComingSoon) ...[
+                  const SizedBox(height: 8),
+                  DifficultyChip(difficulty: path.difficulty),
+                ],
               ],
             ),
           ),
