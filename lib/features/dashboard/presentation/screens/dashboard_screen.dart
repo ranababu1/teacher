@@ -9,6 +9,7 @@ import '../../../../shared/widgets/labeled_progress_bar.dart';
 import '../../../../shared/widgets/section_label.dart';
 import '../../../curriculum/presentation/curriculum_providers.dart';
 import '../../../practice/presentation/providers/practice_providers.dart';
+import '../../../profile/presentation/providers/profile_providers.dart';
 import '../../../progress/domain/models/path_progress_summary.dart';
 import '../../../progress/presentation/providers/progress_providers.dart';
 import '../../../review/presentation/providers/review_providers.dart';
@@ -31,7 +32,6 @@ class DashboardScreen extends ConsumerWidget {
     ];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Teacher')),
       body: SafeArea(
         child: ListView.separated(
           padding: const EdgeInsets.all(16),
@@ -45,25 +45,24 @@ class DashboardScreen extends ConsumerWidget {
   }
 }
 
-class _Greeting extends StatelessWidget {
+class _Greeting extends ConsumerWidget {
   const _Greeting();
 
   @override
-  Widget build(BuildContext context) {
-    final hour = DateTime.now().hour;
-    final greeting = hour < 12
-        ? 'Good morning'
-        : hour < 17
-        ? 'Good afternoon'
-        : 'Good evening';
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profile = ref.watch(learnerProfileControllerProvider).valueOrNull;
+    final name = profile?.name ?? '';
 
     final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(greeting, style: theme.textTheme.headlineMedium),
         Text(
-          'Ready to learn?',
+          name.isEmpty ? 'Hi there 👋' : 'Hi $name 👋',
+          style: theme.textTheme.headlineMedium,
+        ),
+        Text(
+          'Ready to continue learning?',
           style: theme.textTheme.bodyLarge?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),

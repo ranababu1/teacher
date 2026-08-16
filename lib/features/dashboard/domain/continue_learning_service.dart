@@ -1,6 +1,7 @@
 import '../../curriculum/domain/models/concept.dart';
 import '../../curriculum/domain/models/learning_path.dart';
 import '../../progress/domain/models/student_progress.dart';
+import '../../progress/domain/path_completion.dart';
 import 'models/continue_learning_state.dart';
 
 /// Resolves the Dashboard's "Continue Learning" card. See
@@ -57,11 +58,9 @@ class ContinueLearningService {
     // so a learner who jumped around and left an earlier concept
     // incomplete gets sent to the actual gap, not falsely told the path
     // is complete.
-    for (final concept in path.allConcepts) {
-      final progress = progressByConceptId[concept.id];
-      if (progress == null || !progress.isCompleted) {
-        return ContinueLearningConcept(concept);
-      }
+    final firstIncomplete = firstIncompleteConcept(path, progressByConceptId);
+    if (firstIncomplete != null) {
+      return ContinueLearningConcept(firstIncomplete);
     }
 
     return ContinueLearningPathCompleted(pathId: path.id, pathTitle: path.title);
