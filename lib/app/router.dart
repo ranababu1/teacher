@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -6,6 +7,8 @@ import '../features/curriculum/presentation/screens/learning_path_detail_screen.
 import '../features/curriculum/presentation/screens/learning_paths_screen.dart';
 import '../features/curriculum/presentation/screens/module_detail_screen.dart';
 import '../features/dashboard/presentation/screens/dashboard_screen.dart';
+import '../features/flashcards/domain/models/flash_card.dart';
+import '../features/flashcards/presentation/screens/flash_card_screen.dart';
 import '../features/learning/presentation/screens/lesson_screen.dart';
 import '../features/practice/presentation/screens/practice_screen.dart';
 import '../features/practice/presentation/screens/practice_session_screen.dart';
@@ -15,10 +18,20 @@ import '../features/review/presentation/screens/review_session_screen.dart';
 import '../features/settings/presentation/screens/settings_screen.dart';
 import 'app_shell.dart';
 
+/// Lets code outside the widget tree (a tapped notification callback) push
+/// a route without needing a [BuildContext] of its own.
+final rootNavigatorKey = GlobalKey<NavigatorState>();
+
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
+    navigatorKey: rootNavigatorKey,
     initialLocation: Routes.dashboard,
     routes: [
+      GoRoute(
+        path: Routes.flashCard,
+        builder: (context, state) =>
+            FlashCardScreen(card: state.extra as FlashCard),
+      ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) =>
             AppShell(navigationShell: navigationShell),
