@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../app/theme.dart';
 import '../../../../shared/widgets/async_value_view.dart';
 import '../../../../shared/widgets/labeled_progress_bar.dart';
+import '../../../../shared/widgets/section_label.dart';
 import '../../../assessment/domain/models/learning_stats.dart';
 import '../../../assessment/presentation/providers/learning_stats_provider.dart';
 import '../../domain/models/path_progress_summary.dart';
@@ -30,20 +32,14 @@ class ProgressScreen extends ConsumerWidget {
               : ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
-                    Text(
-                      'Overall Learning Progress',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
+                    const SectionLabel('Overall Learning Progress'),
                     const SizedBox(height: 16),
                     for (final summary in summaries) ...[
                       _PathProgressCard(summary: summary),
                       const SizedBox(height: 12),
                     ],
                     const SizedBox(height: 12),
-                    Text(
-                      'Performance',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
+                    const SectionLabel('Performance'),
                     const SizedBox(height: 12),
                     statsValue.when(
                       data: (stats) => _StatsGrid(stats: stats),
@@ -70,6 +66,8 @@ class _PathProgressCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Card(
+      elevation: AppElevation.prominent,
+      color: theme.colorScheme.surfaceContainer,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

@@ -6,6 +6,7 @@ import '../../../../app/theme.dart';
 import '../../../../core/constants/routes.dart';
 import '../../../../shared/widgets/fade_slide_in.dart';
 import '../../../../shared/widgets/labeled_progress_bar.dart';
+import '../../../../shared/widgets/section_label.dart';
 import '../../../curriculum/presentation/curriculum_providers.dart';
 import '../../../practice/presentation/providers/practice_providers.dart';
 import '../../../progress/domain/models/path_progress_summary.dart';
@@ -56,11 +57,17 @@ class _Greeting extends StatelessWidget {
         ? 'Good afternoon'
         : 'Good evening';
 
+    final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(greeting, style: Theme.of(context).textTheme.headlineSmall),
-        Text('Ready to learn?', style: Theme.of(context).textTheme.bodyLarge),
+        Text(greeting, style: theme.textTheme.headlineMedium),
+        Text(
+          'Ready to learn?',
+          style: theme.textTheme.bodyLarge?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
       ],
     );
   }
@@ -254,12 +261,11 @@ class _LearningProgressSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Learning Progress',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
+        const SectionLabel('Learning Progress'),
         const SizedBox(height: 12),
         Card(
+          elevation: AppElevation.prominent,
+          color: Theme.of(context).colorScheme.surfaceContainer,
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -290,6 +296,7 @@ class _ReviewQueueCard extends ConsumerWidget {
     if (count == 0) return const SizedBox.shrink();
 
     return Card(
+      elevation: AppElevation.flat,
       child: ListTile(
         onTap: () => context.go(Routes.review),
         leading: const Icon(Icons.replay_circle_filled_outlined),
@@ -310,6 +317,7 @@ class _PracticeQueueCard extends ConsumerWidget {
     if (count == 0) return const SizedBox.shrink();
 
     return Card(
+      elevation: AppElevation.flat,
       child: ListTile(
         onTap: () => context.go(Routes.practice),
         leading: const Icon(Icons.edit_note_outlined),
@@ -396,7 +404,7 @@ class _RecentActivitySection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Recent Activity', style: Theme.of(context).textTheme.titleMedium),
+        const SectionLabel('Recent Activity'),
         const SizedBox(height: 12),
         Card(
           child: Column(

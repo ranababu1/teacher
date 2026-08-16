@@ -22,6 +22,18 @@ class AppColors {
   static Color get seedAccent => _seedAccent;
 }
 
+/// Centralized elevation tiers — depth signals hierarchy instead of every
+/// card looking identical. Link-row cards (a queue item, a settings row)
+/// stay [flat] on purpose so stat/content cards visibly "float" above
+/// them; that contrast is itself the hierarchy cue.
+class AppElevation {
+  AppElevation._();
+
+  static const double flat = 0;
+  static const double standard = 1;
+  static const double prominent = 3;
+}
+
 /// Subtle, restrained gradients — never the loud kind. See
 /// instructions.md section 7: "keep subtle gradients", avoid excess.
 class AppGradients {
@@ -94,13 +106,14 @@ class AppTheme {
         centerTitle: false,
       ),
       cardTheme: CardThemeData(
-        elevation: 0,
+        elevation: AppElevation.standard,
         color: colorScheme.surfaceContainerLow,
         surfaceTintColor: Colors.transparent,
+        shadowColor: colorScheme.shadow.withValues(alpha: 0.2),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
           side: BorderSide(
-            color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+            color: colorScheme.outlineVariant.withValues(alpha: 0.3),
           ),
         ),
       ),
@@ -150,8 +163,21 @@ class AppTheme {
   static TextTheme _buildTextTheme() {
     return const TextTheme(
       displaySmall: TextStyle(fontWeight: FontWeight.w600, height: 1.2),
-      headlineMedium: TextStyle(fontWeight: FontWeight.w600, height: 1.25),
-      headlineSmall: TextStyle(fontWeight: FontWeight.w600, height: 1.3),
+      // Bumped past Material's default ~28/w600 and given slightly
+      // negative tracking — this is the one "big headline" style in the
+      // app (the Dashboard greeting), so it needs real contrast against
+      // everything else rather than sitting one notch above titleLarge.
+      headlineMedium: TextStyle(
+        fontSize: 30,
+        fontWeight: FontWeight.w700,
+        height: 1.25,
+        letterSpacing: -0.2,
+      ),
+      headlineSmall: TextStyle(
+        fontWeight: FontWeight.w600,
+        height: 1.3,
+        letterSpacing: -0.2,
+      ),
       titleLarge: TextStyle(fontWeight: FontWeight.w600, height: 1.3),
       titleMedium: TextStyle(fontWeight: FontWeight.w600, height: 1.35),
       titleSmall: TextStyle(fontWeight: FontWeight.w500, height: 1.4),
