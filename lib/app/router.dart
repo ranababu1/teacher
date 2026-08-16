@@ -12,6 +12,8 @@ import '../features/flashcards/presentation/screens/flash_card_screen.dart';
 import '../features/learning/presentation/screens/lesson_screen.dart';
 import '../features/practice/presentation/screens/practice_screen.dart';
 import '../features/practice/presentation/screens/practice_session_screen.dart';
+import '../features/profile/presentation/providers/profile_providers.dart';
+import '../features/profile/presentation/screens/onboarding_screen.dart';
 import '../features/progress/presentation/screens/progress_screen.dart';
 import '../features/review/presentation/screens/review_screen.dart';
 import '../features/review/presentation/screens/review_session_screen.dart';
@@ -22,11 +24,40 @@ import 'app_shell.dart';
 /// a route without needing a [BuildContext] of its own.
 final rootNavigatorKey = GlobalKey<NavigatorState>();
 
+/// Bridges Riverpod's [learnerProfileControllerProvider] to go_router's
+/// [GoRouter.refreshListenable] — without this, `redirect` only re-runs on
+/// navigation events, so the loading->loaded transition on first launch
+/// (which happens with no user-driven navigation) would never trigger the
+/// initial redirect to onboarding.
+class _ProfileRefreshListenable extends ChangeNotifier {
+  _ProfileRefreshListenable(Ref ref) {
+    ref.listen(learnerProfileControllerProvider, (_, _) => notifyListeners());
+  }
+}
+
 final routerProvider = Provider<GoRouter>((ref) {
+  final refresh = _ProfileRefreshListenable(ref);
   return GoRouter(
     navigatorKey: rootNavigatorKey,
     initialLocation: Routes.dashboard,
+    refreshListenable: refresh,
+    redirect: (context, state) {
+      final profile = ref.read(learnerProfileControllerProvider).valueOrNull;
+      if (profile == null) return null;
+      final onOnboarding = state.matchedLocation == Routes.onboarding;
+      if (!profile.hasCompletedOnboarding && !onOnboarding) {
+        return Routes.onboarding;
+      }
+      if (profile.hasCompletedOnboarding && onOnboarding) {
+        return Routes.dashboard;
+      }
+      return null;
+    },
     routes: [
+      GoRoute(
+        path: Routes.onboarding,
+        builder: (context, state) => const OnboardingScreen(),
+      ),
       GoRoute(
         path: Routes.flashCard,
         builder: (context, state) =>

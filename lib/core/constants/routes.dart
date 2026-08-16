@@ -9,6 +9,7 @@ class Routes {
   static const progress = '/progress';
   static const settings = '/settings';
   static const flashCard = '/flash-card';
+  static const onboarding = '/onboarding';
 
   static String learningPath(String pathId) => '/learn/$pathId';
   static String module(String pathId, String moduleId) =>
