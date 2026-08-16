@@ -32,6 +32,12 @@ class AppConfig {
     this.featureFlags = const FeatureFlags(),
     this.geminiApiBaseUrl = 'https://generativelanguage.googleapis.com',
     this.geminiModel = 'gemini-3.7-flash',
+    this.openAiApiBaseUrl = 'https://api.openai.com/v1',
+    this.openAiModel = 'gpt-4o-mini',
+    this.anthropicApiBaseUrl = 'https://api.anthropic.com',
+    this.anthropicModel = 'claude-sonnet-5',
+    this.deepSeekApiBaseUrl = 'https://api.deepseek.com',
+    this.deepSeekModel = 'deepseek-chat',
   });
 
   final AppEnvironment environment;
@@ -43,4 +49,16 @@ class AppConfig {
   /// See instructions.md section 28.
   final String geminiApiBaseUrl;
   final String geminiModel;
+
+  final String openAiApiBaseUrl;
+  final String openAiModel;
+
+  final String anthropicApiBaseUrl;
+  final String anthropicModel;
+
+  /// DeepSeek's Chat Completions API is wire-compatible with OpenAI's, so
+  /// it's served by the same [OpenAiCompatibleProvider] with just this
+  /// base URL/model swapped in.
+  final String deepSeekApiBaseUrl;
+  final String deepSeekModel;
 }
