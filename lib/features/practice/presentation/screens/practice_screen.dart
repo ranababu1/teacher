@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/routes.dart';
 import '../../../../shared/widgets/async_value_view.dart';
 import '../../../../shared/widgets/difficulty_chip.dart';
+import '../../../../shared/widgets/skeleton_loader.dart';
 import '../../../curriculum/presentation/curriculum_providers.dart';
 import '../../../progress/domain/models/mastery_status.dart';
 import '../../../progress/presentation/providers/progress_providers.dart';
@@ -26,6 +27,7 @@ class PracticeScreen extends ConsumerWidget {
         child: AsyncValueView(
           value: pathsValue,
           onRetry: () => ref.invalidate(learningPathsProvider),
+          skeleton: () => const SkeletonCardList(),
           data: (paths) {
             final masteryByConceptId = {
               for (final m in masteryValue.valueOrNull ?? const [])

@@ -11,11 +11,17 @@ class AsyncValueView<T> extends StatelessWidget {
     required this.value,
     required this.data,
     this.onRetry,
+    this.skeleton,
   });
 
   final AsyncValue<T> value;
   final Widget Function(T data) data;
   final VoidCallback? onRetry;
+
+  /// Loading-state override — a list-shaped skeleton reads better than a
+  /// bare spinner on screens whose content is itself a list. Omit to keep
+  /// the default centered spinner.
+  final Widget Function()? skeleton;
 
   @override
   Widget build(BuildContext context) {
@@ -23,12 +29,16 @@ class AsyncValueView<T> extends StatelessWidget {
       duration: const Duration(milliseconds: 250),
       child: value.when(
         data: (d) => KeyedSubtree(key: const ValueKey('data'), child: data(d)),
-        loading: () => const Center(
-          key: ValueKey('loading'),
-          child: Padding(
-            padding: EdgeInsets.all(32),
-            child: CircularProgressIndicator(),
-          ),
+        loading: () => KeyedSubtree(
+          key: const ValueKey('loading'),
+          child: skeleton != null
+              ? skeleton!()
+              : const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(32),
+                    child: CircularProgressIndicator(),
+                  ),
+                ),
         ),
         error: (error, stackTrace) => KeyedSubtree(
           key: const ValueKey('error'),

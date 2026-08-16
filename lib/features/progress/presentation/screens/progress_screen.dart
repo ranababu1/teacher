@@ -5,6 +5,7 @@ import '../../../../app/theme.dart';
 import '../../../../shared/widgets/async_value_view.dart';
 import '../../../../shared/widgets/labeled_progress_bar.dart';
 import '../../../../shared/widgets/section_label.dart';
+import '../../../../shared/widgets/skeleton_loader.dart';
 import '../../../assessment/domain/models/learning_stats.dart';
 import '../../../assessment/presentation/providers/learning_stats_provider.dart';
 import '../../domain/models/path_progress_summary.dart';
@@ -24,6 +25,7 @@ class ProgressScreen extends ConsumerWidget {
         child: AsyncValueView(
           value: summariesValue,
           onRetry: () => ref.invalidate(startedPathProgressSummariesProvider),
+          skeleton: () => const SkeletonCardList(itemCount: 3),
           data: (summaries) => summaries.isEmpty
               ? const EmptyState(
                   message: 'Start a learning path to see your progress here.',

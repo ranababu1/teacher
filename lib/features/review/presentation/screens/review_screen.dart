@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/routes.dart';
 import '../../../../shared/widgets/async_value_view.dart';
+import '../../../../shared/widgets/skeleton_loader.dart';
 import '../providers/review_providers.dart';
 
 class ReviewScreen extends ConsumerWidget {
@@ -19,6 +20,7 @@ class ReviewScreen extends ConsumerWidget {
         child: AsyncValueView(
           value: dueValue,
           onRetry: () => ref.invalidate(dueForReviewProvider),
+          skeleton: () => const SkeletonCardList(),
           data: (concepts) {
             if (concepts.isEmpty) {
               return const Center(

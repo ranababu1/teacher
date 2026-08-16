@@ -8,6 +8,7 @@ import '../../../../shared/widgets/async_value_view.dart';
 import '../../../../shared/widgets/difficulty_chip.dart';
 import '../../../../shared/widgets/fade_slide_in.dart';
 import '../../../../shared/widgets/labeled_progress_bar.dart';
+import '../../../../shared/widgets/skeleton_loader.dart';
 import '../../../progress/domain/models/path_progress_summary.dart';
 import '../../../progress/presentation/providers/progress_providers.dart';
 import '../../domain/models/learning_path.dart';
@@ -27,6 +28,8 @@ class LearningPathsScreen extends ConsumerWidget {
         child: AsyncValueView(
           value: pathsValue,
           onRetry: () => ref.invalidate(learningPathsProvider),
+          skeleton: () =>
+              const SkeletonCardList(itemCount: 6, itemHeight: 190),
           data: (paths) {
             final summaries = summariesValue.valueOrNull;
             return GridView.builder(
