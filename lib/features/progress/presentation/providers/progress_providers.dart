@@ -5,6 +5,7 @@ import '../../../../core/services/data_revision_provider.dart';
 import '../../../curriculum/presentation/curriculum_providers.dart';
 import '../../data/concept_mastery_repository_impl.dart';
 import '../../data/learning_path_progress_repository_impl.dart';
+import '../../data/module_test_progress_repository_impl.dart';
 import '../../data/student_progress_repository_impl.dart';
 import '../../domain/concept_mastery_repository.dart';
 import '../../domain/learning_path_progress_repository.dart';
@@ -12,6 +13,7 @@ import '../../domain/models/concept_mastery.dart';
 import '../../domain/models/mastery_status.dart';
 import '../../domain/models/path_progress_summary.dart';
 import '../../domain/models/student_progress.dart';
+import '../../domain/module_test_progress_repository.dart';
 import '../../domain/student_progress_repository.dart';
 
 final conceptMasteryRepositoryProvider = Provider<ConceptMasteryRepository>((
@@ -29,6 +31,11 @@ final studentProgressRepositoryProvider = Provider<StudentProgressRepository>((
 final learningPathProgressRepositoryProvider =
     Provider<LearningPathProgressRepository>((ref) {
       return LearningPathProgressRepositoryImpl(ref.watch(appDatabaseProvider));
+    });
+
+final moduleTestProgressRepositoryProvider =
+    Provider<ModuleTestProgressRepository>((ref) {
+      return ModuleTestProgressRepositoryImpl(ref.watch(appDatabaseProvider));
     });
 
 final allMasteryProvider = FutureProvider<List<ConceptMastery>>((ref) {
@@ -79,6 +86,46 @@ class LearningPathStarter {
     await _ref
         .read(learningPathProgressRepositoryProvider)
         .markPathStarted(learningPathId);
+    _ref.read(dataRevisionProvider.notifier).bump();
+  }
+}
+
+/// Module ("topic") ids within [learningPathId] whose gating test has
+/// been passed — see [ModuleTestProgressRepository].
+final passedModuleIdsProvider = FutureProvider.family<Set<String>, String>((
+  ref,
+  learningPathId,
+) {
+  ref.watch(dataRevisionProvider);
+  return ref
+      .watch(moduleTestProgressRepositoryProvider)
+      .getPassedModuleIds(learningPathId);
+});
+
+/// The entry point UI should call once a learner passes a module's topic
+/// test — wraps the plain repository write with telling dependent read
+/// providers to refetch, the same shape as [LearningPathStarter].
+final moduleTestRecorderProvider = Provider<ModuleTestRecorder>((ref) {
+  return ModuleTestRecorder(ref);
+});
+
+class ModuleTestRecorder {
+  ModuleTestRecorder(this._ref);
+
+  final Ref _ref;
+
+  Future<void> call({
+    required String learningPathId,
+    required String moduleId,
+    required int scorePercent,
+    required int questionCount,
+  }) async {
+    await _ref.read(moduleTestProgressRepositoryProvider).markModulePassed(
+      learningPathId: learningPathId,
+      moduleId: moduleId,
+      scorePercent: scorePercent,
+      questionCount: questionCount,
+    );
     _ref.read(dataRevisionProvider.notifier).bump();
   }
 }
