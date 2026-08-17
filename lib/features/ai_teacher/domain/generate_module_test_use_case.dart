@@ -34,7 +34,9 @@ class GenerateModuleTestUseCase {
   Future<List<Assessment>> call({
     required String learningPathId,
     required String moduleId,
+    int? questionCount,
   }) async {
+    final effectiveQuestionCount = questionCount ?? this.questionCount;
     final path = await _curriculumRepository.getLearningPath(learningPathId);
     if (path == null) {
       throw ContentNotFoundException(
@@ -63,12 +65,15 @@ class GenerateModuleTestUseCase {
     if (requestLoggingEnabled) {
       AppLogger.debug(
         'AI generateModuleTest request: learningPathId=$learningPathId '
-        'moduleId=$moduleId questionCount=$questionCount',
+        'moduleId=$moduleId questionCount=$effectiveQuestionCount',
       );
     }
 
     final questions = await _aiProvider.generateModuleTest(
-      ModuleTestRequest(context: context, questionCount: questionCount),
+      ModuleTestRequest(
+        context: context,
+        questionCount: effectiveQuestionCount,
+      ),
     );
 
     // Defensive filter: only keep well-formed, auto-gradable multiple-choice

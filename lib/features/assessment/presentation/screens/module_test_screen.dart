@@ -17,11 +17,14 @@ import '../../../progress/domain/models/module_test_result.dart';
 import '../../../progress/domain/module_unlock.dart';
 import '../../../progress/presentation/providers/progress_providers.dart';
 
-/// A gating test covering an entire module ("topic") — AI-generated on
-/// demand when a provider is configured, otherwise a shorter fallback
-/// built from the module's existing static assessments. All questions
-/// are multiple-choice, graded locally and instantly. Passing at ≥70%
-/// unlocks the next module in the path.
+/// A gating test covering an entire module ("topic"), always built from
+/// the module's own curated static assessments (curriculum content, not
+/// AI-generated) so passing is deterministic and doesn't depend on AI
+/// availability or output quality. All questions are multiple-choice,
+/// graded locally and instantly. Passing at ≥70% unlocks the next module
+/// in the path. Once passed, a learner with an AI provider configured
+/// can optionally generate a fresh 20-question AI practice round — purely
+/// extra practice, never persisted, and never re-gates anything.
 class ModuleTestScreen extends ConsumerStatefulWidget {
   const ModuleTestScreen({
     super.key,
@@ -36,43 +39,64 @@ class ModuleTestScreen extends ConsumerStatefulWidget {
   ConsumerState<ModuleTestScreen> createState() => _ModuleTestScreenState();
 }
 
-enum _Phase { intro, generating, inProgress, result }
+enum _Phase { intro, inProgress, result }
 
 class _ModuleTestScreenState extends ConsumerState<ModuleTestScreen> {
   _Phase _phase = _Phase.intro;
-  String? _generateError;
+  String? _startError;
   List<Assessment> _questions = const [];
   int _currentIndex = 0;
   int _correctCount = 0;
   int? _selectedOptionIndex;
   bool _questionSubmitted = false;
-  bool _usedAi = false;
+  bool _isPracticeRound = false;
+  bool _practiceLoading = false;
+  String? _practiceError;
 
-  Future<void> _start(CurriculumModule module) async {
+  void _start(CurriculumModule module) {
+    final questions =
+        module.concepts
+            .expand((c) => c.assessments)
+            .where((a) => a.type == ItemType.multipleChoice)
+            .toList()
+          ..shuffle();
+
+    if (questions.isEmpty) {
+      setState(() {
+        _startError = "This topic doesn't have any test questions yet.";
+      });
+      return;
+    }
+
     setState(() {
-      _phase = _Phase.generating;
-      _generateError = null;
+      _questions = questions;
+      _currentIndex = 0;
+      _correctCount = 0;
+      _selectedOptionIndex = null;
+      _questionSubmitted = false;
+      _isPracticeRound = false;
+      _startError = null;
+      _phase = _Phase.inProgress;
     });
+  }
 
-    final isAiConfigured = ref.read(isAiConfiguredProvider);
+  Future<void> _startPracticeRound() async {
+    setState(() {
+      _practiceLoading = true;
+      _practiceError = null;
+    });
     try {
-      final List<Assessment> questions;
-      if (isAiConfigured) {
-        questions = await ref
-            .read(generateModuleTestUseCaseProvider)
-            .call(learningPathId: widget.pathId, moduleId: widget.moduleId);
-      } else {
-        questions =
-            module.concepts
-                .expand((c) => c.assessments)
-                .where((a) => a.type == ItemType.multipleChoice)
-                .toList()
-              ..shuffle();
-      }
+      final questions = await ref
+          .read(generateModuleTestUseCaseProvider)
+          .call(
+            learningPathId: widget.pathId,
+            moduleId: widget.moduleId,
+            questionCount: 20,
+          );
 
       if (questions.isEmpty) {
         throw const InvalidAIResponseException(
-          'No multiple-choice questions available for this topic',
+          'No practice questions were generated for this topic',
         );
       }
 
@@ -83,16 +107,17 @@ class _ModuleTestScreenState extends ConsumerState<ModuleTestScreen> {
         _correctCount = 0;
         _selectedOptionIndex = null;
         _questionSubmitted = false;
-        _usedAi = isAiConfigured;
+        _isPracticeRound = true;
+        _practiceLoading = false;
         _phase = _Phase.inProgress;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _phase = _Phase.intro;
-        _generateError = e is AppException
+        _practiceLoading = false;
+        _practiceError = e is AppException
             ? e.userMessage
-            : "Couldn't put together a test for this topic. Please try again.";
+            : "Couldn't generate practice questions. Please try again.";
       });
     }
   }
@@ -137,7 +162,7 @@ class _ModuleTestScreenState extends ConsumerState<ModuleTestScreen> {
             }
 
             return switch (_phase) {
-              _Phase.intro || _Phase.generating => _buildIntro(module),
+              _Phase.intro => _buildIntro(module),
               _Phase.inProgress => _buildInProgress(),
               _Phase.result => _buildResult(path, module),
             };
@@ -149,7 +174,6 @@ class _ModuleTestScreenState extends ConsumerState<ModuleTestScreen> {
 
   Widget _buildIntro(CurriculumModule module) {
     final theme = Theme.of(context);
-    final generating = _phase == _Phase.generating;
 
     return Center(
       child: Padding(
@@ -174,25 +198,19 @@ class _ModuleTestScreenState extends ConsumerState<ModuleTestScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            if (_generateError != null) ...[
+            if (_startError != null) ...[
               Padding(
                 padding: const EdgeInsets.only(bottom: 16),
                 child: Text(
-                  _generateError!,
+                  _startError!,
                   textAlign: TextAlign.center,
                   style: TextStyle(color: theme.colorScheme.error),
                 ),
               ),
             ],
             FilledButton(
-              onPressed: generating ? null : () => _start(module),
-              child: generating
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Start'),
+              onPressed: () => _start(module),
+              child: const Text('Start'),
             ),
           ],
         ),
@@ -294,10 +312,12 @@ class _ModuleTestScreenState extends ConsumerState<ModuleTestScreen> {
       totalQuestions: _questions.length,
     );
 
-    if (result.isPassed) {
+    if (!_isPracticeRound && result.isPassed) {
       // Fire-and-forget: the result screen doesn't need to await this to
       // render, and RecordAttemptUseCase-style recorders elsewhere in this
-      // app are written the same way (see LearningPathStarter).
+      // app are written the same way (see LearningPathStarter). Practice
+      // rounds are ephemeral and never recorded — the module is already
+      // unlocked by this point.
       ref
           .read(moduleTestRecorderProvider)
           .call(
@@ -309,6 +329,10 @@ class _ModuleTestScreenState extends ConsumerState<ModuleTestScreen> {
     }
 
     final next = nextModule(path: path, module: module);
+    final canOfferPractice =
+        !_isPracticeRound &&
+        result.isPassed &&
+        ref.watch(isAiConfiguredProvider);
 
     return Center(
       child: Padding(
@@ -325,40 +349,83 @@ class _ModuleTestScreenState extends ConsumerState<ModuleTestScreen> {
             ),
             const SizedBox(height: 16),
             Text(
-              result.isPassed ? 'Passed!' : 'Not quite',
+              _isPracticeRound
+                  ? 'Practice round complete'
+                  : (result.isPassed ? 'Passed!' : 'Not quite'),
               style: theme.textTheme.headlineSmall,
             ),
             const SizedBox(height: 8),
             Text(
-              '${result.correctCount} of ${result.totalQuestions} correct '
-              '(${result.scorePercent}%) — need 70% to pass.',
+              _isPracticeRound
+                  ? '${result.correctCount} of ${result.totalQuestions} '
+                        'correct (${result.scorePercent}%).'
+                  : '${result.correctCount} of ${result.totalQuestions} '
+                        'correct (${result.scorePercent}%) — need 70% to '
+                        'pass.',
               textAlign: TextAlign.center,
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
-            if (!_usedAi) ...[
+            if (_practiceError != null) ...[
               const SizedBox(height: 8),
               Text(
-                'No AI provider configured — this was a shorter test built '
-                "from this topic's existing questions.",
+                _practiceError!,
                 textAlign: TextAlign.center,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
+                style: TextStyle(color: theme.colorScheme.error),
               ),
             ],
             const SizedBox(height: 24),
-            if (result.isPassed)
-              FilledButton(
-                onPressed: () => context.go(
-                  next != null
-                      ? Routes.module(widget.pathId, next.id)
-                      : Routes.learningPath(widget.pathId),
-                ),
-                child: Text(
-                  next != null ? 'Continue to Next Topic' : 'Back to Course',
-                ),
+            if (_isPracticeRound)
+              Wrap(
+                spacing: 12,
+                alignment: WrapAlignment.center,
+                children: [
+                  OutlinedButton(
+                    onPressed: () => context.go(
+                      Routes.module(widget.pathId, widget.moduleId),
+                    ),
+                    child: const Text('Back to Topic'),
+                  ),
+                  FilledButton(
+                    onPressed: _practiceLoading ? null : _startPracticeRound,
+                    child: _practiceLoading
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Practice Again'),
+                  ),
+                ],
+              )
+            else if (result.isPassed)
+              Column(
+                children: [
+                  FilledButton(
+                    onPressed: () => context.go(
+                      next != null
+                          ? Routes.module(widget.pathId, next.id)
+                          : Routes.learningPath(widget.pathId),
+                    ),
+                    child: Text(
+                      next != null ? 'Continue to Next Topic' : 'Back to Course',
+                    ),
+                  ),
+                  if (canOfferPractice) ...[
+                    const SizedBox(height: 12),
+                    OutlinedButton(
+                      onPressed: _practiceLoading ? null : _startPracticeRound,
+                      child: _practiceLoading
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Practice More (20 AI Questions)'),
+                    ),
+                  ],
+                ],
               )
             else
               Wrap(

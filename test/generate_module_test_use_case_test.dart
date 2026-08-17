@@ -213,6 +213,18 @@ void main() {
     expect(result.map((a) => a.id), ['good']);
   });
 
+  test('uses the per-call questionCount override instead of the constructor default', () async {
+    aiProvider.questionsToReturn = [_mcq('q1')];
+
+    await useCase.call(
+      learningPathId: 'python',
+      moduleId: 'basics',
+      questionCount: 20,
+    );
+
+    expect(aiProvider.lastRequest!.questionCount, 20);
+  });
+
   test('throws ContentNotFoundException for an unknown learning path', () async {
     final missingPathUseCase = GenerateModuleTestUseCase(
       curriculumRepository: _FakeCurriculumRepository(null),
