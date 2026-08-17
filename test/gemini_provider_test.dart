@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:teacher/core/errors/app_exception.dart';
 import 'package:teacher/features/ai_teacher/data/gemini_api_client.dart';
 import 'package:teacher/features/ai_teacher/data/gemini_provider.dart';
+import 'package:teacher/features/ai_teacher/domain/models/module_test_context.dart';
 import 'package:teacher/features/ai_teacher/domain/models/teacher_response.dart';
 import 'package:teacher/features/ai_teacher/domain/models/teaching_context.dart';
 import 'package:teacher/features/curriculum/domain/models/concept.dart';
@@ -118,6 +119,15 @@ TeachingContext _buildContext() {
   );
 }
 
+ModuleTestContext _buildModuleTestContext() {
+  return ModuleTestContext(
+    learningPathId: 'python',
+    moduleId: 'functions',
+    moduleTitle: 'Functions',
+    conceptContexts: [_buildContext()],
+  );
+}
+
 GeminiProvider _providerWith(_FakeAdapter adapter) {
   final dio = Dio();
   dio.httpClientAdapter = adapter;
@@ -198,6 +208,81 @@ void main() {
       );
       expect(adapter.callCount, 1);
     });
+  });
+
+  group('GeminiProvider.generateModuleTest', () {
+    test('a well-formed response parses into a list of Assessments', () async {
+      final adapter = _FakeAdapter([
+        (_) => _jsonResponse(
+          _envelope(
+            jsonEncode({
+              'questions': [
+                {
+                  'id': 'q1',
+                  'type': 'multipleChoice',
+                  'prompt': 'What does a closure capture?',
+                  'options': ['Nothing', 'Variables by reference', 'Only ints'],
+                  'correctOptionIndex': 1,
+                  'explanation': 'Closures capture variables by reference.',
+                },
+                {
+                  'id': 'q2',
+                  'type': 'multipleChoice',
+                  'prompt': 'When is a closure created?',
+                  'options': ['At call time', 'At definition time'],
+                  'correctOptionIndex': 1,
+                },
+              ],
+            }),
+          ),
+        ),
+      ]);
+      final provider = _providerWith(adapter);
+
+      final result = await provider.generateModuleTest(
+        ModuleTestRequest(context: _buildModuleTestContext(), questionCount: 2),
+      );
+
+      expect(result, hasLength(2));
+      expect(result.first.id, 'q1');
+      expect(result.first.correctOptionIndex, 1);
+      expect(adapter.callCount, 1);
+    });
+
+    test(
+      'fewer questions than requested retries exactly once then throws InvalidAIResponseException',
+      () async {
+        final adapter = _FakeAdapter([
+          (_) => _jsonResponse(
+            _envelope(
+              jsonEncode({
+                'questions': [
+                  {
+                    'id': 'q1',
+                    'type': 'multipleChoice',
+                    'prompt': 'Only one question came back',
+                    'options': ['A', 'B'],
+                    'correctOptionIndex': 0,
+                  },
+                ],
+              }),
+            ),
+          ),
+        ]);
+        final provider = _providerWith(adapter);
+
+        await expectLater(
+          provider.generateModuleTest(
+            ModuleTestRequest(
+              context: _buildModuleTestContext(),
+              questionCount: 10,
+            ),
+          ),
+          throwsA(isA<InvalidAIResponseException>()),
+        );
+        expect(adapter.callCount, 2);
+      },
+    );
   });
 
   group('error mapping', () {

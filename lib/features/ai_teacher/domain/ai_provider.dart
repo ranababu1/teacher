@@ -1,4 +1,5 @@
 import '../../../core/errors/app_exception.dart';
+import '../../curriculum/domain/models/assessment.dart';
 import '../../curriculum/domain/models/exercise.dart';
 import 'models/teacher_response.dart';
 
@@ -17,6 +18,12 @@ abstract class AIProvider {
   Future<Exercise> generateExercise(ExerciseRequest request);
 
   Future<ExplanationEvaluation> evaluateExplanation(ExplanationRequest request);
+
+  /// A batch of multiple-choice questions covering an entire module,
+  /// used to gate advancing to the next module in a path. Always
+  /// multiple-choice so the result can be graded locally, instantly, and
+  /// without any further AI round trip.
+  Future<List<Assessment>> generateModuleTest(ModuleTestRequest request);
 
   /// A minimal round trip that succeeds only if the whole path — network,
   /// API key, and the AI service itself — is actually working. Used by

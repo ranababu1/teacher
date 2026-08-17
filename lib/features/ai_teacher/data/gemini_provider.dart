@@ -1,6 +1,8 @@
+import '../../curriculum/domain/models/assessment.dart';
 import '../../curriculum/domain/models/exercise.dart';
 import '../../settings/domain/settings_models.dart';
 import '../domain/ai_provider.dart';
+import '../domain/models/module_test_context.dart';
 import '../domain/models/teacher_response.dart';
 import '../domain/models/teaching_context.dart';
 import 'ai_response_parsing.dart' as parsing;
@@ -154,6 +156,29 @@ class GeminiProvider implements AIProvider {
           'detectedMisconceptions',
           providerLabel: _providerLabel,
         ),
+      );
+    });
+  }
+
+  @override
+  Future<List<Assessment>> generateModuleTest(ModuleTestRequest request) {
+    final context = request.context as ModuleTestContext;
+    final prompt = buildModuleTestPrompt(
+      context,
+      questionCount: request.questionCount,
+      depth: explanationDepth,
+    );
+    return parsing.callWithRetry(() async {
+      final json = await _client.generateContent(
+        model: _model,
+        systemInstruction: prompt.systemInstruction,
+        userContent: prompt.userContent,
+        responseSchema: moduleTestSchema,
+      );
+      return parsing.parseAssessmentList(
+        json,
+        providerLabel: _providerLabel,
+        minCount: request.questionCount,
       );
     });
   }

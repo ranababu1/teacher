@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/config/app_config.dart';
 import '../../../../core/config/app_config_provider.dart';
 import '../../../../core/errors/app_exception.dart';
+import '../../../curriculum/domain/models/assessment.dart';
 import '../../../curriculum/domain/models/exercise.dart';
 import '../../../curriculum/presentation/curriculum_providers.dart';
 import '../../../progress/presentation/providers/progress_providers.dart';
@@ -46,6 +47,10 @@ class _UnavailableAiProvider implements AIProvider {
   Future<ExplanationEvaluation> evaluateExplanation(
     ExplanationRequest request,
   ) async => _throwUnavailable();
+
+  @override
+  Future<List<Assessment>> generateModuleTest(ModuleTestRequest request) async =>
+      _throwUnavailable();
 
   @override
   Future<void> testConnection() async => _throwUnavailable();

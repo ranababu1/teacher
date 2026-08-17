@@ -1,4 +1,5 @@
 import '../../settings/domain/settings_models.dart';
+import '../domain/models/module_test_context.dart';
 import '../domain/models/teaching_context.dart';
 
 /// A ready-to-send AI prompt: a system instruction (persona, teaching
@@ -99,6 +100,47 @@ AiPrompt buildEvaluateExplanationPrompt(
   return (systemInstruction: system, userContent: user);
 }
 
+/// Pure prompt construction for the "module test" capability — a batch of
+/// [questionCount] multiple-choice questions covering every concept in
+/// [context], used to gate advancing to the next module in a path.
+AiPrompt buildModuleTestPrompt(
+  ModuleTestContext context, {
+  required int questionCount,
+  required ExplanationDepth depth,
+  required String outputInstruction,
+}) {
+  final system = _systemInstruction(
+    depth: depth,
+    addendum: _moduleTestAddendum(questionCount),
+    outputInstruction: outputInstruction,
+  );
+
+  final buffer = StringBuffer()
+    ..writeln('## Topic: ${context.moduleTitle}')
+    ..writeln(
+      'This topic covers ${context.conceptContexts.length} concept'
+      '${context.conceptContexts.length == 1 ? '' : 's'}, detailed below.',
+    );
+  for (final conceptContext in context.conceptContexts) {
+    buffer
+      ..writeln()
+      ..write(_contextBlock(conceptContext));
+  }
+  buffer
+    ..writeln()
+    ..writeln('## Task')
+    ..writeln(
+      'Author exactly $questionCount multiple-choice questions that '
+      'together test understanding of every concept described above. '
+      'Spread the questions across the concepts rather than clustering '
+      'them all on just one. Each question must have exactly one '
+      'unambiguously correct option among 3-4 plausible options, and must '
+      'not be a verbatim copy of any example already shown.',
+    );
+
+  return (systemInstruction: system, userContent: buffer.toString());
+}
+
 // ---------------------------------------------------------------------------
 // System instruction — shared core + capability-specific addendum.
 // ---------------------------------------------------------------------------
@@ -184,6 +226,11 @@ const _evaluateExplanationAddendum =
     'words, of the concept described below. Judge correctness and '
     'completeness as two separate questions, and explicitly name any '
     'misconceptions revealed in their explanation.';
+
+String _moduleTestAddendum(int questionCount) =>
+    'Right now: you are authoring a gating test for an entire topic '
+    '(module) of $questionCount multiple-choice questions, not teaching '
+    'or responding to a single learner message.';
 
 // ---------------------------------------------------------------------------
 // Shared context block.

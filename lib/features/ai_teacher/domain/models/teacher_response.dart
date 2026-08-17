@@ -71,6 +71,16 @@ class ExplanationRequest extends Equatable {
   List<Object?> get props => [context, learnerExplanation];
 }
 
+class ModuleTestRequest extends Equatable {
+  const ModuleTestRequest({required this.context, required this.questionCount});
+
+  final Object context; // ModuleTestContext — kept loose, same as other requests
+  final int questionCount;
+
+  @override
+  List<Object?> get props => [context, questionCount];
+}
+
 class ExplanationEvaluation extends Equatable {
   const ExplanationEvaluation({
     required this.isCorrect,

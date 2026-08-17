@@ -1,4 +1,5 @@
 import '../../settings/domain/settings_models.dart';
+import '../domain/models/module_test_context.dart';
 import '../domain/models/teaching_context.dart';
 import 'shared_prompt_builder.dart' as shared;
 
@@ -47,6 +48,17 @@ const _evaluateExplanationShapeInstruction =
     '— use an empty array if none were detected. No markdown code fences, '
     'no prose before or after it, nothing but the JSON object itself.';
 
+String _moduleTestShapeInstruction(int questionCount) =>
+    'Output requirement: respond with ONLY a raw JSON object of exactly '
+    'this shape: {"questions": [{"id": "<string, a short unique slug>", '
+    '"type": "multipleChoice", "prompt": "<string>", "options": '
+    '["<string>", ...] (3-4 options), "correctOptionIndex": <integer>, '
+    '"explanation": "<string, omit if not applicable>"}, ...]}. The '
+    '"questions" array must contain exactly $questionCount items, and '
+    'every "type" value must be exactly "multipleChoice". No markdown '
+    'code fences, no prose before or after it, nothing but the JSON '
+    'object itself.';
+
 OpenAiCompatiblePrompt buildTeachPrompt(
   TeachingContext context,
   String? learnerMessage, {
@@ -87,4 +99,15 @@ OpenAiCompatiblePrompt buildEvaluateExplanationPrompt(
   learnerExplanation,
   depth: depth,
   outputInstruction: _evaluateExplanationShapeInstruction,
+);
+
+OpenAiCompatiblePrompt buildModuleTestPrompt(
+  ModuleTestContext context, {
+  required int questionCount,
+  required ExplanationDepth depth,
+}) => shared.buildModuleTestPrompt(
+  context,
+  questionCount: questionCount,
+  depth: depth,
+  outputInstruction: _moduleTestShapeInstruction(questionCount),
 );

@@ -78,3 +78,34 @@ const Map<String, dynamic> explanationEvaluationSchema = {
   },
   'required': ['isCorrect', 'isComplete', 'feedback', 'detectedMisconceptions'],
 };
+
+/// Shape matching a list of [Assessment]s, always `multipleChoice` — see
+/// lib/features/curriculum/domain/models/assessment.dart for the exact
+/// keys. Used for the module ("topic") gating test.
+const Map<String, dynamic> moduleTestSchema = {
+  'type': 'OBJECT',
+  'properties': {
+    'questions': {
+      'type': 'ARRAY',
+      'items': {
+        'type': 'OBJECT',
+        'properties': {
+          'id': {'type': 'STRING'},
+          'type': {
+            'type': 'STRING',
+            'enum': ['multipleChoice'],
+          },
+          'prompt': {'type': 'STRING'},
+          'options': {
+            'type': 'ARRAY',
+            'items': {'type': 'STRING'},
+          },
+          'correctOptionIndex': {'type': 'INTEGER'},
+          'explanation': {'type': 'STRING', 'nullable': true},
+        },
+        'required': ['id', 'type', 'prompt', 'options', 'correctOptionIndex'],
+      },
+    },
+  },
+  'required': ['questions'],
+};

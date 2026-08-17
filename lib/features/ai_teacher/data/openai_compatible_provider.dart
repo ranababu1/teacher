@@ -1,6 +1,8 @@
+import '../../curriculum/domain/models/assessment.dart';
 import '../../curriculum/domain/models/exercise.dart';
 import '../../settings/domain/settings_models.dart';
 import '../domain/ai_provider.dart';
+import '../domain/models/module_test_context.dart';
 import '../domain/models/teacher_response.dart';
 import '../domain/models/teaching_context.dart';
 import 'ai_response_parsing.dart' as parsing;
@@ -158,6 +160,28 @@ class OpenAiCompatibleProvider implements AIProvider {
           'detectedMisconceptions',
           providerLabel: providerLabel,
         ),
+      );
+    });
+  }
+
+  @override
+  Future<List<Assessment>> generateModuleTest(ModuleTestRequest request) {
+    final context = request.context as ModuleTestContext;
+    final prompt = buildModuleTestPrompt(
+      context,
+      questionCount: request.questionCount,
+      depth: explanationDepth,
+    );
+    return parsing.callWithRetry(() async {
+      final json = await _client.chatCompletion(
+        model: _model,
+        systemInstruction: prompt.systemInstruction,
+        userContent: prompt.userContent,
+      );
+      return parsing.parseAssessmentList(
+        json,
+        providerLabel: providerLabel,
+        minCount: request.questionCount,
       );
     });
   }

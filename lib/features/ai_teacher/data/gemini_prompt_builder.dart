@@ -1,4 +1,5 @@
 import '../../settings/domain/settings_models.dart';
+import '../domain/models/module_test_context.dart';
 import '../domain/models/teaching_context.dart';
 import 'shared_prompt_builder.dart' as shared;
 
@@ -48,6 +49,17 @@ GeminiPrompt buildEvaluateExplanationPrompt(
 }) => shared.buildEvaluateExplanationPrompt(
   context,
   learnerExplanation,
+  depth: depth,
+  outputInstruction: shared.nativeSchemaOutputInstruction,
+);
+
+GeminiPrompt buildModuleTestPrompt(
+  ModuleTestContext context, {
+  required int questionCount,
+  required ExplanationDepth depth,
+}) => shared.buildModuleTestPrompt(
+  context,
+  questionCount: questionCount,
   depth: depth,
   outputInstruction: shared.nativeSchemaOutputInstruction,
 );

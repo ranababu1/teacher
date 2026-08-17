@@ -1,4 +1,5 @@
 import '../../../core/errors/app_exception.dart';
+import '../../curriculum/domain/models/assessment.dart';
 import '../../curriculum/domain/models/exercise.dart';
 
 /// Strict field extraction shared by every AIProvider implementation —
@@ -84,6 +85,47 @@ Exercise parseExercise(
       'Could not parse exercise from $providerLabel response: $e',
     );
   }
+}
+
+/// Parses `{"questions": [...]}` into a list of [Assessment]s, throwing
+/// [InvalidAIResponseException] on a malformed entry or a list shorter
+/// than [minCount] — either way plugging into the existing
+/// [callWithRetry] the same as every other parse helper here.
+List<Assessment> parseAssessmentList(
+  Map<String, dynamic> json, {
+  required String providerLabel,
+  required int minCount,
+}) {
+  final value = json['questions'];
+  if (value is! List) {
+    throw InvalidAIResponseException(
+      '$providerLabel response missing required array field "questions"',
+    );
+  }
+
+  final assessments = <Assessment>[];
+  for (final entry in value) {
+    if (entry is! Map<String, dynamic>) {
+      throw InvalidAIResponseException(
+        '$providerLabel response has a non-object entry in "questions"',
+      );
+    }
+    try {
+      assessments.add(Assessment.fromJson(entry));
+    } catch (e) {
+      throw InvalidAIResponseException(
+        'Could not parse a question from $providerLabel response: $e',
+      );
+    }
+  }
+
+  if (assessments.length < minCount) {
+    throw InvalidAIResponseException(
+      '$providerLabel response returned only ${assessments.length} '
+      'questions, need at least $minCount',
+    );
+  }
+  return assessments;
 }
 
 /// Runs [attempt] (a full generate-and-parse round trip); if it fails

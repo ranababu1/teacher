@@ -12,6 +12,7 @@ import 'package:teacher/features/ai_teacher/domain/teach_use_case.dart';
 import 'package:teacher/features/ai_teacher/domain/teaching_context_builder.dart';
 import 'package:teacher/features/ai_teacher/domain/test_ai_connection_use_case.dart';
 import 'package:teacher/features/curriculum/domain/curriculum_repository.dart';
+import 'package:teacher/features/curriculum/domain/models/assessment.dart';
 import 'package:teacher/features/curriculum/domain/models/concept.dart';
 import 'package:teacher/features/curriculum/domain/models/difficulty.dart';
 import 'package:teacher/features/curriculum/domain/models/exercise.dart';
@@ -171,6 +172,15 @@ class _FakeAIProvider implements AIProvider {
   ) async {
     lastExplanationRequest = request;
     return explanationResult;
+  }
+
+  ModuleTestRequest? lastModuleTestRequest;
+  List<Assessment> moduleTestQuestions = const [];
+
+  @override
+  Future<List<Assessment>> generateModuleTest(ModuleTestRequest request) async {
+    lastModuleTestRequest = request;
+    return moduleTestQuestions;
   }
 
   bool testConnectionCalled = false;
