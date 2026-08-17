@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/config/app_config.dart';
 import '../../../../core/config/app_config_provider.dart';
 import '../../../../core/errors/app_exception.dart';
 import '../../../curriculum/domain/models/exercise.dart';
@@ -74,39 +75,56 @@ final aiProviderProvider = Provider<AIProvider>((ref) {
   }
 
   final config = ref.watch(appConfigProvider);
-  final depth =
-      ref.watch(settingsControllerProvider).valueOrNull?.explanationDepth ??
-      ExplanationDepth.standard;
+  final settings = ref.watch(settingsControllerProvider).valueOrNull;
+  final depth = settings?.explanationDepth ?? ExplanationDepth.standard;
+  final model = _effectiveModel(providerKind, settings, config);
 
   return switch (providerKind) {
     AiProviderKind.gemini => GeminiProvider(
       apiKey: apiKey,
-      model: config.geminiModel,
+      model: model,
       baseUrl: config.geminiApiBaseUrl,
       explanationDepth: depth,
     ),
     AiProviderKind.openai => OpenAiCompatibleProvider(
       apiKey: apiKey,
-      model: config.openAiModel,
+      model: model,
       baseUrl: config.openAiApiBaseUrl,
       providerLabel: 'OpenAI',
       explanationDepth: depth,
     ),
     AiProviderKind.anthropic => AnthropicProvider(
       apiKey: apiKey,
-      model: config.anthropicModel,
+      model: model,
       baseUrl: config.anthropicApiBaseUrl,
       explanationDepth: depth,
     ),
     AiProviderKind.deepseek => OpenAiCompatibleProvider(
       apiKey: apiKey,
-      model: config.deepSeekModel,
+      model: model,
       baseUrl: config.deepSeekApiBaseUrl,
       providerLabel: 'DeepSeek',
       explanationDepth: depth,
     ),
   };
 });
+
+/// The model to actually use for [provider] — the learner's selection if
+/// they've made one, otherwise [AppConfig]'s built-in default.
+String _effectiveModel(
+  AiProviderKind provider,
+  AppSettings? settings,
+  AppConfig config,
+) {
+  final selected = settings?.selectedModelByProvider[provider];
+  if (selected != null && selected.isNotEmpty) return selected;
+  return switch (provider) {
+    AiProviderKind.gemini => config.geminiModel,
+    AiProviderKind.openai => config.openAiModel,
+    AiProviderKind.anthropic => config.anthropicModel,
+    AiProviderKind.deepseek => config.deepSeekModel,
+  };
+}
 
 /// Shared by every AI Teacher use case so context assembly can't drift
 /// between them.
