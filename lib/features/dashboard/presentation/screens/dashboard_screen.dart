@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,9 +7,10 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/theme.dart';
 import '../../../../core/constants/routes.dart';
 import '../../../../shared/widgets/fade_slide_in.dart';
+import '../../../../shared/widgets/glass_blob_field.dart';
 import '../../../../shared/widgets/gradient_card.dart';
-import '../../../../shared/widgets/labeled_progress_bar.dart';
 import '../../../../shared/widgets/section_label.dart';
+import '../../../../shared/widgets/sparkline.dart';
 import '../../../curriculum/presentation/curriculum_providers.dart';
 import '../../../practice/presentation/providers/practice_providers.dart';
 import '../../../profile/presentation/providers/profile_providers.dart';
@@ -25,11 +28,11 @@ class DashboardScreen extends ConsumerWidget {
     const sections = [
       _Greeting(),
       _ContinueLearningCard(),
-      _CurriculumSnapshotCard(),
-      _LearningProgressSection(),
-      _ReviewQueueCard(),
-      _PracticeQueueCard(),
+      _StatRow(),
+      _JourneySection(),
       _RecommendedNextStepCard(),
+      _CurriculumSnapshotCard(),
+      _ReviewQueueCard(),
       _WhyTeacherSection(),
       _RecentActivitySection(),
     ];
@@ -218,9 +221,11 @@ class _PathCompletedCard extends StatelessWidget {
 }
 
 /// Shared visual treatment for the dashboard's single "hero" moment — a
-/// subtle brand gradient, reserved for exactly one card per screen so it
-/// reads as a highlight rather than visual noise. See instructions.md
-/// section 7 ("keep subtle gradients").
+/// brand gradient with a glass finish, reserved for exactly one card per
+/// screen so it reads as a highlight rather than visual noise. This is
+/// one of the handful of surfaces per screen that pays for a real
+/// [BackdropFilter] blur (see [GradientCard]'s [GlassTint] doc comment for
+/// why that budget is kept small app-wide).
 class _HeroGradientCard extends StatelessWidget {
   const _HeroGradientCard({required this.children, this.onTap});
 
@@ -235,15 +240,42 @@ class _HeroGradientCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        child: Container(
-          decoration: BoxDecoration(
-            gradient: AppGradients.primary(colorScheme),
-          ),
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: children,
-          ),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: AppGradients.primary(colorScheme),
+                ),
+              ),
+            ),
+            // Abstract stand-in for photography this app doesn't bundle —
+            // see GlassBlobField's doc comment.
+            Positioned(
+              right: -20,
+              top: -20,
+              bottom: -20,
+              width: 170,
+              child: GlassBlobField(seed: 7),
+            ),
+            Positioned.fill(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.02),
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: children,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -370,8 +402,153 @@ class _BenefitTile extends StatelessWidget {
   }
 }
 
-class _LearningProgressSection extends ConsumerWidget {
-  const _LearningProgressSection();
+/// A glanceable row of three stat tiles: the learner's most-recently
+/// active course (if any), how many concepts are ready to practice, and
+/// the current day streak. Tile 1 is the app's one other real-blur
+/// surface per screen alongside the hero card (see [GradientCard]'s
+/// [GlassTint] doc comment); tiles 2/3 fake the glass look and always
+/// show (even at 0), matching the reference mockup's own always-visible
+/// stat row.
+class _StatRow extends ConsumerWidget {
+  const _StatRow();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final summariesValue = ref.watch(startedPathProgressSummariesProvider);
+    final summaries =
+        summariesValue.valueOrNull ?? const <PathProgressSummary>[];
+    final practiceCount =
+        ref.watch(practiceQueueProvider).valueOrNull?.length ?? 0;
+    final streak =
+        ref.watch(learnerStatsProvider).valueOrNull?.currentStreak ?? 0;
+
+    final tiles = <Widget>[
+      if (summaries.isNotEmpty)
+        _StatTile(
+          tint: GlassTint.dark,
+          icon: Icons.menu_book_outlined,
+          iconColor: Colors.white,
+          value: '${(summaries.first.overallPercent * 100).round()}%',
+          label: summaries.first.title,
+          sparklineValue: summaries.first.overallPercent,
+          sparklineSeed: 0,
+          onTap: () =>
+              context.go(Routes.learningPath(summaries.first.learningPathId)),
+        ),
+      _StatTile(
+        icon: Icons.checklist_outlined,
+        iconColor: AppColors.success,
+        value: '$practiceCount',
+        label: practiceCount == 1 ? 'concept ready' : 'concepts ready',
+        sparklineValue: (practiceCount / 10).clamp(0.0, 1.0),
+        sparklineSeed: 1,
+        onTap: () => context.go(Routes.practice),
+      ),
+      _StatTile(
+        icon: Icons.local_fire_department_outlined,
+        iconColor: AppColors.danger,
+        value: '$streak',
+        label: 'day streak',
+        sparklineValue: (streak / 30).clamp(0.0, 1.0),
+        sparklineSeed: 2,
+      ),
+    ];
+
+    // IntrinsicHeight so the Row's own height is determinate — this Row
+    // sits directly inside the Dashboard's ListView with no bounded-height
+    // ancestor, and crossAxisAlignment.stretch demands infinite height
+    // without it (a real layout crash caught live, not a hypothetical).
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < tiles.length; i++) ...[
+            Expanded(child: tiles[i]),
+            if (i != tiles.length - 1) const SizedBox(width: 12),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _StatTile extends StatelessWidget {
+  const _StatTile({
+    required this.icon,
+    required this.iconColor,
+    required this.value,
+    required this.label,
+    required this.sparklineValue,
+    required this.sparklineSeed,
+    this.onTap,
+    this.tint = GlassTint.adaptive,
+  });
+
+  final IconData icon;
+  final Color iconColor;
+  final String value;
+  final String label;
+  final double sparklineValue;
+  final int sparklineSeed;
+  final VoidCallback? onTap;
+  final GlassTint tint;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final onDark = tint == GlassTint.dark;
+    final valueColor = onDark ? Colors.white : theme.colorScheme.onSurface;
+    final labelColor = onDark
+        ? Colors.white70
+        : theme.colorScheme.onSurfaceVariant;
+
+    return GradientCard(
+      tint: tint,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, color: iconColor, size: 20),
+              const SizedBox(height: 10),
+              Text(
+                value,
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  color: valueColor,
+                ),
+              ),
+              Text(
+                label,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall?.copyWith(color: labelColor),
+              ),
+              const SizedBox(height: 8),
+              Sparkline(
+                value: sparklineValue,
+                seed: sparklineSeed,
+                color: iconColor,
+                height: 24,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One restyled card per started course, replacing the old plain
+/// progress-bar list with a step-dot visualization (fill proportional to
+/// [PathProgressSummary.overallPercent] — no literal "module N of M"
+/// concept exists in the domain layer, so this is deliberately a
+/// percent-driven decoration, not a real module count) and a short
+/// next-step caption.
+class _JourneySection extends ConsumerWidget {
+  const _JourneySection();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -380,30 +557,140 @@ class _LearningProgressSection extends ConsumerWidget {
         summariesValue.valueOrNull ?? const <PathProgressSummary>[];
     if (summaries.isEmpty) return const SizedBox.shrink();
 
+    final continueState = ref.watch(continueLearningProvider).valueOrNull;
+    final continueConcept = continueState is ContinueLearningConcept
+        ? continueState.concept
+        : null;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SectionLabel('Learning Progress'),
-        const SizedBox(height: 12),
-        GradientCard(
-          elevation: AppElevation.prominent,
-          color: Theme.of(context).colorScheme.surfaceContainer,
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                for (var i = 0; i < summaries.length; i++) ...[
-                  LabeledProgressBar(
-                    label: summaries[i].title,
-                    progress: summaries[i].overallPercent,
-                  ),
-                  if (i != summaries.length - 1) const SizedBox(height: 16),
-                ],
-              ],
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Continue your journey',
+              style: Theme.of(context).textTheme.titleMedium,
             ),
+            TextButton(
+              onPressed: () => context.go(Routes.progress),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('View all'),
+                  Icon(Icons.chevron_right, size: 16),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        for (var i = 0; i < summaries.length; i++) ...[
+          _JourneyCard(
+            summary: summaries[i],
+            caption:
+                continueConcept != null &&
+                    continueConcept.learningPathId ==
+                        summaries[i].learningPathId
+                ? continueConcept.title
+                : (summaries[i].overallPercent > 0
+                      ? 'Keep going'
+                      : 'Start your first concept'),
+          ),
+          if (i != summaries.length - 1) const SizedBox(height: 12),
+        ],
+      ],
+    );
+  }
+}
+
+class _JourneyCard extends StatelessWidget {
+  const _JourneyCard({required this.summary, required this.caption});
+
+  final PathProgressSummary summary;
+  final String caption;
+
+  static const _dotCount = 5;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final filledDots = (summary.overallPercent * _dotCount).round().clamp(
+      0,
+      _dotCount,
+    );
+
+    return GradientCard(
+      child: InkWell(
+        onTap: () => context.go(Routes.learningPath(summary.learningPathId)),
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              GlassMedallion(
+                icon: Icons.menu_book_outlined,
+                size: 40,
+                color: colorScheme.primary,
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(summary.title, style: theme.textTheme.titleSmall),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        for (var i = 0; i < _dotCount; i++) ...[
+                          Container(
+                            width: 9,
+                            height: 9,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: i < filledDots
+                                  ? colorScheme.primary
+                                  : colorScheme.outlineVariant,
+                            ),
+                          ),
+                          if (i != _dotCount - 1)
+                            Expanded(
+                              child: Container(
+                                height: 2,
+                                color: i < filledDots - 1
+                                    ? colorScheme.primary.withValues(
+                                        alpha: 0.5,
+                                      )
+                                    : colorScheme.outlineVariant.withValues(
+                                        alpha: 0.5,
+                                      ),
+                              ),
+                            ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      caption,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '${(summary.overallPercent * 100).round()}%',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  color: colorScheme.primary,
+                ),
+              ),
+            ],
           ),
         ),
-      ],
+      ),
     );
   }
 }
@@ -429,28 +716,11 @@ class _ReviewQueueCard extends ConsumerWidget {
   }
 }
 
-class _PracticeQueueCard extends ConsumerWidget {
-  const _PracticeQueueCard();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final queueValue = ref.watch(practiceQueueProvider);
-    final count = queueValue.valueOrNull?.length ?? 0;
-    if (count == 0) return const SizedBox.shrink();
-
-    return GradientCard(
-      elevation: AppElevation.flat,
-      child: ListTile(
-        onTap: () => context.go(Routes.practice),
-        leading: const Icon(Icons.edit_note_outlined),
-        title: Text('$count concept${count == 1 ? '' : 's'} ready to practice'),
-        trailing: const Icon(Icons.chevron_right),
-      ),
-    );
-  }
-}
-
-
+/// Reskinned as a dark-glass "featured" card (like the hero card) since
+/// it's the Dashboard's other spotlight moment — an abstract
+/// [GlassMedallion] icon stands in for the reference mockup's 3D
+/// illustration. Copy/data (`{path} → {module} → {concept}`, the reason
+/// text) is unchanged from before.
 class _RecommendedNextStepCard extends ConsumerWidget {
   const _RecommendedNextStepCard();
 
@@ -475,55 +745,66 @@ class _RecommendedNextStepCard extends ConsumerWidget {
       return const SizedBox.shrink();
     }
 
-    final colorScheme = Theme.of(context).colorScheme;
+    void goToRecommendation() => context.go(
+      Routes.lesson(
+        recommendation.concept.learningPathId,
+        recommendation.concept.moduleId,
+        recommendation.concept.id,
+      ),
+    );
 
     return GradientCard(
+      tint: GlassTint.dark,
       clipBehavior: Clip.antiAlias,
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              width: 4,
-              decoration: BoxDecoration(
-                gradient: AppGradients.primary(colorScheme),
-              ),
-            ),
-            Expanded(
-              child: InkWell(
-                onTap: () => context.go(
-                  Routes.lesson(
-                    recommendation.concept.learningPathId,
-                    recommendation.concept.moduleId,
-                    recommendation.concept.id,
-                  ),
+      child: InkWell(
+        onTap: goToRecommendation,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const GlassMedallion(icon: Icons.code),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'RECOMMENDED NEXT',
+                      style: Theme.of(context).textTheme.labelMedium
+                          ?.copyWith(color: Colors.white70, letterSpacing: 1),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '${recommendation.learningPathTitle} → ${recommendation.moduleTitle} → '
+                      '${recommendation.concept.title}',
+                      style: Theme.of(context).textTheme.titleMedium
+                          ?.copyWith(color: Colors.white),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      recommendation.reason,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.white70,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          side: const BorderSide(color: Colors.white54),
+                        ),
+                        onPressed: goToRecommendation,
+                        child: const Text('Start Learning →'),
+                      ),
+                    ),
+                  ],
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Recommended Next',
-                        style: Theme.of(context).textTheme.labelLarge,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '${recommendation.learningPathTitle} → ${recommendation.moduleTitle} → '
-                        '${recommendation.concept.title}',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        recommendation.reason,
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ],
-                  ),
-                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
