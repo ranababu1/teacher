@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/theme.dart';
 import '../../../../core/constants/routes.dart';
 import '../../../../shared/widgets/fade_slide_in.dart';
+import '../../../../shared/widgets/gradient_card.dart';
 import '../../../../shared/widgets/labeled_progress_bar.dart';
 import '../../../../shared/widgets/section_label.dart';
 import '../../../assessment/presentation/providers/pending_tests_provider.dart';
@@ -264,7 +265,7 @@ class _LearningProgressSection extends ConsumerWidget {
       children: [
         const SectionLabel('Learning Progress'),
         const SizedBox(height: 12),
-        Card(
+        GradientCard(
           elevation: AppElevation.prominent,
           color: Theme.of(context).colorScheme.surfaceContainer,
           child: Padding(
@@ -296,7 +297,7 @@ class _ReviewQueueCard extends ConsumerWidget {
     final count = dueValue.valueOrNull?.length ?? 0;
     if (count == 0) return const SizedBox.shrink();
 
-    return Card(
+    return GradientCard(
       elevation: AppElevation.flat,
       child: ListTile(
         onTap: () => context.go(Routes.review),
@@ -317,7 +318,7 @@ class _PracticeQueueCard extends ConsumerWidget {
     final count = queueValue.valueOrNull?.length ?? 0;
     if (count == 0) return const SizedBox.shrink();
 
-    return Card(
+    return GradientCard(
       elevation: AppElevation.flat,
       child: ListTile(
         onTap: () => context.go(Routes.practice),
@@ -381,7 +382,7 @@ class _RecommendedNextStepCard extends ConsumerWidget {
 
     final colorScheme = Theme.of(context).colorScheme;
 
-    return Card(
+    return GradientCard(
       clipBehavior: Clip.antiAlias,
       child: IntrinsicHeight(
         child: Row(
@@ -448,7 +449,7 @@ class _RecentActivitySection extends ConsumerWidget {
       children: [
         const SectionLabel('Recent Activity'),
         const SizedBox(height: 12),
-        Card(
+        GradientCard(
           child: Column(
             children: [
               for (final progress in completed)
