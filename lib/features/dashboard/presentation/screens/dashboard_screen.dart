@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -93,48 +91,13 @@ class _ContinueLearningCard extends ConsumerWidget {
     return switch (state) {
       null || ContinueLearningEmpty() => const _EmptyContinueCard(),
       ContinueLearningConcept(concept: final concept) => _HeroGradientCard(
+        eyebrow: 'Continue Learning',
+        title: concept.title,
+        subtitle: concept.description,
+        ctaLabel: 'Continue',
         onTap: () => context.go(
           Routes.lesson(concept.learningPathId, concept.moduleId, concept.id),
         ),
-        children: [
-          const Text(
-            'Continue Learning',
-            style: TextStyle(
-              color: Colors.white70,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            concept.title,
-            style: Theme.of(context).textTheme.titleLarge
-                ?.copyWith(color: Colors.white),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            concept.description,
-            style: Theme.of(context).textTheme.bodyMedium
-                ?.copyWith(color: Colors.white70),
-          ),
-          const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.centerRight,
-            child: FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: Theme.of(context).colorScheme.primary,
-              ),
-              onPressed: () => context.go(
-                Routes.lesson(
-                  concept.learningPathId,
-                  concept.moduleId,
-                  concept.id,
-                ),
-              ),
-              child: const Text('Continue'),
-            ),
-          ),
-        ],
       ),
       ContinueLearningPathCompleted(pathTitle: final title) =>
         _PathCompletedCard(pathTitle: title),
@@ -148,34 +111,11 @@ class _EmptyContinueCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _HeroGradientCard(
+      eyebrow: "Let's start",
+      title: 'Learning.',
+      subtitle: 'Pick a learning path to get started.',
+      ctaLabel: 'Browse Learning Paths',
       onTap: () => context.go(Routes.learn),
-      children: [
-        const Text(
-          "Let's start learning.",
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 22,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 8),
-        const Text(
-          'Pick a learning path to get started.',
-          style: TextStyle(color: Colors.white70),
-        ),
-        const SizedBox(height: 12),
-        Align(
-          alignment: Alignment.centerRight,
-          child: FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: Theme.of(context).colorScheme.primary,
-            ),
-            onPressed: () => context.go(Routes.learn),
-            child: const Text('Browse Learning Paths'),
-          ),
-        ),
-      ],
     );
   }
 }
@@ -188,94 +128,213 @@ class _PathCompletedCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _HeroGradientCard(
+      eyebrow: 'Course Complete',
+      title: "You've completed $pathTitle! 🎉",
+      subtitle: 'Great work. Ready for another course?',
+      ctaLabel: 'Browse Learning Paths',
       onTap: () => context.go(Routes.learn),
-      children: [
-        Text(
-          "You've completed $pathTitle! 🎉",
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 22,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 8),
-        const Text(
-          'Great work. Ready for another course?',
-          style: TextStyle(color: Colors.white70),
-        ),
-        const SizedBox(height: 12),
-        Align(
-          alignment: Alignment.centerRight,
-          child: FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: Theme.of(context).colorScheme.primary,
-            ),
-            onPressed: () => context.go(Routes.learn),
-            child: const Text('Browse Learning Paths'),
-          ),
-        ),
-      ],
     );
   }
 }
 
 /// Shared visual treatment for the dashboard's single "hero" moment — a
-/// brand gradient with a glass finish, reserved for exactly one card per
-/// screen so it reads as a highlight rather than visual noise. This is
-/// one of the handful of surfaces per screen that pays for a real
-/// [BackdropFilter] blur (see [GradientCard]'s [GlassTint] doc comment for
-/// why that budget is kept small app-wide).
+/// glass card (matching every other card in the app, not a full-bleed
+/// gradient wash — an earlier version used [AppGradients.primary] as the
+/// whole card background with white text, which the user found "very
+/// unreadable" once actually used) with the brand gradient applied
+/// selectively: to the last word of [title] (via [_GradientTailHeadline])
+/// and to the CTA button, matching the reference mockups' own treatment.
 class _HeroGradientCard extends StatelessWidget {
-  const _HeroGradientCard({required this.children, this.onTap});
+  const _HeroGradientCard({
+    required this.eyebrow,
+    required this.title,
+    required this.subtitle,
+    required this.ctaLabel,
+    required this.onTap,
+  });
 
-  final List<Widget> children;
-  final VoidCallback? onTap;
+  final String eyebrow;
+  final String title;
+  final String subtitle;
+  final String ctaLabel;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return GradientCard(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        eyebrow,
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    _GradientTailHeadline(
+                      text: title,
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      subtitle,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _HeroCtaButton(label: ctaLabel, onPressed: onTap),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              const _HeroVisual(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The hero card's right-side image slot — a bundled study-themed photo,
+/// clipped to a big rounded "swoop" on the top-left corner matching the
+/// reference mockups' photo treatment.
+class _HeroVisual extends StatelessWidget {
+  const _HeroVisual();
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: const BorderRadius.only(
+        topLeft: Radius.circular(64),
+        topRight: Radius.circular(16),
+        bottomLeft: Radius.circular(16),
+        bottomRight: Radius.circular(16),
+      ),
+      child: SizedBox(
+        width: 110,
+        height: 170,
+        child: Image.asset(
+          'assets/images/hero_photo.jpg',
+          fit: BoxFit.cover,
+          alignment: Alignment.topCenter,
+        ),
+      ),
+    );
+  }
+}
+
+/// Renders [text] with its trailing word gradient-filled (the brand
+/// [AppGradients.primary] hues) and the rest in [style]'s plain color —
+/// matching the reference mockups' "Learning." / "learning." treatment.
+/// Trailing non-ASCII characters (e.g. a `🎉` on the path-completed
+/// card) are excluded from the gradient and rendered plain immediately
+/// after it, since [ShaderMask] would otherwise flatten an emoji glyph's
+/// own colors to the gradient too.
+class _GradientTailHeadline extends StatelessWidget {
+  const _GradientTailHeadline({required this.text, this.style});
+
+  final String text;
+  final TextStyle? style;
+
+  static final _trailingNonAscii = RegExp(r'\s*([^\x00-\x7F]+)\s*$');
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final match = _trailingNonAscii.firstMatch(text);
+    final trailing = match?.group(1);
+    final core = match == null ? text : text.substring(0, match.start);
+
+    final words = core.trimRight().split(' ');
+    final tail = words.isEmpty ? '' : words.removeLast();
+    final rest = words.isEmpty ? '' : '${words.join(' ')} ';
+
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        if (rest.isNotEmpty) Text(rest, style: style),
+        if (tail.isNotEmpty)
+          ShaderMask(
+            blendMode: BlendMode.srcIn,
+            shaderCallback: (bounds) => AppGradients.primary(
+              colorScheme,
+            ).createShader(Rect.fromLTWH(0, 0, bounds.width, bounds.height)),
+            child: Text(tail, style: style),
+          ),
+        if (trailing != null) Text(' $trailing', style: style),
+      ],
+    );
+  }
+}
+
+/// The hero card's CTA — a gradient-filled button (the one place per
+/// hero the brand gradient still appears at full strength), matching the
+/// reference mockups' "Browse Learning Paths →" treatment.
+class _HeroCtaButton extends StatelessWidget {
+  const _HeroCtaButton({required this.label, required this.onPressed});
+
+  final String label;
+  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return Material(
-      borderRadius: BorderRadius.circular(16),
-      clipBehavior: Clip.antiAlias,
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(12),
       child: InkWell(
-        onTap: onTap,
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: AppGradients.primary(colorScheme),
+        borderRadius: BorderRadius.circular(12),
+        onTap: onPressed,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+          decoration: BoxDecoration(
+            gradient: AppGradients.primary(colorScheme),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 18,
                 ),
               ),
-            ),
-            // Abstract stand-in for photography this app doesn't bundle —
-            // see GlassBlobField's doc comment.
-            Positioned(
-              right: -20,
-              top: -20,
-              bottom: -20,
-              width: 170,
-              child: GlassBlobField(seed: 7),
-            ),
-            Positioned.fill(
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.02),
-                  ),
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: children,
-              ),
-            ),
-          ],
+              const SizedBox(width: 6),
+              const Icon(Icons.arrow_forward, color: Colors.white, size: 18),
+            ],
+          ),
         ),
       ),
     );
