@@ -76,6 +76,27 @@ class AppShell extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final isDark = colorScheme.brightness == Brightness.dark;
 
+    // Each branch below is its own independent Navigator with no shared
+    // history — once a branch's own back-stack is exhausted, a system
+    // back press would otherwise exit the app instead of returning to
+    // Dashboard. Intercept only that case; intra-branch back navigation
+    // is handled by the branch's own Navigator before this ever fires.
+    return PopScope(
+      canPop: navigationShell.currentIndex == 0,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        navigationShell.goBranch(0);
+      },
+      child: _buildScaffold(context, isWide, colorScheme, isDark),
+    );
+  }
+
+  Widget _buildScaffold(
+    BuildContext context,
+    bool isWide,
+    ColorScheme colorScheme,
+    bool isDark,
+  ) {
     if (isWide) {
       return Scaffold(
         body: Row(
@@ -165,7 +186,7 @@ class AppShell extends StatelessWidget {
                     labelTextStyle: WidgetStateProperty.resolveWith((states) {
                       final selected = states.contains(WidgetState.selected);
                       return TextStyle(
-                        fontSize: 12,
+                        fontSize: 16,
                         fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
                         color: selected
                             ? colorScheme.primary
