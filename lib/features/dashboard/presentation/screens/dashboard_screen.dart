@@ -8,7 +8,6 @@ import '../../../../shared/widgets/fade_slide_in.dart';
 import '../../../../shared/widgets/gradient_card.dart';
 import '../../../../shared/widgets/labeled_progress_bar.dart';
 import '../../../../shared/widgets/section_label.dart';
-import '../../../assessment/presentation/providers/pending_tests_provider.dart';
 import '../../../curriculum/presentation/curriculum_providers.dart';
 import '../../../practice/presentation/providers/practice_providers.dart';
 import '../../../profile/presentation/providers/profile_providers.dart';
@@ -30,7 +29,6 @@ class DashboardScreen extends ConsumerWidget {
       _LearningProgressSection(),
       _ReviewQueueCard(),
       _PracticeQueueCard(),
-      _PendingTestsCard(),
       _RecommendedNextStepCard(),
       _WhyTeacherSection(),
       _RecentActivitySection(),
@@ -452,31 +450,6 @@ class _PracticeQueueCard extends ConsumerWidget {
   }
 }
 
-class _PendingTestsCard extends ConsumerWidget {
-  const _PendingTestsCard();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final pendingValue = ref.watch(pendingTestsProvider);
-    final pending = pendingValue.valueOrNull ?? const [];
-    if (pending.isEmpty) return const SizedBox.shrink();
-
-    final count = pending.length;
-    final first = pending.first;
-
-    return Card(
-      elevation: AppElevation.flat,
-      child: ListTile(
-        onTap: () => context.go(
-          Routes.lesson(first.learningPathId, first.moduleId, first.id),
-        ),
-        leading: const Icon(Icons.quiz_outlined),
-        title: Text('$count test${count == 1 ? '' : 's'} pending'),
-        trailing: const Icon(Icons.chevron_right),
-      ),
-    );
-  }
-}
 
 class _RecommendedNextStepCard extends ConsumerWidget {
   const _RecommendedNextStepCard();
