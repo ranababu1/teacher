@@ -33,11 +33,11 @@ class AppConfig {
     this.geminiApiBaseUrl = 'https://generativelanguage.googleapis.com',
     this.geminiModel = 'gemini-3.7-flash',
     this.openAiApiBaseUrl = 'https://api.openai.com/v1',
-    this.openAiModel = 'gpt-4o-mini',
+    this.openAiModel = 'gpt-5.6-luna',
     this.anthropicApiBaseUrl = 'https://api.anthropic.com',
     this.anthropicModel = 'claude-sonnet-5',
     this.deepSeekApiBaseUrl = 'https://api.deepseek.com',
-    this.deepSeekModel = 'deepseek-chat',
+    this.deepSeekModel = 'deepseek-v4-flash',
   });
 
   final AppEnvironment environment;
