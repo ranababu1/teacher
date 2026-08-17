@@ -6,10 +6,12 @@ import '../../../../core/constants/routes.dart';
 import '../../../../shared/widgets/async_value_view.dart';
 import '../../../../shared/widgets/difficulty_chip.dart';
 import '../../../progress/domain/models/mastery_status.dart';
+import '../../../progress/domain/module_unlock.dart';
 import '../../../progress/presentation/providers/progress_providers.dart';
 import '../../../progress/presentation/widgets/mastery_status_icon.dart';
 import '../curriculum_providers.dart';
 import '../widgets/course_locked_state.dart';
+import '../widgets/topic_locked_state.dart';
 
 class ModuleDetailScreen extends ConsumerWidget {
   const ModuleDetailScreen({
@@ -27,6 +29,8 @@ class ModuleDetailScreen extends ConsumerWidget {
     final masteryValue = ref.watch(allMasteryProvider);
     final isStarted =
         ref.watch(isLearningPathStartedProvider(pathId)).valueOrNull ?? false;
+    final passedModuleIds =
+        ref.watch(passedModuleIdsProvider(pathId)).valueOrNull ?? const {};
 
     return Scaffold(
       appBar: AppBar(title: const Text('Topic')),
@@ -42,10 +46,23 @@ class ModuleDetailScreen extends ConsumerWidget {
             if (!isStarted) {
               return CourseLockedState(pathId: pathId);
             }
+            if (!isModuleUnlocked(
+              path: path,
+              module: module,
+              passedModuleIds: passedModuleIds,
+            )) {
+              final index = path.modules.indexWhere((m) => m.id == module.id);
+              return TopicLockedState(
+                pathId: pathId,
+                previousModuleId: path.modules[index - 1].id,
+              );
+            }
             final masteryByConceptId = {
               for (final m in masteryValue.valueOrNull ?? const [])
                 m.conceptId: m,
             };
+            final isPassed = passedModuleIds.contains(module.id);
+            final next = nextModule(path: path, module: module);
 
             return ListView(
               padding: const EdgeInsets.all(16),
@@ -96,9 +113,65 @@ class ModuleDetailScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 8),
                 ],
+                const SizedBox(height: 12),
+                _TopicTestCta(
+                  pathId: pathId,
+                  moduleId: moduleId,
+                  isPassed: isPassed,
+                  nextModuleId: next?.id,
+                ),
               ],
             );
           },
+        ),
+      ),
+    );
+  }
+}
+
+class _TopicTestCta extends StatelessWidget {
+  const _TopicTestCta({
+    required this.pathId,
+    required this.moduleId,
+    required this.isPassed,
+    required this.nextModuleId,
+  });
+
+  final String pathId;
+  final String moduleId;
+  final bool isPassed;
+  final String? nextModuleId;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    if (isPassed) {
+      return Card(
+        child: ListTile(
+          leading: Icon(Icons.check_circle_outline, color: theme.colorScheme.primary),
+          title: const Text('Topic test passed'),
+          trailing: nextModuleId == null
+              ? null
+              : FilledButton(
+                  onPressed: () =>
+                      context.go(Routes.module(pathId, nextModuleId!)),
+                  child: const Text('Continue'),
+                ),
+        ),
+      );
+    }
+
+    return Card(
+      child: ListTile(
+        leading: Icon(Icons.quiz_outlined, color: theme.colorScheme.primary),
+        title: const Text('Topic test'),
+        subtitle: const Text(
+          'Pass this to unlock the next topic.',
+        ),
+        trailing: FilledButton(
+          onPressed: () => context.go(Routes.moduleTest(pathId, moduleId)),
+          child: const Text('Take Topic Test'),
         ),
       ),
     );

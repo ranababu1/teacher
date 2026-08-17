@@ -8,6 +8,7 @@ import '../../../../shared/widgets/difficulty_chip.dart';
 import '../../../../shared/widgets/fade_slide_in.dart';
 import '../../../progress/domain/models/concept_mastery.dart';
 import '../../../progress/domain/models/mastery_status.dart';
+import '../../../progress/domain/module_unlock.dart';
 import '../../../progress/presentation/providers/progress_providers.dart';
 import '../../../progress/presentation/widgets/mastery_status_icon.dart';
 import '../../domain/models/curriculum_module.dart';
@@ -25,6 +26,8 @@ class LearningPathDetailScreen extends ConsumerWidget {
     final masteryValue = ref.watch(allMasteryProvider);
     final isStarted =
         ref.watch(isLearningPathStartedProvider(pathId)).valueOrNull ?? false;
+    final passedModuleIds =
+        ref.watch(passedModuleIdsProvider(pathId)).valueOrNull ?? const {};
 
     return Scaffold(
       appBar: AppBar(
@@ -142,6 +145,7 @@ class LearningPathDetailScreen extends ConsumerWidget {
                         module: path.modules[i],
                         masteryByConceptId: masteryByConceptId,
                         isStarted: isStarted,
+                        passedModuleIds: passedModuleIds,
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -161,17 +165,27 @@ class _ModuleCard extends StatelessWidget {
     required this.module,
     required this.masteryByConceptId,
     required this.isStarted,
+    required this.passedModuleIds,
   });
 
   final LearningPath path;
   final CurriculumModule module;
   final Map<String, ConceptMastery> masteryByConceptId;
   final bool isStarted;
+  final Set<String> passedModuleIds;
 
   @override
   Widget build(BuildContext context) {
+    final isUnlocked =
+        isStarted &&
+        isModuleUnlocked(
+          path: path,
+          module: module,
+          passedModuleIds: passedModuleIds,
+        );
+
     return Opacity(
-      opacity: isStarted ? 1 : 0.5,
+      opacity: isUnlocked ? 1 : 0.5,
       child: Card(
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
@@ -180,6 +194,16 @@ class _ModuleCard extends StatelessWidget {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('Start this course to unlock its lessons.'),
+                ),
+              );
+              return;
+            }
+            if (!isUnlocked) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    "Pass the previous topic's test to unlock this topic.",
+                  ),
                 ),
               );
               return;
@@ -199,7 +223,7 @@ class _ModuleCard extends StatelessWidget {
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                     ),
-                    Icon(isStarted ? Icons.chevron_right : Icons.lock_outline),
+                    Icon(isUnlocked ? Icons.chevron_right : Icons.lock_outline),
                   ],
                 ),
                 const SizedBox(height: 8),
