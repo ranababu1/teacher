@@ -405,11 +405,16 @@ class _ModuleTestScreenState extends ConsumerState<ModuleTestScreen> {
               Column(
                 children: [
                   FilledButton(
-                    onPressed: () => context.go(
-                      next != null
-                          ? Routes.module(widget.pathId, next.id)
-                          : Routes.learningPath(widget.pathId),
-                    ),
+                    // The next module is a sibling of this test's module,
+                    // not a descendant — push() so this result screen
+                    // stays underneath instead of go() rebuilding the
+                    // whole stack and discarding it (see the matching
+                    // comment on module_detail_screen.dart's "Continue").
+                    // The "back to course" fallback (no next module) IS
+                    // an ancestor of here, so go() there is correct as-is.
+                    onPressed: () => next != null
+                        ? context.push(Routes.module(widget.pathId, next.id))
+                        : context.go(Routes.learningPath(widget.pathId)),
                     child: Text(
                       next != null ? 'Continue to Next Topic' : 'Back to Course',
                     ),

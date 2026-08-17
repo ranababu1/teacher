@@ -156,8 +156,14 @@ class _TopicTestCta extends StatelessWidget {
           trailing: nextModuleId == null
               ? null
               : FilledButton(
+                  // push, not go: this module and the next one are
+                  // siblings (same route depth) — go() would rebuild the
+                  // whole branch stack from this URI and discard the
+                  // current module page, so swiping back would skip
+                  // straight past it to the path detail screen instead
+                  // of landing back here.
                   onPressed: () =>
-                      context.go(Routes.module(pathId, nextModuleId!)),
+                      context.push(Routes.module(pathId, nextModuleId!)),
                   child: const Text('Continue'),
                 ),
         ),
