@@ -67,6 +67,25 @@ class AppGradients {
     end: Alignment.centerRight,
     colors: [colorScheme.primary, AppColors.seedAccent],
   );
+
+  /// An ambient, corner-anchored sheen for ordinary cards — a single hue
+  /// fading to nothing, an order of magnitude fainter than [primary] and
+  /// visually unrelated to it (one color, not two; a corner highlight, not
+  /// a full-card wash). Applied via `GradientCard` so every card in the
+  /// app picks it up without individually hard-coding it. [primary]
+  /// remains reserved for exactly one hero card per screen.
+  static LinearGradient cardSheen(ColorScheme colorScheme) {
+    final isDark = colorScheme.brightness == Brightness.dark;
+    return LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [
+        colorScheme.primary.withValues(alpha: isDark ? 0.07 : 0.05),
+        colorScheme.primary.withValues(alpha: 0),
+      ],
+      stops: const [0.0, 0.55],
+    );
+  }
 }
 
 class AppTheme {
