@@ -157,7 +157,7 @@ class _StatBadge extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(emoji, style: const TextStyle(fontSize: 18)),
+        Text(emoji, style: const TextStyle(fontSize: 22)),
         const SizedBox(width: 6),
         Text(
           label,

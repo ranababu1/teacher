@@ -59,7 +59,7 @@ class CodeBlock extends StatelessWidget {
                       padding: EdgeInsets.zero,
                       textStyle: const TextStyle(
                         fontFamily: 'monospace',
-                        fontSize: 13.5,
+                        fontSize: 17,
                         height: 1.5,
                       ),
                     ),
@@ -158,7 +158,7 @@ class _LineNumbers extends StatelessWidget {
             '${i + 1}',
             style: TextStyle(
               fontFamily: 'monospace',
-              fontSize: 13.5,
+              fontSize: 17,
               height: 1.5,
               color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
             ),

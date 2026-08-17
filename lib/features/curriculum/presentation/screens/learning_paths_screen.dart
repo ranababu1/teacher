@@ -31,14 +31,14 @@ class LearningPathsScreen extends ConsumerWidget {
           value: pathsValue,
           onRetry: () => ref.invalidate(learningPathsProvider),
           skeleton: () =>
-              const SkeletonCardList(itemCount: 6, itemHeight: 190),
+              const SkeletonCardList(itemCount: 6, itemHeight: 222),
           data: (paths) {
             final summaries = summariesValue.valueOrNull;
             return GridView.builder(
               padding: const EdgeInsets.all(16),
               gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                 maxCrossAxisExtent: 320,
-                mainAxisExtent: 190,
+                mainAxisExtent: 222,
                 mainAxisSpacing: 12,
                 crossAxisSpacing: 12,
               ),

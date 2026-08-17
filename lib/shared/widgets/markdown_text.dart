@@ -24,7 +24,7 @@ class MarkdownText extends StatelessWidget {
         em: theme.textTheme.bodyLarge?.copyWith(fontStyle: FontStyle.italic),
         code: TextStyle(
           fontFamily: 'monospace',
-          fontSize: 13.5,
+          fontSize: 17,
           backgroundColor: colorScheme.surfaceContainerHigh,
           color: colorScheme.onSurface,
         ),

@@ -179,32 +179,39 @@ class AppTheme {
     );
   }
 
+  // Every size below is Material 3's default type-scale value +4 —
+  // the user found the previous (mostly implicit-default) scale hard to
+  // read and asked for a flat, consistent bump across every text style,
+  // not just the headline. Every style now sets fontSize explicitly so
+  // none of them can silently drift back to the M3 default.
   static TextTheme _buildTextTheme() {
     return const TextTheme(
-      displaySmall: TextStyle(fontWeight: FontWeight.w600, height: 1.2),
-      // Bumped past Material's default ~28/w600 and given slightly
-      // negative tracking — this is the one "big headline" style in the
-      // app (the Dashboard greeting), so it needs real contrast against
+      displaySmall: TextStyle(fontSize: 40, fontWeight: FontWeight.w600, height: 1.2),
+      // Bumped past Material's default and given slightly negative
+      // tracking — this is the one "big headline" style in the app (the
+      // Dashboard greeting), so it needs real contrast against
       // everything else rather than sitting one notch above titleLarge.
       headlineMedium: TextStyle(
-        fontSize: 30,
+        fontSize: 34,
         fontWeight: FontWeight.w700,
         height: 1.25,
         letterSpacing: -0.2,
       ),
       headlineSmall: TextStyle(
+        fontSize: 28,
         fontWeight: FontWeight.w600,
         height: 1.3,
         letterSpacing: -0.2,
       ),
-      titleLarge: TextStyle(fontWeight: FontWeight.w600, height: 1.3),
-      titleMedium: TextStyle(fontWeight: FontWeight.w600, height: 1.35),
-      titleSmall: TextStyle(fontWeight: FontWeight.w500, height: 1.4),
-      bodyLarge: TextStyle(height: 1.5, letterSpacing: 0.1),
-      bodyMedium: TextStyle(height: 1.5, letterSpacing: 0.1),
-      bodySmall: TextStyle(height: 1.4, letterSpacing: 0.1),
-      labelLarge: TextStyle(fontWeight: FontWeight.w600),
-      labelMedium: TextStyle(fontWeight: FontWeight.w500),
+      titleLarge: TextStyle(fontSize: 26, fontWeight: FontWeight.w600, height: 1.3),
+      titleMedium: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, height: 1.35),
+      titleSmall: TextStyle(fontSize: 18, fontWeight: FontWeight.w500, height: 1.4),
+      bodyLarge: TextStyle(fontSize: 20, height: 1.5, letterSpacing: 0.1),
+      bodyMedium: TextStyle(fontSize: 18, height: 1.5, letterSpacing: 0.1),
+      bodySmall: TextStyle(fontSize: 16, height: 1.4, letterSpacing: 0.1),
+      labelLarge: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+      labelMedium: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+      labelSmall: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
     );
   }
 }
