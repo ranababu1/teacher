@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/constants/routes.dart';
+import '../features/assessment/presentation/screens/module_test_screen.dart';
 import '../features/curriculum/presentation/screens/learning_path_detail_screen.dart';
 import '../features/curriculum/presentation/screens/learning_paths_screen.dart';
 import '../features/curriculum/presentation/screens/module_detail_screen.dart';
@@ -101,6 +102,13 @@ final routerProvider = Provider<GoRouter>((ref) {
                               pathId: state.pathParameters['pathId']!,
                               moduleId: state.pathParameters['moduleId']!,
                               conceptId: state.pathParameters['conceptId']!,
+                            ),
+                          ),
+                          GoRoute(
+                            path: 'test',
+                            builder: (context, state) => ModuleTestScreen(
+                              pathId: state.pathParameters['pathId']!,
+                              moduleId: state.pathParameters['moduleId']!,
                             ),
                           ),
                         ],
