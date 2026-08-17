@@ -26,11 +26,13 @@ class DashboardScreen extends ConsumerWidget {
     const sections = [
       _Greeting(),
       _ContinueLearningCard(),
+      _CurriculumSnapshotCard(),
       _LearningProgressSection(),
       _ReviewQueueCard(),
       _PracticeQueueCard(),
       _PendingTestsCard(),
       _RecommendedNextStepCard(),
+      _WhyTeacherSection(),
       _RecentActivitySection(),
     ];
 
@@ -246,6 +248,126 @@ class _HeroGradientCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// A big-number snapshot of the whole curriculum, shown only before any
+/// course is started — fills otherwise-empty space with something
+/// low-text/high-impact rather than nothing, using real, live-computed
+/// numbers (never hardcoded) so it stays correct as the curriculum grows.
+class _CurriculumSnapshotCard extends ConsumerWidget {
+  const _CurriculumSnapshotCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final started = ref.watch(startedLearningPathIdsProvider).valueOrNull;
+    if (started == null || started.isNotEmpty) return const SizedBox.shrink();
+
+    final paths = ref.watch(learningPathsProvider).valueOrNull;
+    if (paths == null || paths.isEmpty) return const SizedBox.shrink();
+
+    final courseCount = paths.length;
+    final conceptCount = paths.fold(0, (sum, p) => sum + p.conceptCount);
+    final hours = paths.fold(0, (sum, p) => sum + p.estimatedHours);
+
+    return GradientCard(
+      child: InkWell(
+        onTap: () => context.go(Routes.learn),
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              _BigStat(value: '$courseCount', label: 'Courses'),
+              _BigStat(value: '$conceptCount', label: 'Concepts'),
+              _BigStat(value: '${hours}h', label: 'Content'),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BigStat extends StatelessWidget {
+  const _BigStat({required this.value, required this.label});
+
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Expanded(
+      child: Column(
+        children: [
+          Text(value, style: theme.textTheme.displaySmall),
+          Text(
+            label,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A short, icon-led list of what the app actually offers — shown only
+/// before any course is started, alongside [_CurriculumSnapshotCard], but
+/// in a deliberately different visual register (icon+caption rather than
+/// big numbers) so the two empty-state slots don't feel repetitive.
+class _WhyTeacherSection extends ConsumerWidget {
+  const _WhyTeacherSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final started = ref.watch(startedLearningPathIdsProvider).valueOrNull;
+    if (started == null || started.isNotEmpty) return const SizedBox.shrink();
+
+    return GradientCard(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: const [
+            _BenefitTile(
+              icon: Icons.smart_toy_outlined,
+              text: 'An AI teacher on demand',
+            ),
+            SizedBox(height: 16),
+            _BenefitTile(
+              icon: Icons.replay_circle_filled_outlined,
+              text: 'Spaced review that sticks',
+            ),
+            SizedBox(height: 16),
+            _BenefitTile(
+              icon: Icons.edit_note_outlined,
+              text: 'Practice by writing real code',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BenefitTile extends StatelessWidget {
+  const _BenefitTile({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      children: [
+        Icon(icon, color: theme.colorScheme.primary),
+        const SizedBox(width: 12),
+        Expanded(child: Text(text, style: theme.textTheme.titleSmall)),
+      ],
     );
   }
 }
