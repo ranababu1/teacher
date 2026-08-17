@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/routes.dart';
 import '../../../../core/errors/app_exception.dart';
 import '../../../../shared/widgets/async_value_view.dart';
+import '../../../../shared/widgets/glass_app_bar.dart';
 import '../../../ai_teacher/presentation/providers/api_key_providers.dart';
 import '../../../ai_teacher/presentation/providers/generate_exercise_providers.dart';
 import '../../../assessment/domain/models/practice_item.dart';
@@ -69,7 +70,7 @@ class _PracticeSessionScreenState
     final isAiConfigured = ref.watch(isAiConfiguredProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Practice')),
+      appBar: GlassAppBar(title: const Text('Practice')),
       body: SafeArea(
         child: AsyncValueView(
           value: conceptValue,

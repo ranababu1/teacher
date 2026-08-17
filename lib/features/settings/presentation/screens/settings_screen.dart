@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../shared/widgets/async_value_view.dart';
+import '../../../../shared/widgets/glass_app_bar.dart';
+import '../../../../shared/widgets/gradient_card.dart';
 import '../../../flashcards/domain/models/flash_card.dart';
 import '../../../flashcards/presentation/providers/flashcard_providers.dart';
 import '../../domain/settings_models.dart';
@@ -16,7 +18,7 @@ class SettingsScreen extends ConsumerWidget {
     final settingsValue = ref.watch(settingsControllerProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: GlassAppBar(title: const Text('Settings')),
       body: SafeArea(
         child: AsyncValueView(
           value: settingsValue,
@@ -279,7 +281,7 @@ class _SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return GradientCard(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

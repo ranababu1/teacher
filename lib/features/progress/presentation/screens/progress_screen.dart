@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/theme.dart';
 import '../../../../shared/widgets/async_value_view.dart';
+import '../../../../shared/widgets/glass_app_bar.dart';
+import '../../../../shared/widgets/gradient_card.dart';
 import '../../../../shared/widgets/labeled_progress_bar.dart';
 import '../../../../shared/widgets/section_label.dart';
 import '../../../../shared/widgets/skeleton_loader.dart';
@@ -20,7 +22,7 @@ class ProgressScreen extends ConsumerWidget {
     final statsValue = ref.watch(learningStatsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Progress')),
+      appBar: GlassAppBar(title: const Text('Progress')),
       body: SafeArea(
         child: AsyncValueView(
           value: summariesValue,
@@ -67,9 +69,8 @@ class _PathProgressCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Card(
+    return GradientCard(
       elevation: AppElevation.prominent,
-      color: theme.colorScheme.surfaceContainer,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

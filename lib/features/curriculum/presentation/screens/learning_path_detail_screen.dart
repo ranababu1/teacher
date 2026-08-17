@@ -6,6 +6,8 @@ import '../../../../core/constants/routes.dart';
 import '../../../../shared/widgets/async_value_view.dart';
 import '../../../../shared/widgets/difficulty_chip.dart';
 import '../../../../shared/widgets/fade_slide_in.dart';
+import '../../../../shared/widgets/glass_app_bar.dart';
+import '../../../../shared/widgets/gradient_card.dart';
 import '../../../progress/domain/models/concept_mastery.dart';
 import '../../../progress/domain/models/mastery_status.dart';
 import '../../../progress/domain/module_unlock.dart';
@@ -30,7 +32,7 @@ class LearningPathDetailScreen extends ConsumerWidget {
         ref.watch(passedModuleIdsProvider(pathId)).valueOrNull ?? const {};
 
     return Scaffold(
-      appBar: AppBar(
+      appBar: GlassAppBar(
         title: Text(pathId[0].toUpperCase() + pathId.substring(1)),
       ),
       body: SafeArea(
@@ -186,7 +188,7 @@ class _ModuleCard extends StatelessWidget {
 
     return Opacity(
       opacity: isUnlocked ? 1 : 0.5,
-      child: Card(
+      child: GradientCard(
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
           onTap: () {

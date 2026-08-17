@@ -6,6 +6,8 @@ import '../../../../app/theme.dart';
 import '../../../../core/constants/routes.dart';
 import '../../../../shared/utils/subject_style.dart';
 import '../../../../shared/widgets/async_value_view.dart';
+import '../../../../shared/widgets/glass_app_bar.dart';
+import '../../../../shared/widgets/gradient_card.dart';
 import '../../../../shared/widgets/labeled_progress_bar.dart';
 import '../../../../shared/widgets/section_label.dart';
 import '../../../../shared/widgets/skeleton_loader.dart';
@@ -25,7 +27,7 @@ class ProfileScreen extends ConsumerWidget {
     final profileValue = ref.watch(learnerProfileControllerProvider);
 
     return Scaffold(
-      appBar: AppBar(
+      appBar: GlassAppBar(
         title: const Text('Profile'),
         actions: [
           IconButton(
@@ -175,9 +177,8 @@ class _LearningProgressCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return GradientCard(
       elevation: AppElevation.prominent,
-      color: Theme.of(context).colorScheme.surfaceContainer,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -268,7 +269,7 @@ class _LearningGoalsCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final hasGoal = (profile.careerGoal ?? '').isNotEmpty;
 
-    return Card(
+    return GradientCard(
       child: Column(
         children: [
           ListTile(
@@ -335,9 +336,8 @@ class _SkillsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
-    return Card(
+    return GradientCard(
       elevation: AppElevation.prominent,
-      color: Theme.of(context).colorScheme.surfaceContainer,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -362,7 +362,7 @@ class _SettingsLinksCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return GradientCard(
       elevation: AppElevation.flat,
       child: Column(
         children: [

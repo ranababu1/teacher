@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/errors/app_exception.dart';
 import '../../../../shared/widgets/code_block.dart';
+import '../../../../shared/widgets/gradient_card.dart';
 import '../../../../shared/widgets/markdown_text.dart';
 import '../../../ai_teacher/presentation/providers/api_key_providers.dart';
 import '../../../ai_teacher/presentation/providers/grading_providers.dart';
@@ -205,7 +206,7 @@ class _ExercisePlayerState extends ConsumerState<ExercisePlayer> {
     final theme = Theme.of(context);
     final item = widget.item;
 
-    return Card(
+    return GradientCard(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

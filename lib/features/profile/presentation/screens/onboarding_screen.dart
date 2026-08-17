@@ -6,6 +6,7 @@ import '../../../../core/constants/routes.dart';
 import '../../../../shared/utils/subject_style.dart';
 import '../../../../shared/widgets/async_value_view.dart';
 import '../../../../shared/widgets/difficulty_chip.dart';
+import '../../../../shared/widgets/gradient_card.dart';
 import '../../../curriculum/domain/models/learning_path.dart';
 import '../../../curriculum/presentation/curriculum_providers.dart';
 import '../../../progress/presentation/providers/progress_providers.dart';
@@ -247,7 +248,7 @@ class _LearningInterestTile extends StatelessWidget {
 
     return Opacity(
       opacity: _comingSoon ? 0.6 : 1,
-      child: Card(
+      child: GradientCard(
         clipBehavior: Clip.antiAlias,
         child: CheckboxListTile(
           value: selected,

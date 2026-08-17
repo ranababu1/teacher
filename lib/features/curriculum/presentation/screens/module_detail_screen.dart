@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/routes.dart';
 import '../../../../shared/widgets/async_value_view.dart';
 import '../../../../shared/widgets/difficulty_chip.dart';
+import '../../../../shared/widgets/glass_app_bar.dart';
+import '../../../../shared/widgets/gradient_card.dart';
 import '../../../progress/domain/models/mastery_status.dart';
 import '../../../progress/domain/module_unlock.dart';
 import '../../../progress/presentation/providers/progress_providers.dart';
@@ -33,7 +35,7 @@ class ModuleDetailScreen extends ConsumerWidget {
         ref.watch(passedModuleIdsProvider(pathId)).valueOrNull ?? const {};
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Topic')),
+      appBar: GlassAppBar(title: const Text('Topic')),
       body: SafeArea(
         child: AsyncValueView(
           value: pathValue,
@@ -78,7 +80,7 @@ class ModuleDetailScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 20),
                 for (final concept in module.concepts) ...[
-                  Card(
+                  GradientCard(
                     child: ListTile(
                       onTap: () => context.go(
                         Routes.lesson(pathId, moduleId, concept.id),
@@ -147,7 +149,7 @@ class _TopicTestCta extends StatelessWidget {
     final theme = Theme.of(context);
 
     if (isPassed) {
-      return Card(
+      return GradientCard(
         child: ListTile(
           leading: Icon(Icons.check_circle_outline, color: theme.colorScheme.primary),
           title: const Text('Topic test passed'),
@@ -162,7 +164,7 @@ class _TopicTestCta extends StatelessWidget {
       );
     }
 
-    return Card(
+    return GradientCard(
       child: ListTile(
         leading: Icon(Icons.quiz_outlined, color: theme.colorScheme.primary),
         title: const Text('Topic test'),

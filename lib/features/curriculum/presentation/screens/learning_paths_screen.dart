@@ -7,6 +7,8 @@ import '../../../../shared/utils/subject_style.dart';
 import '../../../../shared/widgets/async_value_view.dart';
 import '../../../../shared/widgets/difficulty_chip.dart';
 import '../../../../shared/widgets/fade_slide_in.dart';
+import '../../../../shared/widgets/glass_app_bar.dart';
+import '../../../../shared/widgets/gradient_card.dart';
 import '../../../../shared/widgets/labeled_progress_bar.dart';
 import '../../../../shared/widgets/skeleton_loader.dart';
 import '../../../progress/domain/models/path_progress_summary.dart';
@@ -23,7 +25,7 @@ class LearningPathsScreen extends ConsumerWidget {
     final summariesValue = ref.watch(pathProgressSummariesProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Learning Paths')),
+      appBar: GlassAppBar(title: const Text('Learning Paths')),
       body: SafeArea(
         child: AsyncValueView(
           value: pathsValue,
@@ -81,7 +83,7 @@ class _LearningPathCard extends StatelessWidget {
 
     return Opacity(
       opacity: _isComingSoon ? 0.7 : 1,
-      child: Card(
+      child: GradientCard(
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: () => context.go(Routes.learningPath(path.id)),

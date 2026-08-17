@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/routes.dart';
 import '../../../../shared/widgets/async_value_view.dart';
+import '../../../../shared/widgets/glass_app_bar.dart';
+import '../../../../shared/widgets/gradient_card.dart';
 import '../../../../shared/widgets/skeleton_loader.dart';
 import '../providers/review_providers.dart';
 
@@ -15,7 +17,7 @@ class ReviewScreen extends ConsumerWidget {
     final dueValue = ref.watch(dueForReviewProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Review')),
+      appBar: GlassAppBar(title: const Text('Review')),
       body: SafeArea(
         child: AsyncValueView(
           value: dueValue,
@@ -43,7 +45,7 @@ class ReviewScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 12),
                 for (final concept in concepts)
-                  Card(
+                  GradientCard(
                     margin: const EdgeInsets.only(bottom: 8),
                     child: ListTile(
                       leading: const Icon(Icons.replay_circle_filled_outlined),

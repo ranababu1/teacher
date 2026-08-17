@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/routes.dart';
 import '../../../../shared/widgets/async_value_view.dart';
 import '../../../../shared/widgets/difficulty_chip.dart';
+import '../../../../shared/widgets/glass_app_bar.dart';
+import '../../../../shared/widgets/gradient_card.dart';
 import '../../../../shared/widgets/skeleton_loader.dart';
 import '../../../curriculum/presentation/curriculum_providers.dart';
 import '../../../progress/domain/models/mastery_status.dart';
@@ -22,7 +24,7 @@ class PracticeScreen extends ConsumerWidget {
     final startedIdsValue = ref.watch(startedLearningPathIdsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Practice')),
+      appBar: GlassAppBar(title: const Text('Practice')),
       body: SafeArea(
         child: AsyncValueView(
           value: pathsValue,
@@ -112,7 +114,7 @@ class PracticeScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 12),
                 for (final concept in practicableConcepts)
-                  Card(
+                  GradientCard(
                     margin: const EdgeInsets.only(bottom: 8),
                     child: ListTile(
                       onTap: () =>

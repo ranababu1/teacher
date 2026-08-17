@@ -6,6 +6,7 @@ import '../../../../core/constants/routes.dart';
 import '../../../../shared/widgets/async_value_view.dart';
 import '../../../../shared/widgets/code_block.dart';
 import '../../../../shared/widgets/difficulty_chip.dart';
+import '../../../../shared/widgets/glass_app_bar.dart';
 import '../../../../shared/widgets/markdown_text.dart';
 import '../../../ai_teacher/presentation/providers/misconception_providers.dart';
 import '../../../ai_teacher/presentation/widgets/ai_teacher_panel.dart';
@@ -60,7 +61,7 @@ class _LessonScreenState extends ConsumerState<LessonScreen> {
 
     if (!isStarted) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Lesson')),
+        appBar: GlassAppBar(title: const Text('Lesson')),
         body: SafeArea(child: CourseLockedState(pathId: widget.pathId)),
       );
     }
@@ -70,7 +71,7 @@ class _LessonScreenState extends ConsumerState<LessonScreen> {
     final conceptValue = ref.watch(conceptProvider(widget.conceptId));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Lesson')),
+      appBar: GlassAppBar(title: const Text('Lesson')),
       body: SafeArea(
         child: AsyncValueView(
           value: conceptValue,

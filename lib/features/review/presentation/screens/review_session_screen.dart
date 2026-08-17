@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../shared/widgets/async_value_view.dart';
+import '../../../../shared/widgets/glass_app_bar.dart';
 import '../../../assessment/domain/models/practice_item.dart';
 import '../../../assessment/presentation/widgets/exercise_player.dart';
 import '../../../curriculum/domain/models/learning_path.dart';
@@ -24,7 +25,7 @@ class ReviewSessionScreen extends ConsumerWidget {
     final conceptValue = ref.watch(conceptProvider(conceptId));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Review')),
+      appBar: GlassAppBar(title: const Text('Review')),
       body: SafeArea(
         child: AsyncValueView(
           value: conceptValue,

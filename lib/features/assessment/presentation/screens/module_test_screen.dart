@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/routes.dart';
 import '../../../../core/errors/app_exception.dart';
 import '../../../../shared/widgets/async_value_view.dart';
+import '../../../../shared/widgets/glass_app_bar.dart';
+import '../../../../shared/widgets/gradient_card.dart';
 import '../../../../shared/widgets/markdown_text.dart';
 import '../../../ai_teacher/presentation/providers/api_key_providers.dart';
 import '../../../ai_teacher/presentation/providers/module_test_providers.dart';
@@ -149,7 +151,7 @@ class _ModuleTestScreenState extends ConsumerState<ModuleTestScreen> {
     final pathValue = ref.watch(learningPathProvider(widget.pathId));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Topic Test')),
+      appBar: GlassAppBar(title: const Text('Topic Test')),
       body: SafeArea(
         child: AsyncValueView(
           value: pathValue,
@@ -231,7 +233,7 @@ class _ModuleTestScreenState extends ConsumerState<ModuleTestScreen> {
           style: theme.textTheme.labelLarge,
         ),
         const SizedBox(height: 12),
-        Card(
+        GradientCard(
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
