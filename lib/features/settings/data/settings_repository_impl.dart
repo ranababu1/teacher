@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../../../core/database/app_database.dart';
 import '../../../core/errors/app_exception.dart';
 import '../domain/settings_models.dart';
@@ -19,6 +21,12 @@ class SettingsRepositoryImpl implements SettingsRepository {
   static const _keyDebugMode = 'debug_mode';
   static const _keyAiRequestLogging = 'ai_request_logging';
   static const _keyAiProviderKind = 'ai_provider_kind';
+
+  static String _keySelectedModel(AiProviderKind provider) =>
+      'selected_model_${provider.name}';
+
+  static String _keyCustomModels(AiProviderKind provider) =>
+      'custom_models_${provider.name}';
 
   Future<String?> _read(String key) async {
     final row = await (_db.select(
@@ -57,6 +65,25 @@ class SettingsRepositoryImpl implements SettingsRepository {
     final aiLoggingRaw = await _read(_keyAiRequestLogging);
     final aiProviderKindRaw = await _read(_keyAiProviderKind);
 
+    final selectedModelByProvider = <AiProviderKind, String>{};
+    final customModelsByProvider = <AiProviderKind, List<String>>{};
+    for (final provider in AiProviderKind.values) {
+      final selectedModel = await _read(_keySelectedModel(provider));
+      if (selectedModel != null && selectedModel.isNotEmpty) {
+        selectedModelByProvider[provider] = selectedModel;
+      }
+
+      final customModelsRaw = await _read(_keyCustomModels(provider));
+      if (customModelsRaw != null && customModelsRaw.isNotEmpty) {
+        try {
+          customModelsByProvider[provider] = (jsonDecode(customModelsRaw) as List)
+              .cast<String>();
+        } on FormatException {
+          customModelsByProvider[provider] = const [];
+        }
+      }
+    }
+
     return AppSettings(
       themeModeKey: themeModeKey,
       explanationDepth: ExplanationDepth.values.firstWhere(
@@ -92,6 +119,8 @@ class SettingsRepositoryImpl implements SettingsRepository {
         (k) => k.name == aiProviderKindRaw,
         orElse: () => defaults.aiProviderKind,
       ),
+      selectedModelByProvider: selectedModelByProvider,
+      customModelsByProvider: customModelsByProvider,
     );
   }
 
@@ -138,4 +167,12 @@ class SettingsRepositoryImpl implements SettingsRepository {
   @override
   Future<void> setAiProviderKind(AiProviderKind kind) =>
       _write(_keyAiProviderKind, kind.name);
+
+  @override
+  Future<void> setSelectedModel(AiProviderKind provider, String model) =>
+      _write(_keySelectedModel(provider), model);
+
+  @override
+  Future<void> setCustomModels(AiProviderKind provider, List<String> models) =>
+      _write(_keyCustomModels(provider), jsonEncode(models));
 }

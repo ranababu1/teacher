@@ -24,4 +24,8 @@ abstract class SettingsRepository {
   Future<void> setAiRequestLogging(bool enabled);
 
   Future<void> setAiProviderKind(AiProviderKind kind);
+
+  Future<void> setSelectedModel(AiProviderKind provider, String model);
+
+  Future<void> setCustomModels(AiProviderKind provider, List<String> models);
 }

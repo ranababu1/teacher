@@ -50,6 +50,8 @@ class AppSettings {
     required this.debugMode,
     required this.aiRequestLogging,
     required this.aiProviderKind,
+    required this.selectedModelByProvider,
+    required this.customModelsByProvider,
   });
 
   final String themeModeKey; // 'light' | 'dark' | 'system'
@@ -67,6 +69,14 @@ class AppSettings {
   final bool aiRequestLogging;
   final AiProviderKind aiProviderKind;
 
+  /// The model selected for each provider, if the learner has picked one
+  /// other than that provider's built-in default. Absent = use
+  /// [AppConfig]'s hardcoded default for that provider.
+  final Map<AiProviderKind, String> selectedModelByProvider;
+
+  /// User-added model ids per provider, beyond the built-in default.
+  final Map<AiProviderKind, List<String>> customModelsByProvider;
+
   static const defaults = AppSettings(
     themeModeKey: 'system',
     explanationDepth: ExplanationDepth.standard,
@@ -79,6 +89,8 @@ class AppSettings {
     debugMode: false,
     aiRequestLogging: false,
     aiProviderKind: AiProviderKind.gemini,
+    selectedModelByProvider: {},
+    customModelsByProvider: {},
   );
 
   AppSettings copyWith({
@@ -93,6 +105,8 @@ class AppSettings {
     bool? debugMode,
     bool? aiRequestLogging,
     AiProviderKind? aiProviderKind,
+    Map<AiProviderKind, String>? selectedModelByProvider,
+    Map<AiProviderKind, List<String>>? customModelsByProvider,
   }) {
     return AppSettings(
       themeModeKey: themeModeKey ?? this.themeModeKey,
@@ -108,6 +122,10 @@ class AppSettings {
       debugMode: debugMode ?? this.debugMode,
       aiRequestLogging: aiRequestLogging ?? this.aiRequestLogging,
       aiProviderKind: aiProviderKind ?? this.aiProviderKind,
+      selectedModelByProvider:
+          selectedModelByProvider ?? this.selectedModelByProvider,
+      customModelsByProvider:
+          customModelsByProvider ?? this.customModelsByProvider,
     );
   }
 }
