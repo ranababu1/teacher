@@ -77,6 +77,113 @@ class SettingsController extends AsyncNotifier<AppSettings> {
     _update((s) => s.copyWith(aiProviderKind: kind));
   }
 
+  /// Selects [model] as the active model for [provider]. Pass an empty
+  /// string to clear the selection and fall back to that provider's
+  /// built-in default (see [SettingsRepositoryImpl.getSettings], which
+  /// only populates a provider's map entry for a non-empty stored value).
+  Future<void> setSelectedModel(AiProviderKind provider, String model) async {
+    await ref.read(settingsRepositoryProvider).setSelectedModel(provider, model);
+    _update((s) {
+      final updated = Map<AiProviderKind, String>.from(s.selectedModelByProvider);
+      if (model.isEmpty) {
+        updated.remove(provider);
+      } else {
+        updated[provider] = model;
+      }
+      return s.copyWith(selectedModelByProvider: updated);
+    });
+  }
+
+  /// Adds [model] to [provider]'s custom model list. No-op if blank or
+  /// already present (case-sensitive, matching how provider APIs treat
+  /// model ids).
+  Future<void> addCustomModel(AiProviderKind provider, String model) async {
+    final trimmed = model.trim();
+    if (trimmed.isEmpty) return;
+    final current = state.valueOrNull;
+    if (current == null) return;
+
+    final existing = current.customModelsByProvider[provider] ?? const <String>[];
+    if (existing.contains(trimmed)) return;
+
+    final updatedList = [...existing, trimmed];
+    await ref.read(settingsRepositoryProvider).setCustomModels(provider, updatedList);
+    _update((s) {
+      final updated = Map<AiProviderKind, List<String>>.from(s.customModelsByProvider);
+      updated[provider] = updatedList;
+      return s.copyWith(customModelsByProvider: updated);
+    });
+  }
+
+  /// Renames a custom model entry. Only ever operates on entries already
+  /// present in [provider]'s custom list — since the app's built-in
+  /// baseline models are never stored there, this can't touch a baseline
+  /// model even if [oldModel] happens to match one. If [oldModel] was the
+  /// selected model, the selection follows the rename.
+  Future<void> renameCustomModel(
+    AiProviderKind provider,
+    String oldModel,
+    String newModel,
+  ) async {
+    final trimmed = newModel.trim();
+    if (trimmed.isEmpty || trimmed == oldModel) return;
+    final current = state.valueOrNull;
+    if (current == null) return;
+
+    final existing = current.customModelsByProvider[provider] ?? const <String>[];
+    if (!existing.contains(oldModel) || existing.contains(trimmed)) return;
+
+    final updatedList = [
+      for (final m in existing) m == oldModel ? trimmed : m,
+    ];
+    await ref.read(settingsRepositoryProvider).setCustomModels(provider, updatedList);
+
+    final wasSelected = current.selectedModelByProvider[provider] == oldModel;
+    if (wasSelected) {
+      await ref.read(settingsRepositoryProvider).setSelectedModel(provider, trimmed);
+    }
+
+    _update((s) {
+      final updatedModels = Map<AiProviderKind, List<String>>.from(s.customModelsByProvider);
+      updatedModels[provider] = updatedList;
+      final updatedSelected = Map<AiProviderKind, String>.from(s.selectedModelByProvider);
+      if (wasSelected) updatedSelected[provider] = trimmed;
+      return s.copyWith(
+        customModelsByProvider: updatedModels,
+        selectedModelByProvider: updatedSelected,
+      );
+    });
+  }
+
+  /// Removes a custom model entry. If it was the selected model, the
+  /// selection is cleared so the provider's baseline default takes over.
+  Future<void> removeCustomModel(AiProviderKind provider, String model) async {
+    final current = state.valueOrNull;
+    if (current == null) return;
+
+    final existing = current.customModelsByProvider[provider] ?? const <String>[];
+    if (!existing.contains(model)) return;
+
+    final updatedList = existing.where((m) => m != model).toList();
+    await ref.read(settingsRepositoryProvider).setCustomModels(provider, updatedList);
+
+    final wasSelected = current.selectedModelByProvider[provider] == model;
+    if (wasSelected) {
+      await ref.read(settingsRepositoryProvider).setSelectedModel(provider, '');
+    }
+
+    _update((s) {
+      final updatedModels = Map<AiProviderKind, List<String>>.from(s.customModelsByProvider);
+      updatedModels[provider] = updatedList;
+      final updatedSelected = Map<AiProviderKind, String>.from(s.selectedModelByProvider);
+      if (wasSelected) updatedSelected.remove(provider);
+      return s.copyWith(
+        customModelsByProvider: updatedModels,
+        selectedModelByProvider: updatedSelected,
+      );
+    });
+  }
+
   void _update(AppSettings Function(AppSettings) transform) {
     final current = state.valueOrNull;
     if (current != null) {
