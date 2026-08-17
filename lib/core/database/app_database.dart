@@ -5,6 +5,7 @@ import 'tables/attempts_table.dart';
 import 'tables/concept_mastery_table.dart';
 import 'tables/learning_path_progress_table.dart';
 import 'tables/misconceptions_table.dart';
+import 'tables/module_test_progress_table.dart';
 import 'tables/review_schedule_table.dart';
 import 'tables/settings_table.dart';
 import 'tables/student_progress_table.dart';
@@ -20,6 +21,7 @@ part 'app_database.g.dart';
     ReviewScheduleTable,
     SettingsTable,
     LearningPathProgressTable,
+    ModuleTestProgressTable,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -28,7 +30,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.connection);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -51,6 +53,40 @@ class AppDatabase extends _$AppDatabase {
             LearningPathProgressTableCompanion.insert(
               learningPathId: pathId,
               startedAt: DateTime.now(),
+            ),
+          );
+        }
+      }
+      if (from < 3) {
+        await m.createTable(moduleTestProgressTable);
+        // Backfill: any module with existing concept-level progress from
+        // before the topic-test gate existed counts as already
+        // "passed" (grandfathered), so upgrading never retroactively
+        // locks a learner out of a module they were already partway
+        // through — same philosophy as the v1->v2 backfill above.
+        final existingModules =
+            await (selectOnly(studentProgressTable)
+                  ..addColumns([
+                    studentProgressTable.learningPathId,
+                    studentProgressTable.moduleId,
+                  ])
+                  ..groupBy([
+                    studentProgressTable.learningPathId,
+                    studentProgressTable.moduleId,
+                  ]))
+                .get();
+        for (final row in existingModules) {
+          final pathId = row.read(studentProgressTable.learningPathId);
+          final moduleId = row.read(studentProgressTable.moduleId);
+          if (pathId == null || moduleId == null) continue;
+          await into(moduleTestProgressTable).insert(
+            ModuleTestProgressTableCompanion.insert(
+              learningPathId: pathId,
+              moduleId: moduleId,
+              passedAt: DateTime.now(),
+              scorePercent: 100,
+              questionCount: 0,
+              isGrandfathered: const Value(true),
             ),
           );
         }

@@ -3227,6 +3227,460 @@ class LearningPathProgressTableCompanion
   }
 }
 
+class $ModuleTestProgressTableTable extends ModuleTestProgressTable
+    with TableInfo<$ModuleTestProgressTableTable, ModuleTestProgressTableData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ModuleTestProgressTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _learningPathIdMeta = const VerificationMeta(
+    'learningPathId',
+  );
+  @override
+  late final GeneratedColumn<String> learningPathId = GeneratedColumn<String>(
+    'learning_path_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _moduleIdMeta = const VerificationMeta(
+    'moduleId',
+  );
+  @override
+  late final GeneratedColumn<String> moduleId = GeneratedColumn<String>(
+    'module_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _passedAtMeta = const VerificationMeta(
+    'passedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> passedAt = GeneratedColumn<DateTime>(
+    'passed_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _scorePercentMeta = const VerificationMeta(
+    'scorePercent',
+  );
+  @override
+  late final GeneratedColumn<int> scorePercent = GeneratedColumn<int>(
+    'score_percent',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _questionCountMeta = const VerificationMeta(
+    'questionCount',
+  );
+  @override
+  late final GeneratedColumn<int> questionCount = GeneratedColumn<int>(
+    'question_count',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _isGrandfatheredMeta = const VerificationMeta(
+    'isGrandfathered',
+  );
+  @override
+  late final GeneratedColumn<bool> isGrandfathered = GeneratedColumn<bool>(
+    'is_grandfathered',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_grandfathered" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    learningPathId,
+    moduleId,
+    passedAt,
+    scorePercent,
+    questionCount,
+    isGrandfathered,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'module_test_progress_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ModuleTestProgressTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('learning_path_id')) {
+      context.handle(
+        _learningPathIdMeta,
+        learningPathId.isAcceptableOrUnknown(
+          data['learning_path_id']!,
+          _learningPathIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_learningPathIdMeta);
+    }
+    if (data.containsKey('module_id')) {
+      context.handle(
+        _moduleIdMeta,
+        moduleId.isAcceptableOrUnknown(data['module_id']!, _moduleIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_moduleIdMeta);
+    }
+    if (data.containsKey('passed_at')) {
+      context.handle(
+        _passedAtMeta,
+        passedAt.isAcceptableOrUnknown(data['passed_at']!, _passedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_passedAtMeta);
+    }
+    if (data.containsKey('score_percent')) {
+      context.handle(
+        _scorePercentMeta,
+        scorePercent.isAcceptableOrUnknown(
+          data['score_percent']!,
+          _scorePercentMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_scorePercentMeta);
+    }
+    if (data.containsKey('question_count')) {
+      context.handle(
+        _questionCountMeta,
+        questionCount.isAcceptableOrUnknown(
+          data['question_count']!,
+          _questionCountMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_questionCountMeta);
+    }
+    if (data.containsKey('is_grandfathered')) {
+      context.handle(
+        _isGrandfatheredMeta,
+        isGrandfathered.isAcceptableOrUnknown(
+          data['is_grandfathered']!,
+          _isGrandfatheredMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {learningPathId, moduleId};
+  @override
+  ModuleTestProgressTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ModuleTestProgressTableData(
+      learningPathId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}learning_path_id'],
+      )!,
+      moduleId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}module_id'],
+      )!,
+      passedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}passed_at'],
+      )!,
+      scorePercent: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}score_percent'],
+      )!,
+      questionCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}question_count'],
+      )!,
+      isGrandfathered: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_grandfathered'],
+      )!,
+    );
+  }
+
+  @override
+  $ModuleTestProgressTableTable createAlias(String alias) {
+    return $ModuleTestProgressTableTable(attachedDatabase, alias);
+  }
+}
+
+class ModuleTestProgressTableData extends DataClass
+    implements Insertable<ModuleTestProgressTableData> {
+  final String learningPathId;
+  final String moduleId;
+  final DateTime passedAt;
+  final int scorePercent;
+  final int questionCount;
+
+  /// True for rows backfilled during the v2->v3 migration for learners
+  /// who had already started a module under the old, gate-free rules —
+  /// never a real test attempt. Kept as a real column (not inferred)
+  /// so this decision stays introspectable/reversible later.
+  final bool isGrandfathered;
+  const ModuleTestProgressTableData({
+    required this.learningPathId,
+    required this.moduleId,
+    required this.passedAt,
+    required this.scorePercent,
+    required this.questionCount,
+    required this.isGrandfathered,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['learning_path_id'] = Variable<String>(learningPathId);
+    map['module_id'] = Variable<String>(moduleId);
+    map['passed_at'] = Variable<DateTime>(passedAt);
+    map['score_percent'] = Variable<int>(scorePercent);
+    map['question_count'] = Variable<int>(questionCount);
+    map['is_grandfathered'] = Variable<bool>(isGrandfathered);
+    return map;
+  }
+
+  ModuleTestProgressTableCompanion toCompanion(bool nullToAbsent) {
+    return ModuleTestProgressTableCompanion(
+      learningPathId: Value(learningPathId),
+      moduleId: Value(moduleId),
+      passedAt: Value(passedAt),
+      scorePercent: Value(scorePercent),
+      questionCount: Value(questionCount),
+      isGrandfathered: Value(isGrandfathered),
+    );
+  }
+
+  factory ModuleTestProgressTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ModuleTestProgressTableData(
+      learningPathId: serializer.fromJson<String>(json['learningPathId']),
+      moduleId: serializer.fromJson<String>(json['moduleId']),
+      passedAt: serializer.fromJson<DateTime>(json['passedAt']),
+      scorePercent: serializer.fromJson<int>(json['scorePercent']),
+      questionCount: serializer.fromJson<int>(json['questionCount']),
+      isGrandfathered: serializer.fromJson<bool>(json['isGrandfathered']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'learningPathId': serializer.toJson<String>(learningPathId),
+      'moduleId': serializer.toJson<String>(moduleId),
+      'passedAt': serializer.toJson<DateTime>(passedAt),
+      'scorePercent': serializer.toJson<int>(scorePercent),
+      'questionCount': serializer.toJson<int>(questionCount),
+      'isGrandfathered': serializer.toJson<bool>(isGrandfathered),
+    };
+  }
+
+  ModuleTestProgressTableData copyWith({
+    String? learningPathId,
+    String? moduleId,
+    DateTime? passedAt,
+    int? scorePercent,
+    int? questionCount,
+    bool? isGrandfathered,
+  }) => ModuleTestProgressTableData(
+    learningPathId: learningPathId ?? this.learningPathId,
+    moduleId: moduleId ?? this.moduleId,
+    passedAt: passedAt ?? this.passedAt,
+    scorePercent: scorePercent ?? this.scorePercent,
+    questionCount: questionCount ?? this.questionCount,
+    isGrandfathered: isGrandfathered ?? this.isGrandfathered,
+  );
+  ModuleTestProgressTableData copyWithCompanion(
+    ModuleTestProgressTableCompanion data,
+  ) {
+    return ModuleTestProgressTableData(
+      learningPathId: data.learningPathId.present
+          ? data.learningPathId.value
+          : this.learningPathId,
+      moduleId: data.moduleId.present ? data.moduleId.value : this.moduleId,
+      passedAt: data.passedAt.present ? data.passedAt.value : this.passedAt,
+      scorePercent: data.scorePercent.present
+          ? data.scorePercent.value
+          : this.scorePercent,
+      questionCount: data.questionCount.present
+          ? data.questionCount.value
+          : this.questionCount,
+      isGrandfathered: data.isGrandfathered.present
+          ? data.isGrandfathered.value
+          : this.isGrandfathered,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ModuleTestProgressTableData(')
+          ..write('learningPathId: $learningPathId, ')
+          ..write('moduleId: $moduleId, ')
+          ..write('passedAt: $passedAt, ')
+          ..write('scorePercent: $scorePercent, ')
+          ..write('questionCount: $questionCount, ')
+          ..write('isGrandfathered: $isGrandfathered')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    learningPathId,
+    moduleId,
+    passedAt,
+    scorePercent,
+    questionCount,
+    isGrandfathered,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ModuleTestProgressTableData &&
+          other.learningPathId == this.learningPathId &&
+          other.moduleId == this.moduleId &&
+          other.passedAt == this.passedAt &&
+          other.scorePercent == this.scorePercent &&
+          other.questionCount == this.questionCount &&
+          other.isGrandfathered == this.isGrandfathered);
+}
+
+class ModuleTestProgressTableCompanion
+    extends UpdateCompanion<ModuleTestProgressTableData> {
+  final Value<String> learningPathId;
+  final Value<String> moduleId;
+  final Value<DateTime> passedAt;
+  final Value<int> scorePercent;
+  final Value<int> questionCount;
+  final Value<bool> isGrandfathered;
+  final Value<int> rowid;
+  const ModuleTestProgressTableCompanion({
+    this.learningPathId = const Value.absent(),
+    this.moduleId = const Value.absent(),
+    this.passedAt = const Value.absent(),
+    this.scorePercent = const Value.absent(),
+    this.questionCount = const Value.absent(),
+    this.isGrandfathered = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ModuleTestProgressTableCompanion.insert({
+    required String learningPathId,
+    required String moduleId,
+    required DateTime passedAt,
+    required int scorePercent,
+    required int questionCount,
+    this.isGrandfathered = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : learningPathId = Value(learningPathId),
+       moduleId = Value(moduleId),
+       passedAt = Value(passedAt),
+       scorePercent = Value(scorePercent),
+       questionCount = Value(questionCount);
+  static Insertable<ModuleTestProgressTableData> custom({
+    Expression<String>? learningPathId,
+    Expression<String>? moduleId,
+    Expression<DateTime>? passedAt,
+    Expression<int>? scorePercent,
+    Expression<int>? questionCount,
+    Expression<bool>? isGrandfathered,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (learningPathId != null) 'learning_path_id': learningPathId,
+      if (moduleId != null) 'module_id': moduleId,
+      if (passedAt != null) 'passed_at': passedAt,
+      if (scorePercent != null) 'score_percent': scorePercent,
+      if (questionCount != null) 'question_count': questionCount,
+      if (isGrandfathered != null) 'is_grandfathered': isGrandfathered,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ModuleTestProgressTableCompanion copyWith({
+    Value<String>? learningPathId,
+    Value<String>? moduleId,
+    Value<DateTime>? passedAt,
+    Value<int>? scorePercent,
+    Value<int>? questionCount,
+    Value<bool>? isGrandfathered,
+    Value<int>? rowid,
+  }) {
+    return ModuleTestProgressTableCompanion(
+      learningPathId: learningPathId ?? this.learningPathId,
+      moduleId: moduleId ?? this.moduleId,
+      passedAt: passedAt ?? this.passedAt,
+      scorePercent: scorePercent ?? this.scorePercent,
+      questionCount: questionCount ?? this.questionCount,
+      isGrandfathered: isGrandfathered ?? this.isGrandfathered,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (learningPathId.present) {
+      map['learning_path_id'] = Variable<String>(learningPathId.value);
+    }
+    if (moduleId.present) {
+      map['module_id'] = Variable<String>(moduleId.value);
+    }
+    if (passedAt.present) {
+      map['passed_at'] = Variable<DateTime>(passedAt.value);
+    }
+    if (scorePercent.present) {
+      map['score_percent'] = Variable<int>(scorePercent.value);
+    }
+    if (questionCount.present) {
+      map['question_count'] = Variable<int>(questionCount.value);
+    }
+    if (isGrandfathered.present) {
+      map['is_grandfathered'] = Variable<bool>(isGrandfathered.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ModuleTestProgressTableCompanion(')
+          ..write('learningPathId: $learningPathId, ')
+          ..write('moduleId: $moduleId, ')
+          ..write('passedAt: $passedAt, ')
+          ..write('scorePercent: $scorePercent, ')
+          ..write('questionCount: $questionCount, ')
+          ..write('isGrandfathered: $isGrandfathered, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -3242,6 +3696,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $SettingsTableTable settingsTable = $SettingsTableTable(this);
   late final $LearningPathProgressTableTable learningPathProgressTable =
       $LearningPathProgressTableTable(this);
+  late final $ModuleTestProgressTableTable moduleTestProgressTable =
+      $ModuleTestProgressTableTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -3254,6 +3710,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     reviewScheduleTable,
     settingsTable,
     learningPathProgressTable,
+    moduleTestProgressTable,
   ];
 }
 
@@ -4992,6 +5449,252 @@ typedef $$LearningPathProgressTableTableProcessedTableManager =
       LearningPathProgressTableData,
       PrefetchHooks Function()
     >;
+typedef $$ModuleTestProgressTableTableCreateCompanionBuilder =
+    ModuleTestProgressTableCompanion Function({
+      required String learningPathId,
+      required String moduleId,
+      required DateTime passedAt,
+      required int scorePercent,
+      required int questionCount,
+      Value<bool> isGrandfathered,
+      Value<int> rowid,
+    });
+typedef $$ModuleTestProgressTableTableUpdateCompanionBuilder =
+    ModuleTestProgressTableCompanion Function({
+      Value<String> learningPathId,
+      Value<String> moduleId,
+      Value<DateTime> passedAt,
+      Value<int> scorePercent,
+      Value<int> questionCount,
+      Value<bool> isGrandfathered,
+      Value<int> rowid,
+    });
+
+class $$ModuleTestProgressTableTableFilterComposer
+    extends Composer<_$AppDatabase, $ModuleTestProgressTableTable> {
+  $$ModuleTestProgressTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get learningPathId => $composableBuilder(
+    column: $table.learningPathId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get moduleId => $composableBuilder(
+    column: $table.moduleId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get passedAt => $composableBuilder(
+    column: $table.passedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get scorePercent => $composableBuilder(
+    column: $table.scorePercent,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get questionCount => $composableBuilder(
+    column: $table.questionCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isGrandfathered => $composableBuilder(
+    column: $table.isGrandfathered,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ModuleTestProgressTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $ModuleTestProgressTableTable> {
+  $$ModuleTestProgressTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get learningPathId => $composableBuilder(
+    column: $table.learningPathId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get moduleId => $composableBuilder(
+    column: $table.moduleId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get passedAt => $composableBuilder(
+    column: $table.passedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get scorePercent => $composableBuilder(
+    column: $table.scorePercent,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get questionCount => $composableBuilder(
+    column: $table.questionCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isGrandfathered => $composableBuilder(
+    column: $table.isGrandfathered,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ModuleTestProgressTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ModuleTestProgressTableTable> {
+  $$ModuleTestProgressTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get learningPathId => $composableBuilder(
+    column: $table.learningPathId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get moduleId =>
+      $composableBuilder(column: $table.moduleId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get passedAt =>
+      $composableBuilder(column: $table.passedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get scorePercent => $composableBuilder(
+    column: $table.scorePercent,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get questionCount => $composableBuilder(
+    column: $table.questionCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get isGrandfathered => $composableBuilder(
+    column: $table.isGrandfathered,
+    builder: (column) => column,
+  );
+}
+
+class $$ModuleTestProgressTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ModuleTestProgressTableTable,
+          ModuleTestProgressTableData,
+          $$ModuleTestProgressTableTableFilterComposer,
+          $$ModuleTestProgressTableTableOrderingComposer,
+          $$ModuleTestProgressTableTableAnnotationComposer,
+          $$ModuleTestProgressTableTableCreateCompanionBuilder,
+          $$ModuleTestProgressTableTableUpdateCompanionBuilder,
+          (
+            ModuleTestProgressTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $ModuleTestProgressTableTable,
+              ModuleTestProgressTableData
+            >,
+          ),
+          ModuleTestProgressTableData,
+          PrefetchHooks Function()
+        > {
+  $$ModuleTestProgressTableTableTableManager(
+    _$AppDatabase db,
+    $ModuleTestProgressTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ModuleTestProgressTableTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$ModuleTestProgressTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$ModuleTestProgressTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> learningPathId = const Value.absent(),
+                Value<String> moduleId = const Value.absent(),
+                Value<DateTime> passedAt = const Value.absent(),
+                Value<int> scorePercent = const Value.absent(),
+                Value<int> questionCount = const Value.absent(),
+                Value<bool> isGrandfathered = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ModuleTestProgressTableCompanion(
+                learningPathId: learningPathId,
+                moduleId: moduleId,
+                passedAt: passedAt,
+                scorePercent: scorePercent,
+                questionCount: questionCount,
+                isGrandfathered: isGrandfathered,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String learningPathId,
+                required String moduleId,
+                required DateTime passedAt,
+                required int scorePercent,
+                required int questionCount,
+                Value<bool> isGrandfathered = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ModuleTestProgressTableCompanion.insert(
+                learningPathId: learningPathId,
+                moduleId: moduleId,
+                passedAt: passedAt,
+                scorePercent: scorePercent,
+                questionCount: questionCount,
+                isGrandfathered: isGrandfathered,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ModuleTestProgressTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ModuleTestProgressTableTable,
+      ModuleTestProgressTableData,
+      $$ModuleTestProgressTableTableFilterComposer,
+      $$ModuleTestProgressTableTableOrderingComposer,
+      $$ModuleTestProgressTableTableAnnotationComposer,
+      $$ModuleTestProgressTableTableCreateCompanionBuilder,
+      $$ModuleTestProgressTableTableUpdateCompanionBuilder,
+      (
+        ModuleTestProgressTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $ModuleTestProgressTableTable,
+          ModuleTestProgressTableData
+        >,
+      ),
+      ModuleTestProgressTableData,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -5012,5 +5715,10 @@ class $AppDatabaseManager {
       $$LearningPathProgressTableTableTableManager(
         _db,
         _db.learningPathProgressTable,
+      );
+  $$ModuleTestProgressTableTableTableManager get moduleTestProgressTable =>
+      $$ModuleTestProgressTableTableTableManager(
+        _db,
+        _db.moduleTestProgressTable,
       );
 }
