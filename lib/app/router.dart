@@ -96,19 +96,25 @@ final routerProvider = Provider<GoRouter>((ref) {
                           moduleId: state.pathParameters['moduleId']!,
                         ),
                         routes: [
+                          // Static routes must be declared before the
+                          // sibling `:conceptId` wildcard — go_router tries
+                          // sibling routes in declaration order, so a
+                          // dynamic param declared first would otherwise
+                          // swallow this literal segment (e.g. matching
+                          // '.../test' as conceptId == 'test').
+                          GoRoute(
+                            path: 'test',
+                            builder: (context, state) => ModuleTestScreen(
+                              pathId: state.pathParameters['pathId']!,
+                              moduleId: state.pathParameters['moduleId']!,
+                            ),
+                          ),
                           GoRoute(
                             path: ':conceptId',
                             builder: (context, state) => LessonScreen(
                               pathId: state.pathParameters['pathId']!,
                               moduleId: state.pathParameters['moduleId']!,
                               conceptId: state.pathParameters['conceptId']!,
-                            ),
-                          ),
-                          GoRoute(
-                            path: 'test',
-                            builder: (context, state) => ModuleTestScreen(
-                              pathId: state.pathParameters['pathId']!,
-                              moduleId: state.pathParameters['moduleId']!,
                             ),
                           ),
                         ],
