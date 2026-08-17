@@ -118,6 +118,45 @@
           "explanation": "Pending with zero restarts means no container in this Pod has ever actually started running -- there is no live process to exec into (ruling out option A), no previous crashed instance to retrieve logs from since nothing has run at all (ruling out option B), and nothing listening on any port to forward traffic to (ruling out option D). kubectl describe pod's Events section is exactly the tool for this stage, since it will surface either a scheduling failure (FailedScheduling, with a specific resource or constraint named) or show that an init container is still running or stuck -- either way, revealing why the Pod hasn't progressed past Pending, which is the actual question at this stage."
         },
         {
+          "id": "kubernetes-debugging-workflow-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A Pod shows `STATUS: Running` with `RESTARTS: 14`, and the number keeps climbing. What does this actually indicate?",
+          "options": [
+            "The Pod is healthy -- Running is the only status that matters, and RESTARTS is purely a historical counter with no bearing on current health.",
+            "The Pod is functionally in the same broken category as one showing CrashLoopBackOff -- it's currently caught mid-cycle between one crash and the next, and happens to display Running at this exact instant, not a Pod that's stably healthy.",
+            "RESTARTS only increments when a Pod is deleted and replaced by its own controller, so a high, climbing count here actually indicates a ReplicaSet functioning correctly.",
+            "Running with any nonzero RESTARTS count always means a human operator manually restarted the container via kubectl, never the kubelet acting automatically."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This concept calls this out directly as one of the most common ways people waste time investigating the wrong thing first: 'a Pod showing Running with RESTARTS: 14 and climbing is not a healthy Pod that happens to say Running right now -- it's a Pod that keeps crashing and getting restarted by the kubelet, currently caught mid-cycle.' Option A ignores exactly this trap. Option C misattributes RESTARTS to Pod replacement by a controller, when it actually tracks container restarts within the same Pod object. Option D is false -- the overwhelming majority of restarts are the kubelet acting automatically per restartPolicy, not manual operator action."
+        },
+        {
+          "id": "kubernetes-debugging-workflow-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "`kubectl exec -it` into a Running container fails with 'executable file not found in $PATH' when trying to run `sh`. What does this specific error most likely indicate, and what's the appropriate next step?",
+          "options": [
+            "The container is unhealthy and about to crash; the fix is to wait and retry exec once it stabilizes.",
+            "The container's image is likely a minimal/distroless image built without a shell binary at all -- exec has nothing to run inside the container regardless of its health; the appropriate fix is kubectl debug with an ephemeral container that brings its own shell along.",
+            "The Pod hasn't actually reached the Running state yet, despite what kubectl get pods reports, and exec is failing for the same underlying reason it would against a Pending Pod.",
+            "This error specifically means the container has no readiness probe configured, and one must be added before exec will succeed."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This concept describes exactly this failure mode: 'many production images ... have no /bin/sh at all, so kubectl exec into them fails with executable file not found, not because the container is unhealthy, but because there's genuinely no shell binary to run.' The fix is kubectl debug with an ephemeral container, which attaches its own shell without needing to modify the original image. Option A misdiagnoses a missing-binary problem as a health problem. Option C is inconsistent with the premise -- the scenario states the container is genuinely Running. Option D invents a dependency between readiness probes and exec that doesn't exist."
+        },
+        {
+          "id": "kubernetes-debugging-workflow-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "`kubectl port-forward pod/web-abc123 8080:80` is used, and curling `localhost:8080` locally works perfectly. However, requests routed through the Pod's Service still fail. What does this specifically isolate the problem to?",
+          "options": [
+            "The problem must be inside the Pod's own application code, since port-forward and the Service ultimately reach the same container either way.",
+            "The problem lies in the Service/Endpoints/kube-proxy layer sitting in front of the Pod, not in the Pod itself -- port-forward bypasses the Service entirely and talks directly to this one specific Pod, so a working port-forward alongside a failing Service points squarely at the networking layer between them.",
+            "The comparison is meaningless, since port-forward and Services always use fundamentally different, incompatible port numbering schemes.",
+            "The problem must be a liveness probe misconfiguration, since only a liveness failure could cause a Service to fail while direct Pod access still succeeds."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This concept describes port-forward as the tool for exactly this question: 'is the problem inside this one Pod itself, or is it somewhere in the Service/networking layer sitting in front of it?' A successful port-forward proves the Pod itself is functioning and reachable directly, which means a simultaneously failing Service points at the selector/Endpoints/kube-proxy layer instead. Option A draws the opposite conclusion from the evidence. Option C is a made-up constraint -- port-forward simply maps an arbitrary local port to the Pod's own container port, with no special incompatibility with Service port numbers. Option D incorrectly narrows the cause to one specific probe type when the actual evidence points at the networking layer, not any probe."
+        },
+        {
           "id": "kubernetes-debugging-workflow-assess-explain1",
           "type": "explanation",
           "prompt": "Walk through, in order, the full diagnostic sequence you'd use for a Pod reported as 'broken' with no other information given, explaining what question each command answers and why the order matters.",
@@ -239,6 +278,45 @@
           "explanation": "A failing readiness probe, on its own, never triggers a restart or a deletion -- its entire effect is on Service routing: the Pod is excluded from the relevant Endpoints/EndpointSlice objects, so kube-proxy stops sending it new traffic, while the container itself keeps running completely untouched, and can resume receiving traffic automatically the moment readiness starts passing again. Option A conflates the two probe types' consequences -- only a failing liveness probe causes a restart. Option B describes something no probe on its own ever does (that's a controller/replica-count concern, unrelated to probe results). Option D is false and is exactly the misconception this concept corrects -- a failing readiness probe absolutely has an observable effect, just a non-destructive, traffic-routing one rather than a restart."
         },
         {
+          "id": "kubernetes-probes-liveness-readiness-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A team configures a livenessProbe with `tcpSocket: { port: 5432 }` for a Postgres container. The process inside has deadlocked internally -- it still accepts new TCP connections but never actually responds to any query -- yet the liveness probe keeps reporting success indefinitely. Why?",
+          "options": [
+            "tcpSocket probes are broken by design and never actually execute; the container would need an httpGet or exec probe to have any liveness protection at all.",
+            "tcpSocket only verifies that a TCP connection can be opened to the given port -- it has no awareness of anything at the application layer above that, so a process that accepts connections but never processes anything correctly still passes, since successfully opening the connection is the entire extent of what this probe type checks.",
+            "tcpSocket probes only run once, at container startup, and never repeat -- so a deadlock occurring after that first successful check would never be detected by design.",
+            "tcpSocket probes require a correspondingly-configured readinessProbe of the same type before they will ever report a failure."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This concept is explicit that tcpSocket 'merely attempts to open a TCP connection ... with no awareness of anything at the application layer above that ... also the weakest signal of the three, since a port accepting connections says nothing about whether the process behind it is actually functioning correctly.' A deadlocked-but-still-listening process is exactly the blind spot this probe type has by design. Option A is false -- tcpSocket probes do run and do check something real, just a narrow thing. Option C is false; probes with periodSeconds configured repeat continuously, not once. Option D invents a dependency between probe types that doesn't exist -- a livenessProbe functions independently of whatever readinessProbe (if any) is configured."
+        },
+        {
+          "id": "kubernetes-probes-liveness-readiness-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A Pod defines both a startupProbe and a livenessProbe. During the first 60 seconds after the container starts, while the application is still warming up, what is the livenessProbe actually doing?",
+          "options": [
+            "It's running on its own normal schedule the entire time, exactly as if no startupProbe were configured, and could restart the container if it happens to fail during warm-up.",
+            "It is not running at all yet -- startupProbe specifically disables both the liveness and readiness probes until it succeeds at least once; only after that does the livenessProbe begin executing on its own configured schedule.",
+            "It runs, but any failures during this window are silently discarded and never counted toward failureThreshold; only once the startupProbe succeeds do failures start counting.",
+            "It runs at a permanently slower periodSeconds during this window, automatically multiplied by whatever failureThreshold the startupProbe itself uses."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This concept states this mechanism directly: 'startupProbe runs first, on its own schedule, and specifically disables both the liveness and readiness probes until it succeeds at least once -- once it does, it stops running entirely, and liveness/readiness take over on their own configured schedules from that point forward.' The livenessProbe genuinely isn't executing during this window, not merely having its failures ignored. Option A ignores the entire purpose of startupProbe, which is precisely to prevent liveness from acting during this window. Option C invents a discard-but-still-run behavior that isn't how the mechanism is described. Option D invents a schedule-multiplication effect that doesn't exist."
+        },
+        {
+          "id": "kubernetes-probes-liveness-readiness-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A Service has 5 Pods, and each one's readinessProbe checks connectivity to a shared third-party API. That third-party API becomes briefly flaky. What happens, and why is this considered a readiness-probe design mistake per this concept?",
+          "options": [
+            "Only the one Pod that happens to check the API during the flaky window drops out of Endpoints; the other 4 continue serving traffic normally, completely unaffected.",
+            "All 5 Pods tend to bounce out of Ready in near-lockstep, needlessly cutting the Service's entire serving capacity -- because a shared dependency being down affects every Pod equally, it isn't information about any individual Pod's own health relative to its siblings, which is exactly what a per-Pod readiness check is supposed to measure.",
+            "This is actually the correct, recommended design -- readiness probes should always check every downstream dependency a Pod talks to, regardless of how shared or external it is.",
+            "Nothing happens, since readiness probes are only capable of checking conditions local to the Pod's own container filesystem, never anything reachable over the network."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This concept describes exactly this failure pattern: checking a shared dependency in a readiness probe means 'every one of that Service's Pods bounces in and out of Ready in near-lockstep whenever that shared dependency hiccups, needlessly cutting the Service's actual serving capacity for a problem that a per-Pod readiness check was never well-suited to detect or fix in the first place.' The guidance given is that readiness should check 'whether this specific process is currently able to do its job,' not the transitive health of everything it talks to. Option A wrongly assumes independence across Pods that a shared-dependency check doesn't actually provide. Option C directly contradicts this concept's own stated guidance. Option D is false -- exec and httpGet readiness checks routinely reach over the network; nothing restricts them to the local filesystem."
+        },
+        {
           "id": "kubernetes-probes-liveness-readiness-assess-explain1",
           "type": "explanation",
           "prompt": "A team's Pods are crash-looping under moderate production load, but the application's own logs show no errors. They suspect the liveness probe. Explain, mechanistically, how a liveness probe misconfiguration alone can produce exactly this symptom, and what specifically about the probe's configuration needs to change.",
@@ -358,6 +436,45 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "Guaranteed requires requests to equal limits for BOTH cpu AND memory, across every container in the Pod -- here memory matches (256Mi == 256Mi) but cpu does not (200m requested vs. 400m limit), so the strict Guaranteed condition isn't met, and the Pod is classified as Burstable: it has requests set (ruling out BestEffort, which requires no requests or limits at all) but isn't fully requests-equals-limits (ruling out Guaranteed). Option A incorrectly treats matching on just one resource as sufficient for Guaranteed. Option C misapplies BestEffort, which specifically means no requests/limits declared at all, not merely an unequal pair. Option D is wrong -- having requests below limits for one resource while equal for another is a completely valid, common (Burstable) configuration, not a rejected one."
+        },
+        {
+          "id": "kubernetes-resource-requests-limits-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A container was scheduled with `requests: { cpu: 100m, memory: 128Mi }`. An hour after the Pod starts running successfully, does the kubelet or any other component continue checking this container's actual usage against its requests value on an ongoing basis?",
+          "options": [
+            "Yes -- if actual usage ever drops below the requested value, the container is throttled to prevent it from using less than its own reservation.",
+            "No -- requests are consulted exactly once, by the scheduler, at the moment of the placement decision; once the Pod is running, requests have no further runtime enforcement or checking at all. Only limits are continuously enforced afterward, by the kernel.",
+            "Yes -- the API server polls every container's actual usage against its requests every few seconds and reschedules the Pod onto a different node if usage no longer matches.",
+            "Yes, but only for Guaranteed QoS class Pods -- Burstable and BestEffort Pods have their requests value ignored after scheduling as well as before."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This concept is direct about this: 'once a Pod is actually scheduled, requests have no further runtime effect at all -- they don't get enforced or checked again; they were purely an input to one placement decision that already happened.' Everything that continues to matter afterward is governed by limits, enforced continuously by the kernel via cgroups. Option A invents a throttling-for-under-usage behavior that doesn't exist -- throttling only ever applies to exceeding a limit, never to using less than a request. Option C invents an API-server polling and automatic-rescheduling mechanism that Kubernetes doesn't have (Pods are never silently moved between nodes after scheduling). Option D invents a QoS-class-dependent exception to a rule that this concept states applies universally, regardless of QoS class."
+        },
+        {
+          "id": "kubernetes-resource-requests-limits-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A container's spec sets `limits: { memory: 1Gi }` but no `requests` at all, in a namespace with no LimitRange configured. From the scheduler's point of view, how much memory does this container reserve when deciding where to place its Pod?",
+          "options": [
+            "1Gi, since the scheduler automatically treats an unset requests value as equal to whatever limits specifies.",
+            "Effectively zero -- with no requests set and no LimitRange to supply a default, the scheduler treats this container as needing no reserved capacity at all, even though it could actually use up to 1Gi once running, which is exactly the overcommit risk this concept describes.",
+            "512Mi, exactly half of the limits value, as Kubernetes' built-in fallback ratio for any container missing an explicit request.",
+            "The Pod is rejected at admission time, since setting limits without a corresponding requests value is invalid."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This concept's own misconception callout addresses this directly: 'no such automatic behavior happens on its own -- if requests is omitted, the container is treated as requesting nothing at all for scheduling purposes, completely independent of whatever limits happens to say, unless a namespace has an explicit LimitRange configured.' With no LimitRange present here, the scheduler reserves nothing for this container even though it's permitted to use up to 1Gi at runtime. Option A describes exactly the automatic-copy behavior this concept says doesn't exist. Option C invents a fallback ratio Kubernetes has no such built-in default for. Option D is false -- a container may legitimately set limits without requests; it isn't rejected, it just becomes BestEffort for scheduling purposes."
+        },
+        {
+          "id": "kubernetes-resource-requests-limits-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A namespace has a LimitRange with `defaultRequest: { cpu: 100m, memory: 128Mi }`. A developer applies a Pod spec whose container declares no `resources` block at all. What actually happens to that container's resources at creation time, and which component is responsible?",
+          "options": [
+            "Nothing is filled in automatically; the LimitRange only produces a warning event, and the container still runs as BestEffort exactly as if no LimitRange existed.",
+            "The API server's admission process fills in the LimitRange's defaultRequest (and default limit, if configured) onto the container's spec at creation time, before the object is even persisted -- so the container ends up with a real, non-zero reservation without the developer having declared one explicitly.",
+            "The kubelet, on whichever node the Pod eventually lands on, retroactively edits the running container's cgroup settings to match the LimitRange sometime after scheduling has already happened.",
+            "The scheduler consults the LimitRange only as a last resort, if the Pod would otherwise fail to schedule anywhere at all."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This concept's own worked example describes exactly this: 'the API server's admission process fills in those values automatically at creation time, before the object is even persisted' -- so the container ends up Burstable with the LimitRange's defaults applied, with the developer never having had to specify resources at all. Option A contradicts the concept's explicit example, where the defaults genuinely are applied, not just warned about. Option C misattributes the mechanism to the kubelet acting after scheduling, when it actually happens at admission time, before the object is even scheduled. Option D invents a last-resort-only trigger condition; the LimitRange applies unconditionally to any container missing its own values, regardless of whether scheduling would otherwise succeed."
         },
         {
           "id": "kubernetes-resource-requests-limits-assess-explain1",

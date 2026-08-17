@@ -113,6 +113,45 @@
           "explanation": "The entire difference is whether the newly allocated memory is zero-filled before being handed back. Buffer.alloc pays a small performance cost to guarantee every byte starts at 0; Buffer.allocUnsafe skips that guarantee entirely for speed, which means any bytes you don't explicitly overwrite before reading could contain leftover data from a previous, unrelated allocation. Option A is wrong -- both can throw on genuinely oversized requests, that's unrelated to the unsafe/safe distinction. Option C is wrong -- allocUnsafe is not deprecated, it's a legitimate performance tool for narrow, carefully-audited use cases. Option D is wrong -- both support the same range of Buffer/TypedArray operations; resizability isn't the distinguishing factor here."
         },
         {
+          "id": "nodejs-buffers-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A developer calls buf.toString('ascii') on a Buffer that was created from a UTF-8-encoded string containing an accented character like the one in 'caf\\u00e9'. What actually happens?",
+          "options": [
+            "It throws an EncodingError, because ASCII cannot represent the accented character.",
+            "It silently produces mangled or garbled output rather than throwing -- ASCII cannot represent the multi-byte UTF-8 encoding of that character, and toString doesn't validate that the chosen encoding matches how the bytes were actually produced.",
+            "Node automatically detects that the original encoding was UTF-8 and ignores the 'ascii' argument entirely.",
+            "It returns exactly the same string that toString('utf8') would, since all encodings ultimately decode to the same JS string object."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Interpreting bytes with the wrong encoding does not throw an error in general -- it just produces incorrect, garbled-looking output, which is exactly why encoding mismatches are a harder class of bug to catch than a crash would be. ASCII simply has no representation for a multi-byte UTF-8 sequence, so decoding those bytes as if they were ASCII produces mangled results rather than a clean failure. Option A invents an exception type toString doesn't throw for this. Option C is wrong -- toString takes the encoding argument at face value; it does not detect or verify the buffer's true original encoding. Option D is wrong -- different encoding arguments to toString genuinely produce different results when the bytes don't happen to be plain ASCII."
+        },
+        {
+          "id": "nodejs-buffers-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "buf.slice(0, 4) (or its modern alias, buf.subarray(0, 4)) is called on a Buffer. What is true of the object it returns?",
+          "options": [
+            "It's an independent copy of the first 4 bytes; changes made to it never affect the original buffer.",
+            "It's a view over the exact same underlying memory as the original buffer's first 4 bytes -- writing into the returned Buffer mutates the original, and vice versa.",
+            "It's a new Buffer.alloc(4)-style zero-filled buffer that happens to start out containing a copy of the first 4 bytes.",
+            "It throws a RangeError unless the original buffer was created with Buffer.alloc rather than Buffer.from."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "slice/subarray are deliberately designed to avoid copying -- they return a new Buffer object that shares the exact same underlying memory as the region it was taken from, which is precisely why they're fast. That sharing means a write through either the slice or the original is visible through the other, since there's genuinely only one block of memory involved. Option A describes what an actual copy (via Buffer.from(original) or .copy()) would give you, not slice. Option C invents zero-filling behavior slice doesn't have. Option D invents a restriction that doesn't exist -- slice works the same regardless of how the original buffer was created."
+        },
+        {
+          "id": "nodejs-buffers-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Buffer.concat(chunks, totalLength) accepts an optional totalLength argument, even though Buffer.concat could compute the combined length itself by summing each chunk's .length. Why does that parameter exist?",
+          "options": [
+            "totalLength is actually required; Buffer.concat throws without it.",
+            "Passing totalLength lets Buffer.concat skip computing the sum of all the chunks' lengths itself, which is a minor optimization when the caller already knows or has already computed that value.",
+            "totalLength truncates the result to that many bytes, silently discarding anything beyond it, regardless of how much data the chunks actually contain.",
+            "totalLength is only used to zero-fill any unused space if the chunks add up to less than that value."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Buffer.concat can compute the combined length on its own by summing each buffer's .length, but doing so costs a small amount of extra work; if the caller already has that total on hand (as in the collectChunks example, where it's computed via .reduce beforehand), passing it in directly avoids Buffer.concat redoing that same computation. Option A is wrong -- totalLength is optional; Buffer.concat computes it itself if omitted. Option C and D both invent truncation/zero-fill behaviors that aren't what this parameter does -- it's purely a minor performance optimization, not a behavior-changing option."
+        },
+        {
           "id": "nodejs-buffers-assess-explain1",
           "type": "explanation",
           "prompt": "Explain, to a developer who has only ever worked with JavaScript strings, why Node needs a separate Buffer type at all, and what practical risk they should keep in mind when choosing between Buffer.alloc and Buffer.allocUnsafe.",
@@ -233,6 +272,45 @@
           "explanation": ".pipe() forwards data chunks and backpressure signals between the two streams it connects, but deliberately does not forward 'error' events -- each stream in a chain can fail independently, and a failure needs its own listener on that specific stream (or all streams need to be wired through stream.pipeline(), which does funnel every stage's errors into one place). Since nothing here listens for 'error' on any of the three streams, the transform stream's error has no handler, which Node treats the same as an uncaught exception, crashing the process. Option A describes what people often wrongly assume pipe() does. Option B is wrong -- errors are not silently discarded, they become loud, unhandled crashes if nothing catches them. Option D is wrong -- streams have no automatic retry behavior built in."
         },
         {
+          "id": "nodejs-streams-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "What specifically happens when you attach a 'data' event listener to a Readable stream that wasn't previously being actively read?",
+          "options": [
+            "Nothing changes -- 'data' listeners are purely passive and don't affect how the stream behaves.",
+            "The stream switches into flowing mode, and chunks begin arriving as fast as they're available, pushed to the listener via events -- as opposed to paused mode, where you'd have to explicitly call .read() yourself to pull a chunk when ready.",
+            "The stream immediately loads its entire remaining content into a single Buffer before emitting one 'data' event with everything at once.",
+            "Attaching a 'data' listener automatically pipes the stream to process.stdout unless a different destination is specified."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Readable streams have two reading modes: attaching a 'data' listener is specifically what switches a stream into flowing mode, where chunks are pushed to you as events as fast as they become available; the alternative, paused mode, requires you to explicitly call readable.read() to pull data at your own pace. Option A understates a real, meaningful side effect of attaching the listener. Option C misdescribes flowing mode as if it were equivalent to a non-streaming, whole-payload read, which defeats the entire point of using a stream. Option D invents a default destination that doesn't exist -- attaching 'data' has nothing to do with stdout unless you explicitly write there yourself."
+        },
+        {
+          "id": "nodejs-streams-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A Readable stream emits an 'error' event, but the surrounding code never attached any 'error' listener to that specific stream at all. What does Node do?",
+          "options": [
+            "Node silently ignores the error, and the stream simply stops producing any further data with no other consequence.",
+            "Node logs a warning to the console, but the process keeps running normally, just as it would on older Node versions.",
+            "Node treats the unhandled 'error' event the same as an uncaught exception, which can crash the whole process -- this is exactly why attaching an 'error' listener to every stream you use is not optional in serious code.",
+            "Node automatically retries whatever operation caused the error, up to a fixed number of attempts, before giving up."
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "An 'error' event with no listener attached is treated by Node the same way it would treat any other uncaught exception -- it can crash the entire process, not just quietly disable that one stream. This is precisely why the concept stresses that an 'error' listener on every stream you work with directly isn't a defensive nicety, it's a requirement for avoiding a stream failure (a missing file, a permissions error, a dropped network connection) from taking down the whole application. Options A, B, and D all describe a softer, contained failure mode that doesn't match Node's actual behavior here."
+        },
+        {
+          "id": "nodejs-streams-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Of Node's four kinds of stream -- Readable, Writable, Duplex, and Transform -- which one both consumes AND produces (modified) data as it passes through, without buffering the entire payload first, and is exactly what zlib.createGzip() returns?",
+          "options": [
+            "Readable",
+            "Writable",
+            "Duplex",
+            "Transform"
+          ],
+          "correctOptionIndex": 3,
+          "explanation": "A Transform stream is specifically a Duplex stream (readable and writable at once) that also modifies the data as it passes through, rather than merely passing it along unchanged -- exactly the role a gzip compressor plays in a pipe chain like fs.createReadStream(...).pipe(zlib.createGzip()).pipe(fs.createWriteStream(...)). A plain Readable only produces data, a plain Writable only consumes it, and a plain Duplex handles both directions but doesn't necessarily transform the data passing through it the way Transform explicitly does."
+        },
+        {
           "id": "nodejs-streams-assess-explain1",
           "type": "explanation",
           "prompt": "Explain why streaming a large file to an HTTP response with .pipe() is meaningfully better than reading the whole file with fs.readFile and then calling res.end(data), and what .pipe() is actually automating for you compared to doing it by hand.",
@@ -351,6 +429,45 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "false is Node's backpressure signal: it means the stream's internal buffer has reached its configured highWaterMark threshold, and the correct response is to pause producing more data until a 'drain' event indicates the buffer has been worked down enough to accept more. Critically, nothing enforces this -- ignoring the false return and calling .write() again anyway does not raise an error or get rejected; the stream simply keeps accepting and buffering more data, which is exactly why ignoring the signal is dangerous rather than merely suboptimal: the failure is silent until memory pressure becomes severe. Option A is the misconception this concept specifically warns against. Option C is wrong -- false does not mean the stream failed, it's an expected, routine signal about buffer pressure, not an error condition. Option D is wrong -- the chunk that was just written was still accepted and queued; it does not need to be resent."
+        },
+        {
+          "id": "nodejs-backpressure-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A developer reasons: 'My server pipes data to a local file on the same machine, which is always fast, so backpressure isn't something I need to worry about here.' What's the flaw in this reasoning?",
+          "options": [
+            "There's no flaw -- local disk writes are always faster than any Readable source, so backpressure genuinely cannot occur when the destination is a local file.",
+            "Backpressure depends on the RELATIVE speed of producer versus consumer, not on what kind of destination is involved -- a heavily loaded disk, a network-mounted filesystem, or a slow CPU-bound transform stage can all be slower than the source, and any Writable stream can signal backpressure via write()'s return value regardless of what's on the other end.",
+            "Backpressure only applies to Duplex streams, not to plain Writable streams like a file write stream.",
+            "Local file writes bypass the Writable stream interface entirely, so write()'s return value is meaningless for them."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Backpressure is fundamentally about relative speed, not about the specific category of destination -- a local disk under heavy load, a network-mounted filesystem, or a slow in-process transform can all be the bottleneck, regardless of being 'local.' Any Writable stream, whatever sits behind it, exposes the same write()-return-value mechanism, and any code that ignores it risks the same unbounded buffering. Option A asserts a guarantee ('always faster') the concept explicitly warns against assuming. Option C invents a restriction to Duplex streams that doesn't exist -- plain Writable streams signal backpressure the same way. Option D is wrong -- fs write streams are ordinary Writable streams, and write()'s return value behaves the same for them as for any other."
+        },
+        {
+          "id": "nodejs-backpressure-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A developer reduces the chunk size used when reading from a fast Readable source, hoping this alone will prevent a slow Writable destination's buffer from growing unboundedly. Does this fix the underlying problem?",
+          "options": [
+            "Yes -- smaller chunks mean each individual write() call carries less data, so the destination's buffer can never grow very large.",
+            "No -- backpressure depends on the total rate of data production versus total rate of consumption over time, not the size of any single chunk; with a producer still faster overall than the consumer, smaller chunks just accumulate in more, smaller increments, still growing without bound unless write()'s return value is actually respected.",
+            "Yes, but only if the chunk size is reduced to something smaller than the configured highWaterMark value specifically.",
+            "No, because reducing chunk size actually increases the risk of unbounded buffering, since it causes write() to be called more frequently."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Chunk size changes how granular the buffering is, but not whether the underlying rate mismatch exists at all -- a producer that is still faster overall than the consumer will keep adding to the destination's buffer regardless of whether it does so in fewer large increments or more small ones, as long as nothing ever checks write()'s return value and pauses. Option A and C both assume chunk size alone changes the fundamental rate relationship, which it doesn't. Option D correctly rejects the fix but for the wrong reason -- more frequent write() calls isn't itself what makes things worse; the unrespected backpressure signal is."
+        },
+        {
+          "id": "nodejs-backpressure-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Is a Writable stream's highWaterMark a hard limit that its internal buffer can never exceed?",
+          "options": [
+            "Yes -- Node enforces highWaterMark strictly, and .write() calls that would exceed it are rejected outright rather than queued.",
+            "No -- highWaterMark is a threshold that determines when write() starts returning false (and when some internal flow paths pause automatically); it does not stop code that ignores that false return value from continuing to call .write(), so the buffer can grow well past highWaterMark if the signal is ignored.",
+            "Yes, but only for object-mode streams -- byte-mode streams have no such enforcement at all.",
+            "No -- highWaterMark only affects Readable streams and has no meaning at all for Writable streams."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "highWaterMark is a signal threshold, not an enforced cap -- write() always accepts and queues a chunk regardless of current buffer level, and merely returns false once that level is at or above highWaterMark to indicate the caller should pause. Nothing about the stream itself prevents further .write() calls from being made and queued after that point; the buffer's actual growth is bounded only by whether the calling code respects the false signal. Option A asserts an enforcement mechanism that doesn't exist. Option C invents a distinction between object-mode and byte-mode streams that isn't the actual explanation. Option D is wrong -- highWaterMark is explicitly discussed for Writable streams in this concept as the threshold governing write()'s return value."
         },
         {
           "id": "nodejs-backpressure-assess-explain1",

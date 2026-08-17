@@ -111,6 +111,45 @@
           "type": "explanation",
           "prompt": "Explain why using a mutable object (like a list or dict) as a default argument value is considered a classic Python pitfall, and how to avoid it.",
           "modelAnswer": "Python evaluates a default argument's value exactly once -- when the function is defined -- and reuses that same object as the default on every subsequent call that doesn't supply its own value for that parameter. That's harmless for immutable defaults like `0` or `\"\"`, because there's no way to mutate them in place; the next call just gets the same unchanged value. But if the default is a mutable object like `[]` or `{}`, and the function body mutates it (`.append()`, `[key] = value`), those mutations stick around on that one shared object between calls. So two calls that both rely on the default can end up silently sharing and accumulating state, even though nothing about the call sites suggests they're related -- a serious, hard-to-spot bug, especially since the function often works perfectly fine in quick manual testing where you only call it once. The standard fix is the 'sentinel default' pattern: default the parameter to `None`, then inside the function body write something like `value = [] if value is None else value`. Because that line lives in the function body, it runs fresh on every single call, genuinely creating a new empty list each time the caller didn't provide one."
+        },
+        {
+          "id": "python-functions-basics-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "```python\ndef describe(name, age=30):\n    return f\"{name} is {age}\"\n\nprint(describe(\"Amy\", name=\"Ben\"))\n```\nWhat happens?",
+          "options": [
+            "TypeError: describe() got multiple values for argument 'name'",
+            "\"Ben is 30\" -- the keyword argument overrides the positional one",
+            "\"Amy is 30\" -- the positional argument takes precedence",
+            "\"Amy is 30\" -- the keyword argument is silently ignored"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "`\"Amy\"` is passed positionally, which fills the first parameter, `name`. The keyword argument `name=\"Ben\"` then tries to fill `name` *again* -- Python has no rule for 'the keyword one wins' or 'the positional one wins'; instead, it detects that the same parameter has been given a value twice and raises `TypeError: describe() got multiple values for argument 'name'` immediately, before the function body ever runs. Neither positional nor keyword arguments silently override each other -- supplying the same parameter both ways is simply an error."
+        },
+        {
+          "id": "python-functions-basics-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "```python\ndef log(msg):\n    print(msg)\n\nresults = [log(\"a\"), log(\"b\")]\nprint(results)\n```\nWhat gets printed, in order?",
+          "options": [
+            "a / b / [None, None]",
+            "a / b / ['a', 'b']",
+            "[None, None] / a / b",
+            "TypeError, because log() doesn't return anything to store in a list"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "Building the list `[log(\"a\"), log(\"b\")]` calls `log(\"a\")` first, which prints \"a\" as a side effect and then implicitly returns `None` (there's no `return` statement in `log`), and then calls `log(\"b\")`, which prints \"b\" and also returns `None`. So `results` ends up as `[None, None]` -- a perfectly valid list, since `None` is a normal, storable value, not an error. The final `print(results)` then shows `[None, None]`. There's nothing invalid about storing a function's implicit `None` return value; it just usually isn't useful."
+        },
+        {
+          "id": "python-functions-basics-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "```python\ndef shout(text):\n    return text.upper() + \"!\"\n\nactions = {\"a\": shout}\nf = actions[\"a\"]\nprint(f(\"hi\"))\nprint(type(actions[\"a\"]))\n```\nWhat gets printed?",
+          "options": [
+            "HI! then <class 'function'>",
+            "hi! then <class 'function'>",
+            "TypeError: 'dict' object is not callable",
+            "HI! then <class 'str'>"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "Storing `shout` in the dict (with no parentheses) stores a reference to the function object itself, not the result of calling it -- functions are ordinary, storable, first-class objects. `f = actions[\"a\"]` gives `f` that same function object, and `f(\"hi\")` actually calls it, producing `\"hi\".upper() + \"!\"` = `\"HI!\"`. `type(actions[\"a\"])` reports the type of the stored object, which is a function, `<class 'function'>` -- not a string, and the dict itself was never called, so there's no TypeError."
         }
       ]
     },
@@ -221,6 +260,45 @@
           "type": "explanation",
           "prompt": "A junior developer asks why their function raises UnboundLocalError when they thought they were just reading and updating a global variable. Explain what's actually happening and how to fix it.",
           "modelAnswer": "Python decides, when it compiles a function's body (before the function ever runs), whether each name used inside is local to that function -- and the rule is: if a name is assigned to *anywhere* in the function's body, it's treated as local for the *entire* body, not just from that line onward. So a function like `def f(): x = x + 1` isn't 'reading the global x and then updating it' the way it looks -- because there's an assignment to x in this function, Python has already decided x is local here, and the read of x on the right-hand side is trying to look up that not-yet-assigned local, which raises UnboundLocalError. Merely reading a global (with no assignment to that name anywhere in the function) would have worked fine with zero special syntax -- the problem only appears once you also try to assign to the same name. The fix is to explicitly declare the name with `global x` at the top of the function, which tells Python 'assignments to x in here should modify the existing module-level variable, not create a new local shadow.' With that declared, both the read and the write correctly refer to the same module-level x. It's worth adding, as a design note, that leaning on `global` heavily makes functions harder to test and reason about in isolation, since their behavior now depends on -- and can change -- state outside their own parameters; it's a tool for genuine shared state, not a default habit."
+        },
+        {
+          "id": "python-scope-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "```python\ndef outer():\n    msg = \"hi\"\n    def inner():\n        print(msg)\n    inner()\n\nouter()\n```\nWhat happens?",
+          "options": [
+            "It prints \"hi\" -- reading an enclosing variable works automatically via LEGB, with no nonlocal needed",
+            "UnboundLocalError, because inner() references msg without declaring it nonlocal",
+            "NameError: msg is not defined, because inner() can't see outer()'s local variables",
+            "SyntaxError, because any reference to an outer variable inside a nested function must be declared nonlocal first"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "`inner()` never assigns to `msg` anywhere in its body -- it only reads it. The local-by-default rule (and therefore the need for `nonlocal`) is specifically triggered by *assignment*; a plain read simply falls back to the LEGB search order, which finds `msg` in the Enclosing scope (`outer()`'s local scope) without any special syntax required. `nonlocal` is only necessary when a nested function needs to *rebind* an enclosing variable, not merely read it."
+        },
+        {
+          "id": "python-scope-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "```python\ndef f():\n    nonlocal x\n    x = 5\n```\nWhat happens here? (Assume f is not nested inside any other function.)",
+          "options": [
+            "SyntaxError: no binding for nonlocal 'x' found -- nonlocal requires an enclosing function scope with that variable, and it never falls back to the global scope",
+            "It works fine -- nonlocal falls back to treating x as the module-level global if there's no enclosing function",
+            "NameError: name 'x' is not defined, raised only when f() is actually called",
+            "UnboundLocalError, raised only when f() is actually called"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "`nonlocal` specifically targets the nearest *enclosing function's* local scope -- it requires there to actually be an enclosing function with a matching local variable to bind to. Since `f` here isn't nested inside any other function at all, there's no enclosing local scope for `nonlocal x` to reach into, and Python raises `SyntaxError: no binding for nonlocal 'x' found` -- notably, this is caught at compile time, before `f()` is ever called, not as a runtime error. Unlike a failed name lookup, `nonlocal` deliberately does not fall back to the global scope the way `global` would; that fallback behavior is exactly what `global` is for."
+        },
+        {
+          "id": "python-scope-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "```python\nlist = [1, 2, 3]\n\ndef show():\n    print(list)\n\nshow()\nprint(list([4, 5]))\n```\nWhat happens?",
+          "options": [
+            "[1, 2, 3] then TypeError: 'list' object is not callable",
+            "[1, 2, 3] then [4, 5]",
+            "NameError, because list was already reserved as a built-in name",
+            "[1, 2, 3] then [1, 2, 3, 4, 5]"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "Reassigning `list = [1, 2, 3]` at module level doesn't cause an error -- built-in names occupy the lowest-priority scope in LEGB, so a Global-scope assignment of the same name simply shadows the built-in for the rest of the module. `show()` has no local `list`, so its `print(list)` search proceeds Local (not found) then Enclosing (not applicable) then Global, where it finds the reassigned `[1, 2, 3]` and prints it. But now `list` refers to an actual list object, not the built-in constructor function -- so `list([4, 5])`, which tries to *call* that object, raises `TypeError: 'list' object is not callable`. This is a real, concrete consequence of shadowing a built-in name: the built-in isn't gone, but the name no longer refers to it in this scope."
         }
       ]
     },
@@ -345,6 +423,45 @@
           "type": "explanation",
           "prompt": "Explain closures as if you were teaching another developer who understands functions and scope but has never heard the term 'closure' before. Be sure to mention why closures created inside a loop are a common source of bugs.",
           "modelAnswer": "A closure is what you get when a nested function references a variable from the scope of the function it's defined inside, and that nested function is then returned (or otherwise escapes) so it can be called later, even after the outer function's call has already finished. Python uses lexical scoping -- a function's enclosing scope is fixed by where it's written in the source code, not by how or when it's later called -- so the inner function keeps a working connection back to those specific outer variables no matter when or from where it's eventually invoked. Concretely, Python implements this using 'cell' objects: a variable that's shared between an enclosing scope and a nested function that reads or writes it lives in a cell, and the nested function's closure holds a reference to that same cell -- not a copy of whatever value happened to be in it at some earlier moment. That last point is the key thing to internalize, because it's exactly what causes the most famous closure bug: creating several closures inside a loop that all reference the loop variable. People often expect each one to remember 'its own' value from the iteration when it was created, as if it took a snapshot -- but a for loop doesn't create a new scope per iteration, so there is really only one loop variable, in one cell, shared by every closure created inside that loop. Since none of those closures are typically called until after the loop has completely finished, they all end up seeing whatever value the loop variable was left at when it stopped, not the value from their 'own' iteration. The standard fix is to force a value to be captured at the right moment instead of looked up later -- either by giving the closure its own parameter with a default equal to the loop variable's current value (defaults are evaluated once, immediately, at definition time, unlike closure variable lookups, which happen at call time), or by wrapping the closure-creation in an extra function call, so each iteration gets a genuinely separate local scope and cell instead of sharing the loop's."
+        },
+        {
+          "id": "python-closures-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "```python\ndef make_accumulator():\n    total = []\n    def add(x):\n        total.append(x)\n        return total\n    return add\n\nacc = make_accumulator()\nprint(acc(1))\nprint(acc(2))\n```\nWhat gets printed, and does `add` need a `nonlocal` declaration to work correctly?",
+          "options": [
+            "[1] then [1, 2] -- and no, nonlocal isn't needed here, since .append() mutates the shared list rather than rebinding the name total",
+            "[1] then [1, 2] -- but this only works because nonlocal total is implicitly assumed",
+            "UnboundLocalError, because total is referenced inside add() without a nonlocal declaration",
+            "[1] then [2] -- each call resets total to a fresh empty list"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "`total.append(x)` mutates the existing list object that `total` refers to -- it does not assign a new value to the name `total` itself. The local-by-default rule (and the resulting need for `nonlocal`) is triggered specifically by *assignment* to a name, not by calling a mutating method on the object it refers to. Since `add` never writes `total = ...`, Python never considers `total` local to `add` at all -- it's simply read via the LEGB search and found in the enclosing scope, and its contents are then mutated in place. Both calls share the one list created in `make_accumulator()`, so the first call gives `[1]` and the second gives `[1, 2]`."
+        },
+        {
+          "id": "python-closures-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "```python\ndef make_pair():\n    value = 0\n    def get():\n        return value\n    def set_value(new_value):\n        nonlocal value\n        value = new_value\n    return get, set_value\n\nget, set_value = make_pair()\nprint(get())\nset_value(99)\nprint(get())\n```\nWhat gets printed?",
+          "options": [
+            "0 then 99",
+            "0 then 0",
+            "UnboundLocalError, because get() doesn't declare nonlocal value",
+            "99 then 99"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "`get` and `set_value` are two separate closures created by the same call to `make_pair()`, and both reference the exact same `value` cell -- a closure holds a reference to the cell, not a frozen snapshot of the value. `get()` never assigns to `value`, so it just reads whatever the shared cell currently holds, with no `nonlocal` needed for that. `set_value(99)` does assign to `value`, and its `nonlocal value` declaration makes that assignment update the *shared* cell rather than create a new local -- so after that call, the one cell both functions are looking at holds `99`. The next `get()` call reads that same, now-updated cell, printing `99`. This shows closures sharing state isn't limited to a single function calling itself repeatedly -- sibling closures from the same enclosing call can share and observe each other's updates to the same cell."
+        },
+        {
+          "id": "python-closures-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "```python\nfuncs = []\ni = 0\nwhile i < 3:\n    funcs.append(lambda: i)\n    i += 1\n\nprint([f() for f in funcs])\n```\nWhat gets printed?",
+          "options": [
+            "[3, 3, 3]",
+            "[0, 1, 2]",
+            "[2, 2, 2]",
+            "[0, 0, 0]"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "The loop-variable-capture bug isn't specific to `for` loops -- it's a consequence of the fact that neither `for` nor `while` loops create a new scope per iteration in Python. There's exactly one `i`, living in one cell, for the entire `while` loop, and all three lambdas close over that same shared cell. None of the lambdas are called until the list comprehension runs, well after the loop has completely finished -- at which point `i` holds its final value. Since the loop body appends and then increments, the last iteration runs with `i == 2` (appending a lambda), then increments `i` to `3`, and only then does `3 < 3` fail and the loop exit -- leaving `i` at `3`. So every lambda reports `3` when finally called, giving `[3, 3, 3]`."
         }
       ]
     }

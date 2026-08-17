@@ -105,6 +105,32 @@
           ],
           "correctOptionIndex": 2,
           "explanation": "Since data only flows one way in React -- parent to child -- a child can never reach up and directly modify something the parent owns. The standard mechanism is for the parent to pass a function as a prop; the child simply calls that function (typically from an event handler) to report that something happened, and the parent decides what to do about it, usually by updating its own state. Option A describes mutating a prop, which doesn't propagate anywhere and triggers no re-render. Option B isn't how components are structured -- a child doesn't import or directly invoke a parent's internal state setter; it only ever receives what the parent explicitly hands it as a prop. Option D describes an ad hoc global-mutation pattern that defeats React's data-flow model and its ability to know when to re-render."
+        },
+        {
+          "id": "react-props-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "```jsx\nfunction Button({ label, variant = \"primary\" }) {\n  return <button className={variant}>{label}</button>;\n}\n```\nThis is rendered as `<Button label=\"Save\" variant={0} />`. What value does variant actually have inside Button?",
+          "options": [
+            "\"primary\", because 0 is falsy, so the default parameter kicks in.",
+            "0 (the number), because the default parameter mechanism only triggers when the value is exactly undefined, not for any other falsy value like 0.",
+            "\"\" (an empty string), because React coerces unusual prop values to an empty string before passing them along.",
+            "undefined, because 0 is not considered a valid value to pass as a prop."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "A prop's default value, written with ordinary JavaScript default-parameter syntax, only applies when the corresponding value is exactly undefined -- not for any other falsy value. Here, variant is explicitly passed as the number 0, which is a real, defined value (just also happens to be falsy), so the default \"primary\" is never consulted at all. variant stays 0 inside Button, and className={variant} ends up bound to that number, not to the string \"primary\". This is precisely the narrower-than-expected default-parameter rule that trips people up when they assume 'falsy means use the default.'"
+        },
+        {
+          "id": "react-props-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "```jsx\nfunction Alert({ children }) {\n  return <div className=\"alert\">{children}</div>;\n}\n\n<Alert>\n  <strong>Warning:</strong> Disk space low.\n</Alert>\n```\nWhat is `children` inside Alert in this usage?",
+          "options": [
+            "The literal string \"children\".",
+            "A React element (or set of elements) representing everything nested between <Alert> and </Alert> -- here, the <strong> element and the surrounding text -- automatically populated by React.",
+            "undefined, since children was never explicitly passed as an attribute like children={...}.",
+            "An empty array, since Alert never declared a specific children prop type or shape."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "children is an entirely ordinary prop, not special syntax requiring an explicit declaration or attribute -- React automatically populates it with whatever JSX is nested between a component's opening and closing tags. Here, that's the <strong>Warning:</strong> element plus the surrounding text \"Disk space low.\", all made available to Alert as props.children (destructured directly as children). Nothing about this requires Alert to opt in beyond simply reading the children prop -- there's no separate mechanism, and no need to pass it explicitly as an attribute, though doing so (children={...}) would also work identically."
         }
       ]
     },
@@ -213,6 +239,32 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "push() runs fine and does mutate the array in memory -- the bug isn't that the data failed to change, it's that React never finds out. React's only trigger for scheduling a re-render is a call to the state setter function; it doesn't watch the contents of whatever value it's holding for changes. Since setItems was never called, nothing tells React to re-render, so the component keeps showing whatever it last rendered, now silently out of sync with the mutated array. Option A is false -- push() works fine on a plain array, React or not. Option C is false -- arrays and objects are extremely common things to store in state; the issue here is mutation, not the type of value. Option D misdescribes push(), which is synchronous and completes immediately; the real issue is that no setter call ever occurred to trigger a re-render in the first place."
+        },
+        {
+          "id": "react-state-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "```jsx\nfunction Widget({ refreshKey }) {\n  const [count, setCount] = useState(0);\n  return <p>{count}</p>;\n}\n```\nWidget's parent re-renders it many times, each time passing a different refreshKey prop, but the Widget component instance itself is never unmounted, and nothing ever calls setCount. What happens to count across those re-renders?",
+          "options": [
+            "count resets back to 0 on every single re-render, since useState(0) runs again on each call to Widget.",
+            "count keeps whatever value it was last set to (0, since setCount is never called here) -- React ignores the 0 argument to useState on every render after the very first one, for as long as this component instance stays mounted.",
+            "count becomes undefined after the first re-render, since useState is only reliable on a component's initial render.",
+            "count automatically updates to match refreshKey on every re-render, since refreshKey changing is itself a kind of state update."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "React associates state with a specific component instance, not with any single call to the component function -- the 0 passed to useState(0) is only ever used to initialize that state the very first time this instance renders. Re-rendering Widget with a new refreshKey prop doesn't unmount or remount it, so every subsequent call to useState(0) simply hands back whatever count currently is, ignoring the 0 argument entirely. Since nothing here ever calls setCount, count simply stays at its initial value (0) through every one of these re-renders -- receiving new props has no effect on state that nothing has explicitly updated."
+        },
+        {
+          "id": "react-state-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A SearchBox component and a ResultsList component are rendered as siblings inside one App component. Both need access to the exact same searchTerm value -- SearchBox updates it as the user types, and ResultsList reads it to filter what it displays. Where should searchTerm's state most appropriately live?",
+          "options": [
+            "Inside SearchBox only, since it's the component whose input actually updates the value.",
+            "Inside ResultsList only, since it's the component that actually needs to read the value to filter its output.",
+            "In the nearest common ancestor of both components -- App -- passed down to each of them as needed, a technique known as lifting state up.",
+            "Independently inside each of SearchBox and ResultsList, with some mechanism keeping the two copies automatically synchronized."
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "The default principle is to keep state as low and local as possible, but that only works cleanly when exactly one component needs it. Here, two siblings both genuinely need the same value -- one to update it, one to read it -- and neither can hold state the other one also needs to see, since state only flows down from wherever it's declared. The correct move is lifting the state up to the nearest common ancestor of both siblings (App), which then passes searchTerm down to ResultsList as a prop and passes both searchTerm and a setter (or an onChange-style callback) down to SearchBox -- keeping a single source of truth rather than trying to keep two independent copies in sync."
         }
       ]
     },
@@ -317,6 +369,19 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "A <form> submission's native browser behavior is to perform a page navigation (reloading the current page, by default). In a React app, that navigation would tear down the whole component tree and its state, which is essentially never what you want, since the app is meant to handle the submission entirely in JavaScript. preventDefault() stops that native navigation so your handler's own logic -- reading state, validating it, sending a request -- runs uninterrupted instead. Option A is false: forms render and work fine without it; you just also get an unwanted page navigation. Option C confuses submission with the separate onChange handlers on individual inputs, which fire regardless. Option D misattributes batching, which is an unrelated React scheduling behavior, not something preventDefault controls."
+        },
+        {
+          "id": "react-events-and-forms-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Which statement correctly describes React's synthetic event system, as used when you write `<input onChange={handleChange} />` in JSX?",
+          "options": [
+            "You still need to manually call addEventListener and removeEventListener yourself for each JSX event prop you use; onChange is just a naming convention.",
+            "React wraps native browser events in its own consistent wrapper, and event props like onClick/onChange/onSubmit let you attach handlers declaratively -- React attaches and cleans up the real underlying listeners for you, with no manual addEventListener call needed.",
+            "Synthetic events only exist for onClick; typing-related interactions like onChange still require raw DOM event listeners set up separately.",
+            "The synthetic event system replaces the DOM entirely, so no actual native browser event occurs underneath a React event handler."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "React's synthetic event system exists specifically so you can declare handlers via camelCase JSX props (onClick, onChange, onSubmit, and so on) for essentially any interaction you'd expect, without ever calling addEventListener or removeEventListener yourself -- React handles wiring up (and later cleaning up) the real underlying listeners. Option A describes exactly the manual bookkeeping this system exists to remove. Option C is false -- onChange, onSubmit, and every other standard event prop all work the same declarative way, not just onClick. Option D is false -- there's still a real native browser event happening underneath; React's synthetic event is a consistent wrapper around it, not a replacement for it."
         }
       ]
     },
@@ -425,6 +490,19 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "Keys exist to give React a stable identity for each item across renders, which is what makes correct reconciliation possible -- matching 'this item moved from position 2 to position 0' versus 'this is a brand-new item' versus 'this item was removed.' Option A undersells the issue: without stable keys, React can and does make the wrong call about what changed, which can cause real bugs (state or DOM attaching to the wrong item), not just a performance cost. Option C is false -- omitting keys produces a console warning, not a build error, and the list still renders (just with reconciliation correctness at risk). Option D is false -- the array's own order (as produced by .map()) determines display order; keys are about matching identity across renders, not about display sequence."
+        },
+        {
+          "id": "react-conditional-rendering-and-lists-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A list of checkboxes is rendered with `key={index}` from `.map((item, index) => ...)`. A new item is inserted at the very front of the array, shifting every existing item down by one position, and the list re-renders. What happens to the existing checkboxes' visual checked state?",
+          "options": [
+            "Each checkbox correctly keeps the checked state of the same underlying item it originally represented, since key={index} is recalculated fresh on every render.",
+            "Because keys are matched purely by position rather than by item identity, the checked states end up shifted -- each existing DOM checkbox (and whatever checked state it's holding) gets reused for whichever item now happens to sit at that same position, which is a different item than before the insert.",
+            "React detects that the array's length changed and automatically remounts every item from scratch with fresh, unchecked checkboxes.",
+            "Nothing changes visually, since defaultChecked only sets the initial value and is never reconsidered after an item's very first render anyway."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "React reconciles a list by matching keys between the previous render and the new one -- it has no other way to tell 'same logical item, moved' from 'a different item that happens to be here now' besides the key you give it. With key={index}, inserting a new item at the front doesn't change any key values at all from React's point of view; position 0's key is still 0, position 1's key is still 1, and so on. React therefore assumes the element now at each position is the same one that was previously at that position, and reuses each of those existing DOM nodes -- checkbox checked state included -- for whatever item now happens to occupy that position, even though every existing item has actually shifted down by one. The checked states end up visually attached to the wrong items, off by one row, exactly the same category of bug the concept describes for deletions and reordering."
         }
       ]
     }

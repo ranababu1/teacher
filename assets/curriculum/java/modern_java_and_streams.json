@@ -122,6 +122,45 @@
           "type": "explanation",
           "prompt": "Explain to someone who understands methods and interfaces, but has never used lambdas, what a lambda expression actually is, how target typing determines what it implements, and why it can only read (not reassign) certain local variables from its surroundings.",
           "modelAnswer": "A lambda expression is a compact, inline way of writing the single method body of an implementation of a functional interface -- an interface that declares exactly one abstract method -- without writing out a full named class or an anonymous class for it. Something like name -> \"Hello, \" + name is, by itself, just a description of 'take one parameter, produce this expression's value' -- it has no fixed type or identity on its own. What gives it meaning is target typing: wherever that lambda is actually written -- assigned to a variable of some functional interface type, passed as an argument to a parameter of some functional interface type, or explicitly cast -- the compiler looks at that specific context to determine which functional interface's single abstract method the lambda is meant to implement, and checks that the lambda's parameter count and body are compatible with that method's signature. The exact same lambda text can implement completely different functional interfaces in two different places, purely because of what it's assigned to in each case; there's no such thing as 'the type of this lambda' independent of that context. As for variable capture: a lambda body is allowed to read local variables and parameters from its enclosing scope, but only ones that are 'effectively final' -- assigned exactly once and never reassigned anywhere afterward in that scope, even if the final keyword isn't explicitly written. This exists because a lambda can genuinely be invoked later than, and separately from, the method call that created it -- stored in a field, handed to another thread, called back after the original method has already returned -- and if the captured variable were allowed to keep changing, there would be no single well-defined answer for which value the lambda should actually see. Rather than trying to define some complicated live-capture semantics, Java simply disallows capturing anything that changes, and pushes anyone who genuinely needs shared, mutable state accessed from inside a lambda toward capturing a reference to a mutable container object instead -- the reference stays effectively final even while the object's own internal state changes through its own methods."
+        },
+        {
+          "id": "java-lambdas-and-functional-interfaces-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Function<String, Integer> len = String::length; What does this method reference actually mean, given that no specific String object appears anywhere in the expression?",
+          "options": [
+            "It calls length() on a fixed, hidden String object that the JVM creates internally every time len.apply(...) is called.",
+            "It's an instance method reference on an arbitrary object of a given type: whatever single argument is passed to len.apply(...) becomes the object that length() is actually called on, exactly equivalent to writing s -> s.length().",
+            "This fails to compile, because an instance method can never be referenced without explicitly specifying a receiver object.",
+            "It treats length as if it were a static method of String, calling it with no receiver object at all."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This is the third of the four method-reference forms: when the referenced method is an instance method and no specific object is named, the lambda's own incoming parameter becomes the receiver the method is called on. Function<String, Integer> takes one String argument and returns an Integer, and s.length() matches that shape exactly, with s supplied at call time as len.apply(s). Option A invents a hidden object that doesn't exist. Option C is wrong -- this exact form (an instance method reference on an arbitrary object of a type) is one of the four standard, fully legal method reference forms. Option D is wrong because length() is a genuine instance method on String, not a static one; the method reference works precisely because the argument becomes the receiver, not because the method is static."
+        },
+        {
+          "id": "java-lambdas-and-functional-interfaces-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "List<Runnable> tasks = new ArrayList<>(); for (int i = 0; i < 3; i++) { int current = i; tasks.add(() -> System.out.println(current)); } Why does this compile, when capturing the loop variable i directly -- tasks.add(() -> System.out.println(i)); -- would not?",
+          "options": [
+            "current and i are actually the same variable under the hood, so there's no real difference -- both versions would compile identically.",
+            "current is a brand-new local variable, freshly declared and assigned exactly once within each loop iteration, so it's effectively final for that iteration's lambda; i, by contrast, is reassigned by the loop's own update step (i++) on every iteration, which disqualifies it from being effectively final.",
+            "Lambdas can only capture variables declared with the exact keyword final, and current happens to satisfy that requirement while i does not.",
+            "This fails to compile as written too, because ArrayList cannot hold a list of lambdas."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Each pass through the loop body declares a fresh current and assigns it exactly once, so from the lambda's point of view inside that one iteration, current is never reassigned anywhere in its scope -- effectively final. i, however, is a single variable shared across every iteration, and the loop's update clause reassigns it on every pass, which makes it fail the effectively-final test regardless of which iteration's lambda tries to capture it. Option A is wrong -- current and i are genuinely different variables, with different values captured across iterations, which is exactly why the copy-into-current pattern is a standard idiom. Option C overstates the rule -- effectively final variables don't need the explicit final keyword at all, only the never-reassigned property. Option D is a fabricated, unrelated claim; ArrayList holds references of any type, lambdas included."
+        },
+        {
+          "id": "java-lambdas-and-functional-interfaces-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "class Handler { private String label = \"handler\"; Runnable makeLambdaRunnable() { return () -> System.out.println(this.label); } Runnable makeAnonymousRunnable() { return new Runnable() { public void run() { System.out.println(this.label); } }; } } What is true about each method?",
+          "options": [
+            "Both compile fine and print \"handler\", because this always refers to the enclosing Handler instance inside both a lambda and an anonymous class.",
+            "makeLambdaRunnable() compiles fine -- a lambda introduces no instance or this of its own, so this.label correctly refers to the enclosing Handler's field; makeAnonymousRunnable() fails to compile, because the anonymous class genuinely creates its own object with its own this, which has no field named label, requiring Handler.this.label to reach the enclosing instance instead.",
+            "Both fail to compile, because this can never be referenced inside any implementation of a functional interface.",
+            "makeAnonymousRunnable() compiles fine and makeLambdaRunnable() fails, because lambdas are never allowed to reference this under any circumstance."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "A lambda body behaves as if it were written directly inline in the enclosing code -- it introduces no new this at all, so this.label inside the lambda resolves to Handler's own label field exactly as it would anywhere else in makeLambdaRunnable. An anonymous class, by contrast, genuinely creates a distinct object of its own, with its own this -- and that anonymous Runnable object has no field named label, so this.label inside its run() method fails to compile (there being no such member to resolve to); reaching the enclosing Handler's label from inside the anonymous class requires the more verbose Handler.this.label. Option A ignores this real, structural difference. Option C is wrong -- this is used constantly and correctly inside lambdas, referring to the enclosing context. Option D reverses which one actually has the problem."
         }
       ]
     },
@@ -243,6 +282,45 @@
           "type": "explanation",
           "prompt": "Someone on your team says streams are 'just a fancy way to write a for-loop' and doesn't see why laziness or the single-use rule matter in practice. Explain why they actually do matter, with a concrete scenario for each.",
           "modelAnswer": "Streams differ from a for-loop in two ways that have real, observable consequences, not just stylistic ones. First, laziness: none of a stream's intermediate operations -- filter, map, sorted, and so on -- actually process any elements when they're called; they only build up a description of a pipeline. Nothing runs until a terminal operation, like collect or forEach, is invoked, at which point elements are pulled through the whole chain. This matters concretely in two ways: it enables genuine short-circuiting, so an operation like findFirst() or anyMatch() can stop pulling elements through the pipeline the moment it has its answer, without ever touching the rest of a large (or even conceptually infinite) source -- something a naive for-loop written by hand would need to replicate manually with an explicit break. It also means that if you build a pipeline and forget to attach a terminal operation at all, the whole thing silently does nothing at run time, which is a genuinely different failure mode from a for-loop, where forgetting to 'finish' the loop isn't really a coherent mistake to make in the same way -- it's worth knowing this so an accidentally terminal-operation-less pipeline doesn't get mistaken for a bug somewhere else. Second, the single-use rule: a Stream can be traversed exactly once; once any terminal operation has run on it, that stream is consumed, and calling anything else on that same reference throws IllegalStateException. This is a real trap in practice when someone tries to reuse one stream variable for two different purposes -- say, counting how many elements match a condition, and then separately collecting the transformed matches into a list -- because it's easy to assume a stream behaves like a List you can iterate as many times as you want. The fix is simply to build a fresh stream, from the same source, for each pipeline you need to run, which is cheap and exactly what streams are designed for, but it does require internalizing that a Stream reference is a one-shot pipeline, not a reusable collection."
+        },
+        {
+          "id": "java-streams-map-filter-reduce-collect-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Stream<String> s = List.of(\"a\", \"b\").stream(); long count = s.count(); List<String> upper = s.map(String::toUpperCase).collect(Collectors.toList()); What happens on the second statement operating on s?",
+          "options": [
+            "It works fine, producing [A, B], since count() only reads from the stream without actually consuming it.",
+            "It throws IllegalStateException: stream has already been operated upon or closed, because count() is itself a terminal operation, and once any terminal operation has run on a stream, that same stream reference is fully consumed and can never be operated on again.",
+            "It silently returns an empty list, since the stream's elements were already used up by count() and none remain to map.",
+            "It recomputes the stream from scratch internally, since Stream objects automatically refresh themselves each time a new operation is chained onto them."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "count() is a terminal operation, even though it superficially looks like a harmless read -- and the moment any terminal operation runs, the stream it ran on is considered consumed. Calling .map(...) on that same, already-consumed s reference afterward throws IllegalStateException at run time. Option A is wrong because there is no such thing as a 'read-only,' non-consuming terminal operation in the Stream API -- every terminal operation consumes the stream it's called on. Option C invents a silent-failure behavior Java's streams don't have; the actual failure is a loud, immediate exception. Option D describes a self-refreshing behavior streams simply don't implement -- a Stream is a genuinely one-shot pipeline over its source, not a renewable view."
+        },
+        {
+          "id": "java-streams-map-filter-reduce-collect-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Optional<Integer> result = Stream.<Integer>empty().reduce((a, b) -> a + b); What does this evaluate to, and why does this form of reduce return an Optional at all rather than an int directly?",
+          "options": [
+            "It returns Optional.empty(), because the one-argument reduce overload has no identity value to fall back on for an empty stream, so it has to express 'no result' explicitly rather than inventing an arbitrary answer.",
+            "It throws NoSuchElementException immediately, because reduce always requires at least one element to combine, empty stream or not.",
+            "It returns Optional.of(0), because 0 is used as an implicit default identity value whenever none is explicitly supplied to reduce.",
+            "It fails to compile, because reduce can only ever be called with exactly two arguments: an identity value and a combining function."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "The single-argument reduce(BinaryOperator<T>) overload has no identity value supplied by the caller, so for a genuinely empty stream there's no combining to do and no starting value to fall back on and hand back as-is -- there is, correctly, no sensible T to return. Rather than picking an arbitrary placeholder, this overload returns Optional<T>, forcing the caller to explicitly handle the empty case, and for an empty stream that Optional is empty. Option B is wrong -- reduce does not throw for an empty stream when using this overload; that's exactly the scenario Optional is there to represent safely. Option C invents a default identity that doesn't exist for this overload; 0 is never assumed. Option D is wrong because reduce has multiple legitimate overloads, including this exact one-argument form used here."
+        },
+        {
+          "id": "java-streams-map-filter-reduce-collect-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Which statement accurately distinguishes filter and map from sorted and distinct, in terms of stateless versus stateful stream operations?",
+          "options": [
+            "filter and map are stateful because they can reject or transform elements, while sorted and distinct are stateless because they merely reorder or deduplicate what's already there.",
+            "filter and map are stateless -- deciding what to do with one element only ever requires that element's own value, never any knowledge of other elements; sorted and distinct are stateful -- sorted cannot know an element's correct final position until every other element has been seen, and distinct must remember every element it's already emitted.",
+            "There is no real distinction between the four operations; all are implemented identically internally and differ only in which lambda is supplied to them.",
+            "filter and map are stateful because they each require a Predicate or Function argument, while sorted and distinct take no arguments at all and are therefore stateless."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "filter and map process each element independently, using only that element's own value -- nothing about handling one element depends on having seen any other. sorted, by contrast, cannot place any element into its final position without having compared it against every other element in the stream, and distinct has to remember every distinct value already emitted so far to recognize a later repeat -- both genuinely depend on more than just the one element currently being processed, which is what makes them stateful. Option A gets the labels backwards. Option C is wrong because the stateless/stateful distinction is a real, documented property with real consequences for buffering and parallel behavior, not a cosmetic difference. Option D bases the distinction on argument count, which isn't the actual criterion at all -- sorted() can even take a Comparator argument and remains just as stateful."
         }
       ]
     },
@@ -363,6 +441,32 @@
           "type": "explanation",
           "prompt": "Explain why Optional is generally recommended as a return type but discouraged as a field type or parameter type, and separately explain what a record's compact constructor is for and what actually happens to the record's fields after it runs.",
           "modelAnswer": "Optional<T> earns its usefulness specifically as a return type for methods where 'no result' is a legitimate, expected outcome -- it puts that possibility directly into the method's signature, which is a much stronger, more visible signal to a caller than a bare T that might secretly be null with no indication of that in the type at all. That value doesn't carry over cleanly to fields or parameters, though, for a fairly concrete reason: an Optional-typed field or parameter can still itself be null -- nothing about declaring a field as Optional<String> prevents someone from assigning it null directly -- so you haven't actually removed the null-handling problem in that context, you've only added an extra unwrapping step (calling .get() or .orElse(...)) on top of a problem that's still there underneath. Optional also isn't designed to be a general-purpose null-replacement -- it's specifically meant for the 'method might not produce a result' shape, which return types have and fields/parameters generally don't need in the same way; a field either has a value because the object was constructed with one, or the class's own design should make clear what 'no value' means for that field without introducing another wrapper type to express it. As for records: a compact constructor is written without repeating the record's parameter list, and it exists specifically to add validation or normalization logic to the values being used to construct the record. Critically, it does NOT replace the actual field assignments -- those still happen automatically, but only AFTER the compact constructor's own body finishes running. So a compact constructor's job is purely to check or transform the incoming values (throwing an exception on invalid input, for instance) before the implicit assignment step takes over and actually sets each private final field to its corresponding parameter's value."
+        },
+        {
+          "id": "java-optional-and-records-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Optional<String> present = Optional.of(\"value\"); String result = present.orElse(computeExpensiveDefault()); -- assuming computeExpensiveDefault() has an observable side effect, like printing a message, what happens when this line runs, even though present already holds a value?",
+          "options": [
+            "computeExpensiveDefault() is never called at all, since present already has a value and the default is unnecessary.",
+            "computeExpensiveDefault() is called and its side effect runs, because orElse's argument is evaluated eagerly as an ordinary method argument before orElse itself is even invoked -- regardless of whether the Optional turns out to be present or empty.",
+            "computeExpensiveDefault() is called, but its side effects are automatically suppressed until Java confirms the Optional is actually empty.",
+            "This throws an exception, because orElse cannot legally be called on an Optional that already has a value present."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Method arguments in Java are evaluated before the method they're passed to is invoked, with no special exception for orElse -- so computeExpensiveDefault() runs, side effects and all, as an ordinary part of evaluating this statement, whether or not present later turns out to have a value. Since present does have a value here, the computed default is simply discarded once orElse decides it isn't needed -- but by then the work (and the side effect) has already happened. Option A describes orElseGet's actual laziness, not orElse's. Option C invents a suppression mechanism Java doesn't have -- side effects, once triggered by running code, cannot be selectively undone. Option D is wrong -- orElse is always legal to call regardless of whether the Optional is present or empty; that's the entire point of it being a fallback mechanism."
+        },
+        {
+          "id": "java-optional-and-records-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "record Buffer(byte[] data) { } Buffer b1 = new Buffer(new byte[]{1, 2, 3}); Buffer b2 = new Buffer(new byte[]{1, 2, 3}); System.out.println(b1.equals(b2)); What prints, and why?",
+          "options": [
+            "true, because records always generate value-based equals() that compares every component by its actual content, arrays included.",
+            "false, because the generated equals() calls Object.equals() on each component, and arrays never override that method from Object -- so an array component is compared by reference identity rather than content, even though b1's and b2's arrays happen to hold identical bytes.",
+            "This fails to compile, because array types are not permitted as record components.",
+            "true, because byte[] specifically is treated as a value type inside records, unlike in ordinary hand-written classes."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "A record's generated equals() compares components using Object.equals() (and generated hashCode() uses Object.hashCode()) for each one -- and arrays never override equals() or hashCode() from Object, so an array component is compared by reference identity, exactly as if you'd compared two plain arrays with == outside of any record at all. b1.data and b2.data are two separate array objects, so even though their contents are identical, b1.equals(b2) is false. Option A overstates records' guarantee -- it holds for ordinary components but specifically breaks down for array-typed ones. Option C is wrong -- arrays are completely legal record component types; they just don't get the value-equality behavior other component types do. Option D is wrong -- there is no special-casing of byte[] or any other array type inside record-generated code; the pitfall applies uniformly to every array-typed component."
         }
       ]
     }

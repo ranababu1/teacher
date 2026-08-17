@@ -117,6 +117,45 @@
           "explanation": "Option 3 is correct: a bare, single-word image name with no namespace or host segment expands specifically to docker.io/library/<name>:latest -- library/ being the reserved namespace Docker Hub uses for its official, curated images. Option 1 is wrong because which registries you're logged into never determines where an unqualified reference resolves to; that's governed entirely by the reference's own host segment (or lack of one). Option 2 is wrong about the specific default -- a single-word name is not treated as its own top-level namespace; it's expanded into library/. Option 4 is wrong -- omitting the host is explicitly supported and simply falls back to Docker Hub, rather than causing any kind of error."
         },
         {
+          "id": "docker-registries-push-pull-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "After pushing app:1.0, a team rebuilds after only changing application source code (the base image and dependency-install layers remain unchanged), then pushes app:2.0. What does that second push actually transfer?",
+          "options": [
+            "The entire image again, since each tag is stored as a fully independent copy in the registry.",
+            "Only the layer(s) whose content digest the registry has never seen before -- layers shared with app:1.0, including the base image and dependency-install layers, are skipped with a \"Layer already exists\" message.",
+            "Nothing at all, since the registry assumes any newly-pushed tag is identical to the immediately preceding one until proven otherwise.",
+            "Only the image's manifest, with the actual layer data synced automatically in the background sometime afterward."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 is correct: push operates layer by layer, checking each one's content digest against what the registry already has, and only genuinely new or changed layers -- typically just the one containing the changed application source, given cache-friendly Dockerfile ordering -- are actually uploaded. Option 1 is wrong -- this is exactly the misconception the concept calls out; layers are individually content-addressed and reused across tags. Option 3 is wrong -- the registry doesn't assume anything about tag similarity; it verifies each layer's digest explicitly. Option 4 is wrong -- there's no deferred background sync; the manifest and the layers it references are pushed together, with only already-present layers being skipped at push time."
+        },
+        {
+          "id": "docker-registries-push-pull-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A CI pipeline that has reliably pulled a public base image all week suddenly starts failing with 'toomanyrequests: You have reached your pull rate limit,' despite no change in that team's own usage. What's the most likely explanation?",
+          "options": [
+            "The base image was deleted from Docker Hub, and the rate-limit message is simply a misleading error for a missing image.",
+            "Many CI providers run jobs from a shared pool of runners, so many unrelated pipelines across many unrelated organizations can end up sharing the same small set of egress IP addresses, exhausting that IP's anonymous pull rate limit far faster than any single team's own usage would suggest.",
+            "Docker Hub permanently bans any account that pulls the exact same image more than once within a 24-hour period.",
+            "The team's local Docker daemon has a corrupted image cache that needs to be manually cleared before pulls will succeed again."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 correctly identifies the subtle, easy-to-miss cause described in the concept: Docker Hub's rate limits are tied to IP address (for anonymous pulls) or account, and a shared CI runner pool means many unrelated teams' pulls can collectively exhaust one IP's limit, producing failures that have nothing to do with any single team's own pull volume. Option 1 is wrong -- a deleted image produces a distinct 'not found' error, not a rate-limit message. Option 3 is wrong -- there's no such 24-hour same-image ban; Docker Hub's actual limits are rolling-window pull counts, not per-image repetition bans. Option 4 is wrong -- a local cache issue wouldn't produce a rate-limit-specific error message from the registry itself."
+        },
+        {
+          "id": "docker-registries-push-pull-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "What does `docker login myregistry.example.com --password-stdin` actually do, and why is --password-stdin preferred over passing the password as a plain --password argument?",
+          "options": [
+            "It stores the password in a world-readable environment variable; --password-stdin only changes which variable it's stored in.",
+            "It authenticates against that host and stores an auth token (in ~/.docker/config.json or a configured credential helper), reused automatically on subsequent push/pull; --password-stdin avoids leaving the raw password visible in shell history or a process listing, unlike a plain command-line argument.",
+            "It has no meaningful security difference from --password; both approaches store the password identically in plaintext.",
+            "It only works when authenticating against Docker Hub itself, not against third-party or self-hosted registries."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 correctly describes both what login does (store a reusable auth token/credential for that specific host) and why --password-stdin is the safer form (a plain --password argument can be captured in shell history or observed via a process listing, while stdin avoids both). Option 1 invents an environment-variable storage mechanism that isn't how docker login actually stores credentials. Option 3 is wrong -- the whole point of the concept's guidance is that --password-stdin meaningfully reduces exposure compared to a plain argument. Option 4 is wrong -- docker login works identically against any registry implementing the standard registry API, including self-hosted and third-party ones, not just Docker Hub."
+        },
+        {
           "id": "docker-registries-push-pull-assess-explain1",
           "type": "explanation",
           "prompt": "Explain, at the level of layers and content digests, why pushing a new tag of an image that shares most of its layers with an image already in the registry is typically fast, and separately, explain why an organization might choose to run a private registry instead of relying entirely on public Docker Hub.",
@@ -237,6 +276,32 @@
           "explanation": "Option 3 is correct: :latest is simply the tag Docker applies by default to an unspecified push, and a registry enforces no relationship between that name and actual recency, test status, or version ordering -- it points at whatever was most recently pushed under that literal tag, by whoever had access, full stop. Option 1 sounds plausible but isn't guaranteed -- a team could push an older or unrelated build under :latest at any time, deliberately or by mistake, and nothing prevents it. Option 2 invents a testing/quality guarantee the tag mechanism has no way to enforce or even represent. Option 4 confuses :latest with a genuinely different, semver-aware convention that some tooling implements on top of tags, but which is not what the literal string 'latest' itself means or checks."
         },
         {
+          "id": "docker-tagging-strategies-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "During a rolling deploy, four replicas independently pull app:latest at slightly different times. Partway through, an unrelated pipeline pushes a new build to app:latest. What is the likely result?",
+          "options": [
+            "All four replicas end up running whichever version was pulled first, since Docker caches that initial resolution for the whole rollout.",
+            "Replicas that pulled before the new push end up running the old version, and replicas that pulled after end up running the new version -- resulting in two different versions running simultaneously, with no error surfaced anywhere.",
+            "The rollout fails outright, since Docker detects the tag was repointed mid-rollout and aborts the operation.",
+            "Only the very last replica to pull is affected; the first three are guaranteed to match each other regardless of the timing of the mid-rollout push."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 correctly describes replica drift: each replica resolves app:latest independently, at the exact moment it pulls, with no shared snapshot of 'what latest meant when the rollout started' -- so replicas pulling before versus after the mid-rollout push end up on genuinely different versions, silently. Option 1 invents a caching behavior that doesn't exist; there's no rollout-wide resolution lock. Option 3 is wrong -- Docker has no mechanism to detect or abort based on a tag being repointed during an unrelated rollout. Option 4 is wrong -- any replica pulling after the push picks up the new version, not just the very last one; the split depends on each replica's individual pull timing relative to t=8s, not on rollout position specifically."
+        },
+        {
+          "id": "docker-tagging-strategies-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Why does pinning a production deployment to app@sha256:<digest> provide a stronger guarantee than pinning to app:1.4.2, even if the team has a strict policy of never re-pushing over an existing version tag?",
+          "options": [
+            "There is no meaningful difference -- both are equally strong guarantees as long as the team's policy is actually followed.",
+            "A tag, even a disciplined version tag, is still mechanically just a reassignable pointer that someone with sufficient registry access could repoint (by mistake or through a compromised credential); a digest reference bypasses tag resolution entirely and names the exact content directly, immune to any future repointing of any tag.",
+            "Digests are a feature only supported by private, self-hosted registries, not Docker Hub, so this comparison doesn't meaningfully apply to public images.",
+            "Pinning by digest is functionally identical to pinning by tag, but it happens to execute faster at pull time."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 is correct and matches the concept's core argument for digest pinning: convention and policy are enforced by people, while a digest reference is enforced structurally -- it names content directly and cannot be affected by any tag being repointed, deliberately or accidentally, by anyone with push access. Option 1 is wrong -- policy compliance is exactly the kind of guarantee that can silently fail (a rushed change, a compromised credential), which is precisely what digest pinning is immune to regardless. Option 3 is false -- digests are a standard part of the OCI Distribution Specification, supported by Docker Hub and virtually every other registry. Option 4 is false -- the practical difference is about the strength of the reference's guarantee, not about pull speed, which digest and tag references don't meaningfully differ on."
+        },
+        {
           "id": "docker-tagging-strategies-assess-explain1",
           "type": "explanation",
           "prompt": "A team currently pushes every CI build to app:latest and deploys that tag directly to production. Explain, concretely, at least two specific production incidents this practice makes more likely or harder to recover from, and describe the tagging scheme you'd propose instead, including how it changes each of those specific incidents.",
@@ -355,6 +420,32 @@
           ],
           "correctOptionIndex": 2,
           "explanation": "Option 3 is correct and is exactly the build-once-promote-everywhere principle in practice: one image, built once, is promoted unchanged through every environment, with purely environmental differences like a connection string supplied externally at container-start time. Option 1 and option 2 both involve producing more than one actual image artifact for what should be a single promoted artifact, reopening reproducibility risk and configuration drift between environments, which is precisely the failure mode this principle exists to prevent. Option 4 hardcodes environment-specific values into the application's own source, which is more rigid and harder to change than externalized runtime configuration, and still doesn't address the core problem of what artifact should move between environments."
+        },
+        {
+          "id": "docker-cicd-image-builds-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Why doesn't Docker's layer-caching discipline from the Dockerfile module automatically pay off on a typical CI runner the way it does on a developer's laptop?",
+          "options": [
+            "CI runners use a fundamentally different filesystem type that is structurally incompatible with layer caching.",
+            "CI runners are frequently ephemeral, spun up fresh for a job and destroyed afterward, so they typically start with zero prior build cache unless the pipeline explicitly restores it via a mechanism like --cache-from pointing at a previously-pushed image, or a registry-backed remote cache.",
+            "Docker deliberately disables build caching inside any CI environment, as a hard-coded security restriction.",
+            "Layer caching only works for single-stage Dockerfiles, and CI pipelines exclusively build using multi-stage Dockerfiles."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 correctly identifies the actual cause: a fresh, ephemeral runner has no accumulated local cache the way a long-lived laptop does, so the same layer-ordering discipline that pays off for free locally requires an explicit cache-restoration mechanism -- --cache-from/--cache-to against a registry -- to have any effect in CI. Option 1 is false -- there's no filesystem-level incompatibility; the issue is purely about what cache state happens to already exist on a given machine. Option 3 is false -- Docker imposes no such CI-specific restriction; caching works identically, it just has nothing to reuse on a clean runner by default. Option 4 is false -- layer caching applies to both single- and multi-stage Dockerfiles equally, and CI pipelines use both kinds."
+        },
+        {
+          "id": "docker-cicd-image-builds-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A pipeline is ordered build -> push -> test -> scan -> deploy. A commit introduces a bug the test suite would catch. What specifically goes wrong because of this ordering, even though the pipeline's own deploy stage never runs the broken image?",
+          "options": [
+            "Nothing goes wrong, since the pipeline itself never actually deploys the broken image to production.",
+            "The broken image is uploaded to the registry and becomes pullable by anything watching that repository or tag -- another automated deploy trigger, a different pipeline, or a teammate -- during the window between push and the eventual test failure, even though this pipeline's own deploy stage correctly never runs.",
+            "The push stage itself automatically fails if the image being pushed contains a bug, regardless of test results.",
+            "Docker registries automatically quarantine any image that later fails a test run after having already been pushed."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 correctly identifies the real risk of this ordering: pushing before testing makes the broken image externally available -- to other systems, pipelines, or people watching that tag -- during exactly the window before the test failure is even known, regardless of whether this specific pipeline's own deploy stage ever runs. Option 1 understates the risk by only considering this pipeline's own deploy stage, ignoring everything else that might already be watching the registry. Option 3 is false -- push has no awareness of application-level bugs; it's a pure data-transfer operation. Option 4 is false -- registries have no such automatic quarantine mechanism tied to a separate pipeline's later test results."
         },
         {
           "id": "docker-cicd-image-builds-assess-explain1",

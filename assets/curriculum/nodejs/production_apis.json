@@ -107,6 +107,45 @@
           "explanation": "Letting a missing environment variable go undetected until some deep piece of code actually tries to use it produces a failure whose symptom (often a cryptic error from a database driver or third-party library) is disconnected from its real cause (a missing variable), and that failure might not even surface until well after the server has started accepting real traffic. Validating explicitly at startup, and calling process.exit(1) with a clear message when something required is missing, guarantees the failure happens immediately, before the server ever starts, with a message that names the actual problem directly. Option A is false -- reading an undefined property from process.env just silently yields undefined, no error is thrown automatically. Option C is false -- process.env can be read as many times as needed throughout a process's lifetime. Option D is false -- the timing and clarity of the failure differ substantially between the two approaches, which is the entire point of validating early."
         },
         {
+          "id": "nodejs-env-config-secrets-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A .env file contains the line MAX_CONNECTIONS=10. After require('dotenv').config() runs, what is the actual type and value of process.env.MAX_CONNECTIONS?",
+          "options": [
+            "The number 10, since dotenv automatically parses numeric-looking values into actual JavaScript numbers.",
+            "The string \"10\" -- every value in process.env is a string, unconditionally, regardless of what it looks like; using it directly in arithmetic without an explicit Number()/parseInt() conversion produces string concatenation rather than numeric addition.",
+            "The boolean true, since any non-zero numeric-looking environment variable is automatically coerced to true.",
+            "undefined, because dotenv only loads values that are already explicitly typed as strings in the .env file."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "dotenv copies .env's key/value pairs into process.env exactly as plain strings, with no type inference based on content -- so MAX_CONNECTIONS=10 becomes the string \"10\", not the number 10. Using it directly in arithmetic (process.env.MAX_CONNECTIONS + 1) would concatenate rather than add, producing \"101\" instead of 11, unless explicitly converted first with Number(...) or parseInt(...). Option A invents automatic type inference dotenv doesn't perform. Option C invents a boolean coercion rule that doesn't exist. Option D is wrong -- dotenv loads the value regardless of what it looks like; it simply always represents it as a string."
+        },
+        {
+          "id": "nodejs-env-config-secrets-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "In an app's entry point, some other module is required -- and reads process.env.DATABASE_URL at its own top level -- BEFORE require('dotenv').config() runs. What's the likely consequence?",
+          "options": [
+            "None -- dotenv retroactively back-fills process.env for any code that already ran, regardless of require order.",
+            "That other module likely captures undefined for DATABASE_URL, since it read process.env before dotenv had a chance to populate it from the .env file -- require('dotenv').config() must run before any code that reads the values it's responsible for populating.",
+            "Node automatically defers all process.env reads until after the entire module graph has finished loading, so require order never matters.",
+            "The app throws a SyntaxError at startup, since dotenv's config() call is required to be the literal first line of the entire project's entry file."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "dotenv's entire job is copying .env's contents into process.env at the moment .config() is actually called -- before that call runs, process.env simply doesn't have those values yet. A module required (and executed) earlier that reads process.env.DATABASE_URL at its own top level captures whatever process.env held at that exact moment, which is undefined for a value dotenv hasn't populated yet, and that module doesn't get a second chance to notice the value later. Option A invents retroactive back-filling that doesn't happen -- JavaScript doesn't re-run already-executed top-level code. Option C is false -- Node executes modules and their top-level code in require order, immediately, not deferred until some later point. Option D overstates the requirement into a hard syntax rule; it's a real ordering requirement, but violating it produces a logical bug (undefined values), not a SyntaxError."
+        },
+        {
+          "id": "nodejs-env-config-secrets-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Why is baking a secret into a Docker image at build time (e.g. via a Dockerfile ARG/ENV used to inline a value into the compiled image) considered a common, risky mistake, compared to injecting the same value as a runtime environment variable when the container actually starts?",
+          "options": [
+            "There's no real difference -- both approaches result in identical security posture and identical flexibility.",
+            "A build-time value becomes fixed for every container started from that image, everywhere, and for a secret specifically, gets embedded into the image itself -- which is typically stored in a registry accessible to a broader set of people than should ever see that secret -- whereas a runtime environment variable can differ per deployment and never becomes part of the image's own stored layers.",
+            "Docker images are technically incapable of containing any environment variable values at all; only already-running containers can hold them.",
+            "Build-time configuration is always faster to change in an emergency than runtime configuration, since it doesn't require restarting anything."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "An image baked with a secret at build time carries that secret embedded in its layers wherever the image itself travels -- pulled by anyone with registry access, inspected by anyone who can pull it, copied into every environment that image is deployed to -- which is a fundamentally broader and less controllable exposure than a value supplied only at container startup, per deployment, via runtime environment variables that never become part of the image's stored contents. Option A ignores this real difference in exposure and flexibility. Option C is factually wrong -- Dockerfiles can and do set ENV values baked into an image; that capability is exactly what makes doing so with a secret a mistake. Option D is backwards -- changing a runtime environment variable typically just requires restarting the container with a new value, while a build-time value requires rebuilding and redeploying an entirely new image."
+        },
+        {
           "id": "nodejs-env-config-secrets-assess-explain1",
           "type": "explanation",
           "prompt": "Explain to a junior developer why an API key should never be hardcoded into source code, even for a project in a private repository that 'only the team can see,' and describe the correct alternative.",
@@ -215,6 +254,45 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "A single script on one laptop is typically read directly by the person who just ran it, in real time, in one terminal -- free-form text is perfectly adequate there. A production service shipping logs from many concurrent instances into a centralized platform faces a fundamentally different problem: reconstructing what happened for one specific request or user requires reliably filtering across a large volume of interleaved output from many sources, which depends on every log entry exposing the same queryable fields consistently -- exactly what structured logging with consistent field names provides and free-form string logging does not. Option A ignores the real difference in how logs are consumed at each scale. Option C understates it -- the value is specifically in machine queryability, not visual formatting. Option D is a fabricated requirement with no basis in the scenario."
+        },
+        {
+          "id": "nodejs-structured-logging-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A request gets retried twice and eventually succeeds; separately, a downstream service goes completely unreachable and never responds at all. Which log levels best fit these two situations, respectively?",
+          "options": [
+            "info for both, since neither situation actually crashed the process.",
+            "warn for the retried-but-eventually-successful case (something unexpected happened, but the system recovered without failing outright), and error for the completely unreachable, unrecovered downstream failure (something failed and likely needs attention).",
+            "debug for both, since these are fine-grained diagnostic details only useful during active investigation.",
+            "error for both, since both situations involve a downstream service not behaving ideally."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "warn fits an unexpected event the system nonetheless recovered from on its own -- a retry that eventually succeeded is exactly this: worth recording as a signal something isn't fully healthy, but not an active failure needing immediate attention. error fits a failure that didn't resolve itself -- a completely unreachable downstream service is a genuine, unresolved problem likely to need someone's attention. Option A undersells the retried case's operational significance by treating it as fully routine. Option C would risk this genuinely important signal being silently dropped if debug logging is disabled in production, per this concept's own warning about that failure mode. Option D over-escalates the recovered retry case, which risks alert fatigue if applied broadly to every transient hiccup a system successfully recovers from."
+        },
+        {
+          "id": "nodejs-structured-logging-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "What specific problem does attaching a request ID (via a child logger, e.g. logger.child({ requestId })) to every log entry emitted while handling one incoming request actually solve?",
+          "options": [
+            "It makes each individual log line print faster, since a child logger skips formatting overhead a top-level logger would otherwise perform.",
+            "It lets an engineer filter a log aggregation platform down to exactly the log lines that occurred while handling one specific request, reconstructing that request's complete, ordered story cleanly separated from thousands of other concurrent requests' interleaved log output -- something a shared logger with no per-request identifier cannot provide.",
+            "It automatically raises the log level of every entry associated with that request, guaranteeing none of them are ever dropped by a minimum-level filter.",
+            "It encrypts the log entries associated with that specific request so only the original requester can later decrypt and read them."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "A request ID's entire value is correlation: every log line emitted anywhere during one request's handling carries the same identifying field, which a log aggregation tool can filter on to pull together exactly that request's story out of a much larger, interleaved stream of concurrent output from many other requests happening around the same time. Option A invents a performance claim unrelated to what child loggers actually do (attach consistent fields, not skip formatting). Option C invents an automatic level-escalation behavior that request IDs have no connection to at all. Option D invents encryption behavior no standard logging library provides via child loggers."
+        },
+        {
+          "id": "nodejs-structured-logging-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A developer argues it's fine to log an entire req.body object at debug level on a payment endpoint for convenience, reasoning that debug logs are usually disabled in production anyway. Why does this concept treat that reasoning as unsafe?",
+          "options": [
+            "It isn't actually unsafe -- debug-level log calls never execute in any environment at all, including staging or local development, so there's no real exposure risk.",
+            "Relying on 'debug is usually disabled in production' as the safety mechanism is fragile: debug logging often gets enabled temporarily during real incident investigation (exactly when a sensitive field is most likely to leak into a retained log), configuration mistakes happen, and the same call still runs in staging or local environments that may be less carefully access-controlled than assumed -- the safer rule is to never log sensitive fields at all, regardless of level.",
+            "debug-level logs are stored with measurably weaker encryption than error-level logs by default in most logging libraries.",
+            "Logging req.body at debug level is fine specifically for payment endpoints, but would be unsafe on any other route type for unrelated reasons."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept's actual concern isn't about encryption strength or route type -- it's that the assumed safeguard ('debug is disabled in production') isn't reliable: incidents are precisely when debug logging tends to get turned on, configuration can drift or be misapplied, and the identical code path typically also runs in less strictly controlled environments like staging or local development. The robust rule is level-independent: never log a field known or suspected to be sensitive, regardless of what level the call uses. Option A is factually wrong -- debug calls do execute code and can be enabled. Option C invents a technical distinction that isn't the actual reasoning given. Option D invents a route-specific carve-out the concept doesn't make -- the rule is general, not payment-endpoint-specific."
         },
         {
           "id": "nodejs-structured-logging-assess-explain1",
@@ -331,6 +409,45 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "A wildcard Access-Control-Allow-Origin tells every browser that any origin is permitted to read this API's responses -- so a completely unrelated, potentially malicious web page, opened in the same browser where a user happens to have an active, authenticated session with this API (via cookies or similar), could make requests to it and actually read the returned data, exactly the scenario the same-origin policy is designed to block by default. Option A is wrong -- CORS headers directly govern whether cross-origin response data can be read by page JavaScript, which is a real access boundary, not a cosmetic one. Option C is wrong -- while true, cookie-based credentialed requests need the credentials flag too, plenty of real harm (reading data accessible without credentials, or via other auth schemes like a bearer token attached by malicious page script if it can obtain one) doesn't require that specific combination, and treating the risk as purely theoretical understates it. Option D is backwards -- this scenario specifically affects browser-based users; it has no bearing on server-to-server requests at all, which ignore CORS entirely."
+        },
+        {
+          "id": "nodejs-security-headers-cors-ratelimit-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Which of these best describes what installing helmet() as Express middleware actually accomplishes?",
+          "options": [
+            "It scans the application's own code for SQL injection and authentication vulnerabilities and patches them automatically.",
+            "It sets a curated collection of protective HTTP response headers (such as X-Content-Type-Options, X-Frame-Options, and Strict-Transport-Security) that instruct browsers to enforce additional restrictions, reducing the impact of certain attacks -- it does not fix or scan for vulnerabilities in the application's own business logic.",
+            "It replaces the need for HTTPS entirely, since Strict-Transport-Security alone provides equivalent encryption on its own.",
+            "It automatically blocks any request that doesn't originate from an allowed CORS origin."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "helmet's entire job is setting a well-chosen set of response headers with sensible defaults -- it has no awareness of the application's actual business logic, database queries, or authentication code, and fixes none of those directly. What it does is instruct the receiving browser to enforce extra protective behavior (not sniffing content types, refusing to be framed, always using HTTPS going forward) that reduces the blast radius of certain attack classes. Option A invents a vulnerability-scanning capability helmet doesn't have. Option C is wrong -- Strict-Transport-Security tells a browser to only use HTTPS going forward; it doesn't provide encryption itself, and HTTPS still has to be properly configured and served. Option D confuses helmet's job with CORS middleware's job entirely -- they're unrelated concerns handled by different tools."
+        },
+        {
+          "id": "nodejs-security-headers-cors-ratelimit-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Specifically, what attack does X-Frame-Options: DENY (or an equivalent Content-Security-Policy frame-ancestors directive) protect against?",
+          "options": [
+            "SQL injection, by sanitizing form inputs before they ever reach the database.",
+            "Clickjacking -- tricking a user into clicking something on your real site that's invisibly framed underneath a different, malicious page's UI -- by preventing your pages from being loaded inside an <iframe> on another site at all.",
+            "Cross-origin data exfiltration by a malicious page's own JavaScript reading your API's responses.",
+            "Brute-force password guessing against a login form."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "X-Frame-Options (and its more flexible CSP successor, frame-ancestors) is specifically about controlling whether your pages can be embedded inside an iframe on someone else's site -- blocking clickjacking, where a malicious page overlays or hides your real page's UI underneath its own, tricking a user into clicking something they didn't intend to interact with. Option A describes a database-layer concern this header has no bearing on. Option C describes exactly what CORS addresses, a different header and a different mechanism entirely. Option D describes what rate limiting a login route addresses, unrelated to framing."
+        },
+        {
+          "id": "nodejs-security-headers-cors-ratelimit-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A fixed-window rate limiter allows 100 requests per 15-minute window per client. What is the specific, known edge case this design has, as discussed in this concept?",
+          "options": [
+            "It's mathematically impossible to exceed 100 requests in any 15-minute period under this configuration, under any circumstances.",
+            "A client could send its full 100-request quota right at the very end of one window and another full 100-request quota right at the very start of the next window, effectively achieving close to double the intended rate over a short interval straddling the boundary.",
+            "The limiter actually resets its counter on every single request rather than every window, making it far stricter than intended.",
+            "Fixed-window limiters cannot be scoped to specific routes individually; they only work when applied globally to an entire app."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "A fixed window resets its counter at discrete boundaries, which creates a narrow straddling interval around each boundary where a client can effectively get two full quotas back to back -- one just before the reset, one just after -- adding up to nearly double the intended rate over that short span, even though neither individual window was technically exceeded. Option A ignores exactly this documented edge case. Option C misdescribes how a fixed window actually resets (per window, not per request). Option D is wrong -- this concept's own examples apply different fixed-window limiters to different individual routes (general traffic, login, SMS) without issue."
         },
         {
           "id": "nodejs-security-headers-cors-ratelimit-assess-explain1",

@@ -113,6 +113,45 @@
           "explanation": "Authentication and authorization are distinct checks that can succeed or fail independently. Here, authentication clearly succeeds -- the credentials are valid and correspond to a real, known identity -- so a 401, which specifically signals a failure to establish identity at all, would be misleading despite its name containing 'unauthorized.' The failure here is squarely at the authorization stage: the now-known identity's granted authorities don't satisfy what this specific action requires, which is precisely the scenario 403 Forbidden exists to describe. Option C is wrong -- this is an entirely expected, correctly-functioning access-control outcome, not a bug. Option D is wrong -- silently returning 200 for a denied request would hide a real access-control decision from the client and any tooling inspecting response codes."
         },
         {
+          "id": "spring-boot-authn-vs-authz-and-filter-chain-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A request fails Spring Security's authentication filter -- no valid credentials were supplied. What happens to that request afterward?",
+          "options": [
+            "It's forwarded to DispatcherServlet anyway, and the controller method is expected to inspect the Authentication object itself and reject invalid requests from inside the method body.",
+            "It never reaches DispatcherServlet at all -- an exception-translation filter converts the authentication failure into a 401 response directly within the filter chain, before Spring MVC's own routing and handler mapping ever run.",
+            "It's queued and automatically retried by the filter chain up to a fixed number of times before finally being rejected.",
+            "DispatcherServlet routes it to a special @ExceptionHandler-annotated controller method reserved specifically for security failures."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Spring Security's filter chain is registered in front of DispatcherServlet specifically so that a rejected request is turned away before any controller code -- or DispatcherServlet's routing logic itself -- ever runs at all. An authentication failure is caught and translated into 401 by a filter within that chain, and the request simply never proceeds any further. Option A describes exactly the weak, easy-to-forget pattern this concept warns against -- security enforced only via manual in-method checks. Options C and D invent retry and exception-handler-dispatch mechanisms the filter chain does not implement for this kind of failure."
+        },
+        {
+          "id": "spring-boot-authn-vs-authz-and-filter-chain-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "SecurityContextHolder is, by default, backed by a ThreadLocal. What is the practical consequence of this design choice?",
+          "options": [
+            "The authenticated identity is shared globally across every request the application is handling concurrently, since ThreadLocal values are visible application-wide.",
+            "The authenticated identity is scoped to the single thread handling one specific request, populated near the start of the filter chain and cleared at the end of that request -- so one request's identity can never accidentally leak into another's on a shared thread pool.",
+            "ThreadLocal storage means the SecurityContext is persisted to disk, surviving an application restart.",
+            "Every new thread the application spawns automatically inherits the current request's SecurityContext with no extra configuration required."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "A ThreadLocal is, by definition, scoped to one specific thread -- which is exactly why it's the right tool here: it lets the identity resolved early in a request's journey through the filter chain be available to any code running later on that same thread (controller, service, or otherwise), while guaranteeing it's cleared at the end of that request so it can never bleed into a different request handled by the same pooled thread afterward. Option A describes the opposite of what ThreadLocal actually provides -- isolation, not global sharing. Option C confuses in-memory, per-thread storage with persistence, which ThreadLocal has nothing to do with. Option D is false -- a new thread spawned manually (rather than reused from the servlet container's own request-handling pool) does not automatically inherit another thread's ThreadLocal value at all."
+        },
+        {
+          "id": "spring-boot-authn-vs-authz-and-filter-chain-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A team adds spring-boot-starter-security to a fresh project with zero security configuration written, then starts the application and checks the startup logs. What do they find, and what does it mean for accessing a now-protected endpoint?",
+          "options": [
+            "No password is generated at all -- the default user account has no password, and any request is accepted automatically without credentials.",
+            "A line resembling 'Using generated security password: <uuid>' is printed once in the logs -- Spring Boot created a single in-memory user named 'user' with that randomly generated password, usable to authenticate against any endpoint until real security configuration replaces this default.",
+            "The application refuses to start until a SecurityConfig class defining a real user store is provided.",
+            "The generated password is written permanently into application.properties, so it stays the same across every future restart."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This concept describes this exact default behavior: adding the starter with no configuration locks down every endpoint, creates one in-memory user named 'user', and prints that user's randomly generated password once in the startup log specifically so someone can actually log in and confirm security is genuinely active. Option A is wrong -- a real, non-empty password is always generated. Option C is wrong -- the application starts successfully with this default in place; no configuration is required for it to boot. Option D is wrong -- the password is generated fresh at each startup (unless explicitly overridden) and is never persisted into any properties file automatically."
+        },
+        {
           "id": "spring-boot-authn-vs-authz-and-filter-chain-assess-explain1",
           "type": "explanation",
           "prompt": "Explain to a developer who has never worked with Spring Security before what the filter chain is, why it runs where it does relative to DispatcherServlet, and how the SecurityContextHolder lets later code know who's making the current request without re-authenticating.",
@@ -229,6 +268,45 @@
           "explanation": "Spring Security evaluates authorizeHttpRequests rules strictly in declared order and stops at the first match -- there's no rule about permitAll() winning regardless of position (option A is wrong), and anyRequest() isn't automatically deferred to the end unless it's actually written last (option C is wrong here specifically because rule 1 matches first regardless of what's written after it). Since /api/orders/** matches /api/orders/summary and rule 1 is declared before rule 2, rule 1 (hasRole(\"CUSTOMER\")) governs this request, and rule 2's permitAll(), despite looking like it specifically targets this exact path, is unreachable for this request because rule 1 already claimed the match. Option D describes AND-combination semantics Spring Security's rule evaluation does not implement -- exactly one rule applies per request, whichever matches first."
         },
         {
+          "id": "spring-boot-securing-endpoints-httpsecurity-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "An older tutorial configures security by extending WebSecurityConfigurerAdapter and overriding configure(HttpSecurity http). What is true about this approach in a modern (Spring Security 6+) Spring Boot application?",
+          "options": [
+            "It still works identically -- WebSecurityConfigurerAdapter was deprecated purely for cosmetic, naming-convention reasons.",
+            "WebSecurityConfigurerAdapter was deprecated starting with Spring Security 5.7 and removed entirely in Spring Security 6, replaced by declaring a SecurityFilterChain as a @Bean -- partly because a class can only extend one base class, while an application can register several independent SecurityFilterChain beans covering different parts of the same application.",
+            "WebSecurityConfigurerAdapter remains required for any application that needs more than one distinct security policy.",
+            "The @Bean-based style is only a valid alternative if @EnableWebSecurity is removed from the application entirely."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This concept states this migration directly: the inheritance-based WebSecurityConfigurerAdapter was deprecated in 5.7 and removed in Spring Security 6, in favor of an explicit @Bean-returning SecurityFilterChain, precisely because composition (multiple independent beans, each scoped via securityMatcher(...)) is more flexible than being limited to extending one base class. Option A understates the reason -- it's an architectural and flexibility improvement, not cosmetic. Option C inverts the actual situation -- the @Bean style is what enables multiple independent policies, something the single-inheritance-based adapter made awkward. Option D invents a dependency between the two annotations that doesn't exist."
+        },
+        {
+          "id": "spring-boot-securing-endpoints-httpsecurity-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A @Service class has two methods: publicMethod() (no security annotation) and sensitiveMethod() (annotated @PreAuthorize(\"hasRole('ADMIN')\")). publicMethod() calls sensitiveMethod() directly on itself, from within the same class, using `this.sensitiveMethod()`. A non-admin caller invokes publicMethod() from a controller, with @EnableMethodSecurity correctly configured. What happens?",
+          "options": [
+            "The @PreAuthorize check on sensitiveMethod() is still enforced correctly, rejecting the non-admin caller, because Spring intercepts every method call to an annotated method regardless of where the call originates.",
+            "The @PreAuthorize check is bypassed entirely for this particular call, because method security is implemented via an AOP proxy that can only intercept calls arriving from OUTSIDE the bean -- a self-invocation like this.sensitiveMethod() never actually passes through that proxy.",
+            "The application fails to start, because Spring detects this self-invocation pattern at startup and refuses to register the bean.",
+            "Spring automatically rewrites the self-invocation into a proxy-routed call at compile time via annotation processing."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This concept calls out self-invocation explicitly as a known, general limitation of proxy-based Spring AOP: the proxy wraps the bean from the outside, so only calls that arrive through that proxy -- from another bean, or from outside the class -- are actually intercepted. A call made directly on `this` from within the same class bypasses the proxy entirely, and therefore bypasses the security check, even with @EnableMethodSecurity correctly configured elsewhere. Option A describes the naive, incorrect assumption this limitation contradicts. Options C and D invent protective or automatic-rewriting behaviors that Spring's proxy-based AOP does not perform."
+        },
+        {
+          "id": "spring-boot-securing-endpoints-httpsecurity-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A team's test suite for ReportService.getAllReports() (annotated @PreAuthorize(\"hasRole('ADMIN')\")) only ever calls the method as an admin user, and every test passes. @EnableMethodSecurity was never added anywhere in the application. What does this passing test suite actually demonstrate?",
+          "options": [
+            "It confirms method security is correctly enforced, since the annotated method behaved as expected for the admin case.",
+            "Very little about enforcement -- because the method also runs completely unguarded for ANY caller when @EnableMethodSecurity is missing, a test that only ever exercises the authorized happy path would pass identically whether or not the security check is actually active at all.",
+            "It proves @EnableMethodSecurity must already be present somewhere, since @PreAuthorize could not have compiled without it.",
+            "It indicates the test suite simply needs more admin-role test cases before the result can be considered conclusive."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Because @PreAuthorize does nothing at all without @EnableMethodSecurity, an unguarded method and a correctly-guarded one behave identically for a caller who's actually permitted to call it -- the admin-only happy-path test passes either way, which is exactly why this concept recommends specifically testing that an UNauthorized caller is rejected, rather than trusting the annotation's presence or a passing happy-path test. Option A wrongly treats a happy-path pass as proof of enforcement. Option C is false -- @PreAuthorize compiles and exists as valid, inert metadata regardless of whether @EnableMethodSecurity is present anywhere. Option D misdiagnoses the actual gap, which is a missing negative test case (an unauthorized caller), not a shortage of positive ones."
+        },
+        {
           "id": "spring-boot-securing-endpoints-httpsecurity-assess-explain1",
           "type": "explanation",
           "prompt": "Explain the difference between securing an operation with a URL-based rule in HttpSecurity versus securing it with @PreAuthorize on the underlying service method, including a concrete scenario where only one of the two would actually provide protection, and explain the @EnableMethodSecurity requirement.",
@@ -343,6 +421,45 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "BCrypt is specifically designed so that encode() generates a new random salt on every call and bakes that salt directly into the returned hash string -- this is intentional, not a bug, and it's exactly what defeats precomputed rainbow-table attacks: an attacker can't precompute one hash per common password and expect it to match, because the salt varies every time a hash is produced. Option A is wrong because that 'correctly implemented' behavior it describes is precisely the UNSAFE, unsalted behavior real password hashing deliberately avoids. Option C is wrong -- there's nothing special-cased about any particular password string; every input is salted identically. Option D is wrong -- nothing about this behavior implies misconfiguration; it would happen with any correctly configured BCryptPasswordEncoder, at any consistent work factor."
+        },
+        {
+          "id": "spring-boot-password-hashing-bcrypt-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A team considers using reversible encryption, with a decryption key stored in the application's own configuration, instead of a one-way hash for storing passwords -- reasoning that at least the database itself won't contain plain text. What is the flaw in this reasoning?",
+          "options": [
+            "There is no real flaw -- reversible encryption is strictly safer than any one-way hash, since it also allows recovering a password for support purposes.",
+            "The decryption key has to be reachable by the application somewhere, and an attacker who has already breached the application enough to steal the encrypted passwords is very likely to also be able to reach that same key -- at which point every password becomes recoverable in one additional step, which shifts the problem rather than solving it.",
+            "Reversible encryption is mathematically impossible to implement correctly, so an application built this way would simply fail to run.",
+            "Reversible encryption is only insecure if the decryption key happens to be stored in the exact same database table as the encrypted passwords."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The module makes this point directly: reversible encryption only shifts the problem, because the key that makes decryption possible has to live somewhere the application can reach, typically alongside the same configuration or secrets an attacker who's already breached the application is likely to also reach. Option A treats recoverability as a pure benefit, ignoring that it's exactly the property that makes a breach catastrophic instead of contained. Option C is false -- reversible encryption is straightforward to implement; the problem is architectural, not mathematical impossibility. Option D narrows the risk to one specific storage mistake, when the real risk is broader: wherever the key lives, an attacker capable of reaching the encrypted data has a real chance of reaching it too."
+        },
+        {
+          "id": "spring-boot-password-hashing-bcrypt-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A BCrypt hash string looks like `$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy`, and BCrypt does not store a separate salt column anywhere. Given this, what does matches(rawPassword, storedHash) actually do to verify a password?",
+          "options": [
+            "It ignores the string's internal structure entirely and simply calls encode(rawPassword) again, comparing the two resulting strings directly.",
+            "It parses the salt (and work factor) already embedded directly within storedHash itself, re-hashes rawPassword using that exact same extracted salt, and compares the newly computed hash against the stored one.",
+            "It sends storedHash to a remote key-management service to have it decrypted before comparing against rawPassword.",
+            "It strips the $2a$10$ prefix and treats the remainder as the plain, unhashed original password for a direct string comparison."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The module explains precisely how the hash string is structured: the salt and work factor are encoded directly into the string alongside the hash itself, which is exactly what lets matches() extract the original salt straight back out of the stored hash before re-hashing the candidate password with that same salt for comparison -- no separate salt column is ever needed. Option A describes the broken approach the module explicitly warns against, which would fail due to encode()'s fresh random salt on each call. Option C invents an external decryption step that doesn't exist -- BCrypt hashes are never decrypted, only recomputed and compared. Option D misunderstands the hash string as somehow containing the plain password, which a one-way hash function specifically prevents by design."
+        },
+        {
+          "id": "spring-boot-password-hashing-bcrypt-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Why does increasing BCrypt's work factor meaningfully hinder an attacker attempting to brute-force a stolen password database, while barely affecting a genuine user logging in?",
+          "options": [
+            "The work factor only applies to failed login attempts, so a genuine user who enters the correct password never pays the added computational cost at all.",
+            "A genuine user performs exactly one hash computation per login attempt, so a few extra milliseconds is imperceptible; an attacker performs that same per-hash cost across billions of guesses, so the same per-hash increase multiplies into a massive difference in total attack time.",
+            "The work factor changes the length of the resulting hash string, which slows down brute-force comparisons specifically on hardware with limited memory.",
+            "Increasing the work factor causes BCrypt to reject any password attempt shorter than a certain length, filtering out most automated attacks."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The asymmetry is entirely about volume: one genuine login pays the per-hash cost exactly once, so even a deliberately slow hash costs that user only a few imperceptible milliseconds, while an attacker attempting billions of guesses against a leaked hash database pays that same per-hash cost billions of times over -- turning a small, fixed increase per hash into an enormous difference in total attack duration. Option A is false -- the work factor applies identically to every hash computation, correct or incorrect password alike; BCrypt has no way to know in advance which guess will succeed. Option C invents a length-based mechanism unrelated to how the work factor actually works (it controls computational rounds, not string length). Option D invents a length-based rejection rule that doesn't exist in BCrypt's design."
         },
         {
           "id": "spring-boot-password-hashing-bcrypt-assess-explain1",

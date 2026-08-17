@@ -113,6 +113,45 @@
           "explanation": "The speed advantage comes from two compounding factors: far fewer beans need to be constructed (no full component scan for services/repositories, no autoconfiguration unrelated to the web layer), and a slice's narrow, easily-kept-identical configuration is reused across test classes far more often thanks to Spring's test-context caching than a typical @SpringBootTest's configuration, which more often varies just enough between test classes to force a fresh context each time. Option A is false -- Jackson-based JSON conversion is still fully active in @WebMvcTest. Option C describes a JVM-level mechanism Spring Boot does not implement. Option D is false -- Bean Validation support is present in @WebMvcTest, and is not the dominant cost of a full context startup anyway."
         },
         {
+          "id": "spring-boot-testing-context-and-slices-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A @DataJpaTest class autowires a real OrderRepository and asserts against data it persists via TestEntityManager. Which statement about this test is accurate?",
+          "options": [
+            "It exercises the exact same database configuration -- URL, driver, and data -- that the production application actually connects to.",
+            "It exercises a genuine Spring Data JPA repository and EntityManager, but against a disposable, embedded, in-memory database substituted specifically for the test, with each test method's transaction rolled back automatically once it finishes.",
+            "It requires explicit cleanup code (an @AfterEach deleting rows) at the end of each test method, or later tests will see leftover data from earlier ones.",
+            "It also loads and exercises any @Service or @Controller beans that happen to depend on OrderRepository."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "@DataJpaTest deliberately swaps in an embedded, in-memory database in place of the production datasource, and wraps every test method in its own transaction that's automatically rolled back afterward -- the repository and EntityManager objects themselves are genuinely real, but the database backing them is a disposable stand-in. Option A is exactly the misconception this concept calls out directly. Option C is wrong because the automatic rollback IS the cleanup mechanism -- no manual teardown code is needed. Option D is wrong -- @DataJpaTest registers only @Entity classes and repository interfaces, explicitly excluding @Service and @Controller beans from its restricted context."
+        },
+        {
+          "id": "spring-boot-testing-context-and-slices-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A test class is annotated @DirtiesContext, applied after a test that mutates a shared singleton bean's internal state in a way that would corrupt later tests. What is the direct effect of this annotation?",
+          "options": [
+            "It marks the test as flaky so the CI pipeline automatically retries it on failure.",
+            "It forces Spring's test framework to discard the cached ApplicationContext after this test runs and build a fresh one the next time a context is needed, at the cost of reintroducing that context's full startup time.",
+            "It disables all @MockBean stubbing within this specific test class from that point forward.",
+            "It prevents the test's own transaction from being rolled back at the end of the method."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "@DirtiesContext explicitly opts a test out of Spring's test-context caching by forcing the context to be discarded and rebuilt afterward -- useful specifically when a test has mutated shared singleton state in a way that would corrupt subsequent tests reusing the same cached context, but it directly reintroduces the startup cost the caching mechanism exists to avoid, which is exactly why the module recommends using it sparingly. Options A, C, and D each describe an effect @DirtiesContext does not have -- it has nothing to do with retries, mock stubbing, or transaction rollback behavior."
+        },
+        {
+          "id": "spring-boot-testing-context-and-slices-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A class PricingCalculator has no Spring annotations at all and depends on nothing but plain Java objects passed into its constructor. According to this module's guidance on choosing a testing approach, what is the most appropriate way to test it?",
+          "options": [
+            "@SpringBootTest, since every class in a Spring Boot codebase should be tested against the full application context for consistency.",
+            "A plain JUnit test that constructs PricingCalculator directly with `new`, using hand-written or Mockito-created fakes for any collaborators if needed -- no Spring context of any kind is required.",
+            "@DataJpaTest, since among Spring's test annotations it boots the fastest.",
+            "@WebMvcTest, scoped narrowly to just this one class."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The module is explicit that pure business logic with no Spring dependency at all needs no Spring context whatsoever -- a plain JUnit test with `new` and, if needed, a hand-written or Mockito-created fake, runs in milliseconds and is the most proportionate tool for this job. Option A describes exactly the habit the module names as a common mistake: reaching for @SpringBootTest as a default rather than asking whether the test actually needs more than one layer wired together. Options C and D both invoke Spring test infrastructure -- an embedded database and the web layer, respectively -- that PricingCalculator has no relationship to at all."
+        },
+        {
           "id": "spring-boot-testing-context-and-slices-assess-explain1",
           "type": "explanation",
           "prompt": "A teammate wants to write every single test in the codebase using @SpringBootTest 'to be safe.' Explain the trade-off they're making, and describe when a test slice or a plain unit test would be the better choice instead.",
@@ -229,6 +268,45 @@
           "explanation": "MockMvc dispatches the simulated request through Spring MVC's real machinery end to end -- routing, binding, conversion, validation, and exception handling all genuinely execute -- with the sole simplification being that no real network socket or servlet container thread is involved. Option A is wrong because routing and binding genuinely occur through HandlerMapping and argument resolvers, not direct reflection. Option C describes what TestRestTemplate or WebTestClient do against a real embedded server (as with @SpringBootTest's RANDOM_PORT), not MockMvc. Option D is wrong -- the controller itself is real and unmocked; only its own dependencies (like a @Service) would be mocked, and only if you explicitly did so."
         },
         {
+          "id": "spring-boot-mockmvc-controller-testing-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A test writes `jsonPath(\"$.items\").value(\"mug\")` against a response whose items field is a JSON array containing several strings, one of which is \"mug\". What happens?",
+          "options": [
+            "The assertion passes, because .value(...) automatically checks whether the given value is present anywhere in the array.",
+            "The assertion fails or produces a confusing type-mismatch error, because .value(...) expects the JSONPath expression to resolve to a single scalar, not a collection -- jsonPath(\"$.items[0]\").value(\"mug\") for a specific index, or jsonPath(\"$.items\", hasItem(\"mug\")) for membership, are the corrections.",
+            "The assertion silently passes regardless of the array's actual contents, because a path with no index is treated as an automatic wildcard match.",
+            "Spring MVC automatically converts the array into just its first element before the comparison runs."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The module calls out this exact mistake: asserting .value(...) against a jsonPath expression that resolves to an array (rather than a single scalar) produces a confusing failure, because .value(...) expects a scalar match. The two corrections it names directly are indexing into a specific element (jsonPath(\"$.items[0]\").value(\"mug\")) or using a Hamcrest membership matcher against the whole collection (jsonPath(\"$.items\", hasItem(\"mug\"))), depending on what's actually intended. Options A, C, and D each describe automatic, forgiving behavior that jsonPath's .value(...) assertion does not actually provide."
+        },
+        {
+          "id": "spring-boot-mockmvc-controller-testing-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Which statement correctly distinguishes MockMvc from TestRestTemplate/WebTestClient?",
+          "options": [
+            "MockMvc and TestRestTemplate are functionally identical; choosing between them is purely a matter of style.",
+            "TestRestTemplate/WebTestClient fire genuine HTTP requests at a real, running embedded server (typically paired with @SpringBootTest's RANDOM_PORT), exercising the whole stack including real network serialization; MockMvc simulates the same dispatch entirely in memory, with no real socket, testing the web layer's logic without paying for a network round trip.",
+            "MockMvc only supports GET requests -- POST, PUT, and DELETE require switching to TestRestTemplate.",
+            "TestRestTemplate cannot handle JSON responses at all, only plain text bodies."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The module draws this distinction explicitly: TestRestTemplate and WebTestClient are genuine end-to-end tools that need a real running server (the RANDOM_PORT style of @SpringBootTest seen in the previous concept), while MockMvc simulates the same dispatch machinery without any real socket, at unit-test-adjacent speed. Option A collapses a distinction the module treats as meaningful and load-bearing for choosing between them. Option C is false -- MockMvc fully supports post(...), put(...), and delete(...) via MockMvcRequestBuilders, as shown throughout this concept's own examples. Option D is false -- TestRestTemplate handles JSON responses just as readily as MockMvc does."
+        },
+        {
+          "id": "spring-boot-mockmvc-controller-testing-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A response body contains the JSON key \"customerName\", but a test asserts `jsonPath(\"$.CustomerName\").value(\"Amy\")` (capital C). What happens?",
+          "options": [
+            "The assertion passes, because JSONPath expressions are case-insensitive by default when matching JSON keys.",
+            "The assertion fails to find a matching value, because JSON keys -- and therefore the JSONPath expressions that navigate them -- are case-sensitive; $.CustomerName does not refer to the same field as $.customerName.",
+            "Spring MVC normalizes JSON key casing automatically before any jsonPath expression is evaluated against the response.",
+            "The test fails to compile, because jsonPath expressions are validated against the target DTO class's exact field names at compile time."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The module names JSON key case-sensitivity directly as a common source of jsonPath friction: $.items[0].name and $.items[0].Name are explicitly called out as different expressions, precisely because JSON keys are case-sensitive and jsonPath navigates them literally. Option A and C both invent a normalization step that doesn't exist. Option D is wrong -- jsonPath expressions are plain strings evaluated at runtime against the parsed response; there is no compile-time validation against a DTO's field names."
+        },
+        {
           "id": "spring-boot-mockmvc-controller-testing-assess-explain1",
           "type": "explanation",
           "prompt": "Explain, end to end, what happens when a MockMvc test calls mockMvc.perform(post(...).contentType(...).content(...)) against a @WebMvcTest-loaded controller that has a @MockBean service dependency, through to the final assertions.",
@@ -343,6 +421,45 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "Mockito's default answer behavior includes a specific case for Optional-returning methods: rather than returning a bare null (which would be an especially easy source of confusing NullPointerExceptions given how often Optional is chained with .map()/.orElse()), it returns Optional.empty() by default when a method returning Optional hasn't been stubbed. Option A is wrong -- Mockito never requires stubbing before a call; it always has SOME default answer ready. Option C is wrong -- @MockBean fully replaces the real bean; there is no fallback to a real implementation for calls that weren't stubbed. Option D is wrong -- there's nothing about an unstubbed call that Mockito or the compiler can detect statically; it's a purely runtime behavior."
+        },
+        {
+          "id": "spring-boot-mockbean-mocking-dependencies-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A pure unit test constructs `OrderService service = new OrderService(mockRepository);` directly, with no Spring container involved anywhere in the test. What is the more appropriate way to create mockRepository, and why?",
+          "options": [
+            "@MockBean, since it is always the preferred, more modern replacement for creating any mock in a Spring Boot codebase.",
+            "A plain Mockito mock, created via @Mock or mock(OrderRepository.class), because no Spring container is constructing OrderService here -- the mock just needs to be an ordinary Java object handed directly into the constructor, and @MockBean's whole reason for existing (registering into an ApplicationContext) has nothing to attach to.",
+            "Either approach works identically, since @MockBean is simply a more verbose alias for a plain mock(...) call.",
+            "Neither -- OrderRepository must be a genuine bean retrieved from a real ApplicationContext for this test to be considered valid."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The deciding factor is who constructs the object under test: here, the test itself calls `new OrderService(...)` directly, so there's no Spring container in the picture at all for @MockBean's context-registration behavior to do anything useful with -- a plain Mockito mock is simply an ordinary object the test wires in by hand. Option A overgeneralizes @MockBean's purpose to situations where it provides no benefit. Option C is false -- @MockBean does real, extra work (registering into an ApplicationContext) that a plain mock does not, even though both produce a genuine Mockito mock underneath. Option D invents a requirement that contradicts the entire point of writing a pure, Spring-free unit test."
+        },
+        {
+          "id": "spring-boot-mockbean-mocking-dependencies-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A @MockBean has three unstubbed methods: getTags() returning List<String>, getDescription() returning String, and isActive() returning boolean. Which of these calls is most likely to eventually cause a NullPointerException downstream, if the calling code doesn't explicitly check for null first?",
+          "options": [
+            "getTags(), because Mockito returns a bare null for List return types, exactly like any other reference type.",
+            "getDescription(), because String has no special-cased default in Mockito's default answer, so it returns null -- unlike getTags() (which receives Mockito's smart, empty-collection default) and isActive() (which receives boolean's false default).",
+            "isActive(), because Mockito cannot produce a default value for a primitive boolean return type and throws an exception instead.",
+            "None of them -- Mockito always throws UnsupportedStubbingException for any call that wasn't explicitly stubbed."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Mockito's default-answer behavior is type-aware: common collection interfaces like List get a smart, non-null empty-collection default specifically to avoid this exact class of bug, and primitives like boolean always have a natural zero-equivalent (false) to fall back on -- but an ordinary reference type like String has no such special case, so it defaults to a bare null, which is exactly the value most likely to blow up later if something calls a method on it without a null check. Option A misapplies the plain-reference-type default to List, which Mockito special-cases. Option C invents an exception Mockito does not throw for primitives. Option D is false generally -- Mockito's default behavior for unstubbed calls is a lenient default value, not an exception."
+        },
+        {
+          "id": "spring-boot-mockbean-mocking-dependencies-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Two @WebMvcTest classes test different controllers but declare the exact same set of @MockBean types. A third test class in the same slice adds one additional @MockBean beyond what the other two declare. What is the effect on Spring's test-context caching?",
+          "options": [
+            "All three test classes always share a single cached context regardless of their declared @MockBean sets, simply because they're all @WebMvcTest.",
+            "The first two test classes' identical configuration lets them share one cached context; the third class's different set of mocked beans counts as a different configuration, triggering a separate, freshly-built context instead of reuse.",
+            "Declaring any @MockBean at all permanently disables context caching for the remainder of the test run.",
+            "Spring merges all three test classes' configurations into one shared context containing every @MockBean declared across all of them."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The set of @MockBean types declared on a test class is explicitly part of what defines a configuration's cache key -- two test classes with an identical set of mocked beans can share a cached context, but a test class declaring even one additional mocked bean is, from the cache's perspective, requesting a genuinely different configuration, and gets its own freshly-built context rather than reusing the other two's. Option A ignores that cache keys are configuration-specific, not just annotation-specific. Option C overstates the effect -- @MockBean usage doesn't disable caching outright, it just needs to match exactly for reuse to happen. Option D describes a merging behavior Spring's test-context caching does not perform; contexts are reused wholesale when identical, never combined across differing configurations."
         },
         {
           "id": "spring-boot-mockbean-mocking-dependencies-assess-explain1",

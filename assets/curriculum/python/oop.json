@@ -127,6 +127,32 @@
           "type": "explanation",
           "prompt": "A teammate defines a class with a mutable class attribute (like a list) intended as a 'default' for every instance, and is confused why mutating it through one instance affects all the others. Explain what's happening and how to fix their class.",
           "modelAnswer": "A class attribute -- one written directly in the class body, outside any method -- is a single object that belongs to the class itself, and every instance that doesn't have its own instance attribute of the same name falls back to that one shared object when you access it through self. For immutable values this is invisible in practice, because assigning to self.attr from inside a method (self.attr = new_value) always creates a fresh instance attribute rather than modifying the shared one -- there's no way to 'mutate' an int or string in place. The trouble is specifically with mutable objects like lists, dicts, and sets: calling a mutating method on them, like self.some_list.append(x), does not create an instance attribute at all. It's a mutation, not an assignment, so Python looks up some_list, finds no instance attribute by that name, falls back to the shared class attribute, and mutates that one object -- which every other instance is also looking at. The fix is to never use a mutable class attribute as a 'default value template' for something you intend to mutate per instance. Instead, create it fresh inside __init__ with self.attr = [] (or {} or set()), which runs once per instance and genuinely produces a new, independent object each time an object is created. The class attribute pattern is fine to keep for values that really are meant to be shared and constant across every instance of the class -- a species name, a configuration constant -- just never for something a method is going to append to, update, or otherwise mutate on a per-instance basis."
+        },
+        {
+          "id": "python-oop-fundamentals-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "```python\nclass Robot:\n    def __init__(self, name):\n        self.name = name\n\n    def greet(self, other):\n        return f\"{self.name} beeps at {other}\"\n\nr = Robot(\"R2\")\nprint(r.greet(\"C3PO\"))\nprint(Robot.greet(r, \"C3PO\"))\nprint(Robot.greet(\"C3PO\"))\n```\nWhat happens, in order?",
+          "options": [
+            "The first two lines both print \"R2 beeps at C3PO\"; the third raises TypeError: greet() missing 1 required positional argument: 'other'",
+            "All three lines print \"R2 beeps at C3PO\"",
+            "The first two lines raise TypeError, because Robot.greet always requires self to be passed explicitly even through r.greet",
+            "The third line prints \"C3PO beeps at C3PO\", treating \"C3PO\" as self and reusing its own value for other"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "`r.greet(\"C3PO\")` is sugar for `Robot.greet(r, \"C3PO\")` -- both supply `r` as `self` and `\"C3PO\"` as `other`, producing identical output. Calling `Robot.greet(\"C3PO\")` directly through the class, though, supplies only one argument -- `\"C3PO\"` fills the required `self` parameter, and there's nothing left over for `other`, which has no default. Python doesn't infer a missing argument from context; it raises `TypeError: greet() missing 1 required positional argument: 'other'`. Calling through the class this way requires you to supply every parameter explicitly, including `self` -- Python only auto-supplies `self` when you call through an instance."
+        },
+        {
+          "id": "python-oop-fundamentals-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "```python\nclass Counter:\n    count = 0\n\n    def increment(self):\n        self.count = self.count + 1\n\nc1 = Counter()\nc2 = Counter()\nc1.increment()\nc1.increment()\nprint(c1.count, c2.count, Counter.count)\n```\nWhat gets printed?",
+          "options": [
+            "2 0 0",
+            "2 2 0",
+            "0 0 0",
+            "2 0 2"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "`self.count = self.count + 1` is an assignment, not a mutation -- and assignment through `self` always creates (or updates) an *instance* attribute, never the shared class attribute, even though the read on the right-hand side (`self.count`) does fall back to the class attribute the first time. So c1's first `increment()` reads the class attribute (0), computes 1, and creates a brand-new instance attribute `count` on c1 holding 1. The second call now finds c1's own instance attribute (1), computes 2, and updates it to 2. `c2` never called `increment()`, so it has no instance attribute of its own and still falls back to the untouched class attribute, 0. `Counter.count` itself was also never directly reassigned, so it remains 0. This is the opposite of the shared-mutable-class-attribute bug: because `+=`/`=` on `self.count` creates a new instance attribute rather than mutating anything shared, each instance's count genuinely diverges."
         }
       ]
     },
@@ -267,6 +293,32 @@
           "type": "explanation",
           "prompt": "Explain what Method Resolution Order (MRO) is, at a conceptual level, and why super() becomes more important to understand once a class uses multiple inheritance.",
           "modelAnswer": "With single inheritance, 'the parent class' is unambiguous -- there's exactly one class above the current one in the hierarchy, so super() obviously refers to it. Once a class inherits from more than one parent (multiple inheritance), that's no longer true: there could be several direct parents, each with their own parent classes, and Python needs a single, well-defined, and deterministic order in which to search those classes when looking up a method or attribute -- that search order is the Method Resolution Order, computed once per class (using an algorithm called C3 linearization) and inspectable via SomeClass.__mro__. Crucially, super() in Python does not mean 'go to my one direct parent' -- it means 'go to whatever class comes next after the current one in this instance's MRO.' This distinction matters a lot with multiple inheritance: if several classes in a hierarchy each call super().some_method() inside their own version of that method, the MRO is what ensures every one of them actually gets a turn to run, once, in a consistent order, rather than one override accidentally swallowing the others or the chain looping back on itself. You don't need to be able to compute an MRO by hand to write safe code with multiple inheritance, but you do need to understand that super() is relative to the whole MRO, not a literal pointer to 'the' parent -- especially since with multiple inheritance there may not be a single obvious 'the parent' to begin with."
+        },
+        {
+          "id": "python-oop-inheritance-polymorphism-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "```python\nclass Account:\n    def __init__(self, balance):\n        self.__balance = balance\n\na = Account(100)\nprint(a.__balance)\n```\nWhat happens on the last line?",
+          "options": [
+            "AttributeError: 'Account' object has no attribute '__balance' -- the attribute was actually stored, via name mangling, as _Account__balance",
+            "100 -- double-underscore attributes are just a naming convention and remain accessible by the exact same name from outside",
+            "100 -- Python grants outside access to double-underscore attributes automatically within the same module",
+            "SyntaxError -- referencing a double-underscore attribute from outside its class is invalid syntax"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "`self.__balance` inside the class body triggers name mangling: Python actually stores the attribute as `_Account__balance`, not literally `__balance`. Trying to access `a.__balance` from outside the class looks for an attribute literally named `__balance`, which doesn't exist -- only `_Account__balance` does -- so it raises `AttributeError`. This is exactly why name mangling is described as Python's closest thing to privacy, not true privacy: the data is still reachable via `a._Account__balance` if you know (or look up) the mangled name, it's just no longer accessible by accident using the name written inside the class."
+        },
+        {
+          "id": "python-oop-inheritance-polymorphism-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "```python\nclass Square:\n    def __init__(self, side):\n        self.side = side\n    def area(self):\n        return self.side ** 2\n\nclass Circle:\n    def __init__(self, radius):\n        self.radius = radius\n    # no area() method defined\n\ndef total_area(shapes):\n    return sum(shape.area() for shape in shapes)\n\nprint(total_area([Square(4), Circle(2)]))\n```\nWhat happens?",
+          "options": [
+            "AttributeError: 'Circle' object has no attribute 'area'",
+            "16, because Circle is silently skipped when it lacks an area() method",
+            "16 + 0, treating Circle's missing area() as contributing 0",
+            "It computes Circle's area automatically using math.pi, since duck typing infers intent from the class name"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "Duck typing means `total_area` doesn't check what class each `shape` belongs to -- it just calls `.area()` and trusts the object supports it. That trust cuts both ways: there's no automatic fallback, skipping, or inference when an object *doesn't* have the expected method. Since `Circle` was never given an `area()` method, calling `shape.area()` on a `Circle` instance raises a perfectly ordinary `AttributeError: 'Circle' object has no attribute 'area'` -- duck typing provides no safety net here; it simply defers the check from 'is this the right type' (which Python never asks) to 'does this object actually support the call' (which fails loudly and immediately if not)."
         }
       ]
     },
@@ -384,6 +436,45 @@
           "type": "explanation",
           "prompt": "Explain when you would choose @dataclass for a class versus writing a regular class by hand, and what frozen=True adds on top of the default behavior.",
           "modelAnswer": "@dataclass is the right tool when a class's primary purpose is holding a fixed bundle of related values together, with little behavior beyond exposing and comparing that data -- think config objects, simple records, small value types like a Point or a Money amount. It removes the repetitive, error-prone boilerplate of hand-writing __init__ (assigning every parameter to self), __repr__ (building a readable string), and __eq__ (comparing fields with an isinstance check) -- all generated automatically from type-annotated class attributes. It's a weaker fit once a class's behavior is the interesting part: if most of what the class does is meaningful methods that enforce validation or invariants, rather than just plumbing to expose fields, a hand-written class with more deliberate encapsulation is probably a better design choice -- though it's worth noting @dataclass classes can still have their own custom methods; the decorator only ever touches __init__/__repr__/__eq__/etc, so adding methods doesn't disqualify a class from being a dataclass. On top of the default (mutable) behavior, frozen=True makes every field read-only after construction -- attempting to reassign any field raises FrozenInstanceError. This matters for two concrete reasons: it protects against accidental mutation of a value that's meant to represent something fixed (a timestamp, a coordinate, a completed configuration snapshot), which makes reasoning about the object's lifetime simpler since it can never change after creation; and it makes the instance hashable, which lets it be used as a dictionary key or placed into a set -- something a regular, mutable dataclass instance cannot do by default, since a hashable-but-mutable object would risk its hash changing after being inserted into a hash-based collection."
+        },
+        {
+          "id": "python-dataclasses-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "```python\nfrom dataclasses import dataclass\n\n@dataclass\nclass Point:\n    x: int\n    y: int\n\np = Point(\"five\", 2)\nprint(p)\nprint(p.x + 1)\n```\nWhat happens?",
+          "options": [
+            "Point(x='five', y=2) prints first, then TypeError is raised evaluating p.x + 1, since @dataclass never enforces type annotations at runtime",
+            "TypeError is raised immediately at Point(\"five\", 2), since x is annotated as int",
+            "Point(x=5, y=2) prints, with \"five\" silently coerced to a fallback integer",
+            "ValueError is raised when the class Point itself is defined, because of the eventual type mismatch"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "Field type annotations like `x: int` are read by `@dataclass` purely to know which names are fields and what order to generate `__init__`'s parameters in -- they are never checked against the actual values passed in, exactly like ordinary function type hints elsewhere in Python. So `Point(\"five\", 2)` constructs successfully with `x` holding the string `\"five\"`, and `print(p)` shows the generated repr, `Point(x='five', y=2)`, without any error. The error only shows up later, and for an unrelated reason: `p.x + 1` tries to add a `str` and an `int` with `+`, which Python's strong typing refuses, raising `TypeError`. Nothing about `@dataclass` itself performs any type coercion or validation."
+        },
+        {
+          "id": "python-dataclasses-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "```python\nfrom dataclasses import dataclass\n\n@dataclass\nclass Tag:\n    name: str\n\nt = Tag(\"python\")\ncache = {}\ncache[t] = \"found me\"\n```\nWhat happens on the last line?",
+          "options": [
+            "TypeError: unhashable type: 'Tag'",
+            "It works fine -- dataclass instances are always hashable, regardless of frozen",
+            "It works, but the dict key compares equal to everything due to the auto-generated __eq__",
+            "ValueError: dataclass fields must be declared frozen to be used as dict values"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "`Tag` was defined as an ordinary, mutable dataclass (no `frozen=True`), and by default a mutable dataclass instance is not hashable -- allowing it to be hashable while still mutable would risk its hash changing after being inserted into a dict or set, which would corrupt that data structure's internal lookup. So `cache[t] = ...` raises `TypeError: unhashable type: 'Tag'` immediately. Only `@dataclass(frozen=True)` instances gain hashability automatically, precisely because their fields can never change after construction, so their hash is guaranteed to stay valid for the object's whole lifetime."
+        },
+        {
+          "id": "python-dataclasses-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "```python\nfrom dataclasses import dataclass, field\n\ndef default_id():\n    return \"unassigned\"\n\n@dataclass\nclass Ticket:\n    title: str\n    assignee: str = field(default_factory=default_id)\n\nt1 = Ticket(\"Fix bug\")\nt2 = Ticket(\"Add feature\")\nt1.assignee = \"Amy\"\nprint(t1.assignee, t2.assignee)\n```\nWhat gets printed?",
+          "options": [
+            "Amy unassigned",
+            "Amy Amy",
+            "TypeError: default_factory must be a built-in constructor like list, dict, or set",
+            "unassigned unassigned"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "`field(default_factory=...)` accepts any zero-argument callable, not just `list`/`dict`/`set` -- a custom function like `default_id` works exactly the same way: it's called fresh, once, for every instance that doesn't supply its own `assignee` explicitly. So `t1` and `t2` each independently start with `assignee = \"unassigned\"`, as two separate string assignments (not one shared object). Reassigning `t1.assignee = \"Amy\"` afterward is an ordinary attribute assignment on `t1` alone (this dataclass isn't frozen, so mutation is allowed) and has no effect on `t2`, which still holds its own independently-created `\"unassigned\"`."
         }
       ]
     }

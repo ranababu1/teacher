@@ -113,6 +113,19 @@
           "type": "explanation",
           "prompt": "A developer with a C background says \"Python lists are just arrays, right?\" Explain what's actually different, using both the type-flexibility and the mutability/aliasing angle.",
           "modelAnswer": "A C array is a fixed-size block of memory holding elements that are all the same, fixed type -- its size and the type of thing it stores are both nailed down before the array is used. A Python list is neither: it's a dynamic array of *references*, so it can grow or shrink freely (`append`, `insert`, `pop`, `remove` all resize it automatically), and each slot can hold a reference to any kind of object at all, so `[1, \"two\", [3, 4]]` mixing an int, a string, and another list is completely ordinary. On top of that, because a list is a mutable object accessed through references (the same 'name is a label, not a box' model that applies to every Python object), assigning one list variable to another (`b = a`) doesn't copy the underlying data the way assigning one C array to another conceptually might feel like -- it just gives the *same* list object a second name, so mutating it through either name is visible through both. None of this is how a C array behaves, where each declared array is its own fixed block of memory from the start. If you specifically need compact, uniform, fixed-type storage for heavy numeric work, Python has an `array` module and libraries like NumPy for that -- but the default `list` is a fundamentally more flexible, reference-based structure, not a thin wrapper over a C-style array."
+        },
+        {
+          "id": "python-lists-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "```python\nfruits = [\"apple\", \"banana\", \"cherry\", \"banana\"]\nfruits.remove(\"banana\")\nremoved = fruits.pop(1)\nprint(fruits)\nprint(removed)\n```\nWhat gets printed?",
+          "options": [
+            "['apple', 'banana'] then cherry",
+            "['apple', 'cherry'] then banana",
+            "['cherry', 'banana'] then apple",
+            "ValueError, because remove() can't handle a list with duplicate values"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "`fruits.remove(\"banana\")` removes only the *first* element equal to \"banana\" (it searches by value, not position), leaving `[\"apple\", \"cherry\", \"banana\"]`. `fruits.pop(1)` then removes and returns the item at index 1 of that updated list -- which is now `\"cherry\"` -- leaving `fruits` as `[\"apple\", \"banana\"]` and binding `removed` to `\"cherry\"`. `remove()` never raises just because there are duplicates elsewhere in the list; it simply stops after removing the first match."
         }
       ]
     },
@@ -224,6 +237,19 @@
           "type": "shortAnswer",
           "prompt": "You're designing a function that returns a person's (first name, last name) as a single value. Would you return a list or a tuple, and why?",
           "modelAnswer": "A tuple. A first-name/last-name pair is a small, fixed-size record with a fixed meaning for each position -- it's not a collection you'd expect to grow, shrink, sort, or otherwise mutate over time, which is exactly the kind of data a tuple is meant to represent. Using a tuple also communicates that intent clearly to callers: they should treat it as a fixed pair, not append a middle name onto it in place. As a practical bonus, returning a tuple means the result could be used directly as a dict key (for example, to deduplicate people by full name) or stored in a set, which a list could never support. A list would work mechanically, but it would both signal the wrong intent and rule out those hashable use cases for no benefit."
+        },
+        {
+          "id": "python-tuples-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "```python\ndata = (10, 20, 30, 40, 50)\nfirst, *middle, last = data\nprint(first, middle, last)\nprint(type(middle))\n```\nWhat gets printed?",
+          "options": [
+            "10 [20, 30, 40] 50 then <class 'list'>",
+            "10 (20, 30, 40) 50 then <class 'tuple'>",
+            "10 [20, 30, 40, 50] 50 then <class 'list'>",
+            "ValueError: too many values to unpack"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "Starred unpacking matches `first` to the first element and `last` to the last element, then gathers everything strictly in between into `middle`. Here that's `20, 30, 40`. Even though the right-hand side `data` is a tuple, the starred name `middle` always collects its 'everything else' into a genuine `list`, not a tuple -- this is a deliberate, specific behavior of starred unpacking, not something that depends on the source sequence's type. So the output is `10 [20, 30, 40] 50` followed by `<class 'list'>`."
         }
       ]
     },
@@ -323,6 +349,19 @@
           "type": "shortAnswer",
           "prompt": "You're processing a log file with 2 million lines and need to check, for each line, whether its user ID is one of about 50,000 known VIP user IDs. Would you store the VIP IDs in a list or a set, and why does it matter at this scale?",
           "modelAnswer": "A set. Checking membership with `in` works on both a list and a set, but they scale completely differently: a list has to potentially compare against every element until it finds a match (or exhausts the list), so the cost of each check grows with the list's size, and repeating that check 2 million times against a 50,000-item list means a huge amount of redundant scanning. A set uses hashing internally to jump close to directly to where a value would be, so each membership check stays fast regardless of how large the set is. Storing the 50,000 VIP IDs in a set turns a potentially very slow, quadratic-feeling pattern (many checks against a large list) into something that stays fast per check no matter how many lines you process. The set's unordered nature and lack of indexing don't matter here at all, since the only thing being asked is 'is this ID present,' not 'what's the Nth VIP' or 'in what order were they added.'"
+        },
+        {
+          "id": "python-sets-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "```python\nallowed = {\"read\", \"write\", \"execute\"}\nrequested = [\"read\", \"delete\"]\nprint(allowed.intersection(requested))\nprint(allowed & requested)\n```\nWhat happens?",
+          "options": [
+            "{'read'} then TypeError: unsupported operand type(s) for &: 'set' and 'list'",
+            "{'read'} then {'read'}",
+            "TypeError on the very first line, since intersection() only accepts another set",
+            "{'read', 'delete'} then {'read'}"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "The `.intersection()` method accepts *any* iterable as its argument, not just another set -- so `allowed.intersection(requested)` works directly against the plain list, computing the elements common to both: just `\"read\"`. The `&` operator, however, is stricter: it specifically requires both operands to be sets, so `allowed & requested` raises `TypeError` because `requested` is a list, not a set. This is exactly the distinction between the operator forms and the method forms of set operations -- the methods are more flexible about what they accept."
         }
       ]
     },
@@ -435,6 +474,19 @@
           "type": "explanation",
           "prompt": "Explain why Python doesn't allow a list to be used as a dictionary key, connecting it to what would actually go wrong if it were allowed.",
           "modelAnswer": "A dict finds a key's associated value by computing the key's hash and using that hash to jump close to directly to where the value is stored -- this only works reliably if a key's hash never changes for as long as that key is used in the dict. Lists are mutable: you can append to one, remove from it, or reassign an element at any time after it's created. If a list were allowed as a dict key and then mutated after being used as one, its hash would need to change to reflect its new contents, which would mean the dict could no longer find the entry at its original location -- the key/value pair would effectively become lost, unreachable by looking up the (now different) list, yet still occupying its old slot internally. Rather than allow that kind of silent corruption, Python simply refuses to hash mutable types at all, raising `TypeError: unhashable type: 'list'` the moment you try. A tuple avoids this problem entirely because it can never be mutated after creation, so its hash is guaranteed to stay valid for the entire time it's used as a key."
+        },
+        {
+          "id": "python-dictionaries-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "```python\nd = {\"a\": 1}\nx = d.get(\"b\", 99)\nprint(d)\ny = d.setdefault(\"c\", 100)\nprint(d)\nprint(x, y)\n```\nWhat gets printed, in order?",
+          "options": [
+            "{'a': 1} then {'a': 1, 'c': 100} then 99 100",
+            "{'a': 1, 'b': 99} then {'a': 1, 'b': 99, 'c': 100} then 99 100",
+            "{'a': 1} then {'a': 1} then 99 100",
+            "{'a': 1} then {'a': 1, 'c': 100} then 100 99"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "`d.get(\"b\", 99)` returns the fallback `99` since `\"b\"` isn't a key, but `.get()` never modifies the dict -- so the first `print(d)` still shows just `{'a': 1}`. `d.setdefault(\"c\", 100)` is different: since `\"c\"` isn't present either, it *inserts* `\"c\": 100` into the dict and returns `100`, so the second `print(d)` shows `{'a': 1, 'c': 100}`. Finally, `x` is `99` (from `.get()`) and `y` is `100` (from `.setdefault()`), so the last line prints `99 100`. The key distinction this tests is that `.get()` only reads, while `.setdefault()` reads *and* writes when the key is missing."
         }
       ]
     },
@@ -553,6 +605,19 @@
           "type": "scenario",
           "prompt": "You're reviewing a teammate's pull request and find this line: `result = [[y for y in row if y > 0] for row in matrix if sum(row) > 10]`. It works correctly, but you find yourself re-reading it three times to understand it. What would you say in your review, and what alternative would you suggest?",
           "modelAnswer": "I'd point out that this line is doing a lot at once: it's filtering entire rows by their sum, filtering individual elements within the surviving rows by their sign, and nesting one comprehension inside another to do both -- which is exactly the kind of density that makes a comprehension harder to read than an equivalent explicit loop, even though it's 'more Pythonic' by line count. I'd suggest rewriting it as a loop with named intermediate steps, something like: build an empty result list, loop over each row, skip it with a `continue` (or an `if`) when its sum isn't over 10, and otherwise build the filtered list of positive values with either a simple inner comprehension or its own small loop, then append that to the result. The rewritten version is more lines, but each line does one clearly named thing, and a reader doesn't have to mentally track two levels of filtering and nesting simultaneously to understand what the final result contains. I'd frame it as a readability judgment call rather than 'comprehensions are bad' -- a single-level filter or transform here would be totally fine as a comprehension; it's specifically the combination of nested `for`s and two separate filtering conditions that tips it over into needing to be unpacked."
+        },
+        {
+          "id": "python-comprehensions-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "```python\noriginal = {\"a\": 1, \"b\": 2, \"c\": 1}\ninverted = {value: key for key, value in original.items()}\nprint(inverted)\n```\nWhat gets printed?",
+          "options": [
+            "{1: 'c', 2: 'b'}",
+            "{1: 'a', 2: 'b'}",
+            "{1: 'a', 2: 'b', 1: 'c'}",
+            "KeyError, because the value 1 is used twice in original"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "The comprehension processes `original.items()` in insertion order: `(\"a\", 1)`, `(\"b\", 2)`, `(\"c\", 1)`. Each pair writes `inverted[value] = key`, so after the first pair, `inverted[1] = 'a'`; after the second, `inverted[2] = 'b'`; after the third, `inverted[1] = 'c'` -- which *overwrites* the earlier `inverted[1] = 'a'`, since a dict key must stay unique and the later assignment wins. The final result only has two entries: `{1: 'c', 2: 'b'}`. This is exactly the silent-data-loss risk of inverting a dict whose original values aren't all unique -- no error is raised, but one of the original keys ('a') is no longer reachable in the inverted dict at all."
         }
       ]
     }

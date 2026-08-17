@@ -117,6 +117,45 @@
           "type": "explanation",
           "prompt": "Explain why forcing a model's output directly into a rigid final-answer schema can sometimes make its answers less accurate, not just differently formatted, and how a schema can be redesigned to avoid that cost.",
           "modelAnswer": "Generation is strictly autoregressive and left-to-right: every token is produced conditioned only on the tokens that already exist in the sequence, with no separate planning phase and no way to revise something already committed. When a schema's only field is the final answer itself, the very first tokens the model is permitted to generate under that constraint are already part of that committed answer -- there is no room anywhere in the output for the kind of intermediate reasoning tokens (working through sub-steps, restating relevant facts, computing intermediate quantities) that measurably improve accuracy on harder, multi-step problems, because those techniques work precisely by giving the model real generated text to condition later tokens on rather than forcing a jump straight from question to answer. A rigid single-field schema recreates exactly that forced jump, just wrapped in valid JSON syntax instead of plain text, so whatever accuracy loss comes from skipping explicit intermediate reasoning shows up here too, on top of -- and unrelated to -- the schema's formatting benefit. The fix does not require giving up structured output: adding an additional field, such as `reasoning`, and ordering it *before* the final answer field within the same JSON object, lets the model generate its reasoning first while still inside a fully schema-valid structure; because JSON object fields are emitted in the order the schema specifies, the answer field's tokens are then generated conditioned on whatever reasoning text came before them, recovering most of the benefit of an unconstrained chain-of-thought response without sacrificing the hard guarantee that the output will parse and match the required shape. The general lesson is that a schema is not just a passive description of the desired shape of the output -- its field order actively shapes what each field's value gets to condition on, and that's a design lever worth using deliberately rather than an accident of how you happened to list the fields."
+        },
+        {
+          "id": "llm-engineering-structured-output-json-schema-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "In schema-constrained decoding, what specifically happens to the logits of tokens that would violate the schema, before a token is actually selected at a given step?",
+          "options": [
+            "They are forced to negative infinity before softmax runs, so their resulting probability becomes exactly zero and they cannot be sampled, no matter how strongly the model's raw preferences favored them.",
+            "They are multiplied by a small penalty factor, which reduces but does not eliminate their chance of being selected.",
+            "They are permanently removed from the model's vocabulary for the rest of the conversation, not just for this one step.",
+            "They are left untouched during generation and instead flagged for a validator to reject after the complete response has already been produced."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "The module describes the mechanism precisely: the logit for any token outside the schema-allowed set is set to negative infinity before softmax, which makes its probability exactly zero -- not merely small -- so it is mechanically impossible to select, regardless of the model's unconstrained preference for it. Option B describes a soft penalty, which is weaker than what actually happens and would still allow occasional violations. Option C wrongly implies a permanent, conversation-wide vocabulary change rather than a per-step, schema-state-dependent mask. Option D misdescribes the mechanism as after-the-fact validation, when the restriction is applied during generation, at each decoding step, not afterward."
+        },
+        {
+          "id": "llm-engineering-structured-output-json-schema-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A schema declares `\"category\": {\"enum\": [\"billing\", \"technical\", \"other\"]}` as a required field, with strict schema-constrained decoding enabled. A ticket arrives that's actually about a shipping delay -- a case the enum's author never anticipated. What will the constrained output contain for `category`?",
+          "options": [
+            "A new value, \"shipping\", since the model is free to add categories it judges necessary when none of the declared options genuinely fit.",
+            "The field left empty or null, since none of the three declared values is truly correct for this input.",
+            "One of the three declared values -- most plausibly \"other\" -- because the decoder can only select tokens forming one of the declared enum options for a required field; it cannot invent a new value or omit one.",
+            "An immediate API error is raised before any response is returned, because the enum doesn't cover the actual content of the ticket."
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "The module is explicit that an enum forces a choice among the declared options even when none is actually correct -- the model cannot decline, add a new option, or leave the field empty unless it was explicitly made nullable. Option A and B both describe escape routes the constraint doesn't provide: a required enum field has no path to an out-of-schema value or an empty value. Option D is wrong because schema mismatch with the real-world situation isn't a syntax error the API would catch or reject -- the output remains syntactically valid JSON with a value from the enum, which is exactly why this failure mode is dangerous and easy to miss downstream."
+        },
+        {
+          "id": "llm-engineering-structured-output-json-schema-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A schema has a single required field, `answer` (an integer), and strict schema-constrained decoding is used for a multi-step math word problem. Accuracy comes out noticeably worse than the same model answering the same problem in unconstrained plain text. Per this module, what's the most likely cause and the recommended fix?",
+          "options": [
+            "The schema forces the very first tokens the model generates to already be part of the committed final answer, leaving no room for intermediate reasoning tokens to condition on; adding a `reasoning` field ordered before `answer` in the schema restores that scratchpad.",
+            "JSON generation is inherently and unavoidably slower and less accurate than plain text for any task, so structured output should never be used for math problems.",
+            "Enum-typed fields always underperform freeform string fields on numeric tasks, so `answer` should be redeclared as a string rather than an integer.",
+            "Schema-constrained decoding disables the model's attention mechanism entirely, preventing it from using the earlier parts of the prompt at all."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "The module ties this directly to autoregressive generation: with `answer` as the only field, the model has to commit to the final number essentially immediately, with nothing generated beforehand to condition on, which removes the accuracy benefit that explicit intermediate reasoning provides on multi-step problems. Reordering the schema so a `reasoning` field comes before `answer` recovers that scratchpad without giving up structured output. Option B overgeneralizes a schema-design mistake into a blanket claim about JSON that the module never makes. Option C misidentifies the field's type as the issue, when `answer` isn't even an enum here. Option D invents a mechanism -- disabled attention -- that constrained decoding does not involve; it only restricts token eligibility, not what the model can attend to."
         }
       ]
     },
@@ -233,6 +272,45 @@
           "type": "explanation",
           "prompt": "A teammate says: 'Our tool calls always come back as perfectly valid, correctly-typed JSON, so I don't see why we need extra validation before running them.' Explain what's wrong with this reasoning, tying it back to how tool-calling arguments are actually generated, and describe the validation discipline you'd put in place instead.",
           "modelAnswer": "Schema-constrained decoding, which is what makes tool-call arguments reliably well-formed, only restricts which tokens are eligible for selection at each generation step -- it guarantees the resulting JSON will parse and that each field will have the declared type, but it has no mechanism for checking whether the values inside it are actually true or appropriate for the current situation. The arguments are still produced by the same probabilistic, next-token generation process that produces every other piece of model output, including its capacity to hallucinate: a `user_id`, an order number, a file path, or a date can all be syntactically perfect and still be entirely fabricated, especially if the conversation never actually supplied the real value and the model filled in something plausible-sounding to satisfy a required field. Treating 'this parsed successfully' as equivalent to 'this is safe to execute' conflates two completely different guarantees. The validation discipline I'd put in place is to treat every tool-call argument as an untrusted claim proposed by the model, with the strength of validation scaled to the consequence of the action: read-only, low-stakes tools (a calculator, a public lookup) can reasonably execute with light or no additional validation, but anything that changes real state -- cancelling something, sending a communication, moving money, deleting a resource -- needs its consequential arguments checked against ground truth the application already controls, such as the actual authenticated session, a database record, or an explicit business rule, before execution proceeds; a mismatch should hard-fail rather than proceed with a best guess. This mirrors exactly how plain hallucinated prose needs grounding or verification before being trusted for anything consequential -- tool arguments just make the risk easier to overlook because the output happens to look clean and machine-generated rather than obviously prose-like."
+        },
+        {
+          "id": "llm-engineering-function-tool-calling-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Two tools, `search_docs` and `search_web`, are both given the same generic description, 'Searches for information.' Per this module, what's the most likely consequence for tool selection?",
+          "options": [
+            "The API will reject registering two tools that share an identical description string.",
+            "Tool selection becomes inconsistent across calls, because the two nearly-identical descriptions give the model little basis to prefer one tool over the other for a given query -- the same underlying effect as a vague prompt producing inconsistent output.",
+            "The model will deterministically default to whichever tool is listed first in the `tools` array, every single time.",
+            "Both tools will automatically be called together on every request to compensate for the ambiguous descriptions."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The module treats a tool's name and description as conditioning text functioning exactly like prompt engineering; two tools with near-identical, generic descriptions give the model almost no signal to prefer one over the other, so which one gets called for a given query can vary inconsistently between calls -- directly analogous to how a vague prompt produces inconsistent output. Option A invents an API restriction that doesn't exist. Option C and D both assume a deterministic resolution rule (position-based or call-both) that the module never describes; the actual failure mode is inconsistency, not a fixed rule."
+        },
+        {
+          "id": "llm-engineering-function-tool-calling-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A conversation never explicitly states a user ID anywhere, yet the model returns a tool call for `cancel_subscription` with a schema-valid `user_id` argument. Per this module, what does this most likely indicate, and what's the correct response?",
+          "options": [
+            "The argument is trustworthy simply because it passed schema validation, so it can be executed directly.",
+            "The value is likely fabricated -- a plausible-looking string produced to satisfy a required field the conversation never actually grounded -- so it should be validated against trusted application state, such as the authenticated session, before any consequential action executes, rather than trusted at face value.",
+            "This proves a bug in the tool's JSON schema that must be corrected before the tool can be used again.",
+            "The model must have retrieved the real user ID from an earlier part of the conversation that simply wasn't shown in this example."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The module describes exactly this scenario: a required argument with no real grounding anywhere in the conversation still has to be filled with something, and the schema-constrained decoder produces a syntactically valid but fabricated value through the same hallucination mechanism that affects plain text. Option A repeats the misconception the module explicitly warns against -- schema validity says nothing about whether a value is grounded in reality. Option C misdiagnoses a generation-mechanism issue as a schema bug. Option D assumes missing information not present in the scenario as given, rather than accepting the straightforward explanation the module provides."
+        },
+        {
+          "id": "llm-engineering-function-tool-calling-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A tool wraps a database call that returns a JSON object with 40 fields, only 2 of which are relevant to the user's actual question. Per this module, what's the recommended practice before appending this tool result to the conversation?",
+          "options": [
+            "Always pass the full raw payload through untouched, since giving the model more information in the context can only help it answer more accurately.",
+            "Have the tool-execution code shape the result down to the specific fields actually needed before appending it, since dumping the full raw payload wastes tokens and risks burying the relevant fields among many irrelevant ones -- the same 'lost in the middle' risk as an overloaded RAG context.",
+            "Convert the entire JSON object into one long paragraph of prose before appending it, since prose is always parsed more reliably by the model than JSON.",
+            "Never append anything about the tool result to the conversation, and instead have the model ask a clarifying question whenever it needs a specific field."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The module explicitly names this as a common, avoidable mistake -- feeding an entire raw API response back in just because it was convenient -- and recommends shaping the result down to what's relevant first, tying the risk directly back to the lost-in-the-middle effect from the tokenization module. Option A directly contradicts the module's guidance that more context isn't automatically better. Option C invents a prose-conversion step the module never suggests and which would likely make the data harder, not easier, to use precisely. Option D discards the result entirely, which defeats the purpose of having called the tool in the first place."
         }
       ]
     },
@@ -353,6 +431,45 @@
           "type": "explanation",
           "prompt": "A team is building an agent that can look up customer data and, when appropriate, issue refunds autonomously through a tool call. Explain, in terms of how the underlying loop actually works, why this design needs iteration caps, cost budgets, AND a human-approval checkpoint specifically before the refund tool executes -- and why none of the three alone would be sufficient.",
           "modelAnswer": "Each of the three guardrails addresses a different, independent way this loop can go wrong, and none of them substitutes for either of the others because they're not protecting against the same failure. An iteration cap protects against the loop simply never reaching a stopping condition -- because there's no built-in convergence guarantee, an agent can retry an ambiguous tool result, oscillate between two unproductive actions, or otherwise fail to make progress indefinitely unless something external forces it to stop after a bounded number of steps; but a capped loop can still run every one of those bounded iterations at real, nontrivial cost, which an iteration cap alone does nothing to control. A cost or token budget addresses that separate risk directly, catching a loop that is technically making progress each round but is disproportionately expensive relative to the task, a pattern an iteration cap won't necessarily flag if each individual step looks reasonable in isolation. Neither of those two guardrails, however, does anything about the qualitatively different risk introduced by including a refund tool at all: because tool-call arguments can be hallucinated -- schema-valid but not actually grounded in anything real, as covered when the mechanism was first introduced -- and because an agentic loop can chain several tool calls autonomously across many steps, a wrong or fabricated refund amount or target account could be executed as a side effect of an ordinary-looking multi-step run, with no human ever reviewing the specific action before it took effect financially. A human-approval checkpoint placed specifically in front of the refund tool's execution addresses exactly that gap, by inserting a review step at the one point where an error stops being a wasted API call and starts being real-world, hard-to-reverse harm -- and it needs to sit at that specific boundary regardless of how tightly the iteration count and cost budget are otherwise controlled, because a well-bounded, cheap loop can still autonomously execute one wrong refund just as easily as an unbounded one can."
+        },
+        {
+          "id": "llm-engineering-agentic-loops-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "At step 3 of an agent run, the model generates text like 'I'll now check the refund policy before deciding.' Per this module, what does this reasoning text actually represent?",
+          "options": [
+            "Evidence of a persistent internal planning module tracking the agent's progress toward its goal, maintained separately from the conversation history.",
+            "Ordinary generated text, produced by the same next-token-prediction mechanism as any other output, regenerated fresh at this iteration and conditioned only on the transcript resent so far -- not a sign of memory or state carried inside the model between calls.",
+            "A literal log entry written directly by the orchestration code rather than something the model itself generated.",
+            "A required field the API automatically injects into every tool-calling response for compliance and auditing purposes."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The module is explicit that apparent planning text is ordinary output from the same next-token mechanism as everything else, regenerated from scratch each iteration conditioned on the full accumulated transcript -- the appearance of sustained deliberation comes from that transcript being resent every time, not from any state the model retains internally between calls. Option A wrongly attributes a persistent planning module to the model, which the module explicitly denies exists. Option C and D both misattribute the text's origin to something other than the model's own generation, which contradicts how the example is presented."
+        },
+        {
+          "id": "llm-engineering-agentic-loops-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "At step 3, a lookup tool returns `{\"error\": \"No order found matching that ID.\"}`. At step 4, the model's response treats this as though the order exists but is simply empty, and continues reasoning from that mistaken premise. Per this module, what does this illustrate?",
+          "options": [
+            "A tool execution bug -- the tool itself must have returned incorrect data for this to happen.",
+            "The model correctly identifying an unusual edge case in the underlying data and handling it gracefully.",
+            "A misread observation compounding into a wrong path: the model infers the meaning of the tool's JSON result the same way it infers meaning from any other text, and nothing in the base mechanism guarantees it distinguishes a failure signal from unusual-but-valid data, so later steps build fluently on the wrong premise.",
+            "Proof that the agent's iteration cap was set too low, which caused it to misread the result under time pressure."
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "The module names this exact failure mode: the tool executed correctly and returned an honest error, but the model's next generation step has to infer what that error-shaped JSON means, with no guarantee it correctly distinguishes a failure signal from sparse real data, and every subsequent step then compounds on top of whichever interpretation it settled on. Option A misplaces the fault in the tool's execution rather than in how its (correct) result was interpreted. Option B mischaracterizes a misread as a correct handling. Option D introduces an unrelated cause -- iteration-cap sizing has no bearing on how a single observation gets interpreted."
+        },
+        {
+          "id": "llm-engineering-agentic-loops-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "An agent that can autonomously issue refunds is given only a hard iteration cap (say, a maximum of 8 steps) as its sole guardrail. Per this module, why is this insufficient on its own?",
+          "options": [
+            "An iteration cap bounds how many steps and how much cost a run can consume, and can stop a non-converging loop, but it does nothing to prevent a well-formed, schema-valid but hallucinated refund argument from being executed as a side effect within those same bounded steps -- that specific risk requires a human-approval checkpoint before the refund tool executes.",
+            "Iteration caps are unnecessary in practice, since agentic loops reliably converge to a correct answer on their own within a handful of steps.",
+            "An iteration cap alone is actually sufficient, since limiting the number of steps automatically limits how much financial harm any single tool call within those steps could cause.",
+            "Iteration caps only ever apply to read-only tools; any tool that modifies real state is automatically exempt from step limits by design."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "The module treats guardrails as addressing independent failure modes: an iteration cap only bounds runaway looping and cost, it does nothing about a fabricated but schema-valid argument reaching a consequential tool within those bounded steps -- that specific gap is what a human-approval checkpoint in front of the refund tool is for, regardless of how tight the iteration count is. Option B contradicts the module's explicit statement that there's no convergence guarantee at all. Option C wrongly assumes step count correlates with financial exposure, when a single early step could already trigger one incorrect refund. Option D invents an exemption rule the module never describes."
         }
       ]
     }

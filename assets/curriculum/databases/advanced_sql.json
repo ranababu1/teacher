@@ -121,6 +121,45 @@
           "type": "explanation",
           "prompt": "Explain how window functions differ from GROUP BY at a fundamental level, and use a running-total example to explain why the presence or absence of ORDER BY inside OVER() changes the result so dramatically.",
           "modelAnswer": "GROUP BY and window functions both let you compute an aggregate like SUM or COUNT across a set of related rows, but they differ in what happens to the original rows afterward. GROUP BY collapses every row in a group down into exactly one summary row per distinct group value -- the individual, row-level detail is gone from the result; you're left only with the aggregate. A window function, by contrast, computes its result 'alongside' each original row rather than instead of it: every row from the source table survives into the output, one for one, and each one simply gains an extra column holding whatever the window function computed for it. This is why window functions can answer questions GROUP BY structurally cannot on its own, like 'show me each order's amount alongside that customer's running total of all orders so far' -- you need every order row present in the output, which immediately rules out GROUP BY. The ORDER BY inside OVER() interacts with a specific, easily-missed default: Postgres determines the 'frame' -- exactly which rows contribute to a given row's aggregate -- based partly on whether ORDER BY is present. With no ORDER BY inside OVER(), the default frame is the entire partition (or the entire result set, if there's no PARTITION BY either), so every row in that partition gets the exact same aggregate value: the full sum, unaffected by row position. Once you add ORDER BY inside OVER(), the default frame changes to 'from the start of the partition through the current row' -- so each row's aggregate now depends on its position in that order, accumulating as you move through the rows, which is precisely the definition of a running total. The practical danger is that adding or removing an ORDER BY inside an existing OVER() clause silently changes this default frame, which can turn a full-partition sum into a running total (or the reverse) as an apparently minor edit, with no error or warning to flag that the query's meaning just changed."
+        },
+        {
+          "id": "databases-window-functions-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A query uses `SUM(amount) OVER (PARTITION BY customer_id)` with no ORDER BY inside OVER(). Compared to a GROUP BY query computing the same per-customer sum, what's different about the number of rows each returns?",
+          "options": [
+            "Both return exactly one row per customer_id -- PARTITION BY is simply alternative syntax for GROUP BY.",
+            "The window function query returns one row per original order row (nothing collapsed), with the customer's total attached as an extra column on every one of that customer's rows; the GROUP BY query collapses all of a customer's orders down into a single summary row.",
+            "The window function query returns fewer rows than the source table but more rows than the GROUP BY version.",
+            "GROUP BY preserves every original row, while PARTITION BY collapses rows down to one per customer -- the reverse of option B."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B is correct and is the central distinction between the two: PARTITION BY only determines which rows a window function considers together when computing each row's result -- it never removes or merges rows. Every order row survives, each one gaining a customer_total column. GROUP BY, by contrast, genuinely reduces the row count to one row per distinct customer_id, discarding individual order-level detail. Option A treats them as interchangeable, which they aren't -- swapping one for the other changes the row count of the result. Option C invents an in-between row count that doesn't correspond to how either construct behaves. Option D simply reverses which construct does which, getting the core fact backwards."
+        },
+        {
+          "id": "databases-window-functions-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Two rows tie on the value used in `ROW_NUMBER() OVER (ORDER BY score DESC)`. What can you say about which of the two tied rows receives the lower number?",
+          "options": [
+            "ROW_NUMBER() always assigns the lower number to whichever row was physically inserted into the table first.",
+            "Which tied row gets which number is not guaranteed to be deterministic or reproducible across runs unless an additional tiebreaker column is added to the ORDER BY.",
+            "ROW_NUMBER() automatically detects the tie and falls back to RANK()'s behavior, assigning both rows the same number.",
+            "PostgreSQL raises an error whenever ROW_NUMBER() encounters a tie, since ties are considered undefined input for this function."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B is correct: ROW_NUMBER() ignores ties entirely and simply hands out the next sequential integer to each row in whatever order the database happens to encounter them, which is not guaranteed to be stable or reproducible run to run unless the ORDER BY includes enough columns to fully distinguish every row (a tiebreaker like a unique id). Option A invents a rule about insertion order that ROW_NUMBER() makes no such guarantee about. Option C describes RANK()'s actual tie behavior, not ROW_NUMBER()'s -- the two functions exist precisely because they handle ties differently, and ROW_NUMBER() never gives two rows the same number. Option D is false; ties are entirely valid input, they just produce an arbitrary (not erroring) assignment."
+        },
+        {
+          "id": "databases-window-functions-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "`AVG(amount) OVER (ORDER BY order_date ROWS BETWEEN 2 PRECEDING AND CURRENT ROW)` computes a moving average. For the 5th row in the ORDER BY sequence, which rows does this specific average cover?",
+          "options": [
+            "All rows from the 1st through the 5th -- an expanding, running average.",
+            "Only the 3rd, 4th, and 5th rows -- the current row plus the two immediately preceding it in the ORDER BY sequence.",
+            "The 5th row together with the 6th and 7th rows that follow it.",
+            "Every row in the partition, since ROWS BETWEEN only affects processing order, not which rows are included in the average."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B is correct: `ROWS BETWEEN 2 PRECEDING AND CURRENT ROW` explicitly defines the frame as the current row plus exactly the two rows immediately before it in the ORDER BY sequence -- for the 5th row, that's rows 3, 4, and 5, a genuine fixed-size 3-row moving average rather than an ever-growing running average. Option A describes the behavior of the *default* frame when ORDER BY is present but no explicit ROWS/RANGE clause is given -- not what this explicit frame clause specifies. Option C reverses the direction; PRECEDING means before the current row in the ordering, not after. Option D misreads the frame clause as irrelevant to row inclusion, when its entire purpose is to define exactly which rows are included."
         }
       ]
     },
@@ -241,6 +280,45 @@
           "type": "explanation",
           "prompt": "Explain how a recursive CTE executes, step by step, using the base case and recursive case, and explain concretely why a recursive CTE over data that might contain cycles needs an explicit safeguard rather than relying on SQL to detect the cycle automatically.",
           "modelAnswer": "A recursive CTE is built from two parts combined with UNION or UNION ALL: a base case, which is an ordinary query producing the starting set of rows, and a recursive case, which references the CTE's own name and describes how to derive the next layer of rows from the previous layer. Execution is iterative rather than a single pass: Postgres runs the base case once to produce an initial working set, then repeatedly runs the recursive case, each time joining against only the rows that the *immediately preceding* iteration produced -- not the whole accumulated result up to that point. Each iteration's output is appended to the final result and also becomes the input to the next iteration. This continues, layer by layer -- for a hierarchy, this naturally corresponds to depth 1, then depth 2, then depth 3, and so on -- until some iteration of the recursive case produces exactly zero new rows, at which point the recursion stops and the accumulated result is returned. The danger with cyclic data is that this termination condition -- zero new rows produced -- is never guaranteed to be reached if the graph being traversed loops back on itself. If node A eventually leads back to node A through some chain of relationships, and the recursive case has no way of recognizing 'I've already visited this node on this branch,' each iteration will keep finding what it thinks are new rows to add (rediscovering nodes already part of the cycle), and the recursion will run forever, consuming more memory and time with each pass, never producing the zero-new-rows condition it needs to stop. SQL provides no automatic protection against this -- a plain WITH RECURSIVE query has no built-in notion of 'don't revisit a node.' The fix has to be added explicitly: track the specific path of nodes visited so far as an accumulating array in each row, and add a condition to the recursive case's WHERE clause that refuses to extend a branch into any node already present in that branch's path, which breaks the cycle the moment it would loop back on itself. Postgres 14 added a built-in CYCLE clause that performs exactly this bookkeeping automatically, but even that has to be requested explicitly in the query -- there's no ambient, automatic cycle detection that applies unless you ask for it."
+        },
+        {
+          "id": "databases-ctes-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "On Postgres 12+, under which of these conditions is a non-recursive CTE still forced to materialize (computed once, held separately) rather than being inlined into the outer query like an ordinary subquery?",
+          "options": [
+            "Whenever the CTE's own query includes a WHERE clause.",
+            "Whenever the CTE is referenced more than once in the outer query, or is explicitly marked AS MATERIALIZED.",
+            "Whenever the CTE's name is alphabetically later than the names of the tables it queries.",
+            "CTEs are never materialized on Postgres 12+ -- automatic materialization was removed entirely in that version."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B correctly names the actual conditions: a non-recursive CTE referenced exactly once, with no side effects, is inlined by default on Postgres 12+, but referencing it more than once, marking it recursive, or explicitly writing AS MATERIALIZED all force it to be computed once and held separately instead. Option A invents an irrelevant condition -- WHERE clauses have no bearing on materialization. Option C is nonsense with no basis in how the planner works. Option D overstates the change -- materialization wasn't removed, it just stopped being the automatic default for the common single-reference case; recursive and multiply-referenced CTEs are still materialized."
+        },
+        {
+          "id": "databases-ctes-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A recursive CTE's base case, due to a data problem, returns zero rows for a particular run (for instance, a corrupted org chart where every employee has some manager_id set, so `WHERE manager_id IS NULL` matches nobody). What happens?",
+          "options": [
+            "The recursive case still runs once anyway, using the entire underlying table as an implicit starting point.",
+            "Postgres substitutes the full table as a fallback base case whenever the declared base case returns nothing.",
+            "The recursive case has no rows from a preceding iteration to join against, so it also immediately produces zero new rows, and the CTE's overall result is empty.",
+            "Postgres raises a runtime error, because a recursive CTE requires its base case to return at least one row to be valid."
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "Option C correctly traces the mechanism: the recursive case's join is always against the previous iteration's output specifically, not against the table as a whole. If the base case produces zero rows, there is nothing for the first run of the recursive case to join against, so it also produces zero new rows, and the whole CTE terminates immediately with an empty result -- exactly the same termination condition (zero new rows) that ends a normal, successful recursive CTE, just triggered on the very first iteration instead of after several. Option A and B both invent fallback behaviors that don't exist -- there is no implicit substitution of the full table. Option D is wrong; an empty base case is completely valid SQL and simply produces an empty overall result, not an error."
+        },
+        {
+          "id": "databases-ctes-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A CTE named `expensive_calc` performs a costly aggregation and is referenced twice within the outer query's SELECT list. On Postgres 12+, how many times is the aggregation actually computed by default?",
+          "options": [
+            "Twice -- once for each reference, exactly as if the subquery had been pasted inline at both locations.",
+            "Once -- because it's referenced more than once, Postgres forces the CTE to materialize, computing it a single time and reusing the stored result for both references, unless AS NOT MATERIALIZED is explicitly specified to force separate re-evaluation.",
+            "Zero times until the final result is actually fetched by the client, at which point it's computed lazily for whichever reference is read first.",
+            "The number of computations depends only on how many rows expensive_calc returns, not on how many times it's referenced in the outer query."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B is correct: being referenced more than once is specifically one of the conditions that forces a CTE to materialize even on Postgres 12+, precisely so that an expensive computation isn't redundantly recomputed once per reference -- it's computed once and the stored result is reused. Option A describes what would happen to a CTE referenced exactly once if it were instead inlined, which isn't this scenario. AS NOT MATERIALIZED exists specifically to override this default in the rare case you'd actually prefer separate re-evaluation per reference. Option C invents a lazy-evaluation model Postgres doesn't use. Option D confuses row count with reference count, which are unrelated to whether materialization happens."
         }
       ]
     },
@@ -361,6 +439,45 @@
           "type": "explanation",
           "prompt": "Explain the difference between a correlated and an uncorrelated subquery, and explain why EXISTS is generally preferred over a plain JOIN when the actual goal is checking whether a related row exists, rather than retrieving the related rows themselves.",
           "modelAnswer": "The distinguishing test between a correlated and an uncorrelated subquery is simple and purely structural: does the subquery reference any column from the query it's embedded in? An uncorrelated subquery references nothing from its enclosing query -- it could be run entirely on its own and would mean the same thing regardless of which outer row, if any, it's eventually compared against. Because of this, Postgres can evaluate an uncorrelated subquery once and reuse its result across every row of the outer query, which is why something like `WHERE price > (SELECT AVG(price) FROM products)` only computes that average a single time. A correlated subquery, by contrast, references a column belonging to the outer query -- such as `WHERE p2.category = p.category`, where `p.category` comes from the outer row -- meaning the subquery's result genuinely depends on which outer row is currently being evaluated; conceptually, it's a different computation per row, even though Postgres's planner often finds ways to execute it more efficiently than literally re-running it from scratch for every single row, frequently rewriting it into a semi-join or anti-join internally. EXISTS is generally the better tool than a JOIN specifically for existence checks because the two constructs answer genuinely different questions. A JOIN produces one output row for every matching pair between the two tables -- if the 'many' side has several rows matching a given row on the other side, that row gets duplicated once per match in the joined result, which is exactly correct when you actually want that matching detail, but actively wrong when your real question is simply 'does at least one match exist.' EXISTS is inherently structured around exactly that existential question: it evaluates to true or false per outer row, based on whether at least one row in the correlated subquery satisfies the condition, and Postgres can stop searching the moment it finds a single match rather than needing to enumerate all of them. Using EXISTS therefore avoids the duplicate-row problem entirely and avoids needing an after-the-fact DISTINCT to paper over it, while also often being clearer about intent -- the query reads as 'does a match exist,' which is literally the question being asked, rather than 'give me the matches' followed by a mental note that duplicates need to be collapsed."
+        },
+        {
+          "id": "databases-subqueries-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "`SELECT name, (SELECT COUNT(*) FROM orders WHERE orders.customer_id = customers.id) FROM customers` places a subquery directly in the SELECT list. Is this subquery correlated or uncorrelated, and why?",
+          "options": [
+            "Uncorrelated, because scalar subqueries placed in the SELECT list are always evaluated exactly once regardless of their content.",
+            "Correlated, because it references customers.id, a column belonging to the outer query -- whether a subquery is correlated depends only on whether it references an outer column, not on which clause (WHERE, FROM, or SELECT) it happens to appear in.",
+            "Uncorrelated, because COUNT(*) is an aggregate function, and aggregate functions can never appear inside a correlated subquery.",
+            "It cannot be determined from the SQL text alone; correlation is a runtime property only visible by running EXPLAIN."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B correctly applies the actual test: correlation depends solely on whether the subquery references a column from its enclosing query, regardless of which clause the subquery is written inside. Here, `orders.customer_id = customers.id` references `customers.id`, an outer-query column, so this scalar subquery's result genuinely depends on which customer row is currently being evaluated -- it's correlated. Option A wrongly assumes clause position determines correlation; a scalar subquery in the SELECT list can be either correlated or uncorrelated depending on its content, exactly like a WHERE-clause subquery can. Option C is false -- aggregate functions appear inside correlated subqueries constantly, including in this module's own department-average example. Option D is wrong; correlation is a structural property of the SQL text, fully determinable by inspection, not something that requires running the query."
+        },
+        {
+          "id": "databases-subqueries-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A correlated `NOT EXISTS` subquery filters on `p.author_id = a.id`, and `posts.author_id` has no index at all, on a `posts` table with many rows. What's the most accurate expectation for its performance?",
+          "options": [
+            "Performance is unaffected either way, since NOT EXISTS is always rewritten into an anti-join that ignores indexes entirely.",
+            "Without an index on the correlated column, each probe against posts -- however the planner ultimately executes the query -- has no fast path to locate matching rows and may fall back to scanning, so performance can degrade toward something resembling the naive 'once per outer row' worst case; indexing the correlated column matters regardless of which execution strategy the planner picks.",
+            "NOT EXISTS is immune to missing indexes, because it always stops at the first matching row found regardless of how that row is located.",
+            "Only IN and EXISTS depend on indexing; NOT EXISTS specifically never benefits from an index under any circumstance."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B correctly identifies that the planner's ability to execute a correlated subquery efficiently -- whether as a semi-join, an anti-join, or something closer to a per-row probe -- still depends heavily on being able to look up matching rows quickly, which is exactly what an index on the correlated column provides. Without it, each lookup has to fall back to a slower search strategy, and the query's performance can indeed degrade toward the naive per-row mental model in the worst case. Option A and D both wrongly claim indexes are irrelevant to these constructs -- the planner's rewriting into a join-like operation doesn't eliminate the benefit of an index for performing that join efficiently. Option C invents an immunity to missing indexes that doesn't exist; stopping at the first match doesn't help if finding even that first match requires scanning many rows without an index."
+        },
+        {
+          "id": "databases-subqueries-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Someone proposes replacing `WHERE EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.id AND o.amount > 500)` with a `JOIN orders o ON o.customer_id = c.id AND o.amount > 500` followed by `SELECT DISTINCT c.name`. Would this produce the same final set of names, and is it a good idea?",
+          "options": [
+            "No -- the JOIN-plus-DISTINCT version can never produce the same set of customer names as the EXISTS version, regardless of the underlying data.",
+            "Yes, it would produce the same final set of names, but it does strictly more work than necessary -- the JOIN produces and then must deduplicate a row per matching order, whereas EXISTS can stop at the first match per customer without enumerating the rest.",
+            "Yes, and it's strictly more efficient, because DISTINCT is applied before the JOIN executes, which reduces how many rows the JOIN has to scan.",
+            "No -- DISTINCT can only be applied to numeric columns, not text columns such as name, so this rewritten query would fail to run at all."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B is correct: after deduplication, the JOIN-plus-DISTINCT version does converge to the same set of qualifying customer names, but it gets there the long way -- generating one row per matching order (potentially many per customer) and then collapsing them back down, versus EXISTS, which never needs to enumerate more than one matching order per customer in the first place because it's only answering a yes/no question. Option A is wrong -- both queries are answering the same underlying existence question, just via different mechanics, and do converge to the same result set. Option C is backwards; DISTINCT operates on the JOIN's output, not before it, so it cannot reduce the JOIN's own scanning work. Option D is fabricated -- DISTINCT works on any comparable column type, text included."
         }
       ]
     }

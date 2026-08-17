@@ -121,6 +121,45 @@
           "type": "explanation",
           "prompt": "A colleague proposes storing all of a product's attributes in one generic entity-attribute-value table so that adding a new attribute type never requires a schema migration. Explain what's wrong with this reasoning, and describe when JSONB is actually the appropriate tool for attribute variability instead.",
           "modelAnswer": "The EAV proposal optimizes for exactly one thing -- never needing a migration to add a new attribute -- at the cost of nearly everything else a relational schema is supposed to provide. Because every attribute value is stored generically, typically as TEXT, in a single shared column, the database loses the ability to enforce that any given attribute holds the right type of data at all: a price attribute could be inserted as the string 'free', a boolean attribute as '2', with no CHECK constraint or column type able to catch it, because from the schema's point of view every attribute is identical, untyped text. Querying becomes correspondingly painful: filtering on two or three attributes at once requires self-joining the EAV table against itself once per attribute, and any numeric or date comparison requires casting a string on every row, at query time, with no guarantee the cast will even succeed. Indexing suffers too -- a single index on (attribute_name, attribute_value) has to serve every attribute of every entity type mixed together, which is far less targeted and less efficient than a dedicated index on one well-typed column. JSONB is the right tool for attribute variability specifically when the variability is genuine and per-row -- when different rows (different product categories, say) legitimately have different sets of attributes that would otherwise require either a wide table full of mostly-NULL columns or a migration every time a new category introduces a new attribute name. Even then, JSONB should hold only the genuinely variable part of the row -- the attributes that differ by category -- while any field that's common across all rows, or that needs strong typing, constraints, or foreign key relationships, should remain an ordinary column. The distinguishing question to ask before reaching for either EAV or JSONB is whether the attribute set is truly open-ended and sparse (a reasonable case for JSONB, with a GIN index for querying it), or whether it's actually a fixed, small, well-known set of fields that's simply being avoided because adding real columns feels like more upfront work -- in which case a proper table with typed, constrained columns, potentially split by type as in a table-per-type design, is both more correct and, in the long run, considerably easier to query and maintain than either alternative."
+        },
+        {
+          "id": "databases-schema-design-for-queries-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A `posts.comment_count` column is kept in sync by a trigger firing AFTER INSERT OR DELETE on `comments`. A bulk cleanup job runs `TRUNCATE comments` (with triggers still enabled) to wipe out test data. What happens to comment_count?",
+          "options": [
+            "TRUNCATE fires the same row-level AFTER DELETE trigger once for every removed comment row, so comment_count correctly drops to 0 for every affected post.",
+            "TRUNCATE does not fire per-row DELETE triggers at all, so comment_count is left completely unchanged even though every comment is now gone -- silently desynchronizing the counter from reality.",
+            "TRUNCATE is automatically blocked by Postgres on any table that has a trigger referencing another table's column.",
+            "comment_count is automatically recalculated via a fresh COUNT(*) the next time the posts table is queried."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B correctly identifies a genuine, easy-to-miss Postgres behavior: TRUNCATE removes all of a table's rows without processing them individually, so row-level triggers like a typical AFTER INSERT OR DELETE trigger -- which rely on per-row NEW/OLD data -- simply never fire for a TRUNCATE, unlike a plain DELETE FROM comments, which would fire the trigger once per row. The trigger-maintained comment_count is left stale, pointing at counts for comments that no longer exist, which is exactly the kind of silent desynchronization this concept warns a denormalized counter is vulnerable to whenever something bypasses the mechanism keeping it in sync. Option A describes what a plain DELETE would do, not TRUNCATE. Option C invents a protective behavior Postgres doesn't have. Option D invents an automatic recalculation Postgres never performs -- comment_count remains whatever value the trigger last set it to until something explicitly recomputes or corrects it."
+        },
+        {
+          "id": "databases-schema-design-for-queries-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A team stores `shipping_address` -- a fixed set of fields (street, city, zip) present on every single order -- as a JSONB column on `orders`, reasoning that 'it's simpler to just add a JSON blob.' Is this a good fit for JSONB, per the guidance in this concept?",
+          "options": [
+            "Yes -- JSONB is always preferable to adding multiple columns, since it keeps the table's column count lower.",
+            "No -- shipping_address's fields are fixed and known for every row, not sparse or variable across rows, so modeling them as real columns (or a separate addresses table) preserves typing, constraints, and straightforward indexing that JSONB gives up here for no corresponding benefit.",
+            "Yes, but only once a GIN index is added on the column; without one, JSONB is always the wrong choice regardless of the data's actual shape.",
+            "No -- JSONB columns are structurally incapable of storing text values like street names, only numbers and booleans."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B correctly applies the concept's central test: JSONB is justified when attributes are genuinely sparse or variable per row, not simply because adding columns feels like more upfront effort. Every order has the exact same shipping-address fields, with no category-driven variability at all, which is precisely the profile that calls for real, typed, constrained columns (or a dedicated addresses table) instead. Option A treats JSONB as a universal simplification, which the concept explicitly warns against ('a general escape hatch from schema design'). Option C invents a hard requirement -- a GIN index is about query performance on the JSONB column, not a precondition for JSONB being the right modeling choice at all. Option D is factually wrong; JSONB stores text values natively."
+        },
+        {
+          "id": "databases-schema-design-for-queries-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "In an EAV table `entity_attributes(entity_id, attribute_name, attribute_value)`, why is a single index on `(attribute_name, attribute_value)` a poor substitute for ordinary column indexes on a properly modeled schema?",
+          "options": [
+            "Postgres doesn't support composite indexes spanning more than one column, so this index would fail to be created at all.",
+            "The one index has to serve every attribute of every entity type mixed together in a single structure, which is far less targeted than a dedicated index on a single, well-typed column specific to one attribute.",
+            "Indexes on TEXT columns are inherently slower than indexes on INT columns, regardless of how the surrounding schema is organized.",
+            "EAV-style tables cannot be indexed at all, under any circumstances, due to their generic column structure."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B correctly identifies the real cost: because every attribute of every entity is crammed into the same attribute_name/attribute_value columns, one shared index has to do the job that, in a properly modeled schema, would be split across many small, targeted indexes -- each specific to one real column's actual data distribution and type. That mixing makes the EAV index less selective and less efficient for any individual attribute lookup than a dedicated column index would be. Option A is false -- composite indexes on multiple columns are entirely normal and well-supported in Postgres. Option C is a fabricated blanket claim about TEXT versus INT indexing that isn't the actual mechanism at play here. Option D is false; EAV tables can absolutely be indexed, just less effectively than a properly typed schema."
         }
       ]
     },
@@ -241,6 +280,45 @@
           "type": "explanation",
           "prompt": "Explain why a team needs a migration tool rather than just running ALTER TABLE statements by hand, and explain, using a column rename as the example, why a breaking schema change needs to be spread across multiple deploys in a system using rolling deploys.",
           "modelAnswer": "A migration tool solves a coordination problem that has nothing to do with whether any individual ALTER TABLE statement is correct. Over the life of a real application, the schema changes many times, made by different people, across multiple environments -- a developer's laptop, staging, production -- and without a shared, ordered, tracked record of exactly which changes have been applied where, there is no reliable way to answer 'what does this database's schema actually look like right now, and how did it get that way.' A migration tool fixes this by capturing every schema change as its own versioned file and recording, in a table it manages inside the database itself, exactly which files have already been applied -- so running the tool's migrate command on any environment applies precisely the missing changes, in the correct order, exactly once, giving every environment a deterministic path to the same schema state and giving the team a reviewable, version-controlled history of every change ever made. This matters enormously for a breaking change like a column rename in a system with rolling deploys, where old and new versions of the application run side by side against the same database for some window of time while instances are updated one at a time. If a single migration renames the column and a single deploy simultaneously updates the application code to use the new name, there's an unavoidable window during the rollout where some instances are still running the old code, which still expects the old column name -- and the instant the migration commits, every one of those old instances starts failing, because the column it depends on no longer exists, regardless of the fact that the new code and new schema are individually correct together. The safe pattern breaks the change into several smaller steps, each independently deployed and each individually safe for both old and new code to coexist against: first add the new column without touching the old one (harmless to old code, which ignores it); then deploy application code that writes to both the old and new columns while still reading from the old one, so both stay correctly populated regardless of which code version handles a given write; then backfill any rows that predate the dual-writing; then deploy code that reads from the new column, now guaranteed fully populated; and only once every instance has moved past that point, drop the old column. At every one of those stages, the schema and whatever mix of old and new code might be running against it remain mutually compatible, which is the property a single, one-shot rename-and-switch can never guarantee during a rolling deploy."
+        },
+        {
+          "id": "databases-migrations-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A migration splits a `full_name` column into separate `first_name` and `last_name` columns, then drops `full_name`. What's true about writing a genuinely clean down migration for this specific change?",
+          "options": [
+            "A perfectly clean down migration is always possible: simply concatenate first_name and last_name back into a restored full_name column.",
+            "A down migration can recreate a full_name-shaped column and populate it by concatenating first_name and last_name, but this is only a true, lossless inverse if the original split was itself information-preserving for every actual name format encountered -- which isn't guaranteed.",
+            "Down migrations are never possible for any column rename or split; only column additions can ever be cleanly reverted.",
+            "The down migration is generated automatically by most migration tools once the up migration is written, with no explicit logic required."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B correctly captures the nuance: whether concatenating first_name and last_name faithfully reconstructs the original full_name depends entirely on whether splitting it was information-preserving in the first place -- a name like 'Mary Jane Watson' split naively into first_name='Mary' and last_name='Jane Watson' (or some other ambiguous split) may not concatenate back to the original string, especially for names that don't fit a simple two-part assumption. Option A overstates the guarantee as unconditional, which the concept explicitly warns against. Option C is too absolute -- some splits genuinely are reversible if done carefully and the format is simple and consistent; the point is that it isn't guaranteed, not that it's impossible. Option D is false; most migration tools require the down migration's logic to be written explicitly, just like the up migration."
+        },
+        {
+          "id": "databases-migrations-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "What specific problem does a migration tool's `schema_migrations` tracking table solve?",
+          "options": [
+            "It stores a full backup of every table's data before each migration runs, in case a rollback is later needed.",
+            "It records exactly which migration files have already been applied to this specific database, so running the tool's migrate command again applies only whichever ones are still missing, in the correct order, exactly once.",
+            "It automatically generates the SQL for new migrations by diffing the current live schema against a target schema definition file.",
+            "It prevents more than one developer from ever running a migration against the same shared database at the same time."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B is exactly the mechanism described: the tracking table is a record of applied versions, and comparing it against the migration files that exist on disk tells the tool precisely which ones still need to run, in order, without ever reapplying one that's already been applied. Option A invents a data-backup function the table doesn't perform -- it tracks which schema changes ran, not table contents. Option C describes schema-diffing tools, a different category of tool from the ordered-migration-file approach described in this concept. Option D invents a locking/coordination guarantee that a simple tracking table doesn't provide on its own."
+        },
+        {
+          "id": "databases-migrations-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Between running `ALTER TABLE orders ADD CONSTRAINT positive_amount CHECK (amount > 0) NOT VALID;` and later running `VALIDATE CONSTRAINT positive_amount;`, can a new row violating `amount > 0` be inserted into orders during that gap?",
+          "options": [
+            "Yes -- NOT VALID means the constraint isn't enforced on anything at all until VALIDATE CONSTRAINT finishes running, leaving a window where bad new rows can get in.",
+            "No -- NOT VALID only skips checking pre-existing rows immediately; Postgres still enforces the constraint on every new INSERT or UPDATE from the moment it's added, so no new violating row can be inserted during the gap.",
+            "Yes, but only via UPDATE statements -- INSERT statements are always checked against the constraint regardless of the NOT VALID flag.",
+            "No, because adding a NOT VALID constraint takes an exclusive lock that blocks all writes to the table until VALIDATE CONSTRAINT completes."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B correctly describes NOT VALID's actual scope: it defers only the potentially slow, lock-heavy verification of rows that already existed when the constraint was added; new writes are checked against the constraint immediately and normally from that point forward, which is precisely what closes the gap that would otherwise let bad data in during the validation window. Option A overstates NOT VALID's effect, describing a constraint that isn't enforced at all rather than one that's enforced going forward but not yet verified retroactively. Option C invents an INSERT/UPDATE asymmetry that doesn't exist -- both are checked equally. Option D is wrong; NOT VALID's entire appeal is that it takes only a brief lock, not one that blocks writes for the whole validation period -- that's exactly the write-blocking cost this pattern is designed to avoid."
         }
       ]
     },
@@ -361,6 +439,45 @@
           "type": "explanation",
           "prompt": "Explain the methodology for choosing between ON DELETE CASCADE, RESTRICT, and SET NULL for a given foreign key relationship, and explain concretely why applying CASCADE broadly across a schema is a common source of serious, unintended data loss.",
           "modelAnswer": "The single most useful question for choosing an ON DELETE strategy is whether a child row still represents something meaningful on its own once its parent no longer exists, or whether it only ever meant anything as part of that specific parent. A junction or pairing table -- something like post_tags, linking a post and a tag with no content of its own beyond the pairing -- has no independent meaning once either side of the pairing disappears, so CASCADE is correct there: there's no scenario where you'd want that pairing row to survive, orphaned, referencing something that no longer exists. A substantial, independently meaningful record -- a post, an order, anything with content or business significance beyond simply pointing at its parent -- generally calls for RESTRICT, which blocks the parent's deletion outright until a human explicitly decides what should happen to the dependent rows, rather than letting an unrelated cleanup action on the parent silently destroy them as a side effect. SET NULL fits a middle case: the child row (a comment, a review) is worth keeping for its own content even after its specific link to the parent (the account that created it) is gone, so the row survives with its foreign key nulled out rather than being deleted or blocking the parent's deletion. Applying CASCADE broadly, as a default across many tables, is dangerous specifically because CASCADE composes: if table B cascades from table A, and table C cascades from table B, then a single DELETE on one row of A can silently fan out through B and into C, deleting rows in a table that whoever issued the original delete may not have even been thinking about, let alone reviewing before committing to the deletion. There is no confirmation step, no dry-run, and no partial undo once CASCADE has fired -- the fan-out happens completely and instantly, and the only recovery path afterward is typically restoring from a backup taken before the delete ran. RESTRICT's error, in this light, isn't a nuisance to engineer around by defaulting to CASCADE instead -- it's the exact mechanism that stops this kind of unbounded, invisible propagation at the first table where deleting isn't obviously safe, forcing a human to look at what's actually about to happen before it does."
+        },
+        {
+          "id": "databases-fk-strategies-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A foreign key is declared `ON DELETE SET DEFAULT`. What happens to a child row when its referenced parent row is deleted, and what does this option require to make sense?",
+          "options": [
+            "The child row is deleted outright, exactly like CASCADE -- SET DEFAULT is simply an alternate name for CASCADE.",
+            "The child row's foreign key column is set to NULL, identical to SET NULL, regardless of any default value that may be declared.",
+            "The child row's foreign key column is set to whatever default value was declared for that column, which requires a genuine, valid default already configured for this to be meaningful.",
+            "The parent's DELETE is blocked outright with an error, exactly like RESTRICT."
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "Option C correctly describes SET DEFAULT: it's distinct from both CASCADE and SET NULL specifically because it falls back to a predeclared default value for the foreign key column rather than deleting the row or nulling it out -- which only behaves sensibly if that column actually has a meaningful default configured (for instance, a placeholder 'unassigned' row's id). Option A confuses it with CASCADE, a fundamentally more destructive behavior. Option B confuses it with SET NULL -- the two are different options precisely because they fall back to different values (a configured default versus always NULL). Option D confuses it with RESTRICT, which prevents the delete rather than allowing it and adjusting the child row."
+        },
+        {
+          "id": "databases-fk-strategies-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A team uses a product's SKU -- a natural key that occasionally gets revised -- as the primary key of `products`, referenced by foreign key from `order_items.sku`. Why does `ON UPDATE CASCADE` matter here in a way it typically wouldn't for an auto-generated surrogate integer primary key?",
+          "options": [
+            "It doesn't actually matter more here -- ON UPDATE CASCADE is equally irrelevant whether the primary key is natural or surrogate.",
+            "A natural key like a SKU can legitimately need to change after rows already reference it, so ON UPDATE CASCADE automatically propagates a corrected SKU to every referencing order_items row; a surrogate key is designed to never be intentionally changed once assigned, so this scenario essentially never arises for it.",
+            "ON UPDATE CASCADE is only valid syntax when the referenced primary key is a natural key -- Postgres rejects it on surrogate integer keys.",
+            "Surrogate keys actually need ON UPDATE CASCADE more often than natural keys, because their values are more likely to change unexpectedly due to sequence resets."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B is correct and matches the concept's explicit reasoning: a surrogate key's entire purpose is to be a stable, meaningless identifier that's never intentionally changed once assigned, so ON UPDATE CASCADE has essentially nothing to ever respond to in that case. A natural key genuinely can need revision (a SKU scheme update, a corrected value), and when other tables reference that natural key directly as a foreign key, ON UPDATE CASCADE becomes a real, practical convenience, automatically propagating the correction rather than requiring an error-prone manual update across every dependent table. Option A ignores this asymmetry entirely. Option C is fabricated -- ON UPDATE CASCADE is valid syntax on any foreign key regardless of what kind of value the referenced key holds. Option D reverses the actual reasoning -- surrogate keys are the ones essentially never intentionally updated."
+        },
+        {
+          "id": "databases-fk-strategies-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A table adopts soft deletion via a `deleted_at` column, but the team leaves the original plain `UNIQUE` constraint on `email` in place instead of switching to a partial unique index scoped to `WHERE deleted_at IS NULL`. What problem does this cause?",
+          "options": [
+            "No problem -- a plain UNIQUE constraint and a partial unique index behave identically regardless of any soft-deleted rows present.",
+            "A user who soft-deletes their account permanently blocks that email address from ever being used again for a new signup, since the plain constraint still counts the soft-deleted row's email as taken.",
+            "The plain UNIQUE constraint will reject the very UPDATE that sets deleted_at, making soft deletion impossible to perform on this table at all.",
+            "Postgres automatically converts any plain UNIQUE constraint into a partial index scoped to active rows whenever a deleted_at column is added to the same table."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B is correct and is exactly the cost this concept flags: a plain UNIQUE constraint has no awareness of deleted_at at all, so it continues to treat the soft-deleted row's email as occupied indefinitely, permanently preventing a legitimate new signup from reusing that email even though the original account is supposed to be gone from the user's perspective. Option A is false -- this is precisely the scenario where the two behave differently. Option C is wrong; setting deleted_at doesn't change the email value itself, so the UNIQUE constraint on email has no reason to reject that particular UPDATE. Option D invents an automatic conversion Postgres does not perform -- the partial index has to be created explicitly, as shown in this concept's example."
         }
       ]
     }

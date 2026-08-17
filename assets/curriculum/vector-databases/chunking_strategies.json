@@ -110,6 +110,45 @@
           "explanation": "The generation model and the embedding model are two separate components with two separate, independently-enforced limits -- upgrading the model that reads retrieved text at the end of the pipeline says nothing about the model that turns documents into searchable vectors near the beginning of it. Beyond that hard limit, there's a second, completely independent reason chunking matters: even a hypothetical embedding model with no length limit at all would still produce a single vector that has to represent every topic in a long document simultaneously, diluting its similarity to a query about any one specific topic. Option A is the flawed conclusion the question is testing for. Option C invents a latency mechanism that isn't the actual reason chunking matters here. Option D is a fabricated, format-based distinction -- chunking is about token/content length and topical breadth, not file type."
         },
         {
+          "id": "vector-databases-why-chunking-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A document gets silently truncated by an embedding model's token limit before being embedded. Which statement best describes what happened to the resulting vector?",
+          "options": [
+            "The vector still represents the whole document, just with slightly reduced fidelity for content near the end.",
+            "The vector represents an entirely different, shorter document -- whatever text happened to fall before the cutoff -- and content past that point isn't represented approximately, it isn't represented at all.",
+            "The vector will contain a special marker value flagging that truncation occurred, which downstream code can check for and handle.",
+            "The vector's dimensionality is automatically reduced to reflect the shorter effective input, making it incompatible with un-truncated vectors stored in the same index."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The explanation is explicit that truncation is a silent failure, not a degraded one: it doesn't produce a fuzzier representation of the whole document, it produces a completely ordinary-looking vector for a different, shorter document -- whatever text happened to fit within the limit. Option A understates the failure as mere reduced fidelity, when the truth is starker: content past the cutoff is never seen by the model at all. Option C is fabricated -- nothing about a standard embedding call flags truncation in its output; that's precisely why the failure is dangerous. Option D is also fabricated -- a model's fixed output dimensionality doesn't change based on how much of the input was actually used; a truncated and non-truncated call from the same model produce vectors of identical dimensionality, just computed from different underlying text."
+        },
+        {
+          "id": "vector-databases-why-chunking-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "After a team introduces chunking into their pipeline, their application code still displays results as if each one corresponds to exactly one whole source document. What design mistake does this reflect?",
+          "options": [
+            "There is no mistake -- chunking has no effect on what a single search result actually represents.",
+            "Once chunking happens, retrieval, ranking, and filtering all operate at the chunk level -- a search result is one chunk out of potentially dozens belonging to the same source document, not the document as a whole -- and code built around 'one document equals one result' no longer matches reality.",
+            "The mistake is purely cosmetic and has no bearing on which content actually gets embedded, searched, or ranked.",
+            "This pattern indicates the embedding model was never actually given any chunked text, and is still embedding whole documents."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The explanation calls this out directly as a common, fixable design mistake: from the moment chunking happens, a 'document' doesn't exist as a directly retrievable unit in the index anymore -- only its chunks do, each stored and ranked independently, typically alongside metadata pointing back to the parent document. Option A denies a consequence the explanation states outright. Option C wrongly treats a structural mismatch between what's retrieved (chunks) and what the UI assumes (whole documents) as having no functional impact, when it can directly affect how results are grouped, deduplicated, or displayed to a user. Option D is an unrelated, unsupported inference -- the mistake described is about downstream application code's assumptions, not about whether ingestion actually chunked the text."
+        },
+        {
+          "id": "vector-databases-why-chunking-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "In the worked example, a document discussing billing, security, and onboarding roughly equally produces one pooled vector. A query about security scores only 0.5955 against that whole-document vector, but 0.9939 against a vector built from the security content alone. What causes this gap?",
+          "options": [
+            "The whole-document vector is mathematically incorrect, reflecting a bug in how the pooling step was implemented.",
+            "Averaging together vectors representing three different topics pulls the resulting vector toward the geometric middle of all three, making it less closely aligned with any single one of them than a vector built from just that one topic would be.",
+            "The gap only appears because cosine similarity happens to be the metric used here; a different distance metric would show no meaningful difference between the two comparisons.",
+            "The security-related content in the document must be lower quality or less detailed than the billing and onboarding content."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The whole-document vector is literally computed as the coordinate-wise average of the three topic vectors, so geometrically it sits roughly in the middle of all three -- closer to each one than a totally unrelated vector would be, but measurably less aligned with any single one than a vector built purely from that topic. That dilution, not a bug, is exactly the mechanism the example is demonstrating, ruling out option A. Option C is wrong -- the dilution effect comes from how the vector itself was constructed (averaging), not from which similarity formula is used to measure it afterward; a different metric would still show a gap, just possibly a different-looking number. Option D introduces an assumption about content quality that has nothing to do with the actual mechanism at play, which is purely geometric."
+        },
+        {
           "id": "vector-databases-why-chunking-assess-explain1",
           "type": "explanation",
           "prompt": "A colleague setting up their first RAG pipeline says: 'Our generation model supports a 128k-token context window, so I'm just going to embed and retrieve whole documents instead of dealing with chunking.' Explain what you'd tell them.",
@@ -228,6 +267,45 @@
           "explanation": "Recursive chunking never looks at meaning at all -- it works purely off of fixed, predetermined syntactic markers, falling back down its separator list only when a higher-priority one doesn't produce small-enough pieces. Semantic chunking's entire mechanism is different: it embeds individual sentences and cuts based on where the *meaning* actually shifts, which can happen anywhere, independent of any paragraph or sentence boundary. Option A invents a content-type restriction that doesn't exist for either strategy. Option C is wrong -- they produce different chunk boundaries on the same input whenever syntactic and semantic structure diverge. Option D has the dependency exactly backwards: semantic chunking is the one that requires an embedding model (to measure sentence-to-sentence similarity); recursive chunking needs nothing but ordinary string splitting."
         },
         {
+          "id": "vector-databases-chunking-methods-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Despite being blind to sentence and word boundaries, fixed-size chunking has some genuine, legitimate advantages according to the explanation. Which of the following is one of them?",
+          "options": [
+            "It always produces chunks that are more semantically coherent than recursive chunking would produce on the same text.",
+            "It requires no dependencies, runs fast enough over an enormous corpus without a second thought, and is fully deterministic -- the same text and size always produce exactly the same chunks.",
+            "It automatically detects and avoids cutting through Markdown code blocks or other structured content.",
+            "It improves its cut points over time by training a small classifier on which boundaries produced better retrieval results."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The explanation is explicit about fixed-size chunking's real advantages: it's a few lines of code with no dependencies, fast enough for an enormous corpus, and completely deterministic, which makes debugging and reasoning about the resulting index straightforward. Option A is false -- fixed-size chunking is specifically the LEAST structure-aware of the three strategies, not the most coherent. Option C describes exactly the kind of failure the explanation warns fixed-size (and naive recursive) chunking is prone to when applied to technical content, not something it avoids automatically. Option D describes a learning mechanism fixed-size chunking doesn't have at all -- it applies the exact same fixed rule (cut every N characters) regardless of any feedback."
+        },
+        {
+          "id": "vector-databases-chunking-methods-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "In recursive chunking, suppose splitting a document on the highest-priority separator (a blank line between paragraphs) leaves one resulting paragraph still too large for the size budget. What happens next?",
+          "options": [
+            "That oversized paragraph is force-cut at the exact character limit, regardless of word boundaries -- the same behavior fixed-size chunking would produce.",
+            "The entire document is discarded and re-processed from scratch using only whitespace splitting.",
+            "That specific oversized paragraph is recursively split again using the next separator down the prioritized list (such as sentence-ending punctuation, then plain whitespace), continuing to respect structure rather than falling back to an arbitrary character cut.",
+            "The oversized paragraph is embedded exactly as-is, exceeding the size budget, since recursive chunking has no hard ceiling on chunk size."
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "This is the core mechanism of recursive chunking: only the specific piece that's still too large gets recursed into, using the remaining, lower-priority separators in order -- sentence punctuation next, then plain whitespace as a last resort -- so structure is respected as much as possible before ever falling back to a less natural boundary. Option A describes fixed-size chunking's behavior, which is exactly what recursive chunking is designed to avoid until every other separator has been exhausted. Option B invents a wasteful, all-or-nothing restart that isn't how the algorithm works -- only the oversized piece recurses, not the whole document. Option D is wrong -- the whole point of the recursion is to keep chunks within the size budget; recursive chunking does enforce a hard ceiling, it just tries harder than fixed-size chunking to respect structure while doing so."
+        },
+        {
+          "id": "vector-databases-chunking-methods-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Why does semantic chunking require materially more compute than either fixed-size or recursive chunking?",
+          "options": [
+            "It requires embedding every individual sentence as a dedicated preprocessing pass, on top of whatever chunk-level embeddings eventually get computed -- whereas neither fixed-size nor recursive chunking requires any model calls at all to decide where to cut.",
+            "It requires re-embedding the entire corpus multiple times in a loop until the detected boundaries stop changing.",
+            "It only works with the largest and most expensive embedding models available, unlike fixed-size or recursive chunking, which can use any model.",
+            "It requires running the generation LLM once for every candidate boundary to judge whether a topic shift actually occurred there."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "Semantic chunking's defining extra cost is exactly this: it embeds every sentence individually to compute adjacent-sentence similarity, as a separate pass that happens before the chunk-level embeddings are ever computed -- fixed-size and recursive chunking both decide where to cut using zero model calls, which is precisely why they're so much cheaper. Option B invents an iterative re-embedding loop that isn't part of the described mechanism at all -- boundaries are determined from one pass of adjacent-sentence similarities, not from repeated re-embedding. Option C is a fabricated constraint -- semantic chunking's sentence-level embeddings could in principle use any embedding model, small or large. Option D confuses semantic chunking's actual mechanism (embedding similarity) with the generation LLM, which plays no role in deciding chunk boundaries at all."
+        },
+        {
           "id": "vector-databases-chunking-methods-assess-explain1",
           "type": "explanation",
           "prompt": "A teammate is about to run naive fixed-size chunking over a corpus of technical documentation that includes Markdown code blocks. Explain what could go wrong, and what you'd recommend instead.",
@@ -342,6 +420,45 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "Chunk size increases don't just risk hitting an embedding model's hard token limit -- well before that limit, a chunk covering many distinct ideas produces a single vector that has to represent all of them simultaneously, which is a smaller-scale recurrence of exactly the whole-document granularity problem the first concept in this module covered. Option A ignores that dilution effect entirely. Option C is wrong because chunk size affects both storage cost AND retrieval precision, not just the former. Option D is wrong because many real embedding pipelines truncate silently rather than raising an explicit, catchable error -- which is precisely why the failure can go unnoticed rather than being 'found out immediately.'"
+        },
+        {
+          "id": "vector-databases-chunk-size-tradeoffs-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A retrieved chunk contains only the sentence \"The request was ultimately denied.\" with no surrounding text -- a reader has no way to tell which request, or why. What specific failure mode does this illustrate?",
+          "options": [
+            "The chunk is too large, causing its pooled vector to dilute across too many unrelated topics.",
+            "The chunk is too small to be self-contained -- it's sharply on-topic (it really is about a denial), but severed from the context that actually gives the fact its meaning.",
+            "This specifically indicates the overlap setting was too high, causing excessive redundant retrieval.",
+            "This is evidence that the embedding model silently truncated the input before embedding it."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This is exactly the 'too small' failure mode described in the explanation: a chunk can be small enough to be sharply on-topic and still be useless because it isn't self-contained -- missing whatever preceding context (which request, what grounds) that would let the fact actually be understood on its own. Option A describes the opposite failure mode -- dilution from too many topics in one chunk, which isn't what's happening in a chunk that's arguably too narrow, not too broad. Option C misattributes the problem to overlap, which affects whether a fact gets duplicated across boundaries, not whether a single small chunk lacks context. Option D describes an unrelated failure (input exceeding a hard token limit), not the chunk-size-granularity problem this scenario is illustrating."
+        },
+        {
+          "id": "vector-databases-chunk-size-tradeoffs-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "As overlap increases toward roughly half of the chunk size, what happens to the total number of chunks produced from a fixed-length document, and what is the direct downstream consequence?",
+          "options": [
+            "The chunk count decreases, since a larger overlap means fewer distinct chunks are needed to cover the same document.",
+            "The chunk count increases substantially (potentially nearly doubling), because the window between consecutive chunk starts advances by only size-minus-overlap per step -- meaning more embeddings to compute and store, and a higher chance that a top-k retrieval surfaces several heavily redundant, overlapping chunks instead of distinct information.",
+            "The chunk count stays exactly the same regardless of overlap, since overlap changes what each chunk contains, not how many chunks there are.",
+            "The chunk count increases, but only for documents that are shorter than the configured chunk size itself."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Because the step between consecutive chunk starts is size minus overlap, a bigger overlap makes each chunk advance a shorter distance past the previous one, requiring more chunks to cover the same total document length -- the explanation's own worked numbers show chunk count nearly doubling (5 to 9) as overlap grows from 0 to half the chunk size. Each of those extra chunks is a real embedding and storage cost, and several of them substantially repeat text a neighboring chunk also contains, crowding out genuinely distinct information from a limited top-k retrieval. Option A has the relationship backwards. Option C ignores that overlap directly changes the step size and therefore the chunk count, not just chunk content. Option D invents a length-dependent exception that isn't part of how the chunk_count formula actually behaves."
+        },
+        {
+          "id": "vector-databases-chunk-size-tradeoffs-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A team adds a modest overlap to their chunking pipeline and concludes that important facts near a chunk boundary can no longer end up split across two chunks. Is this conclusion correct?",
+          "options": [
+            "Yes -- any nonzero overlap fully guarantees that every fact stays intact within at least one chunk, no matter how long the fact is.",
+            "No -- overlap reduces this risk, by adding extra, shifted chunks that have a good chance of not hitting the exact same boundary as their un-shifted neighbors, but a fact longer than the overlap window, or one that spans more than one boundary, can still end up split even with overlap in place.",
+            "No -- overlap has no effect whatsoever on boundary-splitting risk; it only changes storage and embedding cost.",
+            "Yes, but only for chunks built from English-language text; other languages are unaffected by overlap."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The explanation states this directly as a misconception to avoid: overlap mitigates boundary damage without eliminating it, because it works by adding shifted chunks that often, but not always, avoid the exact same cut point -- a fact that's unusually long relative to the overlap window, or one spanning multiple boundaries, can still be split. Option A overclaims a guarantee the mechanism doesn't provide. Option C understates overlap's real, demonstrated benefit (rescuing '30 days' in the worked example) as having no effect at all. Option D introduces a language-specific distinction that has no basis in how overlap actually works -- the mechanism is purely about character or token position, independent of language."
         },
         {
           "id": "vector-databases-chunk-size-tradeoffs-assess-explain1",

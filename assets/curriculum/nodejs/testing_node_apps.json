@@ -107,6 +107,45 @@
           "explanation": "toBe implements strict equality (comparable to ===/Object.is), which for objects and arrays means 'is this the literal same object in memory,' not 'do these two objects have matching contents.' getUser() returns a freshly created object, and the object literal in the test is a second, separate object -- they can never be === to each other no matter how identical their keys and values are. toEqual is the matcher designed for exactly this case: it recursively compares structure instead of checking identity. Option A is wrong -- toBe doesn't throw on objects, it simply (and validly) evaluates to false. Option C is a red herring with no basis in the given code. Option D is false -- toBe accepts any value type, including object literals; it just performs the wrong kind of comparison for this use case."
         },
         {
+          "id": "nodejs-unit-testing-jest-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A test suite has ten `it` blocks inside one `describe` block. The third `it` block throws an uncaught error partway through. What happens to the other nine?",
+          "options": [
+            "The whole file stops running immediately -- none of the remaining it blocks execute at all, exactly like an uncaught exception would halt a plain script.",
+            "Jest catches the failure within that one it block, marks only that specific test as failed, and continues running every other it block in the file and in any other describe blocks, completely unaffected.",
+            "All ten tests inside that same describe block are marked failed as a group, though tests in other, separate describe blocks still run normally.",
+            "The remaining tests are skipped entirely and reported as 'pending' rather than actually run or evaluated at all."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Each it block is independently isolated by the test runner itself -- a thrown error or failed expect inside one it block is caught by Jest, that one test is marked failed, and Jest proceeds to run every other it block regardless of describe grouping. This is precisely the opposite of a plain script full of sequential code, where an uncaught exception on one line stops everything after it from ever running. Option A describes plain-script behavior, not Jest's. Option C incorrectly assumes failures cascade to sibling tests within the same describe block, which they don't. Option D invents a 'pending' state that doesn't apply here -- the other nine tests run and are evaluated normally."
+        },
+        {
+          "id": "nodejs-unit-testing-jest-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Which of these correctly asserts that calling riskyFunction() throws an error, using Jest's toThrow matcher?",
+          "options": [
+            "expect(riskyFunction()).toThrow('some message');",
+            "expect(() => riskyFunction()).toThrow('some message');",
+            "expect(riskyFunction).toBe(Error);",
+            "expect(riskyFunction()).toEqual(new Error('some message'));"
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "toThrow needs to be the one that actually calls the function, inside Jest's own controlled try/catch machinery, so it can observe the throw -- which means you must pass a function reference (here, wrapped in an arrow function) rather than the already-computed result of calling it. Option A calls riskyFunction() immediately, as part of building the expect(...) argument, before Jest's matcher is ever involved -- if it throws there, the throw escapes as an uncaught error in the test itself rather than being cleanly asserted on. Option C compares the function reference itself to the Error constructor, which is nonsensical and unrelated to whether it throws. Option D would suffer the same problem as option A (calling the function immediately) and additionally uses the wrong matcher for asserting a thrown value."
+        },
+        {
+          "id": "nodejs-unit-testing-jest-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A test suite needs (1) an expensive, read-only setup step -- opening one shared database connection used, unmodified, by every test -- and (2) a plain in-memory array reset to empty before every individual test. Which combination of Jest hooks fits each need, respectively?",
+          "options": [
+            "afterAll for the shared connection, afterEach for resetting the array.",
+            "beforeAll for the shared, expensive, read-only connection, since it only needs to run once for the whole suite; beforeEach for resetting the mutable array, since it needs a guaranteed-fresh value before every single test.",
+            "beforeEach for both, since beforeEach is always the strictly safer choice regardless of what's actually being set up.",
+            "describe for the connection, it for the array reset."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "beforeAll runs once per describe block, which is exactly right for expensive setup that's safe to share, read-only, across every test -- redoing it before every single test would waste time for no benefit. beforeEach runs before every test, which is exactly what a mutated, shared array needs to stay independent between tests -- reusing the same array without resetting it would leak one test's changes into the next. Option A puts the connection's setup in the wrong lifecycle stage (after, not before, and using afterAll's counterpart incorrectly for the array). Option C ignores that beforeEach would redundantly repeat expensive, unnecessary setup work for the read-only connection. Option D confuses hook functions with structural blocks -- describe and it don't function as setup/teardown hooks at all."
+        },
+        {
           "id": "nodejs-unit-testing-jest-assess-explain1",
           "type": "explanation",
           "prompt": "Explain why tests should be independent of execution order, and how beforeEach helps enforce that -- use a concrete example of what goes wrong when tests silently share mutable state.",
@@ -217,6 +256,45 @@
           "explanation": "Mocking exists to isolate the code under test from dependencies that are slow, flaky, or hard to control -- but if the mocking is so extensive that almost nothing of the function's OWN logic remains exercised, the tests risk verifying only that the mocks do what they were configured to do, not that the real system behaves correctly when those dependencies are genuinely involved. Option A overstates isolation as an unconditional goal -- isolation is a means to reliable, fast tests, not an end that justifies mocking away the very logic you're trying to verify. Option C is factually wrong -- Jest supports mocking any number of modules in one file. Option D is backwards -- heavy mocking is the opposite of an integration test, which specifically exercises real dependencies rather than replacing them."
         },
         {
+          "id": "nodejs-mocking-dependencies-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A function under test awaits a dependency that, in production, performs a real async database call. To simulate that dependency's Promise rejecting with an error in a test, which jest.fn() configuration should be used?",
+          "options": [
+            "mockReturnValue(new Error('...')) -- this hands back the Error object as a resolved value.",
+            "mockRejectedValue(new Error('...')) -- this configures the mock to return a Promise that rejects with the given error, which is exactly what an async caller's await needs to actually observe as a failure.",
+            "mockImplementation(() => { throw new Error('...'); }) is the only valid way to simulate an async rejection; mockRejectedValue does not exist as a Jest API.",
+            "mockReturnValue(Promise.resolve(new Error('...'))) -- wrapping the error in a resolved Promise."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "mockRejectedValue configures the mock function to return a Promise that specifically rejects with the given value, which is what an awaiting caller needs in order to have its own await throw and its surrounding try/catch (or .catch()) actually engage, faithfully simulating a real async failure. Option A hands back a successfully resolved Promise containing an Error object as data, which is not the same as a rejection -- await would just receive the Error object as a normal value, not throw. Option C is factually wrong -- mockRejectedValue is a real, standard Jest API, specifically for this purpose. Option D similarly produces a resolved Promise, not a rejected one, so an await on it would not throw."
+        },
+        {
+          "id": "nodejs-mocking-dependencies-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A test file calls jest.mock('./db') and then requires userService.js, which itself internally calls require('./db'). Does userService.js's own internal require also resolve to the mocked version, or to the real module?",
+          "options": [
+            "userService.js's internal require always resolves to the real, unmocked module, since jest.mock only affects requires written directly inside the test file itself.",
+            "userService.js's internal require resolves to the same mocked version, because jest.mock('./db') replaces that module for every piece of code loaded within the test file's module resolution, including modules required internally by the file under test.",
+            "It depends on whether userService.js uses require or import -- only import-based internal dependencies are affected by jest.mock automatically.",
+            "userService.js would need to explicitly call jest.mock('./db') itself for its own internal require to be affected; the test file's call alone isn't sufficient."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "jest.mock('./db') intercepts every require/import of that specific module path within the current test file's entire module graph -- not just the literal line where the test file itself requires it, but every subsequent require of that same path anywhere the test file's requires lead, including inside userService.js. This is exactly what makes it possible to test userService's real logic while faking its internal database dependency, without userService.js needing any awareness that it's running under test. Option A, C, and D all describe a narrower scope than jest.mock actually has, and none matches how module mocking is designed to work."
+        },
+        {
+          "id": "nodejs-mocking-dependencies-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "According to the distinction the testing literature draws (even though Jest's own API blurs it in everyday use), what specifically separates a 'stub' from a 'mock' in the strict sense?",
+          "options": [
+            "A stub can only return primitive values, while a mock can return objects and arrays.",
+            "A stub is a fake that simply returns canned data when called, with no assertions made about how it was called; a mock (in the strict sense) is a fake you additionally make assertions against -- such as checking it was called with specific arguments, or a specific number of times.",
+            "A stub must be created with jest.fn(), while a mock must be created with jest.mock().",
+            "A stub always throws an error when invoked, while a mock always returns a successful value."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The conceptual distinction is about what you do with the fake afterward: a stub just hands back configured data so the code under test can proceed; a strict mock is additionally the subject of its own assertions -- toHaveBeenCalledWith, toHaveBeenCalledTimes -- verifying the code under test actually interacted with it the expected way. jest.fn() can serve either role depending on whether you assert on its calls. Option A invents a data-type restriction that doesn't exist. Option C is wrong -- both stubs and mocks in this codebase are commonly implemented with jest.fn(); jest.mock() serves an unrelated purpose (replacing an entire module). Option D invents behavior-based categories that have nothing to do with the actual stub/mock distinction."
+        },
+        {
           "id": "nodejs-mocking-dependencies-assess-explain1",
           "type": "explanation",
           "prompt": "Explain to a developer new to testing why unit tests should mock dependencies like databases and third-party APIs, and also explain the risk of mocking too much -- use a concrete example to illustrate the risk.",
@@ -325,6 +403,45 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "supertest takes the Express app object and, per request, spins up a temporary HTTP server bound to an OS-assigned free port, sends a genuine HTTP request to it, captures the real response, and shuts that ephemeral server down -- so the actual routing, middleware, and request/response cycle all run for real, just without the ceremony of a fixed port or manual server lifecycle management. Option A is wrong -- supertest deliberately does exercise the real HTTP/Express pipeline, which is exactly why it can catch wiring bugs like a missing body-parser or a mistyped route path. Option C is wrong -- requiring an Express app module does not call listen() as a side effect; that's precisely why apps are structured to export the bare app object separately from the file that calls listen(). Option D is wrong -- there's no pre-existing well-known-port server involved at all; the port is ephemeral and random per request."
+        },
+        {
+          "id": "nodejs-integration-testing-supertest-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A route's handler function is fully correct, and every unit test of it (called directly, with mocked dependencies) passes. But the route was accidentally registered as app.post('/usr', handler) instead of the intended app.post('/user', handler). What does a supertest integration test sending a request to POST /user reveal that the unit tests did not?",
+          "options": [
+            "Nothing different -- since the handler's internal logic is correct, both test types would pass identically.",
+            "The integration test receives a 404, because supertest drives a real HTTP request through the real Express app's actual routing table, exposing the mistyped path -- something the unit tests never exercise, since they call the handler function directly and bypass routing entirely.",
+            "The integration test also passes, since supertest automatically corrects minor typos in route paths before sending a request.",
+            "Express throws a compile-time error before any request is even sent, since it validates every registered route path against a dictionary at startup."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "A unit test that calls handler directly as a plain function never touches Express's routing table at all -- the typo in app.post('/usr', ...) is completely invisible to it. An integration test sending an actual request to /user through the real app, by contrast, genuinely exercises the routing table, and since no route matches /user (only the mistyped /usr does), Express responds with its default 404, immediately surfacing the bug. Option A ignores that the two test types exercise fundamentally different things. Option C invents autocorrection behavior that doesn't exist. Option D invents a startup-time validation step Express doesn't perform."
+        },
+        {
+          "id": "nodejs-integration-testing-supertest-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "In a supertest request, what does calling .send({ name: 'Amy' }) on a POST request actually do, and why does that matter for testing whether a body-parsing middleware like express.json() is correctly wired up in the app?",
+          "options": [
+            "It bypasses HTTP entirely and injects the object directly into req.body, so it doesn't actually exercise whether express.json() is registered at all.",
+            "It serializes the plain object to JSON and sets the appropriate Content-Type header, sending a genuine JSON request body over the request -- exactly mirroring what a real client would send, so req.body only ends up correctly populated in the handler if express.json() is actually registered and working in the app.",
+            "It requires the object to already be manually JSON.stringify'd before being passed in, or supertest throws a TypeError immediately.",
+            "It only works for GET requests; POST requests require .attach() instead to include any body data."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": ".send() with a plain object serializes it to JSON and sets Content-Type appropriately, sending a real request body exactly as an actual HTTP client would -- which means the test only sees a correctly populated req.body in the route handler if the app's own body-parsing middleware genuinely runs and works, precisely the kind of wiring a unit test calling the handler directly (with a plain object, bypassing the real parsing step) could never verify. Option A misdescribes .send() as a shortcut that skips the real mechanism, when the whole point is that it doesn't. Option C is wrong -- .send() accepts a plain object and serializes it for you. Option D is wrong -- .send() works with POST (and other body-carrying methods); .attach() is for file uploads specifically, a different use case."
+        },
+        {
+          "id": "nodejs-integration-testing-supertest-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Two integration tests in one file both hit a route backed by a shared, module-level in-memory array (let users = [] inside app.js). The first test adds a user; the second test asserts the array's total length is exactly 1, but that assertion fails when the tests run in file order. What is the most robust general fix, consistent with this concept's guidance?",
+          "options": [
+            "Reorder the tests so the length-checking test always runs first, relying on Jest's default file-order execution to keep working indefinitely.",
+            "Reset the underlying shared state before every test (for example, via jest.resetModules() and re-requiring the app fresh, or an equivalent reset mechanism), and prefer assertions scoped to the specific resource a test itself created rather than absolute counts that depend on what other tests already did.",
+            "Replace toHaveLength(1) with toHaveLength(2) so the assertion matches whatever the actual accumulated count happens to be.",
+            "Remove the second test entirely, since asserting on array length is fundamentally incompatible with integration testing."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The underlying problem is shared, unreset mutable state leaking between tests -- the same independence concern from unit testing, just applied to a data layer with higher stakes. The robust fix mirrors the unit-testing discipline of resetting state before every test (here, re-requiring a fresh app module so its in-memory array starts empty again) and avoiding assertions that depend on exactly what other tests happened to do first. Option A treats a fragile ordering dependency as a permanent solution, which breaks the moment tests are filtered, reordered, or parallelized. Option C papers over the symptom by hardcoding today's accidental leaked count rather than fixing the actual coupling. Option D throws away a legitimate test rather than fixing the actual state-isolation problem."
         },
         {
           "id": "nodejs-integration-testing-supertest-assess-explain1",

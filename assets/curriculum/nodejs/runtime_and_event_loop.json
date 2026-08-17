@@ -113,6 +113,45 @@
           "explanation": "libuv's thread pool defaults to four threads (controlled by UV_THREADPOOL_SIZE), and that fixed pool size -- not the number of available CPU cores -- is the bottleneck for operations routed through it, so at most four of the twenty pbkdf2 calls run genuinely in parallel at any moment; the rest queue for a free thread. Option A is wrong because idle CPU cores are irrelevant unless UV_THREADPOOL_SIZE is explicitly raised to make use of them. Option C is wrong: the thread pool is separate from the main JS thread and doesn't require it to be idle to make progress. Option D is wrong because pbkdf2 is precisely one of the operations libuv offloads to the thread pool *so that* it does not block the event loop, and the pool does allow some real parallelism (four at once), not strictly one at a time."
         },
         {
+          "id": "nodejs-event-loop-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Node's TCP/network I/O does not need libuv's worker thread pool, while file system operations do. What actually explains this difference?",
+          "options": [
+            "Network I/O is inherently faster than disk I/O, so it never needs a background thread regardless of the OS.",
+            "Operating systems provide genuinely asynchronous, event-driven APIs for sockets (epoll on Linux, kqueue on macOS/BSD, IOCP on Windows) that libuv can hook into directly, but most OS file APIs are fundamentally blocking, so libuv offloads those calls to background threads in the pool instead.",
+            "Node maintains a separate, larger thread pool exclusively for network sockets that isn't governed by UV_THREADPOOL_SIZE.",
+            "File system operations are handled directly in the poll phase, bypassing the thread pool entirely, while network operations always use the thread pool."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The distinction comes down to what the underlying operating system actually offers. For sockets, the OS itself provides non-blocking, event-driven notification mechanisms, so libuv just asks to be told when a socket is ready and does other work meanwhile -- no extra thread needed. Most file APIs have no equivalent 'notify me when ready' mechanism at the OS level, so libuv fakes non-blocking behavior for fs calls by running the genuinely blocking call on a background thread from its fixed pool. Option A is wrong -- relative speed isn't the mechanism at play. Option C is wrong -- there is no separate socket-specific thread pool; sockets don't need the thread pool at all. Option D is wrong -- it inverts which category actually uses the thread pool."
+        },
+        {
+          "id": "nodejs-event-loop-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "An I/O callback is currently running during the poll phase. Partway through, it calls process.nextTick(fn) once. Relative to the event loop's next callback (whether that's the next poll-phase callback or the check phase), when does fn actually run?",
+          "options": [
+            "Immediately after the current callback finishes, before the event loop moves on to anything else at all -- process.nextTick's queue is drained between every single callback, not just between phases.",
+            "Only after the poll phase entirely finishes and the check phase begins.",
+            "Only on the next full iteration of the event loop, after every phase has had a turn.",
+            "At a genuinely unpredictable time, since nextTick provides no ordering guarantee relative to other callbacks."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "process.nextTick's queue (along with the Promise microtask queue right after it) is checked and fully drained between every single callback, not merely between the event loop's phases -- so fn runs immediately once the current I/O callback finishes, before the loop proceeds to whatever callback would normally run next, even if that next callback is still within the very same poll phase. Option B and C both describe a phase-based or iteration-based deferral, which is exactly what nextTick bypasses. Option D is wrong -- nextTick's ordering relative to other callbacks is a fixed, reliable guarantee, not an unpredictable one."
+        },
+        {
+          "id": "nodejs-event-loop-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A developer replaces a blocking fs.readFileSync call with fs.promises.readFile inside a request handler, but the server still stalls under concurrent load whenever a request triggers JSON.parse on a very large payload already in memory. What best explains this?",
+          "options": [
+            "fs.promises.readFile doesn't actually use libuv's thread pool, so it's just as blocking as the Sync version was.",
+            "JSON.parse is itself a synchronous, CPU-bound operation running entirely on the main JS thread -- non-blocking APIs solve blocking I/O specifically, not CPU-heavy computation, which still monopolizes the single thread for as long as it takes to run.",
+            "The event loop's poll phase automatically blocks whenever any JSON parsing occurs, regardless of payload size.",
+            "Switching to fs.promises.readFile made things worse, because it always runs on a separate thread that contends with JSON.parse for CPU time."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "'Non-blocking' specifically refers to I/O -- waiting on a disk, a network response, a timer -- not to CPU-heavy computation. A large JSON.parse call is ordinary synchronous JavaScript that runs to completion on the single main thread, blocking every other request exactly as thoroughly as a synchronous I/O call would, and switching the file read to a non-blocking API does nothing to change that, since the read was never the bottleneck in this scenario. Option A is wrong -- fs.promises.readFile is genuinely non-blocking. Option C is wrong -- the poll phase has no special-cased blocking behavior tied to JSON parsing. Option D is wrong -- fs.promises.readFile's I/O work happens via the thread pool, but the CPU-bound JSON.parse call itself still runs on the main thread regardless."
+        },
+        {
           "id": "nodejs-event-loop-assess-explain1",
           "type": "explanation",
           "prompt": "A teammate says: 'Node.js is single-threaded, so our server can only truly handle one request at a time -- the concurrency everyone talks about is really just an illusion created by interleaving.' Explain what's right and what's misleading about this claim, using the event loop and libuv to justify your answer.",
@@ -229,6 +268,45 @@
           "explanation": "An async function always returns a Promise, no matter what happens inside its body -- if it falls off the end without an explicit return <value>, that Promise resolves with undefined, exactly mirroring how a plain function with no return statement evaluates to undefined on every call, except now wrapped in a Promise. Option A is the answer you'd get for the same code MINUS the async keyword -- adding async is precisely what changes the answer. Option C is wrong: falling off the end of a function body is not the same as never settling; the function still completes normally, it just resolves with undefined rather than something else. Option D is wrong -- async functions are completely allowed to omit return; it's common and valid whenever the function's purpose is a side effect rather than producing a value."
         },
         {
+          "id": "nodejs-async-patterns-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Why do Node's core APIs pass an error as the first argument to a callback instead of simply throwing when something goes wrong during an asynchronous operation?",
+          "options": [
+            "Throwing inside an asynchronous callback would work fine; Node's designers preferred passing errors as data purely for stylistic consistency across the API.",
+            "By the time an asynchronous operation actually completes and its callback runs, the original call stack -- including any try/catch that wrapped the initial call -- is long gone, so there is no meaningful place for a thrown error to be caught; passing the error as an argument to a callback guaranteed to run works regardless of timing.",
+            "JavaScript did not support throw statements inside callback functions until ES2015, so early Node had no choice.",
+            "Passing errors as a callback argument avoids the performance cost of constructing an Error object."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "A synchronous try/catch relies on the calling stack frame still being alive when the error occurs -- but an asynchronous callback runs long after the function that scheduled it has already returned, so that original stack frame, and any try/catch surrounding it, no longer exists to catch a thrown error. Node's core APIs sidestep this entirely by handing the error to the one function guaranteed to run when the operation finishes: your callback, as data in its first parameter. Option A understates that there's a real technical reason, not just style. Option C is factually wrong -- throw has always been part of JavaScript, including inside callbacks; the problem is about stack lifetime, not syntax availability. Option D is not the actual motivation; the cost of constructing an Error object plays no role in this convention's origin."
+        },
+        {
+          "id": "nodejs-async-patterns-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A developer claims: 'Marking a function async makes its body run on a separate thread, so several async functions execute their code in true parallel.' What's wrong with this claim?",
+          "options": [
+            "Nothing -- this is exactly how async functions behave in Node.",
+            "async is Promise syntax sugar only; it creates no new threads. An async function's synchronous statements still run on the single main thread in the usual order, one at a time -- execution only appears to 'jump away' because hitting an await pauses that specific function and hands control back to the event loop, which may run other code while it waits.",
+            "async functions do run on separate threads, but only during the specific line where an I/O operation is awaited, not during ordinary synchronous statements.",
+            "async functions run on libuv's worker thread pool, the same pool used for fs and crypto operations."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The async keyword only changes what a function returns (always a Promise) and grants access to await inside its body -- it introduces no new concurrency mechanism and no new thread. Every synchronous statement in an async function's body still executes on the single main JS thread, in order, exactly like any other function; the illusion of 'jumping away' comes entirely from await voluntarily pausing that one function and returning control to the event loop, which is free to run other pending work in the meantime. Options C and D both invent a thread-based mechanism that doesn't exist -- await never hands JS execution off to another thread, whether during I/O or otherwise; the I/O itself may be handled elsewhere (by the OS or libuv's pool), but the async function's own JS code never runs anywhere but the main thread."
+        },
+        {
+          "id": "nodejs-async-patterns-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "On Node 15 and later, what happens by default when a Promise rejects and nothing in the program -- no .catch(), no surrounding try/catch around an await -- ever handles that rejection?",
+          "options": [
+            "Node silently discards the rejection; nothing is logged and the process continues normally.",
+            "Node logs a DeprecationWarning to the console, but the process keeps running exactly as it did on older Node versions.",
+            "The process crashes and exits, because Node's default behavior for an unhandled promise rejection changed from merely warning to actually terminating the process.",
+            "The rejected Promise is automatically retried up to three times before Node gives up and logs an error."
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "Earlier Node versions just printed a warning for an unhandled promise rejection and kept running. Starting with Node 15, the default behavior escalated: an unhandled rejection now terminates the process outright, on the reasoning that an error nobody was prepared to handle likely represents a real bug that shouldn't be allowed to fail silently. This is exactly why a single missing await -- which can produce an unhandled rejection if the un-awaited Promise later rejects -- can turn into a production crash rather than a quiet warning. Options A and B describe older or nonexistent behavior; option D describes a retry mechanism that Promises have no built-in concept of at all."
+        },
+        {
           "id": "nodejs-async-patterns-assess-explain1",
           "type": "explanation",
           "prompt": "Explain, to a developer new to Node, why forgetting the await keyword on a Promise-returning call inside an async function is a common and often dangerous bug, and how the mistake can eventually surface as an 'unhandled promise rejection' crash.",
@@ -343,6 +421,45 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "The constraint is a genuine technical one about loading semantics, not an arbitrary rule: require's contract is to hand back a finished result synchronously, on the very same line it's called, and there is fundamentally no way to do that for something that loads asynchronously. Import, by contrast, is asynchronous by design (even its static form resolves before execution but doesn't block a calling line the way require does), so it has no trouble waiting on a CommonJS module's load, which is already synchronous and instant from import's perspective. Option A is wrong because this is a real technical constraint, not an arbitrary one. Option C is wrong -- file size has nothing to do with it; the issue is purely about synchronous vs asynchronous loading contracts. Option D is wrong -- Node has run ESM files directly, with no browser involved, since roughly version 12-13."
+        },
+        {
+          "id": "nodejs-modules-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A .js file lives in a project whose package.json has no \"type\" field at all. How does Node decide whether to treat that file as CommonJS or an ES Module?",
+          "options": [
+            "Node inspects the file's contents for import/export keywords and automatically picks the matching module system.",
+            "Omitting the \"type\" field defaults to CommonJS, so the .js file is loaded and executed as CommonJS.",
+            "Node treats it as an ES Module by default, mirroring how a browser's <script type=\"module\"> behaves.",
+            "Node refuses to run the file at all until \"type\" is set explicitly to either value."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Node decides a .js file's module system from the nearest package.json's \"type\" field, and the documented default when that field is entirely omitted is \"commonjs\" -- so a plain .js file in a project with no \"type\" field is loaded as CommonJS, require/module.exports and all. Option A is wrong -- Node does not scan file contents to infer the module system; it relies on the explicit or defaulted \"type\" field (or the .mjs/.cjs extension). Option C is wrong -- ESM-by-default is not Node's behavior; CommonJS remains the default specifically for backwards compatibility with the enormous pre-existing CommonJS ecosystem. Option D is wrong -- omitting \"type\" is completely valid and extremely common; it does not block execution."
+        },
+        {
+          "id": "nodejs-modules-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "The CommonJS example imports square via require('./mathUtils') (no extension), while the ES Module version needs import { square } from './mathUtils.mjs' (full extension included). Why does ESM require the extension while CommonJS can omit it?",
+          "options": [
+            "It's arbitrary; both systems could equally support either behavior.",
+            "CommonJS's require() runs its own resolution algorithm that automatically tries several extensions and directory-based lookups, while standard ES Module resolution requires the full, explicit file extension in the specifier -- there's no equivalent automatic extension-guessing step in ESM.",
+            ".mjs files cannot have their extension omitted because they are always precompiled ahead of time, unlike ordinary .js files.",
+            "Node only added extension-omission support to CommonJS in a later version, and deliberately never backported it to ESM for security reasons."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "require()'s resolution algorithm is designed to be forgiving -- it tries appending .js, .json, and checking for a directory with an index file if a bare specifier doesn't resolve directly. ESM's static resolution model has no equivalent step; specifiers must be exact, extension included, which is part of what makes it possible to resolve the whole dependency graph up front without running any code. Option A dismisses a real, documented difference in resolution algorithms. Option C invents a compilation distinction that isn't the actual reason. Option D fabricates a security-motivated history that isn't accurate -- the difference is about resolution algorithm design, not a security feature that was selectively applied."
+        },
+        {
+          "id": "nodejs-modules-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Which statement about recovering __dirname-equivalent behavior inside an ES Module is correct?",
+          "options": [
+            "process.cwd() is a reliable substitute for __dirname, since it always returns the directory containing the currently executing module file.",
+            "__dirname is automatically available in ESM files too, since Node injects it as a global regardless of which module system is in use.",
+            "import.meta.url gives the current module's own location as a file:// URL string, which fileURLToPath can convert into a native filesystem path, and path.dirname on that result gives the equivalent of __dirname.",
+            "There is no way to determine a module's own file location from within an ES Module; the value must be hardcoded or passed in as a parameter."
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "import.meta.url is the ESM-native primitive that exposes a module's own location as a file:// URL. Running it through fileURLToPath (from Node's 'url' core module) converts that URL to an ordinary OS-native path, and path.dirname on the result reconstructs exactly what __dirname would have given in CommonJS. Option A is a common but incorrect assumption -- process.cwd() returns wherever the process happened to be launched from, which is frequently a different directory than where the source file itself lives, and relying on it for file-relative paths breaks the moment the launch directory changes. Option B is wrong -- __dirname is a CommonJS-only convenience that simply doesn't exist in ESM's scope. Option D is wrong -- import.meta.url plus the reconstruction shown is the standard, well-supported idiom for exactly this purpose."
         },
         {
           "id": "nodejs-modules-assess-explain1",

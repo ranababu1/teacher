@@ -116,6 +116,45 @@
           "explanation": "A node in an HNSW graph often serves as a bridge that other nodes' navigability depends on, and a vector in an IVF cluster contributes to that cluster's effective structure -- removing either one correctly means repairing whatever depended on it, which is real, non-trivial work. Tombstoning turns a delete into an O(1) flag write, deferring the expensive structural repair to a periodic compaction pass instead of paying it synchronously on every delete call. Option A is wrong -- compliance requirements, if anything, push toward eventually purging data via compaction, not toward tombstoning as a legal workaround. Option C is wrong -- both structures do support deletion, just not as a free operation. Option D understates it -- tombstoning isn't just a caching layer, it's a real, deliberate deferral of structural index maintenance."
         },
         {
+          "id": "vector-databases-upserts-updates-deletes-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A document's permissions tag changes, but the document's actual text content stays exactly the same. What's the correct way to update its record in a vector database, and why?",
+          "options": [
+            "Patch just the metadata field directly -- the vector encodes the document's semantic content, which hasn't changed at all, so there's nothing to re-embed.",
+            "Always re-embed and re-upsert the vector on any update whatsoever, metadata or content, purely to be safe.",
+            "Delete the old record entirely and insert a brand-new record under a completely new, unique ID.",
+            "Metadata can never be updated independently of the vector in a production vector database; both must always change together in the same operation."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "The explanation draws this distinction directly: a metadata-only change (permissions, tags, a timestamp) doesn't touch the semantic content a document's vector represents, so patching just the metadata fields is cheap, safe, and doesn't require touching the vector or its position in the index at all. Option B wastes real compute and latency re-embedding content that never changed, providing no correctness benefit. Option C introduces an unnecessary new ID for content that's still the same logical document, breaking the stable-ID discipline that keeps upserts working correctly. Option D is directly contradicted by the explanation, which explicitly calls out metadata patches as a case where the vector does NOT need to change."
+        },
+        {
+          "id": "vector-databases-upserts-updates-deletes-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A collection has had 40% of its original vectors tombstoned over time, and compaction has never been run. What is the most accurate description of the ongoing cost this creates?",
+          "options": [
+            "There is no ongoing cost -- tombstoned vectors are instantly and completely removed from memory and traversal, so the index already behaves exactly as if it only ever held the live 60%.",
+            "The collection is paying close to the full memory and traversal cost of the original 100% of vectors, even though only the live 60% has any chance of contributing a useful result to any query -- because tombstoned vectors still occupy memory and are still visited during search, just filtered out of the results actually returned.",
+            "The extra cost is limited strictly to disk storage; query latency is completely unaffected by how many tombstoned vectors remain in the structure.",
+            "The cost disappears automatically once the tombstone ratio exceeds roughly a third of the collection, since most systems auto-trigger compaction at that threshold with no configuration needed."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This is exactly the deferred-cost tradeoff the explanation describes: a tombstone is a flag, not a removal, so the vector's storage and its role in graph traversal or cluster membership persist until an actual compaction pass reclaims it -- meaning a collection with 40% dead weight pays nearly the full cost of the original 100% while only 60% of that cost has any chance of being useful. Option A describes what compaction achieves, not what tombstoning alone achieves. Option C is wrong -- the explanation is explicit that tombstoned nodes are still visited during traversal, which directly affects query latency, not just storage. Option D invents an automatic threshold-triggered compaction behavior that isn't a property of tombstoning itself -- compaction has to be scheduled or triggered deliberately."
+        },
+        {
+          "id": "vector-databases-upserts-updates-deletes-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A nightly reindexing job writes every document to the vector store using an auto-incrementing counter as the key (`store[len(store)] = embed(doc)`) instead of keying by each document's own stable ID. What happens over repeated nightly runs against the same set of documents?",
+          "options": [
+            "Nothing changes across runs -- len(store) happens to produce the same key for a given document every time, since the store's size is deterministic.",
+            "Every run re-inserts every document as a brand-new entry under a new key, so the collection grows without bound, accumulating stale duplicates of every document that remain fully live and compete against their own more current versions in every future query.",
+            "The vector database automatically detects duplicate content during the next compaction pass and merges the redundant entries.",
+            "This only causes a problem the very first time the job runs; every subsequent run correctly overwrites the previous entries."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This is exactly the broken_reindex pattern from the explanation: because the key is derived purely from how many entries already exist rather than from anything identifying the document itself, every run lands its writes on brand-new keys instead of the ones from the previous run, so the collection keeps growing, and every stale duplicate stays fully live and searchable indefinitely. Option A is false -- len(store) grows after every insert, so it produces a different starting key on each run, not the same one. Option C invents an automatic deduplication capability that compaction doesn't provide; compaction reclaims tombstoned (explicitly deleted) entries, not undetected content duplicates. Option D is wrong -- the bug recurs identically on every run, since the root cause (deriving the key from store size rather than document identity) never gets fixed on its own."
+        },
+        {
           "id": "vector-databases-upserts-updates-deletes-assess-explain1",
           "type": "explanation",
           "prompt": "A teammate says: 'I don't need to call the embedding model again -- I'll just update the document's text field directly in the vector store and it'll be up to date.' Explain what's wrong with this plan and what actually happens if it ships this way.",
@@ -239,6 +278,45 @@
           "explanation": "Selectivities multiply, not add, when independent filter conditions are ANDed together -- a tenant filter that matches 5% of the collection combined with a not-deleted filter matching 90% and a recency filter matching 30% yields a combined selectivity around 1.35%, meaningfully rarer than the tenant filter was on its own. An oversampling factor sized correctly for the tenant filter alone is very likely undersized for that much lower combined selectivity, which produces exactly the observed symptom: queries that used to reliably return k results now sometimes fall short, with no error anywhere to flag it. Option A is a fabricated failure mode unrelated to how filtering actually works. Option C is wrong -- post-filtering handles any number of ANDed conditions fine, it's the sizing of the overfetch that needs to account for their combined effect. Option D is a non-sequitur -- recency being a filter condition doesn't mean it should replace similarity search; it's meant to be combined with it, which is exactly what's happening here."
         },
         {
+          "id": "vector-databases-metadata-filtering-at-scale-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A filter has selectivity 0.02 (it matches 2% of the collection), and a query needs k=20 results. Using required_overfetch (n such that n * selectivity is approximately k), roughly how many unfiltered candidates need to be fetched from the ANN index?",
+          "options": [
+            "About 22 -- just k plus a small fixed buffer, regardless of selectivity.",
+            "About 1,000 -- since n = ceil(k / selectivity) = ceil(20 / 0.02) = 1000.",
+            "About 40 -- twice k, since a 2% selectivity is treated as roughly halving the effective candidate pool twice.",
+            "Exactly 20 -- selectivity has no bearing on how many unfiltered candidates are needed, only on which ones happen to survive filtering afterward."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "required_overfetch is defined as math.ceil(k / selectivity), so plugging in k=20 and selectivity=0.02 gives ceil(20 / 0.02) = ceil(1000) = 1000 -- you need roughly 1000 unfiltered candidates so that, on average, about 2% of them (20) survive the filter. Option A treats overfetch as a small fixed constant, ignoring that the required amount scales directly with how rare the filter is. Option C invents an unrelated halving mechanism with no basis in the actual formula. Option D denies the entire premise of the cost model -- selectivity is precisely the variable that determines how many unfiltered candidates are needed in the first place."
+        },
+        {
+          "id": "vector-databases-metadata-filtering-at-scale-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Why does adaptive expansion (start with a moderate overfetch, check the result count, widen and retry if not enough survived) tend to be more robust in production than committing to one fixed overfetch factor computed once from an estimated selectivity?",
+          "options": [
+            "Adaptive expansion is always cheaper in the average case, regardless of how accurate the initial selectivity estimate happened to be.",
+            "Selectivity estimates are approximations, and real filter matches aren't always distributed perfectly evenly through the ranking the way the cost model assumes -- so a fixed factor sized from an imperfect estimate can still under-return, while adaptive expansion reacts to the actual result count achieved and only widens the net when it's actually needed.",
+            "Adaptive expansion removes the need for a max_candidates cap entirely, since it will always eventually find k results no matter how rare the filter is.",
+            "Adaptive expansion works by pre-filtering first, and only falls back to querying the ANN index if pre-filtering itself returns too few results."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The explanation frames adaptive expansion's robustness advantage exactly this way: a single fixed factor is a reasonable starting point but a fragile bet, since it depends on a selectivity estimate being accurate and on filter matches being distributed evenly through the ranking -- an assumption real data doesn't always satisfy. Adaptive expansion sidesteps betting everything on getting that estimate exactly right by checking the actual outcome and widening only on the retries that actually need it. Option A is false -- adaptive expansion can cost MORE than a well-tuned fixed factor when several widening rounds are needed; its advantage is robustness, not guaranteed lower average cost. Option C is directly contradicted by the explanation, which describes max_candidates as an important safety cap precisely because unbounded retries could otherwise spiral toward scanning the whole collection. Option D reverses the actual order of operations -- adaptive expansion queries the ANN index with a growing n and filters afterward; it never pre-filters first."
+        },
+        {
+          "id": "vector-databases-metadata-filtering-at-scale-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A recency-window filter's selectivity was measured and used to size an oversampling factor six months ago. Why might that same factor now be undersized, even though the filter's definition (\"within the last 30 days\") hasn't changed at all?",
+          "options": [
+            "It can't actually be undersized -- a filter's selectivity is a fixed mathematical property of its definition, not something that changes over time.",
+            "Selectivity is a live property of the CURRENT data, not a fixed constant tied to a filter's definition -- a recency window's boundary mechanically slides forward as time passes over a continuously-arriving stream of content, and shifts in tenant data volume or new common field values can also change what fraction of the collection satisfies the filter today.",
+            "Oversampling factors always degrade at a fixed, predictable rate of about 10% selectivity loss per month, regardless of the specific filter or data involved.",
+            "The factor can only become undersized if the underlying vector database software itself was upgraded to a new version during those six months."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The explanation is explicit that selectivity drifts because it's a property of the current data, not the filter's abstract definition -- a recency window's actual boundary is constantly moving relative to an ever-growing stream of content, so the fraction of the collection it matches today can differ meaningfully from six months ago even though the rule itself ('last 30 days') never changed. Option A directly contradicts this core point. Option C invents a fixed, universal decay rate that has no basis in the actual mechanism, which depends on how a specific dataset's growth and distribution evolve, not a fixed schedule. Option D fabricates a dependency on software upgrades; selectivity drift is a property of the data, entirely independent of whether the vector database software itself changed."
+        },
+        {
           "id": "vector-databases-metadata-filtering-at-scale-assess-explain1",
           "type": "explanation",
           "prompt": "A teammate proposes: 'Pre-filtering is always correct and post-filtering can silently under-return -- let's just always pre-filter everywhere and never worry about this again.' Explain why this isn't automatically the right call at scale, referencing selectivity and how ANN indexes work.",
@@ -355,6 +433,45 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "Dropping a namespace is a single, atomic, immediately verifiable operation with no intermediate state where deleted data still exists physically. A shared index has to tombstone the tenant's vectors first (an immediate, cheap flag) and then wait for -- or explicitly trigger -- a compaction pass to actually reclaim the storage and remove the data from the underlying structure, which is correct in the end but has a real gap where the data is marked deleted but not yet physically purged. Option A ignores that gap entirely. Option C is wrong -- shared indexes fully support erasure, they just require an extra maintenance step (compaction) to complete it. Option D is a fabricated requirement with no basis -- erasure doesn't involve re-embedding anything."
+        },
+        {
+          "id": "vector-databases-multi-tenant-namespaces-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Tenant A issues a sudden burst of 90 requests into a shared vector index at the same moment Tenant B is sending its normal, steady trickle of traffic. Tenant B's own queries slow down noticeably during this period, even though Tenant B's usage pattern hasn't changed at all. What does this illustrate?",
+          "options": [
+            "Tenant B's slowdown must be caused by a bug in Tenant B's own query code, unrelated to Tenant A's traffic.",
+            "The noisy neighbor problem: tenants sharing the same physical index compete for the same underlying resources (CPU threads, disk I/O, throughput budget), so one tenant's burst directly degrades another tenant's latency, as a mechanical consequence of physical sharing rather than any implementation bug.",
+            "This can only happen if Tenant A and Tenant B are using two different embedding models against the same index.",
+            "This indicates the shared index's tenant_id metadata filter is misconfigured and is leaking Tenant A's requests directly into Tenant B's result set."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This is precisely the noisy neighbor problem: shared physical resources -- the same queue, the same CPU capacity, the same I/O budget -- mean one tenant's burst directly competes with and delays another tenant's ordinary requests, purely because they're sharing the same underlying structure, with no filtering bug or misconfiguration required to produce this effect. Option A misattributes an inherent resource-contention effect to a bug in the unaffected tenant's own code. Option C invents an embedding-model-mismatch explanation that has nothing to do with the actual mechanism (shared queueing capacity). Option D confuses a resource contention problem (latency) with a data isolation problem (a filter leaking wrong results) -- Tenant B's results are still correct here, they're just slower to arrive."
+        },
+        {
+          "id": "vector-databases-multi-tenant-namespaces-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "In the overhead cost model, namespace_per_tenant_total pays a fixed baseline_overhead_bytes once PER tenant, while shared_index_total pays that same fixed cost exactly once in total, no matter how many tenants it holds. As the number of small tenants grows very large, what happens to the ratio between the two totals?",
+          "options": [
+            "The ratio approaches 1, since both totals eventually become dominated by the actual vector data as tenant count grows, making the fixed overhead irrelevant either way.",
+            "The ratio approaches a value set by how the fixed overhead compares to each tenant's own vector data size -- the shared index's overhead becomes negligible against its growing vector total, while namespace-per-tenant's overhead keeps scaling directly with tenant count, so the ratio stays elevated rather than shrinking toward 1.",
+            "The ratio decreases toward 0, since a larger tenant population amortizes the fixed overhead equally well in both models.",
+            "The ratio is undefined once tenant count exceeds roughly 1,000, since the cost formulas only produce meaningful results below that count."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "In shared_index_total, the fixed baseline is a constant term added once, so it becomes an ever-smaller fraction of a growing vector total as tenant count rises. In namespace_per_tenant_total, that same fixed baseline is multiplied by the tenant count, so it grows in direct proportion to how many tenants there are, never shrinking relative to the total the way the shared index's overhead does. The worked numbers in the explanation show this concretely -- the ratio holds roughly steady around 4.1x to 4.25x as tenant count rises from 100 to 10,000, rather than trending toward 1. Option A and C both wrongly assume the fixed-overhead effect washes out symmetrically for both formulas, when only the shared index actually amortizes it that way. Option D invents an arbitrary breakdown threshold that isn't a property of the actual formulas, which remain well-defined for any tenant count."
+        },
+        {
+          "id": "vector-databases-multi-tenant-namespaces-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A team argues that a tenant_id metadata filter on a shared index provides the same data-isolation guarantee as giving each tenant a dedicated namespace, since both approaches scope query results to one tenant's data. What's the flaw in this reasoning?",
+          "options": [
+            "There is no flaw -- the two approaches are functionally identical in every respect that actually matters for isolation.",
+            "A metadata filter is a runtime check that depends on every single query path applying it correctly, every time; a missing filter clause or a bypassed check can leak data across tenants, with a blast radius bounded only by how many tenants share that index -- whereas a dedicated namespace provides isolation structurally, with no code path that could reach another tenant's data at all.",
+            "Metadata filters are always meaningfully slower than namespace separation, so the flaw is purely a performance concern rather than a correctness one.",
+            "Metadata filters only function correctly for numeric tenant IDs, so the isolation guarantee silently breaks down whenever tenant IDs are strings."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The explanation is direct about this distinction: a metadata filter's correctness depends on every query path -- including any future code path, caching layer, or edge case -- correctly applying it every single time, and a single lapse can expose data across every tenant sharing that index, whereas a dedicated namespace makes cross-tenant access structurally impossible regardless of what any particular filtering logic does. Option A denies a real, meaningfully different failure mode between the two approaches. Option C mischaracterizes a correctness and blast-radius distinction as merely a performance one. Option D invents a numeric-versus-string restriction on metadata filters that has no basis in how filtering actually works."
         },
         {
           "id": "vector-databases-multi-tenant-namespaces-assess-explain1",

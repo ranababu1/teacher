@@ -121,6 +121,45 @@
           "type": "explanation",
           "prompt": "A teammate proposes building a document Q&A feature by concatenating the full text of up to 200 uploaded PDFs into a single prompt, reasoning that the model's context window is 'large enough' since the combined text fits under the token limit. Explain why this is likely to perform poorly even if it technically fits, and what you'd propose instead.",
           "modelAnswer": "Fitting under the token limit is a necessary condition for this to work at all, but it's far from sufficient for it to work well. Three separate problems stack on top of each other. First, cost and latency scale directly with total tokens processed, and 200 full PDFs concatenated together is very likely tens or hundreds of thousands of tokens -- every single question the user asks would reprocess that entire mass of text from scratch, making the feature slow and expensive per query even if only a handful of sentences across those 200 documents actually contain the answer. Second, and more subtly, models don't attend to a long context uniformly -- the 'lost in the middle' effect means information buried deep within a huge concatenated blob is measurably less likely to be used correctly than information near the start or end, so relevant content from, say, document 140 out of 200 might get effectively ignored even though it's technically present in the prompt. Third, this approach doesn't scale -- the moment a 201st document is uploaded, or the total text creeps past the context window, the whole approach breaks outright with no graceful path forward. The better architecture is retrieval-augmented generation: index the documents ahead of time (chunk them and embed each chunk), and for each user question, retrieve only the small number of chunks that are actually relevant to that specific question, then include just those in the prompt. This keeps each individual call small, fast, and cheap regardless of how many documents are in the corpus, and it sidesteps the lost-in-the-middle problem by only ever including content that's likely to matter for the question at hand rather than everything at once."
+        },
+        {
+          "id": "llm-engineering-tokenization-context-windows-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A BPE-style tokenizer's vocabulary is built by starting with individual bytes and repeatedly merging pairs of tokens. Which pairs get merged, and why does that make a random hex string like 'a3f9c2e1' split into far more tokens than a common English phrase of similar length?",
+          "options": [
+            "The most frequently co-occurring adjacent pairs in the training corpus get merged into new tokens; random hex characters rarely repeat the same substring, so no large merged token was ever created for them.",
+            "Pairs are merged in alphabetical order until the vocabulary reaches its target size, which happens to favor letters over digits.",
+            "The tokenizer merges pairs based on a hand-written list of common English morphemes, and hex digits were never added to that list.",
+            "Every character is merged with its immediate neighbor exactly once, regardless of frequency, so token count only depends on string length."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "BPE vocabularies are learned, not designed: the training process repeatedly finds the most frequent adjacent pair of existing tokens across a large corpus and merges it into one new token, thousands of times over. Common English words and fragments earn big merged tokens because they recur constantly. A random-looking hex string almost never repeats the exact same substring anywhere in the corpus, so the merge process never had a statistical reason to build a larger token for it, leaving it to fall back to small, near-byte-level pieces. Options B, C, and D all describe mechanisms BPE does not use -- it is purely frequency-driven, with no alphabetical ordering, no hand-curated morpheme list, and no fixed one-merge-per-character rule."
+        },
+        {
+          "id": "llm-engineering-tokenization-context-windows-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "You're assembling a prompt that includes several retrieved facts and a final user question, and only one fact can be flagged as the single most important one. Based on the 'lost in the middle' effect described in this module, where should that critical fact be placed to give the model the best chance of using it correctly?",
+          "options": [
+            "Anywhere is equally fine, since a large enough context window guarantees uniform attention across all positions.",
+            "Buried in the exact middle of the context, since models focus attention on the center of long inputs.",
+            "Near the very start or the very end of the context, since models empirically attend less reliably to information placed deep in the middle of a long input.",
+            "Repeated ten times evenly spaced throughout the context, so at least one occurrence lands in an attended position."
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "The module describes 'lost in the middle' as a measurable dip in retrieval accuracy for facts placed deep in the middle of a long context, with models making comparatively better use of information near the start and end. Option A is wrong because a large context window only guarantees a fact mathematically fits, not that it's attended to equally well. Option B has the effect backwards. Option D isn't a strategy discussed in the module and adds unnecessary token cost rather than addressing the actual positional effect."
+        },
+        {
+          "id": "llm-engineering-tokenization-context-windows-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A production system needs to answer questions against a knowledge base of 50,000 support articles -- far larger than any model's context window could ever hold at once. Per the strategies discussed in this module, which approach is the best default fit for this specific situation, and why?",
+          "options": [
+            "Truncation: send as many articles as fit and cut off the rest, since the model can usually infer the missing parts.",
+            "Chunking and map-reduce: split all 50,000 articles into pieces, summarize every piece for every question, then combine the summaries.",
+            "Retrieval: index the articles ahead of time and, for each question, select only the subset of articles actually relevant to it.",
+            "Summarization: compress all 50,000 articles into one dense summary once, and reuse that same summary for every future question."
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "The module explicitly distinguishes these strategies by scenario: retrieval is the default answer when the overall knowledge base is bigger than the context window, because it selects only the relevant subset per query rather than trying to process everything every time. Truncation risks silently cutting relevant articles with no way to know what was lost. Running full map-reduce summarization across all 50,000 articles for every single question is enormously wasteful compared to retrieving the handful of relevant ones. A single static summary of the entire knowledge base would lose the specific detail needed to answer most individual questions accurately -- summarization is better suited to compressing one specific oversized input, not standing in for a whole knowledge base."
         }
       ]
     },
@@ -237,6 +276,45 @@
           "type": "explanation",
           "prompt": "Explain, strictly in terms of the autoregressive next-token-prediction mechanism, why explicitly asking a model to 'think step by step' before giving its final answer often improves accuracy on multi-step reasoning problems.",
           "modelAnswer": "Every token a model generates is produced by conditioning on everything already in the sequence -- the prompt plus every token it has generated so far in this response -- and there is no separate mechanism that lets the model 'work something out internally' without that work existing as actual generated tokens somewhere in the sequence. If you ask a multi-step reasoning question and demand only a final answer, the model has to produce that answer as essentially the very next token(s), conditioned on nothing but the question itself -- there's no intermediate scratch space, because nothing in the base mechanism provides one. Asking the model to 'think step by step' changes what actually gets generated before the final answer: the model now produces explicit intermediate tokens -- restating the problem, working through sub-steps, computing intermediate quantities -- and, crucially, every one of those intermediate tokens becomes part of the context that the eventual final-answer tokens are conditioned on. In effect, you're not invoking a hidden reasoning module; you're using the exact same next-token-prediction mechanism to generate a scratchpad, and then letting the model condition its final answer on that scratchpad instead of jumping straight from 'here's the question' to 'here's the answer' with nothing in between. Because next-token prediction is demonstrably better at producing a locally plausible next step when there's relevant, explicit context to build on, giving the model its own worked intermediate steps to condition on tends to produce a more accurate final answer than forcing the entire multi-step problem to be solved implicitly in the single leap straight to a final answer."
+        },
+        {
+          "id": "llm-engineering-next-token-prediction-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "At each step of the generation loop, what exactly does the model's final layer compute before a next token is chosen?",
+          "options": [
+            "One logit per vocabulary entry, which softmax then converts into a probability distribution over the entire vocabulary that sums to 1.",
+            "A single probability value representing how confident the model is in its overall response so far.",
+            "A ranked shortlist of the five most likely next words, computed by comparing against stored training sentences.",
+            "A binary flag for every vocabulary entry indicating whether that token is grammatically valid at this position."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "The model produces one real-valued logit per vocabulary entry -- tens of thousands of numbers -- and softmax converts that full set of logits into a probability distribution over the whole vocabulary that sums to exactly 1. Option B is wrong because there is no single scalar 'overall confidence' computed at each step, only a distribution over the next token. Option C is wrong because generation doesn't work by comparing against stored training sentences at inference time. Option D is wrong because there's no separate binary grammar-validity check; grammaticality is implicitly reflected in the learned logit values themselves, not a distinct pass/fail flag."
+        },
+        {
+          "id": "llm-engineering-next-token-prediction-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Which of the following is NOT one of the ways the basic autoregressive generation loop actually terminates, according to this module?",
+          "options": [
+            "The model generates a special end-of-sequence token it has learned marks the response as complete.",
+            "The response reaches a configured maximum-length limit.",
+            "The generated text matches a configured stop sequence.",
+            "The model internally recognizes it has 'sufficiently answered' the question and raises a distinct completion signal separate from any generated token."
+          ],
+          "correctOptionIndex": 3,
+          "explanation": "The module lists exactly three termination conditions: an end-of-sequence token, a max-length limit, and a matched stop sequence -- all of which are either tokens the model generates or external configuration you set. Option D describes a mechanism that does not exist in the base loop: there is no separate internal 'I'm done' signal distinct from the actual tokens produced -- the loop only ever stops because of one of the three concrete, token-or-config-based conditions."
+        },
+        {
+          "id": "llm-engineering-next-token-prediction-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Two prompts are identical except that one early word differs ('sunny' vs. 'stormy'), yet their multi-sentence completions end up completely different, not just different in that one spot. What mechanism explains why the difference cascades rather than staying local?",
+          "options": [
+            "The model re-plans and rewrites the entire response from scratch whenever any single input word changes.",
+            "Each generated token is conditioned on every token that precedes it, including the model's own prior output, so a shifted choice at one step alters the input to every later step, and those differences compound across the response.",
+            "Different adjectives route the prompt to different hard-coded response templates stored in the model's weights.",
+            "The tokenizer assigns a different total token budget depending on which adjective is used, changing how much room is left for the response."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Autoregressive generation conditions every new token on the entire sequence so far, including tokens the model itself already generated in this response. A different early word shifts the probability distribution at the very next step; whichever token actually gets picked then becomes part of the context for the step after that, and so on -- so a small initial difference compounds rather than staying isolated. There's no re-planning phase (option A), no template-routing mechanism (option C), and adjective choice doesn't change the token budget in the way option D describes."
         }
       ]
     },
@@ -357,6 +435,45 @@
           "type": "explanation",
           "prompt": "A colleague argues: 'if the model can hallucinate a wrong fact with the exact same fluent, confident tone as a correct one, how are users supposed to trust anything it says?' Explain why this happens in terms of the generation mechanism, and what it implies for how you should design a product that surfaces LLM output directly to end users.",
           "modelAnswer": "This happens because fluency and factual correctness are not linked anywhere in the generation mechanism -- every token, whether it happens to state a verified fact or a fabricated one, is produced by the exact same next-token-prediction process, drawing from a probability distribution shaped by what's statistically plausible given the training data and the current context, not by any distinct internal check against ground truth. The model has no separate 'confidence I've verified this' signal that would make correct statements sound different from incorrect ones; a hallucinated claim gets the same grammatical structure, the same assertive phrasing, and the same overall tone as a true one, because both are generated by the identical mechanism optimizing for the same thing: a locally plausible continuation of the text so far. The practical implication for product design is significant: you cannot rely on the model's own tone or phrasing as a signal of reliability, and you should design as if every output requires either grounding, verification, or an explicit acknowledgment of uncertainty to the end user, rather than assuming fluent output implies correct output. Concretely, this pushes toward architectural choices like retrieval-augmented generation for anything factual (so claims are at least traceable to a real source you can show or check), explicit citations that a human or a separate process actually verifies rather than trusting blindly, UI patterns that make it clear to users when content is AI-generated and not independently verified, and reserving unguarded, ungrounded generation for genuinely low-stakes use cases (brainstorming, creative drafts) where an occasional plausible-but-wrong output causes no real harm. The underlying lesson is that trustworthiness has to be engineered in from outside the generation mechanism -- it is not something you can extract from the model's own output by reading its tone."
+        },
+        {
+          "id": "llm-engineering-sampling-temperature-hallucination-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "How does top-p (nucleus) sampling decide which tokens are eligible for selection, and how does that differ from top-k sampling?",
+          "options": [
+            "Top-p includes the smallest set of highest-probability tokens whose cumulative probability exceeds a threshold, so the pool size adapts to how peaked or flat the distribution is at each step; top-k always uses a fixed candidate count regardless of the distribution's shape.",
+            "Top-p and top-k are two names for the exact same mechanism, differing only in which APIs expose which name.",
+            "Top-p selects tokens alphabetically from among the top-k highest-probability candidates.",
+            "Top-p is only applied when temperature is set to 0, while top-k is only applied at nonzero temperature."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "Top-p's pool boundary is defined by cumulative probability crossing a threshold p, so a sharply peaked distribution yields a tiny nucleus and a flat distribution yields a larger one -- it adapts per step. Top-k, by contrast, always considers exactly k candidates no matter how peaked or flat the actual distribution is, which is precisely the limitation top-p was designed to fix. Options B, C, and D all misstate the mechanisms: they are distinct techniques, neither is alphabetical, and neither is gated on a specific temperature value."
+        },
+        {
+          "id": "llm-engineering-sampling-temperature-hallucination-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Which statement about hallucination mitigation strategies best matches this module's discussion of their real limits?",
+          "options": [
+            "Grounding via retrieval eliminates hallucination entirely, since a grounded model can only ever repeat the retrieved text verbatim.",
+            "Asking the model to provide citations is sufficient on its own, since a model that fabricates facts will not also fabricate a citation.",
+            "Retrieval meaningfully reduces hallucination risk by narrowing the space of plausible continuations, but no purely generative technique drives that risk to zero, so verification remains necessary for high-stakes use cases.",
+            "Setting temperature to 0 is the most effective mitigation, since it removes the sampling randomness that causes hallucination."
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "The module is explicit that grounding via retrieval is the most effective lever available but does not make hallucination structurally impossible, because it doesn't change the underlying probabilistic generation mechanism -- some form of external verification remains non-optional wherever being wrong is costly. Option A overstates retrieval's guarantee. Option B is directly contradicted by the module's point that a model can hallucinate a fake citation just as fluently as any other claim. Option D is wrong because temperature only affects sampling variance, not which answer the model considers most probable, so it doesn't reduce hallucination rate."
+        },
+        {
+          "id": "llm-engineering-sampling-temperature-hallucination-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Why do hallucinated statements typically come out just as fluent and confident-sounding as accurate ones, rather than hedged or tentative?",
+          "options": [
+            "A dedicated confidence-estimation module miscalibrates specifically on false statements, making them sound artificially confident.",
+            "Both correct and fabricated tokens are produced by the identical next-token-prediction mechanism optimizing for locally plausible continuation, and there is no internal signal at generation time distinguishing a verified fact from a plausible-sounding fabrication.",
+            "Models are explicitly trained with a reward signal that punishes hedging language regardless of correctness.",
+            "Hedging phrases are removed from the vocabulary by default and must be manually re-enabled through a configuration flag."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The module's core reframing is that hallucination is the generation mechanism working as designed, not a distinct malfunction: every token, true or fabricated, is produced by the same probability distribution optimizing for plausible continuation, with no separate 'this is verified' marker anywhere in the process. Hedging only appears when training data or prompting conditions the model to produce it in that specific situation -- it isn't a default reaction to low confidence. Options A, C, and D each invent a mechanism (a confidence estimator, an anti-hedging reward, a disabled vocabulary subset) that the module never describes as part of how these models actually work."
         }
       ]
     }

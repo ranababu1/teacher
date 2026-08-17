@@ -114,6 +114,45 @@
           "explanation": "As long as the entity stays managed (registered in an active persistence context) through the moment of mutation, Hibernate's dirty checking automatically detects the changed field against its baseline snapshot and issues the corresponding UPDATE at flush/commit time -- no save() call is required for a managed entity. Option A describes what happens to a DETACHED entity, not a managed one -- the distinction is exactly the point of this concept. Option C is false; mutating a managed entity without calling save() is completely ordinary and expected, not an error condition. Option D is a distractor; @DynamicUpdate changes which columns appear in the generated UPDATE statement (only the changed ones, versus all of them), it has nothing to do with whether the update happens at all."
         },
         {
+          "id": "spring-boot-jpa-entity-mapping-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A team is inserting 10,000 Order rows in a batch job and wants Hibernate to batch the inserts for throughput. The entity currently uses `@GeneratedValue(strategy = GenerationType.IDENTITY)`. What is the most accurate assessment of this setup?",
+          "options": [
+            "IDENTITY is the ideal choice for batched inserts, since it delegates id generation entirely to the database's own auto-increment column.",
+            "IDENTITY prevents Hibernate from batching these inserts at all, because the generated id is only known after each row is physically inserted; switching to GenerationType.SEQUENCE (on a database that supports sequences) would let Hibernate pre-allocate id values and batch the inserts instead.",
+            "GenerationType.AUTO always produces the best insert throughput, regardless of which database is being used.",
+            "Insert batching is controlled entirely by JDBC driver configuration and has nothing to do with which @GeneratedValue strategy is chosen."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Because an IDENTITY-strategy id value doesn't exist until the row is actually inserted, Hibernate cannot prepare a batch of inserts in advance for entities using this strategy -- each one has to complete before the next can even be assembled. GenerationType.SEQUENCE, by contrast, lets Hibernate ask the database for a batch of sequence values up front (tunable via allocationSize) and hand them out to multiple pending inserts before any of them hit the database, enabling real batching -- which is exactly why it's the recommended choice for throughput-sensitive inserts on databases that support sequences, like PostgreSQL or Oracle. Option A gets the tradeoff backward. Option C overstates AUTO's guarantees -- it simply delegates the choice to the provider's dialect-appropriate default, not necessarily the fastest option. Option D ignores that the id-generation strategy is precisely what determines whether batching is even possible in the first place."
+        },
+        {
+          "id": "spring-boot-jpa-entity-mapping-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Inside a @Transactional method, a developer writes `Order order = new Order(\"amy@example.com\");` and has not yet passed it to `orderRepository.save(...)` or the EntityManager in any way. What state is this entity in at that exact moment?",
+          "options": [
+            "Managed, because it was constructed while a transaction happens to be active.",
+            "Transient -- it has never been associated with any persistence context at all, regardless of whether a transaction happens to be open around the code that created it.",
+            "Detached, since no persistence context is currently tracking it.",
+            "Removed, because it hasn't been explicitly saved yet."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "An entity becomes transient the moment it's constructed with a plain `new` call and stays transient until it is explicitly associated with a persistence context (typically via save() or an equivalent EntityManager call) -- merely running inside an active @Transactional method has no bearing on this, since the transaction and the entity are two separate things until they're deliberately connected. Option A confuses 'a transaction is open nearby' with 'this specific object has been registered in that transaction's persistence context,' which hasn't happened yet. Option C is wrong because detached specifically describes an entity that WAS managed at some point and later fell out of tracking -- this object was never managed in the first place. Option D describes an entirely different state reserved for entities marked for deletion."
+        },
+        {
+          "id": "spring-boot-jpa-entity-mapping-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "An Order entity was loaded inside a @Transactional method that has already returned and committed, so the entity is now detached. Later code mutates one of its fields and then calls `orderRepository.save(order)` on that same detached instance. What actually happens?",
+          "options": [
+            "Nothing -- save() is always a no-op for any entity that already has a non-null id, managed or not.",
+            "Hibernate performs a merge: it copies the detached object's current field values onto a freshly-managed instance (loading one first if necessary), so the mutation genuinely gets persisted this time.",
+            "An exception is thrown, because save() can never be called on a detached entity.",
+            "The entity is treated as brand new, and Hibernate inserts an entirely new row with a freshly generated id."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This is precisely the situation where save() is NOT a no-op, in contrast to calling it on an already-managed entity: for a detached entity, Hibernate performs a merge, copying the object's field values onto a newly-managed instance and re-establishing tracking, so the mutation is genuinely picked up and persisted. Option A wrongly generalizes the managed-entity no-op behavior to detached entities as well, which is exactly the misconception this concept warns against. Option C is false -- save() on a detached entity is a normal, supported operation, not an error. Option D is wrong because the entity retains its existing id and is merged onto the existing row, not inserted as a new one."
+        },
+        {
           "id": "spring-boot-jpa-entity-mapping-assess-explain1",
           "type": "explanation",
           "prompt": "A junior developer is confused: sometimes editing a field on an Order object they got back from a service method updates the database automatically, and other times an identical-looking edit does nothing at all, with no error. Explain what's actually going on, in terms of the entity's state and the persistence context's lifecycle.",
@@ -229,6 +268,45 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "The Java compiler has no special knowledge of derived query method naming conventions -- it just sees a normal interface method declaration and compiles it without complaint, so option A is wrong. Spring Data JPA's own validation happens while it builds the repository's runtime proxy implementation during application startup, inspecting every declared method's name against the entity's actual mapped properties; an unresolvable property fails that step immediately with PropertyReferenceException, which is why the application never even finishes starting -- so option C (deferred to first call) and option D (silently returns empty) are both wrong; there is no silent or deferred failure mode here at all."
+        },
+        {
+          "id": "spring-boot-jpa-repositories-and-queries-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A developer, coming from writing raw SQL, writes `@Query(\"select o from orders o where o.customer_email = :email\")`, expecting it to work like a SQL query against the orders table and its customer_email column. What actually happens?",
+          "options": [
+            "It works identically to writing entity-and-property names, because JPQL is fundamentally just SQL under a different name.",
+            "It fails to resolve, because JPQL queries the entity model -- entity names and mapped property names -- not the database schema; 'orders' and 'customer_email' aren't recognized unless they happen to also be the exact entity name and property name.",
+            "Hibernate automatically detects the table/column names and translates them back into the corresponding entity and property names before running the query.",
+            "The query parses and executes without error, but silently returns zero rows every time."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "JPQL's `from` clause refers to an entity by its class name (or explicit @Entity name) and property paths refer to mapped Java fields, not literal table and column identifiers -- writing schema-oriented names into a plain JPQL query (one without nativeQuery = true) generally fails to resolve, because the parser is looking for entity and property names, not table and column names. This is precisely the confusing mistake the module calls out for developers used to raw SQL. Option A collapses a real distinction the module draws deliberately. Option C invents an automatic translation Hibernate does not perform in this direction. Option D is wrong -- an unresolvable reference is a query error, not a silently empty result."
+        },
+        {
+          "id": "spring-boot-jpa-repositories-and-queries-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A native query uses a `LIMIT 10` clause to fetch only the ten most recent orders. What is a genuine, specific risk of this approach that a JPQL-based equivalent would not share?",
+          "options": [
+            "Native queries cannot accept bound parameters at all, so :minTotal-style parameters have to be avoided entirely.",
+            "LIMIT is not standard SQL interpreted identically by every database -- it's PostgreSQL/MySQL-style syntax -- so this query is tied to a specific database vendor's dialect, unlike JPQL, which Hibernate translates into the appropriate dialect automatically.",
+            "Native queries always execute measurably slower than an equivalent JPQL query against the same schema.",
+            "Native queries are incompatible with @Param-annotated method parameters and require positional parameters only."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Dropping to native SQL means the query now refers to literal table and column names and, often, vendor-specific syntax -- LIMIT being a concrete example, since it's PostgreSQL/MySQL syntax rather than something every SQL database supports identically. JPQL avoids this specific risk because Hibernate translates the same entity-oriented query into whatever dialect the configured database actually needs. Option A and D are factually wrong -- native queries fully support both @Param-based and positional parameter binding. Option C overgeneralizes; native queries aren't inherently slower, they're just less portable and lose some of JPA's automatic entity-graph handling."
+        },
+        {
+          "id": "spring-boot-jpa-repositories-and-queries-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Which scenario is the strongest justification for switching from a derived query method to an explicit @Query written in JPQL, rather than continuing to extend the derived method's name?",
+          "options": [
+            "The query needs to filter on more than one property, which would require adding an And to the method name.",
+            "The query needs to select a partial projection across a join spanning multiple associations, or apply a subquery/aggregate condition -- something no method-naming vocabulary can express at all.",
+            "The entity happens to have more than five mapped fields in total.",
+            "The repository interface already extends JpaRepository rather than a lower-level repository type."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "A handful of ANDed conditions is exactly what derived method names handle well -- the real breaking point is a query that needs something the naming grammar genuinely cannot express at all, such as a multi-association join producing a partial projection, or a subquery/aggregate with a HAVING-style condition. At that point, no amount of additional vocabulary in the method name can express the requirement, and @Query with JPQL is the correct escalation. Option A describes something derived methods handle perfectly well via And. Option C is an arbitrary, irrelevant threshold with no bearing on this decision. Option D is unrelated -- extending JpaRepository has no effect on whether a derived method name can express a given query."
         },
         {
           "id": "spring-boot-jpa-repositories-and-queries-assess-explain1",
@@ -350,6 +428,45 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "The defaults reflect a real cost/risk tradeoff specified by JPA itself: a @ManyToOne association resolves to exactly one additional row, a bounded and cheap cost to eagerly fetch by default. A @OneToMany collection has no such bound -- it could be empty or it could be tens of thousands of rows -- so JPA defaults to LAZY, deferring the cost until code actually needs the data. Option C is wrong; this is the JPA specification's own default, not a Hibernate-specific override. Option D is wrong; lazy loading of single-valued associations is technically possible (via bytecode enhancement or proxies) and JPA providers support it when explicitly requested -- it's simply not the DEFAULT for @ManyToOne."
+        },
+        {
+          "id": "spring-boot-jpa-relationships-and-n-plus-one-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Order.items is mapped `@OneToMany(mappedBy = \"order\")` and OrderItem.order is mapped `@ManyToOne @JoinColumn(name = \"order_id\")`. A developer adds a new item by calling only `order.getItems().add(newItem)`, without ever calling `newItem.setOrder(order)`. What happens when the transaction commits?",
+          "options": [
+            "Hibernate automatically sets newItem's order field too, because it detects the addition on the mappedBy side's collection.",
+            "The order_id foreign key on newItem's row is never set correctly, because Order.items is the inverse side of the relationship -- only a change to the owning side, OrderItem.order, is what Hibernate actually persists.",
+            "An exception is thrown immediately, since a bidirectional relationship requires both sides to be updated in the same statement.",
+            "Hibernate creates a separate join table to track the relationship instead of relying on order_id at all."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "OrderItem.order, backed by @JoinColumn, is the owning side -- it's the field Hibernate actually inspects when deciding what to write into the order_id column. Order.items, marked mappedBy, is purely an in-memory, inverse view with no column of its own; adding to that collection alone changes nothing Hibernate will persist. Since newItem.order was never set, its order_id ends up null (or unchanged) regardless of what the items list on the Order object contains. Option A describes automatic synchronization Hibernate does not perform -- keeping both sides consistent is the application's own responsibility (as the addItem() helper method in the module's example exists specifically to do). Options C and D describe failure modes that don't occur here; the mistake is silent, not an exception or a schema change."
+        },
+        {
+          "id": "spring-boot-jpa-relationships-and-n-plus-one-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A JPQL query `select o from Order o join fetch o.items where o.status = :status` (with no `distinct`) runs against an Order that has 4 matching items. What is the likely observable symptom in the returned List<Order>?",
+          "options": [
+            "The query fails to execute, because join fetch syntactically requires distinct to be present.",
+            "That same Order entity may appear multiple times in the returned list -- once per matched item row -- because the underlying SQL join naturally produces one result row per matched child before any de-duplication happens.",
+            "Only the first of the 4 items ends up loaded into the order's items collection; the remaining 3 are silently dropped.",
+            "JPA always de-duplicates entities automatically, so distinct has no effect on this query's result either way."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "A join against a one-to-many association produces one row per matched child in the raw SQL result -- an order with 4 items naturally appears 4 times before de-duplication. `distinct` at the JPQL level is what tells Hibernate to filter that duplication out; omitting it lets the duplicate Order references leak into the returned list. Option A is false -- the query is syntactically valid without distinct, it just behaves differently. Option C invents data loss that doesn't happen -- all 4 items are still loaded, just with the parent Order repeated. Option D directly contradicts the point of adding distinct, which the module states explicitly matters for exactly this reason."
+        },
+        {
+          "id": "spring-boot-jpa-relationships-and-n-plus-one-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A query attempts to `join fetch` both an order's `items` collection and its separately-mapped `discountCodes` collection in a single JPQL query. What specific risk does this introduce?",
+          "options": [
+            "JPQL forbids more than one join fetch clause per query, so this fails to parse entirely.",
+            "The two one-to-many joins multiply against each other in the underlying SQL, producing a Cartesian product -- a much larger, slower result set than intended, rather than the clean fix that fetching a single collection provides.",
+            "Only one of the two collections actually ends up populated; the other silently remains an unfetched lazy proxy regardless of the join fetch clause.",
+            "This pattern is always safe and recommended, provided distinct is included in the query."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Fetching more than one @OneToMany collection on the same entity in a single query causes the two one-to-many joins to multiply against each other in the generated SQL, producing a Cartesian product -- a surprisingly large, slow result set rather than the intended fix. The module explicitly recommends separate queries (or @EntityGraph's subgraph support) for fetching multiple collections safely, rather than one query joining everything at once. Option A is false -- JPQL doesn't forbid multiple join fetch clauses syntactically; the problem is a data-volume one, not a parsing one. Option C is wrong -- both collections DO get populated, just at the cost of a bloated, multiplied result set. Option D is wrong because distinct alone does not solve the Cartesian-product blowup between two separate to-many collections."
         },
         {
           "id": "spring-boot-jpa-relationships-and-n-plus-one-assess-explain1",

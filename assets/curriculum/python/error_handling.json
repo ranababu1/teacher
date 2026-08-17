@@ -119,6 +119,58 @@
           "type": "scenario",
           "prompt": "A support engineer wraps an entire background job's main loop in a bare `except: pass`, 'just to be safe,' so a single bad record doesn't crash the whole job. Explain two concrete problems this causes, beyond general style advice.",
           "modelAnswer": "First, it hides genuine bugs, not just bad records. A bare except: pass catches absolutely everything happening inside the loop identically -- a truly malformed record it was meant to skip, but equally a typo, a logic error, a KeyError from data shaped differently than expected, or any other real defect in the job's own code. All of these get silently swallowed the same way, so a real, fixable bug can run undetected for a long time, quietly producing wrong or incomplete results while looking, from the outside, like the job is running successfully. Second, and more specifically: KeyboardInterrupt and SystemExit are both caught by a bare except: too, since it's equivalent to except BaseException:. That means the job becomes difficult or impossible to stop cleanly -- an operator's Ctrl+C, or an orchestration system's attempt to shut the process down via sys.exit(), gets caught and discarded just like any other error, and the loop keeps running. A better approach narrows the except clause to only the specific exception type actually expected from a bad record (for example, a specific ValueError or a custom RecordParseError raised deliberately during parsing), applied only around the smallest necessary piece of per-record processing -- so a genuinely bad record is skipped as intended, while unexpected bugs and control-flow signals like KeyboardInterrupt still surface visibly."
+        },
+        {
+          "id": "python-exception-handling-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "```python\ndef parse(value):\n    try:\n        return int(value) / 0\n    except (ValueError, ZeroDivisionError) as e:\n        return f\"failed: {type(e).__name__}\"\n\nprint(parse(\"abc\"))\nprint(parse(\"10\"))\n```\nWhat gets printed?",
+          "options": [
+            "failed: ValueError then failed: ZeroDivisionError",
+            "failed: ValueError then failed: TypeError",
+            "The first call raises ValueError uncaught, crashing the program",
+            "failed: ZeroDivisionError then failed: ValueError"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "`except (ValueError, ZeroDivisionError) as e:` groups two exception types in one clause -- either one matches. `parse(\"abc\")`: `int(\"abc\")` raises `ValueError` before division is even attempted, caught by the tuple, giving `\"failed: ValueError\"`. `parse(\"10\")`: `int(\"10\")` succeeds (`10`), but dividing by the literal `0` raises `ZeroDivisionError`, also caught by the same tuple, giving `\"failed: ZeroDivisionError\"`. Grouping exception types in a tuple doesn't change which specific exception was actually raised in each case -- it just means the same handling code applies to either one."
+        },
+        {
+          "id": "python-exception-handling-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "```python\ndef f(n):\n    try:\n        result = 10 / n\n    except ZeroDivisionError:\n        print(\"caught\")\n        return -1\n    else:\n        print(\"no error\")\n        return result\n    finally:\n        print(\"cleanup\")\n\nprint(f(2))\nprint(f(0))\n```\nWhat gets printed, in order?",
+          "options": [
+            "no error / cleanup / 5.0 / caught / cleanup / -1",
+            "cleanup / no error / 5.0 / cleanup / caught / -1",
+            "no error / 5.0 / cleanup / caught / -1 / cleanup",
+            "no error / cleanup / 5.0 / caught / -1 / cleanup"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "For `f(2)`: `10 / 2` succeeds with no exception, so `else` runs (\"no error\"), queuing `return result`. Before that value actually leaves the function, `finally` runs (\"cleanup\"), and only then is `5.0` actually returned and printed. For `f(0)`: the division raises `ZeroDivisionError`, so `except` runs instead (\"caught\"), queuing `return -1`; `finally` still runs unconditionally (\"cleanup\") before `-1` is actually returned and printed. `finally` always runs last within each call, right before the queued return value actually leaves the function -- never after the value has already been printed by the caller."
+        },
+        {
+          "id": "python-exception-handling-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "```python\ntry:\n    raise FileNotFoundError(\"missing.txt\")\nexcept OSError:\n    print(\"os error\")\nexcept FileNotFoundError:\n    print(\"file not found\")\n```\nWhat gets printed?",
+          "options": [
+            "os error",
+            "file not found",
+            "Both \"os error\" and \"file not found\" print",
+            "SyntaxError, because a subclass's except clause can't appear after its parent's"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "`FileNotFoundError` is a subclass of `OSError`, and `except` clauses are checked top to bottom, stopping at the first match -- exactly like an `if`/`elif` chain. Since `except OSError:` is written first and a `FileNotFoundError` instance genuinely IS an `OSError` by inheritance, it matches immediately, prints \"os error\", and the second, more specific `except FileNotFoundError:` clause never even gets evaluated. This is precisely why more specific except clauses need to be listed before more general ones that would also match the same exception -- writing them in the other order would let the specific clause fire instead."
+        },
+        {
+          "id": "python-exception-handling-assess-mcq5",
+          "type": "multipleChoice",
+          "prompt": "```python\ndef risky():\n    try:\n        1 / 0\n    except ZeroDivisionError:\n        print(\"logging the error\")\n        raise\n\ntry:\n    risky()\nexcept ZeroDivisionError:\n    print(\"handled at the top level\")\n```\nWhat gets printed?",
+          "options": [
+            "logging the error / handled at the top level",
+            "logging the error, and then the program crashes with an unhandled exception",
+            "handled at the top level (only)",
+            "logging the error / logging the error"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "Inside `risky()`, `1 / 0` raises `ZeroDivisionError`, caught by the `except` clause, which prints \"logging the error\" and then hits a bare `raise` -- re-raising that exact same `ZeroDivisionError` object, unchanged, rather than swallowing it. That re-raised exception propagates out of `risky()` entirely (its own except clause already ran and finished; a bare raise doesn't loop back into it again) and is caught by the outer `try`'s `except ZeroDivisionError:`, which prints \"handled at the top level\". This pattern -- react to an exception, then let it keep propagating -- is exactly what a bare `raise` inside an except block is for."
         }
       ]
     },
@@ -228,6 +280,58 @@
           "type": "explanation",
           "prompt": "A teammate re-raises a translated exception with `raise HighLevelError(...) from low_level_exc` and asks why not just use a bare `raise` instead, since both seem to 'keep information about the original error.' Explain the actual difference in what gets raised, and why the distinction matters for code further up the call stack.",
           "modelAnswer": "A bare raise (with no argument, inside an except block) re-raises the exact same exception object currently being handled, completely unchanged -- its type, message, and traceback are all untouched. No new exception is introduced at all; it's appropriate when you want to react to an exception (log it, run some cleanup) but ultimately let the original propagate onward exactly as it was. raise HighLevelError(...) from low_level_exc does something different: it raises a genuinely NEW exception object, of a different type and with its own message, chosen to be more meaningful to this function's own callers -- while explicitly recording low_level_exc as that new exception's __cause__, purely for traceback and debugging purposes. This distinction matters a lot for code further up the call stack: a caller that only knows about, and only catches, HighLevelError needs the code to actually raise a HighLevelError -- a bare raise here would still propagate low_level_exc's original type, which that caller might not know to catch at all. Conversely, from is the right choice specifically when the low-level exception type isn't meaningful to callers of this higher-level function (they shouldn't need to know it was, say, a FileNotFoundError internally) and you want to present a cleaner, purpose-specific error instead, without losing the original diagnostic trail from the traceback."
+        },
+        {
+          "id": "python-custom-exceptions-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A small, single-file script reads a local CSV and prints statistics; nothing outside this one file ever calls into it. Following this lesson's guidance, is defining a dedicated `class CsvParsingError(Exception): pass` for this script's internal parsing failures a good idea?",
+          "options": [
+            "Probably not -- since nothing outside this file needs to distinguish this specific failure from others, a built-in exception like ValueError or RuntimeError is likely sufficient, and the custom class adds upkeep without adding real distinguishing power",
+            "Yes, always -- every possible failure in any codebase should get its own dedicated custom exception class",
+            "No -- Python does not allow defining custom exception classes inside a single-file script, only inside packages",
+            "Yes, because custom exception classes are handled faster by the interpreter than built-in ones"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "Custom exceptions earn their keep at a genuine API or library boundary, where separate calling code actually needs to catch a specific failure mode by name and react differently to it. In a small, self-contained script where nothing outside the file ever writes `except CsvParsingError:` specifically, a built-in like `ValueError` or `RuntimeError` communicates 'something about this input/operation was bad' just as well, without adding a class to maintain that provides no real distinguishing power. Python has no restriction against defining exception classes in a single file (option C), and there is no performance difference between custom and built-in exception classes (option D)."
+        },
+        {
+          "id": "python-custom-exceptions-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "```python\nclass ConfigError(Exception):\n    pass\n\ntry:\n    try:\n        1 / 0\n    except ZeroDivisionError as e:\n        raise ConfigError(\"bad config\") from e\nexcept ConfigError as ce:\n    print(type(ce).__name__, type(ce.__cause__).__name__)\n```\nWhat gets printed?",
+          "options": [
+            "ConfigError ZeroDivisionError",
+            "ConfigError None",
+            "ZeroDivisionError ConfigError",
+            "AttributeError: 'ConfigError' object has no attribute '__cause__'"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "`raise ConfigError(\"bad config\") from e` raises a new `ConfigError` and explicitly sets its `__cause__` attribute to `e`, the caught `ZeroDivisionError` object. The outer `except ConfigError as ce:` catches that new exception, so `type(ce).__name__` is `'ConfigError'`. `ce.__cause__` is the original `ZeroDivisionError` object itself (not `None`, and not suppressed, since `from e` was used rather than `from None`), so `type(ce.__cause__).__name__` is `'ZeroDivisionError'`. Every exception object has a `__cause__` attribute available for inspection -- it defaults to `None` when no explicit `from` chaining was used, but here it was."
+        },
+        {
+          "id": "python-custom-exceptions-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A developer wants a traceback to show ONLY their deliberately-raised higher-level exception, with absolutely no trace of the low-level exception that triggered it, because in this specific, deliberate case the low-level detail would be pure noise to whoever reads the log. Which is the correct, intentional way to write the raise statement inside the except block?",
+          "options": [
+            "raise NewException(...) from None",
+            "raise NewException(...) from e",
+            "A bare raise",
+            "raise NewException(...) with no from clause at all, and no other change"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "`from None` explicitly suppresses display of the original exception's context, so the traceback shows only the new exception -- exactly the deliberate, 'the low-level detail is pure noise here' case this lesson describes. `from e` (option B) does the opposite: it deliberately preserves and displays the original exception as the new one's cause. A bare `raise` (option C) doesn't introduce a new exception type at all -- it re-raises the original, unchanged. Omitting `from` entirely (option D) is a different default behavior than explicit suppression and isn't the deliberate, intentional tool being asked for here."
+        },
+        {
+          "id": "python-custom-exceptions-assess-mcq5",
+          "type": "multipleChoice",
+          "prompt": "A function validates a numeric input and wants to raise a custom exception for 'value out of range.' Some callers should be able to catch this exact failure specifically; other, more generic callers should still be able to catch it via a broader `except ValueError:`, since being out of range is fundamentally a kind of bad value. Which class definition best achieves both goals at once?",
+          "options": [
+            "class OutOfRangeError(ValueError): pass",
+            "class OutOfRangeError(Exception): pass",
+            "class OutOfRangeError: pass",
+            "def OutOfRangeError(): raise ValueError()"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "Subclassing `ValueError` directly gives `OutOfRangeError` both properties at once: callers who want the specific failure can write `except OutOfRangeError:`, and callers who only care that 'the value was bad' can write the broader `except ValueError:`, which still matches because of the inheritance relationship -- exactly the same mechanism that lets `except OSError:` catch a `FileNotFoundError`. Subclassing `Exception` directly (option B) would still allow specific catching, but would no longer be caught by a broader `except ValueError:` anywhere else in the codebase. Option C isn't valid at all -- every exception class must ultimately derive from `BaseException`, so a class with no such inheritance cannot legally be raised as an exception. Option D defines a plain function, not an exception class, and couldn't be used in a `raise` or `except` statement as one."
         }
       ]
     }

@@ -117,6 +117,45 @@
           "explanation": "A KD-tree's entire speed advantage over brute force comes from its ability to prune -- to look at a whole branch of the tree and confidently decide 'nothing in here can possibly be closer than what I've already found' without checking every point inside it individually. That confidence depends on there being a meaningful gap between 'clearly inside this partition' and 'clearly outside it' -- and that gap collapses in high dimensions, a direct consequence of the same curse-of-dimensionality effect covered earlier in this subject, where partition boundaries end up close to nearly every point. Option A is factually wrong -- KD-trees aren't restricted to one distance metric in that specific way. Option B is fabricated -- KD-trees build their own internal structure from unsorted data. Option D describes a scale limit that isn't the actual mechanism at play; the degradation is about dimensionality, not raw dataset size."
         },
         {
+          "id": "vector-databases-ann-search-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "In a correctly functioning IVF index with nprobe greater than zero, a stored vector that is genuinely very close to the query is sometimes not returned by the search at all. What specifically causes this?",
+          "options": [
+            "IVF only indexes a random sample of the full collection, so some vectors are permanently unsearchable.",
+            "The vector may have been assigned, during the original clustering step, to a cluster whose centroid isn't among the nprobe closest centroids for this particular query -- purely because of where the hard cluster boundary happened to fall.",
+            "IVF silently discards any vector that hasn't been re-normalized immediately before the query is run.",
+            "IVF automatically filters out vectors produced by an older version of the embedding model, even if no such filtering was configured."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This is exactly the 'approximate' part of IVF: clustering partitions the space with hard boundaries, but real data doesn't respect hard boundaries, so a vector can be geometrically close to the query while having been assigned to a different cluster than the query's own nearest centroid. If that vector's cluster isn't among the nprobe clusters actually probed, the search never looks at it at all -- it's silently missing, even though brute-force search would have found it. Option A is false -- IVF indexes every stored vector, it just organizes them into clusters rather than scanning all of them per query. Option C and D describe filtering mechanisms IVF doesn't have; nothing about IVF's mechanism involves re-normalization checks or automatic version filtering at query time."
+        },
+        {
+          "id": "vector-databases-ann-search-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "In HNSW's layered graph structure, what role does the sparse top layer play during a search, according to the highway/local-streets analogy in the explanation?",
+          "options": [
+            "It stores the exact same vectors as the bottom layer, just rounded to lower numeric precision, purely to speed up early comparisons.",
+            "It lets a search jump across large distances in the vector space quickly using long-range connections, before dropping into denser lower layers to refine locally near the actual answer -- the way a highway covers distance quickly before switching to local streets.",
+            "It acts purely as a fallback, only consulted if the search in the bottom layer fails to converge on any candidate at all.",
+            "It stores each vector's metadata filters, so that filtered searches can skip the top layer entirely."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The explanation's highway analogy is explicit: the sparse top layer has long-range connections that let a greedy search cover large distances across the space in very few hops, landing near the right neighborhood quickly, after which the search drops down to progressively denser layers to do fine-grained local refinement -- exactly like taking a highway to cover distance and switching to local streets only once near the destination. Option A misdescribes the layers as differing only in numeric precision, which isn't how HNSW's layers are built at all -- they differ in which subset of vectors and connections they contain, not in precision. Option C is backwards -- the top layer is used first, not as a fallback. Option D is fabricated -- metadata filtering isn't part of HNSW's core layered structure as described here."
+        },
+        {
+          "id": "vector-databases-ann-search-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Which statement accurately distinguishes what an ANN algorithm like IVF or HNSW actually does from simply 'scanning fewer vectors at random and hoping for the best'?",
+          "options": [
+            "ANN algorithms invest real, structured work upfront -- clustering into centroids for IVF, or building a multi-layer proximity graph for HNSW -- specifically so the small subset of vectors examined at query time is very likely to contain the true nearest neighbors, rather than being an arbitrary random sample.",
+            "ANN algorithms and random subset sampling are functionally identical in practice; 'approximate nearest neighbor' is essentially a more technical-sounding name for the same idea.",
+            "ANN algorithms guarantee finding the exact mathematical top-k every time, which is precisely what distinguishes them from random sampling.",
+            "ANN algorithms examine every single stored vector just like brute force does, but skip the final sorting step to save time."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "The misconception this question targets treats ANN as sloppy or lucky, when in fact its speedup comes from real, structured preprocessing -- IVF's clustering and centroids, HNSW's layered graph -- that deliberately uses the data's own clustered structure to rule out large swaths of clearly-irrelevant vectors cheaply, before ever computing a full distance to most of the collection. Option B collapses a meaningful, structure-driven mechanism into 'the same thing' as random sampling, which the explanation directly rejects. Option C is wrong by definition -- 'approximate' means giving up the guarantee of finding the exact top-k, not securing it; that guarantee belongs to brute-force search instead. Option D is factually wrong -- the entire point of ANN algorithms is to avoid examining every stored vector, not merely to skip sorting at the end."
+        },
+        {
           "id": "vector-databases-ann-search-assess-explain1",
           "type": "explanation",
           "prompt": "Explain, to someone who has only ever used exact search, why production vector databases give up on finding the mathematically exact nearest neighbors and instead use approximate algorithms like HNSW or IVF -- and why that tradeoff turns out to be far more acceptable in practice than it might sound.",
@@ -230,6 +269,45 @@
           ],
           "correctOptionIndex": 2,
           "explanation": "ef_search (HNSW) and nprobe (IVF) both control how much work is done at query time, within an already-built index structure -- widening the candidate list during graph traversal, or probing more clusters -- and neither one changes the structure itself, so both can be adjusted freely, even per individual query. M and ef_construction (options A and B) shape the HNSW graph's actual connections and are baked in when the graph is built; nlist (options A and B) determines how the data was originally clustered for IVF. Changing any of those three requires rebuilding the corresponding index from scratch, which is exactly what makes option C the set of parameters you can actually tune live in a running production system."
+        },
+        {
+          "id": "vector-databases-indexing-recall-tradeoffs-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A team reports that their ANN index has a measured recall@10 of 0.95 against a brute-force ground truth. What does that number actually mean?",
+          "options": [
+            "The index returns exactly 10 results for 95% of the queries it handles.",
+            "On average across the queries measured, 95% of the true top-10 nearest neighbors (as found by brute-force search) also appeared in the ANN index's own top-10 results.",
+            "The ANN index runs about 95% faster than an equivalent brute-force search over the same collection.",
+            "95% of all vectors in the entire collection were included when the index was originally built."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Recall@k is defined exactly as described in option B: run a query through both brute-force (the ground truth) and the approximate index, check what fraction of the true top-k also shows up in the approximate top-k, and average that fraction across many representative queries. Option A confuses recall with a claim about result-count consistency, which isn't what recall measures at all. Option C conflates recall (an accuracy measurement) with latency (a speed measurement) -- the explanation treats these as two separate axes you plot against each other, not the same number. Option D describes something about index construction coverage, not about how well the index's query results match ground truth."
+        },
+        {
+          "id": "vector-databases-indexing-recall-tradeoffs-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Product quantization (PQ) is typically deployed as part of an 'IVF-PQ' index rather than as a standalone replacement for IVF. Why?",
+          "options": [
+            "IVF and PQ address two independent tradeoffs -- which clusters to search, and how precisely to represent each vector -- so combining them stacks a search-narrowing benefit with a memory-compression benefit instead of solving the same problem twice.",
+            "PQ can only compress vectors that have already been assigned to an IVF cluster; it has no defined behavior when applied to vectors that haven't been clustered first.",
+            "PQ replaces the need for any distance metric entirely, so it must be paired with an algorithm like IVF that still computes one.",
+            "'IVF-PQ' is purely a marketing label; using PQ alone would produce identical memory savings and identical recall to using it alongside IVF."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "The explanation frames IVF and PQ as two genuinely independent tradeoffs: IVF's clustering narrows down which vectors get compared at all, while PQ's compressed representation reduces the memory and computation cost of each individual comparison. Combining them as IVF-PQ stacks both benefits rather than duplicating one. Option B invents a technical dependency that doesn't exist -- PQ's compression scheme (splitting a vector into sub-vectors and quantizing each independently) works on any vector, clustered or not. Option C misdescribes PQ's role -- it changes how vectors are represented and compared, not whether a distance metric is needed at all. Option D is wrong because using PQ alone (without IVF's narrowing step) would still require scanning the same number of vectors, just each one more cheaply -- the memory savings from PQ are real either way, but IVF's speed benefit from narrowing the candidate set would be lost."
+        },
+        {
+          "id": "vector-databases-indexing-recall-tradeoffs-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A team measures good recall for a given ef_search value against a brute-force baseline and considers the tuning finished permanently. Under what circumstance would that assumption break down?",
+          "options": [
+            "It never breaks down -- recall is a fixed mathematical property of the parameter value itself, independent of the underlying data.",
+            "If the embedding model changes, or the underlying data distribution shifts meaningfully over time, the same ef_search value can produce meaningfully different recall than what was originally measured, because recall reflects how well the parameter matches the CURRENT data's clustering structure.",
+            "The assumption only breaks down if the total number of stored vectors decreases, since recall tuning is exclusively sensitive to shrinking collections.",
+            "The assumption only breaks down if the underlying server hardware is upgraded to a faster machine."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The explanation is explicit that recall is a property of how well a parameter setting matches the data's actual current clustering structure and query patterns -- not a fixed, timeless property of the number itself. If the embedding model changes or the data distribution shifts (new content categories, an influx of a different document type), the same ef_search value can behave quite differently than it did when first measured, because the underlying structure it's operating over has changed. Option A directly contradicts this. Option C fabricates a one-directional dependency (shrinking only) that isn't how the underlying mechanism works -- growth or compositional shifts matter just as much as shrinkage. Option D confuses hardware speed, which affects latency, with recall, which is about accuracy relative to ground truth and is not a hardware-dependent property."
         },
         {
           "id": "vector-databases-indexing-recall-tradeoffs-assess-explain1",
@@ -355,6 +433,45 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "This is post-filtering, and its specific, well-known failure mode is exactly this: filtering happens after the ANN step already committed to a fixed top-5, unfiltered candidate list, so if few or none of the user's permitted documents happen to be among the overall 5 closest matches, the final filtered result silently comes back with fewer than 5 items, or none at all, even though the user's permitted documents include perfectly relevant matches sitting further down the unfiltered ranking. Option A is wrong -- post-filtering is normally cheaper, not slower, than pre-filtering, precisely because it still benefits from the ANN index's speedup on the initial (unfiltered) search. Option C describes the opposite problem -- post-filtering, applied correctly, does remove documents the user can't see, it just does so too late to recover documents it should have found instead; it doesn't leak anything unpermitted here. Option D is wrong because the code in question (a simple list-comprehension filter) doesn't raise on an empty result -- it just silently returns an empty or short list, which is exactly what makes this bug easy to miss."
+        },
+        {
+          "id": "vector-databases-metadata-filtering-rag-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A vector database applies pre-filtering for a boolean metadata flag that happens to be true for 90% of the entire collection. What's the likely performance consequence?",
+          "options": [
+            "Pre-filtering becomes faster than usual in this case, since fewer vectors technically need to be considered.",
+            "Pre-filtering degenerates toward directly scanning almost the entire collection, since most ANN index structures are built once over the whole collection and a low-selectivity filter barely narrows the candidate set down at all -- losing most of the speedup the ANN index was built to provide.",
+            "Pre-filtering will return incorrect results whenever a filter matches more than 50% of the collection.",
+            "Pre-filtering has no performance cost regardless of filter selectivity, since by construction it is always at least as fast as post-filtering."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The explanation is explicit that naive pre-filtering's speed depends on filter selectivity: it restricts to the matching subset first, then scans that subset directly (brute-force, not via the ANN index), which is cheap only when the filter rules out most of the collection. A filter that barely narrows anything down -- like a boolean flag true for 90% of documents -- means pre-filtering ends up directly scanning almost the whole collection, defeating the purpose of having built an ANN index in the first place. Option A gets the direction backwards for a high-selectivity-in-the-wrong-direction filter like this one. Option C invents a correctness threshold that doesn't exist -- pre-filtering remains correct regardless of selectivity, it just gets slower. Option D is false -- the explanation explicitly frames pre-filtering's cost as selectivity-dependent, not uniformly cheap."
+        },
+        {
+          "id": "vector-databases-metadata-filtering-rag-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Mature production vector databases often build metadata filtering directly into ANN traversal rather than choosing purely between naive pre-filtering and post-filtering. Which of the following describes one real approach to this, as covered in the explanation?",
+          "options": [
+            "During HNSW's greedy graph walk, skip nodes that don't match the filter without terminating the search early, and continue exploring the graph past them.",
+            "Append the metadata value as an extra numeric dimension directly onto each embedding vector, turning the filter into an ordinary part of the distance calculation.",
+            "Run the same unfiltered ANN search twice, independently, and intersect the two resulting sets of candidates.",
+            "Convert the metadata filter into a query against a separate relational database and discard the vector index's results entirely."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "The explanation describes exactly this as 'filtered graph traversal': check each candidate node's metadata against the filter as part of HNSW's normal greedy walk, skip non-matching nodes without stopping the search, and keep walking past them to continue exploring the graph -- integrating the filter into traversal itself rather than treating it as a separate before/after step. Option B describes a technique not mentioned anywhere in the explanation and would corrupt the geometry the distance calculation depends on. Option C would not reliably solve the problem post-filtering already has, since running the identical unfiltered search twice would just return the identical unfiltered top-k twice. Option D describes discarding the vector index's actual value entirely, which isn't a form of integrating filtering into ANN search at all."
+        },
+        {
+          "id": "vector-databases-metadata-filtering-rag-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "In a RAG pipeline, why must the query be embedded, at request time, using the exact same embedding model that was used to embed and index the source document chunks ahead of time?",
+          "options": [
+            "It's a stylistic convention rather than a hard requirement -- any reasonably capable modern embedding model would work interchangeably with any other.",
+            "Different embedding models produce independent, uncalibrated vector spaces, so comparing a query vector from one model against document vectors from another would yield similarity scores with no real meaning, silently corrupting retrieval without raising any error.",
+            "Using a different model only actually matters if the two models happen to produce vectors of different dimensionality.",
+            "The embedding model choice only affects the quality of the LLM's generated answer, not the retrieval step that happens before it."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This is the 'don't mix embedding model versions' rule from the very first concept in this subject, explicitly resurfacing here as a hard requirement for RAG: since two embedding models carve out unrelated, uncalibrated vector spaces, a similarity score computed between a query vector from one model and document vectors from another doesn't correspond to any real relationship -- it will still return some number, with no error or warning, but that number is meaningless, silently producing bad or irrelevant retrieval. Option A is precisely the mistake this rule exists to prevent. Option C is wrong -- matching dimensionality is coincidental and doesn't fix the underlying incompatibility between two independently-trained vector spaces. Option D is wrong because this is fundamentally a retrieval-stage problem -- the wrong or irrelevant chunks get retrieved before generation ever happens, which is exactly the kind of retrieval bug the explanation warns gets mistaken for a generation failure."
         },
         {
           "id": "vector-databases-metadata-filtering-rag-assess-explain1",

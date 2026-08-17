@@ -113,6 +113,45 @@
           "explanation": "Drift detection is purpose-built for exactly this question -- it directly compares each stack resource's live configuration against what its template specifies and flags any discrepancy, which is precisely 'did this resource change outside of CloudFormation.' Manually reviewing CloudTrail logs (option A) can theoretically surface the same information but requires correlating individual API events into a full picture of what changed, and doing it quarterly means drift could go unnoticed for months. A policy promising not to use the console (option C) addresses intent, not detection, and doesn't catch anything that already happened, including legitimate break-glass changes that were never backported. MFA (option D) is a valuable security control but has nothing to do with detecting configuration drift -- it makes console access more secure, not more visible after the fact."
         },
         {
+          "id": "cloud-aws-console-clickops-limits-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A careful, experienced engineer makes a deliberate, well-reasoned emergency change directly in the console during a production incident, intending to fix the problem quickly and correctly. Does this risk causing configuration drift?",
+          "options": [
+            "No, because drift only results from careless mistakes, never from a deliberate, well-reasoned change made by an experienced engineer.",
+            "Yes -- drift can accumulate from a correct, deliberate change just as easily as a careless one, if that change is never propagated to other environments or backported into the shared source of truth afterward; it's a structural consequence of having multiple independently-changeable copies of an environment, not a symptom of carelessness.",
+            "No, because CloudTrail automatically records the change and keeps every environment synchronized as a result.",
+            "Yes, but only if the engineer used the console instead of the AWS CLI to make the change."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Drift doesn't require anyone to do anything wrong or careless -- the most common real path into it is exactly a correct, deliberate emergency fix that resolves the immediate problem but is never backported into the shared source of truth or propagated to other environments afterward. Option A incorrectly ties drift to carelessness specifically. Option C misattributes a synchronization capability to CloudTrail, which only records that an API call happened -- it has no mechanism for keeping environments in sync with each other. Option D draws an arbitrary distinction between console and CLI changes; either could cause the same drift if never backported, since the risk comes from the change being untracked in the shared source of truth, not from which interface was used to make it."
+        },
+        {
+          "id": "cloud-aws-console-clickops-limits-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A team believes that because CloudTrail logs every console action, they already have everything infrastructure-as-code would give them in terms of change tracking and review. What is missing from this reasoning?",
+          "options": [
+            "Nothing; CloudTrail's logging is functionally equivalent to a full code-review process.",
+            "CloudTrail records that an API call happened, by whom, and with what parameters -- valuable forensic history after the fact -- but it provides no pre-change review step, no readable diff of a resource's full before/after configuration, and no guaranteed simple rollback to a known-good prior state.",
+            "CloudTrail only logs actions taken through the console, not API calls made via the CLI or SDKs, so it actually provides even less coverage than assumed.",
+            "CloudTrail is disabled by default in every AWS account, so this reasoning doesn't even apply until it's explicitly turned on."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "CloudTrail's real value is forensic -- a record of what already happened -- not a substitute for the properties infrastructure-as-code provides: a diff reviewed before the change takes effect, a structured record of intent, and a reliable, exact rollback. Option A overstates CloudTrail's role entirely. Option C is factually wrong -- CloudTrail logs API calls regardless of whether they originated from the console, the CLI, or an SDK; it doesn't selectively cover only console actions. Option D is also factually wrong -- CloudTrail is enabled by default in AWS accounts for management events, not something that must be manually turned on from a disabled state first."
+        },
+        {
+          "id": "cloud-aws-console-clickops-limits-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A team adopts a strict policy: console access is never allowed under any circumstances, with zero exceptions, even during a severe incident where the normal deploy pipeline itself is unavailable. What is the likely practical consequence of this zero-exceptions policy?",
+          "options": [
+            "It eliminates all risk of configuration drift entirely, since the console is never touched under any circumstances.",
+            "It tends to produce exactly the kind of rule people quietly route around during a genuine emergency anyway; a more durable approach keeps break-glass console access available but pairs it with a non-optional follow-up step -- backporting the emergency change into the actual infrastructure-as-code source immediately afterward.",
+            "It has no real practical consequence, since a severe incident that makes the deploy pipeline unavailable is not a scenario worth planning for.",
+            "It makes CloudTrail logging unnecessary, since no console changes will ever occur to log."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "An absolute, zero-exceptions rule ignores that a severe enough incident can make the normal pipeline genuinely unavailable or too slow to help, and in that moment, someone facing real pressure to restore service is likely to reach for the console anyway, rule or no rule -- just now doing so quietly, without the structured backporting discipline a more realistic policy would have built in. Option A assumes perfect compliance under all circumstances, which the reasoning specifically argues against. Option C dismisses a real operational scenario that does need planning for. Option D is a non-sequitur -- console changes can still happen under this policy in practice, and CloudTrail's value is independent of any specific console-access policy."
+        },
+        {
           "id": "cloud-aws-console-clickops-limits-assess-explain1",
           "type": "explanation",
           "prompt": "A junior engineer asks why their team insists on making infrastructure changes through code and pull requests instead of just clicking through the console, since the console change would be faster and produce the exact same end result. Explain the reasoning, including what CloudTrail does and doesn't solve.",
@@ -234,6 +273,32 @@
           "explanation": "Replacement: True is CloudFormation's explicit signal that a specific property change cannot be applied to the existing resource in place -- it requires deleting the current resource and creating a new one to satisfy the change, which is a fundamentally different, far riskier operation than an in-place update for anything stateful, since the new resource starts with no data unless a safeguard like DeletionPolicy: Snapshot preserves it first. Option A describes what a Replacement: False modify would mean, not this case. Option C is incorrect -- CloudFormation will still execute a Replacement: True change set if asked to; it doesn't block it, which is exactly why reviewing this flag before executing matters. Option D understates its significance -- it's exactly the detail that determines whether an update is safe or potentially destructive for stateful data."
         },
         {
+          "id": "cloud-aws-cloudformation-cdk-basics-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A template defines a resource with logical ID AppDataBucket, whose BucketName property is !Sub 'app-data-${EnvironmentName}'. Another resource in the same template references it via !GetAtt AppDataBucket.Arn. If EnvironmentName changes from 'dev' to 'staging' on the next deploy, what happens to that reference?",
+          "options": [
+            "The reference breaks, because the logical ID AppDataBucket must itself be renamed whenever the physical bucket name changes.",
+            "Nothing about the reference needs to change -- the logical ID AppDataBucket remains a stable handle within the template regardless of which physical bucket name is actually produced, so !GetAtt continues to resolve correctly to whichever physical bucket the template currently produces.",
+            "The reference must be manually rewritten to !GetAtt 'app-data-staging'.Arn to match the new physical bucket name.",
+            "CloudFormation requires every reference to a resource to be updated to match its current physical name each time that name changes."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "A resource's logical ID is a stable identifier within the template itself, entirely independent of whatever physical name the resource is actually given -- that's precisely what lets other parts of the template reference a resource via !Ref or !GetAtt without ever needing to know or hardcode its real, physical name. Changing the parameter that feeds into the physical bucket name has no effect on the logical ID or on references to it. Options A, C, and D all incorrectly assume the reference is tied to the physical name rather than the logical ID, which would defeat the entire purpose of using a stable logical ID as a template-internal handle in the first place."
+        },
+        {
+          "id": "cloud-aws-cloudformation-cdk-basics-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A template hardcodes a literal AWS account ID inside a resource's ARN property instead of using a pseudo parameter. What problem does this most directly create?",
+          "options": [
+            "The template will fail validation immediately and refuse to deploy in any AWS account whatsoever.",
+            "The template becomes non-portable across accounts -- deploying the identical template into a different AWS account requires manually editing the hardcoded value, whereas AWS::AccountId, a pseudo parameter, would let the same template automatically reference whichever account it's actually deployed into.",
+            "Hardcoded account IDs are automatically replaced by CloudFormation with the deploying account's actual ID at deploy time, so there's no real practical problem.",
+            "This specifically only matters for templates deployed via CDK; raw CloudFormation templates are unaffected by hardcoded account IDs."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "A hardcoded account ID ties the template to one specific account, and reusing that same template in a different account requires manually finding and editing that value -- exactly the kind of per-environment manual edit pseudo parameters like AWS::AccountId are meant to eliminate, letting the same template automatically resolve to whichever account it's actually deployed into. Option A is wrong -- a hardcoded but otherwise valid ARN doesn't fail validation; it deploys successfully, just pointing at the wrong account when reused elsewhere. Option C invents an automatic substitution CloudFormation does not perform on hardcoded literals. Option D draws an arbitrary distinction -- the portability problem is identical whether the template is authored as raw CloudFormation or synthesized from CDK, since CDK ultimately produces the same underlying template."
+        },
+        {
           "id": "cloud-aws-cloudformation-cdk-basics-assess-explain1",
           "type": "explanation",
           "prompt": "Explain what AWS CDK actually adds on top of raw CloudFormation, and why someone using CDK still needs to understand stacks, change sets, and DeletionPolicy rather than treating those as CloudFormation-only concerns CDK makes obsolete.",
@@ -352,6 +417,32 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "The structural risk described is that every merged change reaches production immediately, with no opportunity for validation in a lower environment or a deliberate human checkpoint before real impact -- exactly what inserting a lower-environment stage and a production approval gate addresses directly. Improving credential handling (option A) is a genuinely good, separate improvement (and matches least-privilege practice), but it doesn't address the missing validation/approval sequence at all -- a change deployed with perfectly-scoped short-lived credentials still reaches production immediately and unreviewed-in-practice under this setup. More PR reviewers (option C) strengthens the pre-merge review but doesn't address what happens after merge, which is where this specific risk lives. Better logging (option D) only helps diagnose a problem after it has already reached production, rather than reducing the chance production is reached with a bad change in the first place."
+        },
+        {
+          "id": "cloud-aws-iac-deployment-pipeline-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Two engineers each run cdk deploy AppStack against the same stack within two seconds of each other, unaware the other is doing the same thing. What does CloudFormation actually do?",
+          "options": [
+            "Both updates are automatically merged together into a single combined change.",
+            "Whichever update-stack call arrives first transitions the stack into UPDATE_IN_PROGRESS; the second, nearly-simultaneous update-stack call against the same stack is rejected outright, since a stack supports only one update lifecycle at a time.",
+            "Both updates proceed concurrently against the stack, and CloudFormation applies whichever one happens to finish last as the final state.",
+            "CloudFormation pauses the second engineer's deploy indefinitely until someone manually cancels the first one."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "CloudFormation tracks a single lifecycle status per stack, and once a stack enters UPDATE_IN_PROGRESS, a second concurrent update-stack call against that same stack is rejected outright rather than allowed to race the first -- this is a real, built-in safety net, though a reactive one: the rejected engineer simply has to retry once the first update completes. Option A invents a merge behavior CloudFormation does not perform. Option C describes exactly the dangerous race this protection exists to prevent. Option D fabricates an indefinite pause requiring manual cancellation, which isn't how the rejection behaves -- it fails immediately rather than waiting."
+        },
+        {
+          "id": "cloud-aws-iac-deployment-pipeline-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A team argues that since their deployment pipeline enforces code review and lower-environment validation for every change, periodic drift detection is now redundant and can be turned off entirely. What is the flaw in this reasoning?",
+          "options": [
+            "There is no flaw; a mature pipeline structurally guarantees that deployed infrastructure can never diverge from its reviewed template.",
+            "A pipeline enforces process for every change that goes through it, but it doesn't eliminate the legitimate break-glass exception -- a severe incident where the pipeline itself is unavailable or too slow can still justify a direct, out-of-band change; drift detection remains valuable specifically to catch and prompt backporting of exactly those residual cases.",
+            "Drift detection is genuinely redundant, because CloudFormation change sets already perform the equivalent of drift detection before every pipeline-driven apply.",
+            "Drift detection was only ever useful for accounts that don't use CDK, so a CDK-based pipeline makes it unnecessary regardless of process maturity."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "A good pipeline dramatically reduces how often infrastructure diverges from its source of truth, but it governs only the changes that actually flow through it -- it has no bearing on a genuine break-glass emergency where the pipeline itself is unavailable or too slow, which is exactly the residual case drift detection exists to catch and prompt backporting for. Option A overstates the pipeline's guarantee to an absolute that the reasoning explicitly rejects. Option C confuses change sets (which preview a specific pipeline-initiated change before applying it) with drift detection (which checks whether reality has already diverged from the template via some other path) -- they serve different purposes. Option D draws an arbitrary, unsupported distinction between CDK and non-CDK pipelines; the break-glass risk applies identically to both, since both ultimately drive the same underlying CloudFormation stacks."
         },
         {
           "id": "cloud-aws-iac-deployment-pipeline-assess-explain1",

@@ -118,6 +118,45 @@
           "explanation": "Seeing two ReplicaSets both with nonzero counts is exactly what a rolling update in progress looks like: the Deployment controller creates (or reuses) a new ReplicaSet and shifts replicas from the old one to the new one gradually, bounded by maxSurge/maxUnavailable, rather than switching all at once -- so both legitimately have Pods running simultaneously for the rollout's duration. Option B is wrong because this is normal, not a bug -- it would only be worth investigating if the rollout stays in this state well past when it should have completed (check kubectl rollout status / progressDeadlineSeconds for that). Option C misreads the label match as a coincidence rather than the Deployment's own selector correctly finding both of its own ReplicaSets. Option D confuses the transient total (which can briefly exceed desired replicas by exactly maxSurge, by design) with a misconfiguration."
         },
         {
+          "id": "kubernetes-deployments-replicasets-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "You directly edit a running ReplicaSet's `.spec.template` to change its container image, without touching the owning Deployment at all. What happens to the Pods currently running under that ReplicaSet?",
+          "options": [
+            "All existing Pods are immediately deleted and recreated with the new image, exactly as a Deployment-driven rollout would do.",
+            "None of the already-running Pods change at all -- the edit only affects Pods the ReplicaSet creates from that point forward, because a ReplicaSet reconciles count against its existing Pods, not content.",
+            "The API server rejects the edit outright, since a ReplicaSet's template becomes immutable once any Pods matching its selector exist.",
+            "The Deployment immediately detects the drift and reverts the ReplicaSet's template back to match its own .spec.template within seconds."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "A ReplicaSet has zero concept of 'update' -- its entire job is ensuring N Pods matching its selector exist, and it only compares actual count against desired count, never comparing an existing Pod's spec against the current template. Editing the template changes what future Pods it creates, but every Pod already running was created under the old template and is left completely untouched. Option A describes Deployment-driven rolling-update behavior, which a bare ReplicaSet does not have. Option C is false -- Kubernetes doesn't lock a ReplicaSet's template once Pods exist. Option D is false in the short term -- the Deployment controller isn't watching for this kind of direct edit to immediately correct it, though a subsequent Deployment-driven change would likely create yet another new ReplicaSet from the Deployment's own unedited template, sidelining the manual edit rather than actively reverting it on a timer."
+        },
+        {
+          "id": "kubernetes-deployments-replicasets-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A CI pipeline runs `kubectl rollout status deployment/web` after applying a new image, wanting the pipeline to fail automatically if the rollout never actually completes rather than hanging forever. Which mechanism is actually responsible for that failure being surfaced?",
+          "options": [
+            "kubectl rollout status has a hardcoded 30-second timeout, after which it always exits with an error regardless of how the Deployment is configured.",
+            "The Deployment's progressDeadlineSeconds field (default 600s) causes the Deployment to surface a ProgressDeadlineExceeded condition once the rollout hasn't made forward progress within that window, and kubectl rollout status detects and reports that condition as a failure.",
+            "The readinessProbe itself has a built-in global timeout that automatically fails the entire Deployment object after a fixed number of probe failures.",
+            "kubectl rollout status polls indefinitely with no failure condition of its own; a separate, unrelated monitoring tool must always be configured to catch a stuck rollout."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "progressDeadlineSeconds is exactly the field designed for this: if the rollout hasn't made forward progress within that window, the Deployment's own status conditions record ProgressDeadlineExceeded, and kubectl rollout status (which is watching those conditions, not applying its own arbitrary timeout) reports the failure and exits nonzero -- letting a CI pipeline fail fast instead of hanging. Option A invents a hardcoded timeout that doesn't exist. Option C misattributes deadline behavior to the readinessProbe, which only reports a single Pod's health, not the Deployment's overall rollout progress. Option D is wrong -- this exact mechanism is built into the Deployment object and kubectl itself, with no external tool required."
+        },
+        {
+          "id": "kubernetes-deployments-replicasets-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "After a rolling update finishes, the old ReplicaSet (now scaled to 0 replicas) is not deleted immediately. Why is it retained, and what does that retention directly enable?",
+          "options": [
+            "It's retained purely so `kubectl get rs` output looks complete; it has no functional purpose and could be deleted immediately with zero effect on future operations.",
+            "It's retained (up to revisionHistoryLimit) specifically so `kubectl rollout undo` can simply scale it back up while scaling the current ReplicaSet down -- reusing the existing object instead of rebuilding a new ReplicaSet and re-pulling images from scratch.",
+            "It's retained because Kubernetes never deletes any object automatically under any circumstance; a human must manually run kubectl delete rs on every old ReplicaSet.",
+            "It's retained so the ReplicaSet controller can average resource-usage metrics across old and new ReplicaSets for autoscaling decisions."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This is exactly why rollbacks are fast: kubectl rollout undo doesn't rebuild anything from scratch, it just re-triggers the same scale-up/scale-down mechanism as a forward rollout, pointed at a previous ReplicaSet that already exists (assuming it's still within revisionHistoryLimit) rather than a freshly created one. Option A understates the real functional purpose. Option C is false -- Kubernetes does delete plenty of things automatically (e.g. old ReplicaSets beyond revisionHistoryLimit, per garbage collection); retention here is a deliberate, bounded policy, not an inability to delete. Option D describes a capability the ReplicaSet controller doesn't have -- it has no autoscaling logic of its own."
+        },
+        {
           "id": "kubernetes-deployments-replicasets-assess-explain1",
           "type": "explanation",
           "prompt": "Explain, layer by layer -- Deployment, ReplicaSet, Pod -- exactly what gets created versus mutated at each layer when you change the container image in a Deployment's Pod template and Kubernetes performs a rolling update.",
@@ -239,6 +278,45 @@
           "explanation": "This is precisely what port and targetPort are for: port (80) is what the client addresses, and kube-proxy's programmed rules rewrite the destination to a backing Pod's actual IP and targetPort (8080) as the packet passes through the node's network stack -- a pure Layer 4 rewrite, no proxying process involved. Option B is false and misunderstands the entire purpose of targetPort, which exists specifically to decouple the Service's port from whatever port the container actually listens on. Option C is false -- there is no such standalone Service process anywhere, as covered in the misconceptions for this concept; the rewriting happens in the kernel networking layer of the node, not in a running proxy Pod. Option D is false and nonsensical -- a ClusterIP doesn't 'listen' on anything at all, being purely virtual."
         },
         {
+          "id": "kubernetes-services-networking-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A StatefulSet's Pods need to be addressed individually by identity (pod-0, pod-1, ...) rather than through one shared virtual IP that could route to any interchangeable backend. Which Service configuration supports this, and what does it change about DNS resolution?",
+          "options": [
+            "A standard ClusterIP Service -- DNS resolution behaves identically to any other Service, since kube-proxy always resolves individual Pod identities transparently underneath the shared virtual IP.",
+            "A headless Service (clusterIP: None) -- it skips the virtual IP and kube-proxy packet rewriting entirely, so DNS lookups for the Service return each individual backing Pod's IP directly, rather than one shared virtual address.",
+            "A NodePort Service -- NodePort's fixed port-per-node model is specifically what lets clients address individual Pods instead of a virtual IP.",
+            "No Service configuration supports this; StatefulSet Pods must always be addressed by hardcoding their current Pod IPs directly."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "A headless Service is exactly the mechanism designed for this case: by setting clusterIP: None, there is no virtual IP and no kube-proxy rewriting at all, so a DNS lookup against the Service name returns the individual IPs of every currently matching, Ready Pod directly -- letting a client (or a StatefulSet Pod's own stable per-Pod DNS name) address one specific Pod by identity rather than an interchangeable pool. Option A is false -- a normal ClusterIP Service deliberately hides individual Pod identity behind one shared virtual address, the opposite of what's needed here. Option C misattributes this capability to NodePort, which is really just ClusterIP plus a node-level port and has nothing to do with per-Pod addressing. Option D is false; hardcoding Pod IPs is exactly the fragile anti-pattern Services exist to avoid, and a headless Service solves the identity requirement without resorting to it."
+        },
+        {
+          "id": "kubernetes-services-networking-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A container listens on port 9000. The Service manifest sets `port: 9000` and omits `targetPort` entirely. `kubectl get endpoints` shows all Pods correctly listed, yet requests through the Service still fail. Is the missing `targetPort` field the cause?",
+          "options": [
+            "Yes -- targetPort must always be explicitly set, or the Service is invalid and would never populate Endpoints at all.",
+            "No -- when targetPort is omitted, it defaults to the same value as port (9000), which matches the container's actual listening port here, so this specific field is not the problem; the real cause lies elsewhere (application error, NetworkPolicy, etc).",
+            "Yes -- an omitted targetPort silently defaults to port 80 regardless of what port is set to, so traffic is being routed to port 80 on Pods that aren't listening there.",
+            "No -- targetPort has no effect on routing whatsoever; it is purely a documentation field with no bearing on how kube-proxy rewrites packets."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This tests the precise defaulting rule: when targetPort is left unset, Kubernetes defaults it to whatever port is set to -- not to some other fixed value, and not making the Service invalid. Since port is 9000 here and the container genuinely listens on 9000, the effective targetPort (9000) already matches reality, so this specific configuration is not the bug; the failure must come from something else entirely (a NetworkPolicy blocking traffic, an application-level error, a firewall). This is exactly the kind of question where jumping to 'must be a port mismatch' without checking the actual values would lead you to the wrong fix -- the debugging checklist in this concept is meant to be followed by actually reading the numbers, not applied as a reflex."
+        },
+        {
+          "id": "kubernetes-services-networking-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A team wants a Service to route requests based on the HTTP request path -- for example, `/api` to one set of Pods and `/static` to another -- without adding any component beyond a plain ClusterIP Service. Why can't kube-proxy alone do this?",
+          "options": [
+            "kube-proxy operates purely at Layer 4 (TCP/UDP), rewriting packet destinations without ever parsing an HTTP request -- it has no concept of paths, headers, or any other Layer 7 detail, so path-based routing requires a separate component (an Ingress controller or service mesh) operating one layer up.",
+            "A single Service object actually can map different targetPort values to different URL paths; the team just hasn't discovered that field of the Service spec yet.",
+            "kube-proxy does inspect HTTP paths by default, but only when the Service type is LoadBalancer rather than ClusterIP.",
+            "This is only a limitation on bare-metal clusters; any cloud-managed cluster's kube-proxy automatically gains Layer 7 path-based routing for free."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "kube-proxy's entire job is rewriting a packet's destination IP and port based on Endpoints -- it has no visibility into the payload of the TCP stream at all, so it fundamentally cannot make a routing decision based on something as high-level as an HTTP path, which lives well above Layer 4. This is precisely the gap flagged in this concept as being filled by Ingress controllers or a service mesh, not by any hidden Service field. None of the other options describe real capabilities -- there's no per-path targetPort mapping on a Service, no LoadBalancer-specific HTTP awareness in kube-proxy, and no cloud-specific exception to this Layer 4 boundary."
+        },
+        {
           "id": "kubernetes-services-networking-assess-explain1",
           "type": "explanation",
           "prompt": "Explain the full path a request takes from a client Pod calling a Service's DNS name to a response coming back from a specific backing Pod, and explain specifically what being listed in a Service's Endpoints does -- and does not -- guarantee about that Pod's ability to actually handle the request correctly.",
@@ -347,6 +425,45 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "This is the accurate picture: a Secret and a ConfigMap share the same underlying object shape and the same two consumption styles, and the meaningful difference is a set of conventions (base64 encoding, kubectl's default display behavior) that signal intent rather than provide strong protection by themselves. Option A overclaims default encryption -- etcd encryption at rest for Secrets is an opt-in cluster configuration, not a default. Option C is false in both directions -- both ConfigMaps and Secrets support both env-var and mounted-file consumption identically. Option D is false -- Secrets live in etcd exactly like every other Kubernetes object, with no separate datastore involved by default."
+        },
+        {
+          "id": "kubernetes-configmaps-secrets-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "In a freshly installed Kubernetes cluster with no additional configuration applied, which of the following actually restricts who can read the plaintext value of a Secret?",
+          "options": [
+            "etcd encryption at rest, which is enabled by default on every Kubernetes distribution out of the box.",
+            "RBAC rules controlling which users and ServiceAccounts are permitted to get/list Secret objects through the API server -- this access boundary applies by default, whereas etcd encryption at rest must be explicitly configured via an EncryptionConfiguration.",
+            "The base64 encoding itself, which functions as a lightweight cipher requiring a decode key that only cluster administrators possess.",
+            "Nothing at all by default -- Kubernetes intentionally ships with zero access control on Secret objects until an external secrets manager is installed."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "RBAC is the access-control layer that's actually in effect out of the box, gating who can even issue a get/list request against Secret objects through the API server -- that's the real day-to-day boundary. etcd encryption at rest is a genuinely valuable additional layer, but it's opt-in and not on by default in a great many real clusters, so option A overclaims it. Option C is simply false -- base64 has no key and provides no confidentiality, cipher or otherwise. Option D overstates the gap -- RBAC exists and is enforced by default (clusters typically ship with at least some default RBAC bindings), it just needs to be configured narrowly to be effective, which is different from having no access control mechanism at all."
+        },
+        {
+          "id": "kubernetes-configmaps-secrets-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "An application mounts a ConfigMap as a volume and is written to read its config file only once, at process startup, with no file-watching logic at all. The ConfigMap is then updated via `kubectl apply`. What happens to the file on disk inside the already-running Pod, and does the application's behavior change?",
+          "options": [
+            "The file on disk is updated by the kubelet within roughly a minute, but the application's behavior does not change, because it never re-reads the file after its own startup -- Kubernetes updates the file, it does not force the application to notice.",
+            "Neither the file nor the application's behavior changes until the Pod itself is deleted and replaced, exactly like environment-variable consumption.",
+            "The file updates immediately, and the kubelet automatically sends a SIGHUP to the container's main process to force it to reload its configuration.",
+            "The mounted file is read-only and immutable for the entire lifetime of the Pod, so the ConfigMap update has no effect on it at all, ever."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "Mounted-volume consumption and environment-variable consumption behave differently at the file-system layer, but identically in terms of forcing application behavior: the kubelet really does sync the file on disk to the ConfigMap's current contents within roughly its sync period (about a minute), regardless of whether any application ever looks at it again. But Kubernetes has no way to force an application to re-read a file -- that requires the application itself to implement a watch (inotify) or periodic re-read, which this application deliberately doesn't have. So the file changes, but observable application behavior does not, until something else (a restart, a new deploy) causes the process to re-read it fresh. Option B is wrong specifically because it conflates mounted-volume behavior with env-var behavior -- the file genuinely does update on disk, unlike an environment variable. Options C and D describe mechanisms Kubernetes does not implement."
+        },
+        {
+          "id": "kubernetes-configmaps-secrets-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A team accidentally committed a rendered Secret manifest containing a real, live password to a git repository. They then deleted the file in a later commit and added it to .gitignore going forward. Is the credential now safe?",
+          "options": [
+            "Yes -- once a file is deleted in a later commit and gitignored, its contents are permanently purged from the repository and can no longer be recovered by anyone.",
+            "No -- the credential remains fully recoverable from the repository's git history (and any existing clones or forks) even after the file is deleted in a subsequent commit; deleting and gitignoring only prevents future commits from re-adding it, and the exposed credential should be treated as compromised and rotated.",
+            "Yes, but only because the repository is private -- git history is only ever readable by the public in open-source repositories.",
+            "No, but only temporarily -- .gitignore actively scans and redacts the contents of past commits containing the same filename over time."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Deleting a file in a later commit does not erase it from git's history; the object still exists in every prior commit reachable from the branch's history, and anyone with access to the repository (or an existing clone or fork made before the deletion) can check out that earlier commit and recover the file exactly as it was, including the real credential inside it. .gitignore only prevents that specific path from being re-added or re-tracked going forward -- it has no retroactive effect on history at all, and it certainly doesn't scan or redact past commits. The only real remedies are rewriting history (rebasing it out and force-pushing, which doesn't help against clones/forks that already have it) and, far more reliably, simply treating the credential as compromised and rotating it -- exactly as this concept's git-leak guidance recommends."
         },
         {
           "id": "kubernetes-configmaps-secrets-assess-explain1",

@@ -123,6 +123,32 @@
           "type": "explanation",
           "prompt": "Explain why relying on Python's default text encoding (by omitting encoding= from open()) is considered risky, and what explicitly passing encoding=\"utf-8\" actually fixes.",
           "modelAnswer": "Text files are stored as raw bytes; encoding is the rule that maps those bytes to actual characters when reading, and characters back to bytes when writing. When open() is called for text mode without an explicit encoding= argument, Python falls back to a platform-dependent default encoding -- which is not the same across every operating system and configuration; historically this has commonly been UTF-8 on Linux/macOS but something like a Windows code page on many Windows setups. This becomes risky specifically because code that behaves correctly on the machine and locale it was developed and tested on can behave differently -- and the difference is not guaranteed to be a loud, obvious error -- on a different machine, or when reading a file that was written with a different encoding than the one the current default happens to be. Some mismatches raise UnicodeDecodeError, which is at least noticeable, but others silently decode the bytes into the wrong characters entirely (a phenomenon often called mojibake) with no exception raised at all, meaning a program can run to completion while quietly corrupting text data, especially anything beyond plain ASCII (accented letters, em-dashes, non-Latin scripts, emoji). Explicitly writing encoding=\"utf-8\" fixes this by removing the platform-dependence entirely: the exact same code will decode (or encode) text the exact same way regardless of what machine, OS, or locale settings it happens to run under, as long as the file itself is genuinely UTF-8 -- which, given UTF-8's dominance as the standard encoding for text interchange today, is true or achievable for the overwhelming majority of real-world text files, including ones written by Python code that also explicitly specifies encoding=\"utf-8\" when writing."
+        },
+        {
+          "id": "python-file-handling-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "```python\n# Assume draft.txt already exists on disk\ntry:\n    with open(\"draft.txt\", \"x\", encoding=\"utf-8\") as f:\n        f.write(\"new content\")\nexcept FileExistsError:\n    print(\"already exists, not overwritten\")\n```\nWhat happens?",
+          "options": [
+            "\"already exists, not overwritten\" is printed -- \"x\" mode raises FileExistsError immediately when the target already exists, instead of silently overwriting it",
+            "draft.txt's content is silently overwritten with \"new content\", exactly like \"w\" mode would do",
+            "\"x\" mode silently does nothing if the file already exists, leaving the original content untouched and never raising anything",
+            "It raises FileNotFoundError, since \"x\" mode requires the target file to already exist"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "\"x\" (exclusive creation) is specifically designed to protect against accidentally clobbering an existing file -- unlike \"w\", which truncates an existing file without complaint, \"x\" raises `FileExistsError` the moment `open()` is called if the target already exists, and never gets as far as writing anything. The `try`/`except FileExistsError` here catches exactly that, printing the message instead of letting the error propagate. \"x\" is the right choice specifically when overwriting would be a mistake you want to be forced to notice."
+        },
+        {
+          "id": "python-file-handling-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "```python\nwith open(\"small.txt\", \"w\", encoding=\"utf-8\") as f:\n    f.write(\"abcdefg\")\n\nwith open(\"small.txt\", encoding=\"utf-8\") as f:\n    while True:\n        chunk = f.read(3)\n        if not chunk:\n            break\n        print(chunk)\n```\nWhat gets printed?",
+          "options": [
+            "abc / def / g",
+            "abc / def / g / (one extra blank line printed for the final empty read)",
+            "abc / def -- the remaining single character is silently dropped since it doesn't fill a full chunk",
+            "abcdefg -- read(3) is ignored on the first call and the whole file is read at once"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "`f.read(3)` reads up to 3 characters each call, returning fewer only when less remains. \"abcdefg\" is 7 characters: the first call returns \"abc\", the second \"def\", and the third returns just \"g\" -- the leftover single character, still a non-empty (truthy) string, so the loop prints it and continues. Only the fourth call, with nothing left to read, returns the empty string `\"\"`, which is falsy, triggering `break` before anything is printed for it. Partial chunks at the end of a file are returned normally, never silently dropped -- only a genuinely empty read signals end of file."
         }
       ]
     },
@@ -236,6 +262,32 @@
           "type": "explanation",
           "prompt": "A developer builds a Python dict keyed by integer product IDs, serializes it to a JSON file with json.dump, and later loads it back with json.load. Explain what actually happens to the keys, why, and what they need to do to use the loaded dict the way they originally intended.",
           "modelAnswer": "JSON's specification requires that every key in a JSON object be a string -- there is no way to represent a JSON object with a numeric, tuple, or any other non-string key. Because of this, when json.dump serializes a Python dict with integer keys, it doesn't raise an error (the way it would for an unserializable value like a set) -- instead, it silently converts each integer key to its string representation in the resulting JSON text, so a key like 1024 becomes the JSON string key \"1024\". When that file is later loaded with json.load, the keys come back exactly as they were written in the JSON text: strings. json.load has no way to know, and makes no attempt to guess, that these string keys were originally integers in the Python program that wrote them -- there's no metadata in JSON preserving that information. So the developer's loaded dict looks similar when printed but is meaningfully different: looking up a product by its original integer ID, like loaded_dict[1024], will raise KeyError, because the actual key present is the string \"1024\", not the integer 1024. To use the dict the way it was originally intended, the developer needs to explicitly convert the keys back to integers themselves after loading -- typically with a dict comprehension like `{int(key): value for key, value in loaded_dict.items()}` -- since this conversion is entirely the caller's responsibility; neither json.dump nor json.load does it automatically in either direction."
+        },
+        {
+          "id": "python-json-csv-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "```python\nimport json\ndata = {\"points\": [(1, 2), (3, 4)]}\ntext = json.dumps(data)\nrestored = json.loads(text)\nprint(restored)\nprint(type(restored[\"points\"][0]))\n```\nWhat gets printed?",
+          "options": [
+            "{'points': [[1, 2], [3, 4]]} then <class 'list'>",
+            "{'points': [(1, 2), (3, 4)]} then <class 'tuple'>",
+            "TypeError, because tuples nested inside a list aren't JSON serializable",
+            "{'points': [[1, 2], [3, 4]]} then <class 'tuple'>"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "The tuple-becomes-list transformation applies uniformly no matter how deeply a tuple is nested inside other JSON-serializable structures -- each tuple, wherever it appears, gets serialized as a JSON array indistinguishable from a list, and every JSON array comes back from json.loads as a Python list, never a tuple. So both `(1, 2)` and `(3, 4)` inside the outer list become plain lists after the round trip, and `restored` prints as `{'points': [[1, 2], [3, 4]]}`, with `type(restored[\"points\"][0])` reporting `list`. Nothing about nesting a tuple inside a list causes any serialization error -- lists themselves are fully supported."
+        },
+        {
+          "id": "python-json-csv-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "```python\nimport csv\n# ages.csv contains:\n# name,age\n# Amy,9\n# Ben,10\n\nwith open(\"ages.csv\", encoding=\"utf-8\") as f:\n    reader = csv.DictReader(f)\n    kids = [row for row in reader if row[\"age\"] > \"5\"]\n\nprint(len(kids))\n```\nWhat gets printed?",
+          "options": [
+            "1 -- because \"10\" > \"5\" evaluates to False under plain string comparison, even though 10 is numerically greater than 5",
+            "2 -- because both 9 and 10 are numerically greater than 5",
+            "0 -- comparing csv.DictReader values with > always raises a TypeError",
+            "1 -- but because Amy's row is the one dropped, and Ben's is the one kept"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "csv.DictReader gives every field back as a plain `str` -- there's no numeric type in CSV at all. `row[\"age\"] > \"5\"` is therefore a *string* (lexicographic) comparison, not a numeric one: `\"9\" > \"5\"` is `True` (comparing the single characters '9' and '5' directly), but `\"10\" > \"5\"` is `False`, because lexicographic comparison looks at the first character first -- '1' comes before '5' -- and never gets to the numerically-relevant second digit. So only Amy's row (`\"9\"`) survives the filter, giving `len(kids) == 1`. This is exactly the kind of bug the lesson warns about: forgetting that CSV values need explicit conversion (`int(row[\"age\"])`) before doing anything numeric with them, including comparisons."
         }
       ]
     },
@@ -352,6 +404,19 @@
           "type": "explanation",
           "prompt": "Explain the difference between a naive and a timezone-aware datetime, and why a bug involving this distinction is a common, realistic thing to encounter in real codebases rather than an obscure edge case.",
           "modelAnswer": "A naive datetime is just a bundle of numbers -- year, month, day, hour, minute, second -- with no attached information about which timezone those numbers are relative to; its tzinfo attribute is None. A timezone-aware datetime carries that information explicitly via its tzinfo attribute, so it represents one specific, unambiguous instant in universal time, not just a clock reading whose context is unknown. This distinction becomes a realistic, common source of bugs specifically because different parts of a real system often produce datetimes in different ways: datetime.now() (naive, by default, reflecting local system time with no timezone attached) might be used in one part of a codebase to timestamp something, while a different part parses timestamps from an external API response or database that includes explicit timezone information (aware). Neither of these is unusual or wrong in isolation, but the moment code tries to compare, subtract, or otherwise combine one of each, Python raises TypeError rather than silently producing a result -- and because this often happens across module or team boundaries (one function's author didn't necessarily know another function's datetimes were naive, or aware, or from a different source entirely), it's exactly the kind of mismatch that's easy to introduce without noticing at the time it's written, and that only surfaces once two different code paths' datetimes actually meet at a comparison or subtraction. The practical fix is to be deliberate and consistent throughout a codebase -- commonly, working in UTC-aware datetimes everywhere internally, and converting to naive local time only at the boundary where something is actually displayed to a user -- rather than to expect Python to resolve the ambiguity automatically, since it deliberately never will."
+        },
+        {
+          "id": "python-dates-time-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "```python\nfrom datetime import datetime\n\n# The string was written in US month/day/year order: March 4, 2026\namerican_date = \"03/04/2026\"\nparsed = datetime.strptime(american_date, \"%d/%m/%Y\")   # wrong format string: day/month/year\nprint(parsed.month, parsed.day)\n```\nWhat happens?",
+          "options": [
+            "4 3 -- no error is raised; the day and month values are simply swapped, since both 03 and 04 happen to be valid values for either field",
+            "ValueError, since the string's actual order doesn't match the format string given",
+            "3 4 -- strptime detects the American month/day convention automatically, regardless of the format string supplied",
+            "TypeError, because \"%d/%m/%Y\" is not a recognized strptime format string"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "`strptime` doesn't know or care what order a date string was 'meant' to be in -- it purely follows the format string's positions, character for character. `\"%d/%m/%Y\"` tells it to read the first number as the day, the second as the month, and the third as the year. Both `03` and `04` happen to be structurally valid for either a day or a month, so parsing succeeds without any error -- it's just that `parsed.day` ends up as `3` and `parsed.month` ends up as `4`, the reverse of what was intended (March 4th). This is a genuinely dangerous failure mode: strptime is unforgiving about *structural* mismatches (raising ValueError when the string's punctuation or digit-count doesn't fit the format), but it has no way to catch a *semantic* mismatch like this one, where the format string is structurally compatible but assigns the wrong meaning to each field."
         }
       ]
     },
@@ -469,6 +534,19 @@
           "type": "explanation",
           "prompt": "A teammate submits a pull request with the regex pattern \"\\d{3}\\b\\w+\" (not a raw string) to validate part number formats, and asks you to review it. Explain the risk in how the pattern is written, and how you'd advise them to fix it -- even if it happens to work correctly on their test cases today.",
           "modelAnswer": "The core risk is that the pattern is written as an ordinary Python string literal rather than a raw string, which means Python's own string parser processes any backslash escape sequences in it BEFORE the regex engine ever sees the pattern. Some regex escapes, like \\d, happen to not correspond to any recognized Python string escape sequence, so Python leaves them alone (with a DeprecationWarning in modern versions, since this reliance is considered fragile) -- which is exactly why this pattern might appear to work fine on their test cases today. But \\b is a real, recognized Python string escape sequence, meaning to the string literal, not to the regex engine: it represents the backspace control character (\\x08). By the time this string reaches re.match or re.search, the \\b the teammate intended as a regex 'word boundary' has already been silently converted into a literal backspace character -- the pattern no longer contains a word boundary assertion at all, it contains an actual backspace byte, which will essentially never appear in real input text, meaning this part of the pattern will likely never match anything as intended, probably causing this regex to fail to match cases it should. Passing their existing test cases doesn't rule this out -- it just means their tests happen not to exercise the specific situation where the word-boundary behavior actually matters. The fix is straightforward and should always be applied to regex patterns as a blanket habit, not just when a bug is suspected: write the pattern as a raw string, r\"\\d{3}\\b\\w+\", which disables Python's own backslash processing entirely, so \\b (and every other escape in the pattern) reaches the regex engine exactly as written and is interpreted purely by regex's own rules."
+        },
+        {
+          "id": "python-regular-expressions-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "```python\nimport re\n\ntext = \"file_final_v2.txt\"\nresult = re.search(r\"v\\d+\\.txt$\", text)\nprint(result.group() if result else None)\n\ntext2 = \"file_final_v2.txt.bak\"\nresult2 = re.search(r\"v\\d+\\.txt$\", text2)\nprint(result2.group() if result2 else None)\n```\nWhat gets printed?",
+          "options": [
+            "v2.txt then None",
+            "v2.txt then v2.txt",
+            "None then v2.txt",
+            "v2.txt.bak then v2.txt.bak"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "`$` anchors the pattern to the *end* of the string -- the match must finish exactly where the string finishes. `text` genuinely ends in `\"v2.txt\"`, so `v\\d+\\.txt$` matches there, giving `\"v2.txt\"`. `text2` ends in `\".bak\"`, not `\".txt\"` -- even though `\"v2.txt\"` appears in the middle of `text2`, the pattern's `$` anchor requires the match to reach the actual end of the string, which it can't, since more characters (`.bak`) follow it. So `re.search` correctly returns no match for `text2`, and the second line prints `None`. This is exactly what `$` is for: matching something specifically at the end, not merely 'somewhere in' the string."
         }
       ]
     }

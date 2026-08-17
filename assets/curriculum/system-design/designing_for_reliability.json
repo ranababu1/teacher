@@ -121,6 +121,45 @@
           "type": "explanation",
           "prompt": "A stakeholder says: \"We're fully protected against downtime -- we have two of everything.\" Explain what's incomplete about this statement and walk through the specific questions you'd ask to verify the redundancy is real.",
           "modelAnswer": "Having two of a component is necessary but not sufficient for real protection against downtime -- the actual guarantee redundancy is supposed to provide is that a single failure can't take the whole system down, and that guarantee only holds if the two components can genuinely fail independently of each other, for unrelated reasons, on unrelated schedules. 'We have two of everything' answers 'do multiple instances exist' but not 'can they fail together,' and the gap between those two questions is exactly where most real-world redundancy failures live. Concretely, I'd trace the dependency graph one or two layers past the component diagram and ask: are the two instances in the same physical rack, the same availability zone, or the same region -- and if so, what happens to both when that shared location has a power, network, or cooling failure? Were they deployed via the same script or pipeline, and could a single bad deploy or a misconfigured rollout push a bad change to both simultaneously instead of one at a time? Do they share a config file, a secrets store, or a feature flag system, such that a single mistake there (a bad credential rotation, an accidental deletion) affects both at once? Do they depend on the same third-party service or the same upstream dependency, such that its outage takes out both redundant paths equally? Beyond shared fate, I'd also ask about the failover mechanism itself, since owning a spare doesn't automatically mean a fast or correct handoff: how is a failure actually detected, how long does that detection take, what specifically happens to redirect traffic or promote a replacement, and does the replacement need to recover any state before it can correctly serve traffic. Redundancy is real protection only once all of these questions have concrete, verified answers -- 'two of everything' is the start of that conversation, not the end of it."
+        },
+        {
+          "id": "system-design-redundancy-and-failover-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A primary database uses active-passive redundancy with a single synchronous standby, while a fleet of stateless web servers uses active-active redundancy. Per the concept, why does the database favor active-passive when active-active is generally described as the stronger reliability posture?",
+          "options": [
+            "Because databases are always slower than web servers, so active-passive is required to keep latency low.",
+            "Because keeping multiple simultaneous writers to the same data consistent with each other reintroduces exactly the write-conflict and consistency-coordination problems from multi-leader replication, making a single clear writer (active-passive) the more tractable design for this specific component.",
+            "Because active-active redundancy is only supported for components running on Kubernetes, and most databases do not run on Kubernetes.",
+            "Because active-passive redundancy is cheaper in every case, regardless of what the component does."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept states this directly: for a primary database, active-passive is \"often the pragmatic choice for components where keeping multiple simultaneous writers consistent is itself the harder problem... precisely to avoid the write-conflict problems multi-leader replication introduces,\" while stateless services are described as \"the easy case\" for active-active since there's no shared writable state to reconcile. Option A invents an unrelated latency claim. Option C fabricates a Kubernetes-specific restriction not discussed anywhere. Option D overgeneralizes cost as the deciding factor when the concept's actual reasoning is about write-consistency complexity, not price."
+        },
+        {
+          "id": "system-design-redundancy-and-failover-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Per the concept's discussion of what failover actually requires, why does a stateless service fail over almost instantly compared to a stateful one like a database?",
+          "options": [
+            "Because stateless services are always hosted on faster hardware than stateful ones.",
+            "Because a stateless service has no state-recovery step to wait on -- any surviving instance can correctly serve a request with no data to recover or reconcile, whereas a promoted database replica needs to actually be caught up before it can serve correctly.",
+            "Because stateless services do not require health checks to detect a failure.",
+            "Because stateless services always use active-passive redundancy, which fails over faster than active-active."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept states this directly: statelessness \"matters so much for making failover fast and clean: a stateless service can fail over almost instantly, because there's no state recovery step to wait on at all,\" while a promoted database replica \"needs to be caught up... before it can serve correctly.\" Option A invents an unrelated hardware-speed claim. Option C is false -- detection via health checks is still required regardless of statelessness; it's the recovery-of-state step that's skipped, not detection. Option D is backwards -- the concept associates active-active, not active-passive, with stateless services as \"the easy case.\""
+        },
+        {
+          "id": "system-design-redundancy-and-failover-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Per the concept's discussion of the 'hidden trap' of shared fate, what is the key diagnostic question to ask when evaluating whether two redundant components are actually independent?",
+          "options": [
+            "\"Do the two components run the exact same version of the software?\"",
+            "\"What has to go wrong for BOTH of these to fail at the same time?\" -- traced down through the actual infrastructure (rack, AZ, region, deploy pipeline, shared config) rather than stopping at the first layer that looks redundant.",
+            "\"Which of the two components is more expensive to operate?\"",
+            "\"How many total requests per second can each component handle individually?\""
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept states this exact diagnostic: components only reveal shared fate \"once you ask, explicitly, 'what has to go wrong for BOTH of these to fail at the same time?' and keep tracing that question down through the actual infrastructure... rather than stopping at the first layer that looks redundant.\" Option A asks about software version parity, which is unrelated to the independent-failure question the concept is actually posing. Options C and D ask about cost and raw capacity respectively, neither of which addresses whether the components can fail together."
         }
       ]
     },
@@ -241,6 +280,45 @@
           "type": "explanation",
           "prompt": "Explain, to an engineer who has only worked with simple timeouts and retries before, why a circuit breaker is a genuinely different and additional tool, and describe a concrete scenario where timeouts and retries alone are not enough to prevent a cascading failure.",
           "modelAnswer": "Timeouts and retries both operate at the level of a single call: a timeout bounds how long one attempt is allowed to hang before giving up, and a retry policy decides whether to try that one call again, usually with some backoff delay, after it fails. Neither of them has any memory of, or reaction to, the broader pattern across many calls over time -- each call is evaluated independently, as if it were the first one ever made to that dependency. A circuit breaker adds exactly that missing, aggregate view: it watches the success/failure rate across a window of many calls and makes a system-wide decision -- stop attempting calls at all, for a while -- once that pattern indicates the dependency is genuinely unhealthy rather than experiencing an isolated blip. Concretely: imagine a payment-processing dependency goes down hard. Every caller has a 10-second timeout and retries twice with a 1-second backoff between attempts. Without a circuit breaker, every single incoming request that needs a payment result still attempts up to three calls (initial plus two retries), each waiting up to 10 seconds, for a worst case of around 30+ seconds per request, all while the dependency is provably, completely down for the whole outage -- and under real traffic volume, that's enough concurrent held threads/connections to exhaust the caller's own capacity and take down completely unrelated requests, exactly the cascading failure this module describes. A circuit breaker watching the aggregate failure rate would trip open after the first handful of failures, and every request after that gets an immediate, cheap fallback instead of repeating the same expensive, doomed 30-second dance -- timeouts and retries are still useful and still present underneath the breaker (they handle the genuinely transient blips that don't cross the failure threshold), but they alone have no mechanism for recognizing 'this isn't transient anymore, stop trying so hard' the way a circuit breaker does."
+        },
+        {
+          "id": "system-design-circuit-breakers-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "After a circuit breaker's cooldown period elapses while in the open state, what does the breaker do next, per its state machine?",
+          "options": [
+            "It immediately closes and resumes full traffic without any verification that the dependency has recovered.",
+            "It transitions to half-open and allows a small number of trial calls through to test whether the dependency has recovered, closing again on success or reopening for another full cooldown on failure.",
+            "It stays open permanently until an engineer manually resets it.",
+            "It doubles the cooldown period and waits again before allowing any calls."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept describes this transition precisely: after the cooldown elapses, the breaker \"moves to half-open: it allows a small number of trial calls through to test whether the dependency has recovered. If those succeed, the breaker closes again... if they fail, it reopens and the cooldown starts over.\" Option A skips the verification step the half-open state exists specifically to provide. Option C contradicts the automatic transition the concept describes -- no manual reset is mentioned as required. Option D invents an automatic cooldown-doubling behavior not present in the material."
+        },
+        {
+          "id": "system-design-circuit-breakers-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Per the concept's discussion of choosing a fallback for the open state, why is 'just return something reasonable' described as a mistake when applied uniformly across different dependencies?",
+          "options": [
+            "Because circuit breakers should never have a fallback at all -- they should simply raise an unhandled exception.",
+            "Because what counts as a safe fallback depends on the actual cost of being wrong for that specific feature -- omitting a recommendations section costs little, but fabricating an 'approved' or 'declined' payment result when the real answer is unknown can cause real financial harm.",
+            "Because fallback functions are always slower to execute than the real dependency call, defeating the purpose of failing fast.",
+            "Because only recommendation services are allowed to have fallbacks; financial services must always attempt the real call regardless of circuit state."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept makes this exact point: 'reasonable' fallback content differs completely by feature because the cost of being wrong differs -- for recommendations \"the risk of a wrong fallback\" is \"near zero,\" while for payment authorization there is \"NO safe way to fabricate 'approved' or 'declined'... risk of a wrong fallback: severe.\" Option A contradicts the concept's emphasis that the breaker \"forces the caller to have decided, up front, what a degraded response actually looks like.\" Option C is a fabricated, unsupported performance claim. Option D invents a blanket rule about financial services that isn't part of the pattern described."
+        },
+        {
+          "id": "system-design-circuit-breakers-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Per the concept's explanation of how a downstream failure becomes an upstream outage, why is a degraded, hanging dependency actually more dangerous than one that is cleanly, fully down?",
+          "options": [
+            "A cleanly down dependency is comparatively easy to detect and route around, whereas a slow/hanging one causes calls to sit and wait until the caller's own timeout fires, consuming threads or connections the whole time.",
+            "A degraded dependency always returns incorrect data silently, while a fully down dependency never does.",
+            "A cleanly down dependency causes more total network traffic than a degraded one.",
+            "There is no meaningful difference -- both failure modes are described as equally dangerous and equally fast to detect."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "The concept draws this distinction explicitly: a dependency that becomes \"slow or unresponsive -- not cleanly down, which is comparatively easy to detect and route around, but degraded, hanging, or timing out\" is the dangerous case, because \"A's calls to B don't fail instantly; they sit and wait, typically until A's own timeout fires,\" consuming resources the whole time. Option B invents a data-correctness claim not discussed in this concept. Option C fabricates a network-traffic comparison not present in the material. Option D directly contradicts the concept's explicit distinction between the two failure modes."
         }
       ]
     },
@@ -361,6 +439,45 @@
           "type": "explanation",
           "prompt": "A colleague asks: \"If we already have circuit breakers protecting our service from unhealthy dependencies, why do we also need rate limiting and backpressure?\" Explain what gap circuit breakers leave open that these two mechanisms close.",
           "modelAnswer": "Circuit breakers and rate limiting/backpressure are both self-protection mechanisms, but they protect against traffic flowing in opposite directions relative to the service in question, and neither substitutes for the other. A circuit breaker sits on the outbound side: it protects a service from a downstream dependency that IT calls and that has become unhealthy, by stopping the service from continuing to send calls to something that's very likely to fail or hang, and by failing fast so the service's own resources aren't consumed waiting on those doomed calls. It has nothing to say about the traffic arriving AT the service from its own upstream callers -- if a client (or a burst of legitimate traffic) sends far more requests than the service itself can handle, a circuit breaker offers no protection at all, because there's no unhealthy downstream dependency involved; the service itself is the thing being overwhelmed. That's exactly the gap rate limiting and backpressure close: rate limiting caps how much any single external caller is allowed to send in, protecting the service from being overwhelmed by its own callers, whether from abuse, a bug, or simply unexpected volume; backpressure does the analogous thing internally, letting a slower internal component signal a faster one feeding it to slow down, so one overloaded internal stage doesn't get silently buried by the stage in front of it. A complete reliability story needs both directions covered: circuit breakers so a service doesn't get dragged down by what it depends on, and rate limiting/backpressure so a service doesn't get overwhelmed by what depends on it (or by its own internal pipeline getting out of balance) -- a service with excellent circuit breakers but no rate limiting is still fully exposed to being taken down by a traffic spike or an abusive client, which is a completely separate failure mode circuit breakers were never designed to address."
+        },
+        {
+          "id": "system-design-rate-limiting-and-backpressure-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A bounded queue sits between a fast producer and a slower consumer. Once the queue fills to its maximum size, the producer's next enqueue call blocks until the consumer makes room. What concept does this illustrate, and how does it differ from rate limiting?",
+          "options": [
+            "This is rate limiting, since both mechanisms reject excess work once a cap is reached.",
+            "This is backpressure -- an internal signal flowing backward from a slower component to a faster one feeding it, forcing the producer to slow down to match the consumer's real throughput, distinct from rate limiting's externally imposed, per-client cap enforced at a system's edge.",
+            "This is a circuit breaker, since the queue is 'tripping open' once full.",
+            "This is load shedding, since the producer's work is being discarded once the queue is full."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept defines this exact scenario as backpressure: \"a bounded queue between a producer and a consumer... once it's full, the producer's next attempt to enqueue work blocks... until the consumer catches up and makes room -- the fullness of the queue itself is the backpressure signal,\" explicitly distinguished from rate limiting, which is \"typically an externally imposed, often somewhat arbitrary cap applied at a system's edge.\" Option A conflates the two mechanisms the concept explicitly distinguishes. Option C misapplies circuit-breaker terminology to a mechanism that has nothing to do with tracking dependency health. Option D is wrong -- in this example the producer blocks rather than the work being discarded; nothing here is being shed or dropped."
+        },
+        {
+          "id": "system-design-rate-limiting-and-backpressure-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Per the concept's description of graceful degradation, what specifically distinguishes it from an uncontrolled, undifferentiated collapse under overload?",
+          "options": [
+            "Graceful degradation happens automatically in every system without any advance design work.",
+            "Graceful degradation deliberately identifies and protects the most important operations in advance, shedding load starting from the least important, rather than letting every request -- critical or not -- degrade by the same uniform amount.",
+            "Graceful degradation means the system never rejects any requests, no matter how overloaded it becomes.",
+            "Graceful degradation is only possible if the system uses a token-bucket rate limiter instead of a fixed window."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept states this distinction directly: graceful degradation's \"common thread... is that the most important operations are identified and protected explicitly, and the system sheds load starting from the least important, rather than letting every request -- critical or not -- degrade by the same uniform amount as capacity runs out.\" Option A contradicts the concept's point that this requires deliberate, advance design work, not automatic behavior. Option C is false -- graceful degradation explicitly involves rejecting or delaying some (lower-priority) requests. Option D fabricates a dependency on a specific rate-limiting algorithm that the concept never ties to load shedding."
+        },
+        {
+          "id": "system-design-rate-limiting-and-backpressure-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Per the concept's opening framing, why is rate limiting described as more than just a business or fairness mechanism?",
+          "options": [
+            "Because without some cap, a single misbehaving client or an unexpectedly large legitimate burst can consume enough capacity to degrade or take down service for every other caller, making rate limiting a reliability mechanism in its own right.",
+            "Because rate limiting is required by law in most jurisdictions for any public API.",
+            "Because fairness and business concerns are not real reasons to implement rate limiting at all.",
+            "Because rate limiting always increases a service's total throughput capacity."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "The concept states this directly: it's easy to mistake rate limiting \"for purely a business or fairness concern... and it is that, but it's just as much a reliability mechanism in its own right: without some cap, a single misbehaving client... or a single legitimate but unexpectedly large burst can consume enough capacity to degrade service for every other caller, or take the service down entirely.\" Option B invents a legal requirement not discussed anywhere. Option C contradicts the concept, which affirms fairness/business reasons are real, just not the only reason. Option D is false -- rate limiting caps and rejects traffic; it doesn't increase underlying capacity at all."
         }
       ]
     }

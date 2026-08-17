@@ -109,6 +109,45 @@
           "type": "explanation",
           "prompt": "A teammate says: 'I'll just add a `renderFooter` boolean and a `footerButtons` array prop to our `<Card>` component so people can put whatever buttons they want in the footer.' Explain, using the idea of composition, a different way to give callers that same flexibility, and why it scales better as more variations show up.",
           "modelAnswer": "Instead of adding configuration props for every footer variation, Card can accept the footer content directly as a slot -- either through its regular children, or through a dedicated prop like `footer` that accepts arbitrary JSX: `<Card footer={<><Button>Save</Button><Button>Cancel</Button></>}>...</Card>`, or an even more explicit compound form like `<Card><Card.Footer><Button>Save</Button></Card.Footer></Card>`. Either way, Card itself never needs to know how many buttons there are, what they say, or what they do -- it just renders whatever was passed into that slot. This scales better than the boolean-plus-array approach because every new footer variation a caller wants (one button, three buttons, a link instead of a button, no footer at all) requires zero changes to Card's source: the caller simply composes different JSX into the slot. The configuration approach, by contrast, needs Card's internals modified (or at least reasoned about) every time a new footer shape doesn't fit the existing footerButtons array structure, and the combinations of props that need testing grow with every new option added."
+        },
+        {
+          "id": "react-composition-and-lifting-state-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A Modal component is built with props: title, message, confirmText, cancelText, onConfirm, onCancel. A new use case needs a modal with a text input inside it, right before the confirm button. What does this reveal about the configuration approach used here?",
+          "options": [
+            "Nothing is revealed -- Modal can just be updated with an inputPlaceholder prop, and configuration props scale to any future case just as well as composition would.",
+            "It reveals the core weakness of configuration: a content shape that doesn't fit the existing prop list (an inline input) requires modifying Modal's own source and adding yet another prop/branch, whereas a children-based Modal could have accepted that input with no change to Modal at all.",
+            "It reveals that Modal should be rewritten as a class component instead of a function component.",
+            "It reveals that title and message should have been combined into a single prop from the start."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This is exactly the pattern the concept warns about: a configuration-based component's prop list only grows as new use cases show up, and each one that doesn't fit the existing options (here, an inline input the current props have no way to express) forces a change to the component's own source. A children-based Modal wouldn't need to anticipate this at all -- the caller would simply nest an <input> among whatever else it puts inside Modal, with zero changes to Modal itself. Option A undersells the real cost: yes, another prop *could* be added, but that's precisely the treadmill composition is meant to avoid, and it will happen again for the next unanticipated case too."
+        },
+        {
+          "id": "react-composition-and-lifting-state-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A UserProfileContainer fetches user data and holds loading/error state, then passes { user } down to a UserProfileView that only renders markup from that prop, with no state of its own. What is the main practical benefit of this split, according to the concept?",
+          "options": [
+            "UserProfileView becomes trivially reusable and easy to test in isolation, since it's a pure function of its props with no dependency on how the data it renders was actually obtained, while UserProfileContainer isolates the messier data-fetching logic in one place.",
+            "It's required by React -- any component that fetches data must be paired with a separate presentational component, or the app will fail to compile.",
+            "It automatically makes the app faster, since presentational components are specially optimized by React to never re-render.",
+            "It eliminates the need for props entirely, since UserProfileView can read user directly from the container's internal state without anything being passed down."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "The concept frames container/presentational as a useful organizing lens, not a language requirement -- so option B is false, there's no compiler enforcement of this pattern. The genuine benefit is that UserProfileView, receiving only plain props and holding no state of its own, can be reused and tested anywhere without needing to know or care whether its data came from a fetch, a mock, or a different container entirely; UserProfileContainer, in turn, keeps the fetching/loading/error concerns in one dedicated place instead of scattered through a component that's also handling markup. Option C invents a performance guarantee that doesn't exist, and option D misunderstands props -- UserProfileView still needs user passed to it; it just doesn't own or fetch it itself."
+        },
+        {
+          "id": "react-composition-and-lifting-state-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "```jsx\nfunction SearchBox() {\n  const [query, setQuery] = useState(\"\");\n  const [isDropdownOpen, setIsDropdownOpen] = useState(false);\n  // isDropdownOpen controls a suggestions dropdown that only SearchBox itself ever renders\n  // ...\n}\n```\nA teammate suggests lifting both query and isDropdownOpen up to SearchBox's parent, reasoning \"we just lifted query up for ResultsList, so let's be consistent and lift everything.\" What's the problem with also lifting isDropdownOpen?",
+          "options": [
+            "There's no problem -- consistently lifting all of a component's state to its parent is always the safer default, regardless of who actually needs it.",
+            "isDropdownOpen is genuinely private to SearchBox (nothing else reads or needs to know about it), so lifting it would unnecessarily bloat the parent with a detail it has no real reason to manage, and would make the parent (and anything under it) re-render on every dropdown toggle instead of just SearchBox alone.",
+            "isDropdownOpen can't be lifted at all, because boolean values are not allowed to be passed down as props.",
+            "isDropdownOpen must be lifted whenever query is lifted, since React requires every useState call in a component to be declared at the same tree level as any sibling's lifted state."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Lifting state up is meant to solve a specific problem -- siblings needing to agree on one shared value -- not to be applied as a blanket habit to everything a component owns. query genuinely needs to be lifted because ResultsList also needs it; isDropdownOpen has no such need, since nothing outside SearchBox reads or cares about it. Lifting it anyway would push an unrelated implementation detail into the parent, and since state changes trigger a re-render of the component that owns them (and everything under it), toggling the dropdown would now also re-render the parent and every other child under it, instead of staying contained to SearchBox alone. Options C and D invent constraints that don't exist in React."
         }
       ]
     },
@@ -216,6 +255,45 @@
           "type": "explanation",
           "prompt": "Explain to someone why React Router 'needs to exist' at all, given that browsers already provide a History API for changing the URL without a full reload.",
           "modelAnswer": "The browser's History API is deliberately low-level: pushState/replaceState change the URL and add an entry to the browser's history, and the popstate event fires when the user navigates back or forward -- but none of that comes with any built-in notion of 'this URL pattern should render that component.' There's no matching syntax for params or wildcards, no concept of nested route trees, and no integration with a component-based rendering model. Using the History API directly to build real app routing means hand-writing your own logic to parse the current URL, decide which component(s) it corresponds to, extract any dynamic segments, and re-run that logic every time popstate fires or a navigation happens -- and getting all of that right, including nested layouts, gets complicated fast. React Router exists to provide that missing layer: a declarative way to describe URL-pattern-to-component mappings (including nested ones), hooks to read params and trigger navigation, and components like Link that integrate directly with React's rendering model -- all built on top of the same underlying History API, so you describe the mapping instead of hand-rolling the matching and re-rendering logic yourself."
+        },
+        {
+          "id": "react-router-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "```jsx\nfunction ProductPage() {\n  const { productId } = useParams();\n  if (productId === 42) {\n    return <FeaturedProduct />;\n  }\n  return <RegularProduct id={productId} />;\n}\n```\nThis is matched by a route `path=\"/products/:productId\"`. Visiting /products/42, which branch actually renders, and why?",
+          "options": [
+            "FeaturedProduct, because productId correctly equals 42 at that URL.",
+            "RegularProduct, because productId is the string \"42\", not the number 42, so productId === 42 is false -- useParams() always returns raw text pulled directly from the URL, never automatically converted to a number.",
+            "Neither -- this throws a TypeError, since route params can't be compared with === at all.",
+            "FeaturedProduct, because React Router automatically converts a param to a number whenever that URL segment contains only digits."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Route params are extracted as slices of raw text from the URL, so productId is the string \"42\", never automatically converted to a number regardless of how the digits in that URL segment look. \"42\" === 42 is false in JavaScript, since === never coerces between types, so the strict comparison fails and execution falls through to RegularProduct. This is exactly the concept's warning about route params: any numeric comparison or usage requires an explicit conversion (like Number(productId)) first -- React Router does not do this for you, ruling out option D, and the comparison itself is completely legal, just not true, ruling out option C."
+        },
+        {
+          "id": "react-router-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "In a nested route setup where SettingsLayout renders <Outlet /> and two child routes (profile, billing) are nested underneath it, what specifically happens to SettingsLayout when the user navigates from /settings/profile to /settings/billing?",
+          "options": [
+            "SettingsLayout unmounts completely and mounts fresh again, since the URL changed.",
+            "SettingsLayout stays mounted the entire time -- only whatever is currently rendered inside its <Outlet /> changes, swapping from the profile child route's content to the billing child route's content.",
+            "SettingsLayout is duplicated -- one copy rendered for /profile and a separate copy for /billing, both mounted at the same time.",
+            "SettingsLayout is forced to re-fetch all of its own data from the server on every nested navigation, since <Outlet /> triggers a fresh fetch each time its content changes."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The entire point of nested routes is that the parent route's layout is rendered once and stays mounted across navigations between its child routes -- only the content inside <Outlet /> is swapped to match whichever child route currently matches. This is exactly why nested routes remove the need to duplicate a shared sidebar/header inside every individual page component: SettingsLayout (and anything it owns, like its own state) persists across the profile-to-billing navigation, with no unmount/remount cycle and no automatic re-fetching forced by Outlet itself."
+        },
+        {
+          "id": "react-router-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A user clicks through several client-side-routed pages in an app, then clicks the browser's back button, and correctly lands back on the previous page's content. What actually makes this work?",
+          "options": [
+            "The routing library listens for the browser's popstate event (which fires when the user navigates via back/forward) and re-renders the component tree to match whatever URL the browser has just navigated back to.",
+            "The back button always triggers a full page reload from the server in a client-side-routed app, exactly like it would on a traditional multi-page site.",
+            "Back/forward navigation doesn't actually work in client-side-routed apps -- this is a known limitation every such app has to work around with a custom in-app button.",
+            "The routing library disables the browser's native back button entirely and replaces it with its own in-app equivalent."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "The browser's History API includes a popstate event specifically for this case -- it fires whenever the user navigates via the back/forward buttons. A routing library listens for that event and, on firing, re-runs its URL-matching logic against whatever URL the browser has now navigated to, rendering the component tree that corresponds to it -- all in memory, without requesting a new document from the server. This is a real, working feature of client-side routing, not a limitation to route around (ruling out options B and C), and it uses the browser's actual native back button rather than replacing it (ruling out option D)."
         }
       ]
     },
@@ -322,6 +400,45 @@
           "type": "explanation",
           "prompt": "Explain to a teammate why reaching for Context to hold state that updates many times per second and is read across a large, mostly-unrelated part of the component tree tends to cause performance problems, and what category of tool exists specifically to avoid that problem.",
           "modelAnswer": "Context's re-render behavior is all-or-nothing for its consumers: every component that calls useContext for a given context re-renders whenever the value passed to that context's Provider changes, regardless of whether that particular consumer's own rendered output would actually look any different. If the provided value changes many times per second (like a live cursor position or a frequently-ticking counter) and it's read by components spread across a large, largely unrelated part of the tree, every one of those consumers re-renders on every single change -- most of that re-rendering work has nothing to do with anything actually changing on screen for most of those components. Dedicated client-state libraries (Zustand, Redux, and similar) exist specifically to avoid this: they generally offer more granular subscriptions, where a component only re-renders when the specific slice of the store it actually reads changes, not whenever the store changes at all. That's the category of tool to reach for once state is both frequently-changing and widely-needed -- the exact combination Context handles poorly."
+        },
+        {
+          "id": "react-state-management-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "What specifically distinguishes a dedicated client-state library (like Zustand or Redux) from just putting the same complex, frequently-changing client state into one big Context?",
+          "options": [
+            "Nothing meaningful -- they solve the exact same problem in the exact same way, just with a different import statement and API names.",
+            "These libraries generally support granular subscriptions, so a component only re-renders when the specific slice of the store it actually reads changes -- unlike Context, where every consumer re-renders whenever the Provider's value changes at all, regardless of which part of it any given consumer actually uses.",
+            "They exist purely to fetch data from an API; they have nothing to do with state that's entirely client-side.",
+            "They replace useState entirely -- once a component's file imports one of these libraries, that component is no longer allowed to call useState anywhere."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept's core distinction is re-render granularity: Context treats its value as one all-or-nothing unit, so any change to it re-renders every consumer, no matter which specific field each consumer actually reads. Dedicated client-state libraries are generally built with finer-grained subscriptions, so a component re-renders only when the particular slice of the store it's actually subscribed to changes -- which is exactly why they scale better than Context for state that's both complex and frequently updated across a large tree. Option C describes server-state libraries, a different category solving a different problem; option D invents a restriction that doesn't exist -- these libraries and useState coexist freely."
+        },
+        {
+          "id": "react-state-management-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Three sibling components on the same page each call a hook (built on a server-state library like React Query) that fetches /api/notifications, all using the same cache key, and all mount at roughly the same time. How many actual network requests fire?",
+          "options": [
+            "Three -- one per component, since each one independently calls its own fetch.",
+            "One -- the library deduplicates simultaneous requests that share the same cache key, and shares that single cached result across all three components instead of triggering redundant fetches.",
+            "Zero -- server-state libraries never make real network requests; they only operate on data already sitting in memory.",
+            "It depends on which component happens to mount first; only that one gets real data back, and the other two are left with null permanently."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Deduplicating simultaneous identical requests is specifically one of the behaviors server-state libraries are built to provide, precisely to solve the situation where multiple components need 'the same' server data at roughly the same time. Rather than each of the three components triggering its own independent fetch, the library recognizes the shared cache key and lets exactly one network request serve all three, each reading from the same resulting cached value. This is exactly the boilerplate the concept describes a hand-rolled useState-plus-useEffect fetch as lacking -- without a shared cache, three independent components really would fire three independent, redundant requests."
+        },
+        {
+          "id": "react-state-management-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A form shows a \"characters remaining\" counter that updates on every keystroke as the user types into a bio field (nothing has been submitted yet), and separately, the page displays the user's total follower count, fetched from the server. Using this concept's client-vs-server framework, how should each be categorized?",
+          "options": [
+            "Both are server state, since the form's contents will eventually be submitted to a server.",
+            "The characters-remaining counter is client state (derived purely from the input's own current, unsubmitted value, with no server counterpart) -- plain local useState is enough; the follower count is server state (it originates from and is owned by the server, and can change independently and go stale) -- it deserves loading/caching/revalidation handling.",
+            "Both are client state, since both are ultimately displayed somewhere in the browser.",
+            "The characters-remaining counter is server state because it's expressed as a number, and the follower count is client state because updating it changes what's rendered on screen."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The characters-remaining counter has no source of truth anywhere outside this one input in this one render of the page -- it's purely derived from a value that only exists in the frontend right now, which is exactly the definition of client state given in this concept. The follower count, by contrast, is a cached, possibly-stale copy of a number that actually lives on a server and can change independently of anything happening in this browser tab (another user's action could change it), which is exactly what makes something server state and why it needs the revalidation/caching treatment plain useState doesn't provide by itself. Options A, C, and D each categorize based on surface details (eventual submission, being 'in the browser,' being a number) rather than where each value actually originates and is owned, which is the framework's real test."
         }
       ]
     }

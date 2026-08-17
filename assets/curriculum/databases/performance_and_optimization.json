@@ -121,6 +121,45 @@
           "type": "explanation",
           "prompt": "Walk through how you would diagnose a slow reporting query using EXPLAIN (ANALYZE, BUFFERS), explaining what specific signals in the output would lead you toward each of: a missing index, a join algorithm problem, a work_mem-related disk spill, and a cold cache -- and why looking only at the top-level node's total time would not distinguish between these.",
           "modelAnswer": "The first step is running EXPLAIN (ANALYZE, BUFFERS) rather than plain EXPLAIN, since only ANALYZE provides real, measured actual time and actual rows alongside the planner's estimates, and only BUFFERS shows the hit/read split needed to reason about caching. Looking only at the top-level node's total time is uninformative on its own, because that number is cumulative by construction -- it always includes every child node's cost plus whatever the top node itself adds, so it will always be the largest number in the plan regardless of where the real problem lies; the diagnostic work has to happen by reading the tree from the innermost nodes outward and comparing each node's own exclusive time (its total minus its children's totals) against its neighbors. A missing index shows up as a Seq Scan node with a large 'Rows Removed by Filter' relative to rows kept, especially one nested inside a Nested Loop where a large loops count multiplies an apparently small per-loop time into a dominant total -- the fix is a targeted index on the filtered or joined column. A join algorithm problem shows up as a Nested Loop whose inner side is an unindexed Seq Scan with a large loops count, or conversely a Hash Join or Merge Join whose build/sort side is much larger than expected given the estimated rows, suggesting the planner's cost model and the actual data disagree -- worth checking whether table statistics are stale via a large estimated-vs-actual rows gap, fixable with ANALYZE table_name. A work_mem-related disk spill shows up explicitly as 'Sort Method: external merge Disk' under a Sort node, or multiple Hash Batches under a Hash node, both meaning the operation didn't fit in the memory budgeted for it and fell back to slower disk-backed processing -- the fix is raising work_mem for that query or session, not touching the query's logic or adding an index. Finally, a cold cache shows up as a Buffers line dominated by shared read rather than shared hit on an otherwise well-chosen plan -- re-running the identical query and seeing hit replace read, with actual time dropping correspondingly, confirms the plan itself was never the problem; the fix there is ensuring adequate memory for the working set, not a query or schema change at all. Each of these leaves a distinct fingerprint in the plan, which is exactly why glancing only at the top node's total time -- a number every one of these four causes would inflate identically -- cannot tell them apart."
+        },
+        {
+          "id": "databases-reading-explain-analyze-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A plan shows a Hash Join whose Hash side builds from the smaller of two large tables, with no useful index on the join column of either table. Why would the planner reasonably prefer this over a Nested Loop here?",
+          "options": [
+            "Hash Join requires both inputs to already be sorted, which makes it categorically faster than any other join algorithm whenever it's chosen.",
+            "Without a usable index on the join column, a Nested Loop's inner side would need a full scan repeated once per outer row, whereas Hash Join builds one in-memory hash table from the smaller input and scans the larger input just once, giving a cost close to linear in the combined size of both inputs.",
+            "Hash Join is only ever chosen when the two tables being joined happen to have exactly the same number of rows.",
+            "The planner always prefers Hash Join over every other algorithm regardless of indexes or table size, reserving Nested Loop exclusively for single-row lookups."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B correctly identifies why Hash Join is often the right choice specifically in the no-useful-index case: a Nested Loop without an index on the inner side degrades into repeatedly re-scanning the whole inner table once per outer row, while Hash Join pays the cost of building one hash table from the smaller input a single time and then makes one linear pass over the larger input, probing that hash table for matches -- no per-outer-row re-scanning at all. Option A is false; Hash Join specifically does not require sorted input, which is what distinguishes it from Merge Join. Option C invents a row-count-equality requirement that doesn't exist. Option D overstates the planner's preference -- Nested Loop is frequently the right, efficient choice when a usable index exists on the inner side and the outer side is small, not only for single-row lookups."
+        },
+        {
+          "id": "databases-reading-explain-analyze-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A Sort node's EXPLAIN ANALYZE output includes the line `Sort Method: external merge  Disk: 4120kB`. What does this indicate, and what's the typical fix?",
+          "options": [
+            "The sort completed entirely in memory, and 4120kB simply reports the size of the final sorted result set being returned.",
+            "The rows being sorted did not fit within the memory budgeted for the operation (work_mem) and had to be spilled to and processed via disk, which is considerably slower than an in-memory sort; the typical fix is raising work_mem for that query or session so the sort can complete in memory.",
+            "This indicates a corrupted index that must be rebuilt with REINDEX before the query can be trusted to return correct results.",
+            "\"Disk\" here refers to the physical disk where the table's own data is stored, and has nothing to do with how the sort itself was performed."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B is correct: 'external merge Disk' is Postgres explicitly reporting that the sort operation exceeded its work_mem budget and had to fall back to a disk-backed sorting algorithm, which is dramatically slower than an in-memory quicksort or top-N heapsort. The standard remediation is increasing work_mem (session-scoped via SET work_mem, or for the specific query) so the same data can be sorted in memory instead. Option A misreads 'Disk' as describing output size rather than the sorting method used. Option C invents an index-corruption interpretation with no basis -- this line is about sort memory, not index integrity. Option D confuses the table's on-disk storage with the sort operation's own need to spill intermediate data to disk, which are unrelated concepts."
+        },
+        {
+          "id": "databases-reading-explain-analyze-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A plan includes a Gather node with two child nodes underneath it, each reporting `actual time=850.000`, executed by two parallel workers. Someone compares 850ms directly against a non-parallel plan's single-threaded actual time of 900ms and concludes the parallel plan is barely any faster. What's the flaw in this comparison?",
+          "options": [
+            "There is no flaw -- both numbers represent total elapsed wall-clock time and are directly comparable as-is.",
+            "The actual time reported on nodes underneath a Gather is per-worker, and because multiple workers run concurrently, the parallel plan's real wall-clock time is not simply equal to one worker's reported figure -- comparing a per-worker number directly against a single-threaded total, without accounting for the parallelism, can make a genuinely fast parallel plan look deceptively unimpressive.",
+            "Gather nodes always double whatever actual time is reported on the nodes beneath them, so the true figure is 1700ms, meaning the parallel plan is actually substantially slower.",
+            "Parallel workers cannot be measured by EXPLAIN ANALYZE at all, so the 850ms figures shown are meaningless placeholder values."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B correctly names this concept's specific parallel-plan caveat: because the workers under a Gather run concurrently, not sequentially, their per-worker actual time figures don't sum or directly compare to a single-threaded total the way sequential nodes' times do -- two workers each taking 850ms concurrently can still finish well before a single-threaded 900ms plan would, depending on how much additional work the Gather node itself and the leader process contribute. Option A ignores exactly the caveat the concept raises about parallel plans. Option C invents an arbitrary doubling rule that isn't how Gather reporting works. Option D is false -- EXPLAIN ANALYZE does report real, meaningful per-worker timing for parallel plans; it just has to be interpreted correctly."
         }
       ]
     },
@@ -241,6 +280,45 @@
           "type": "explanation",
           "prompt": "Explain what the N+1 query problem is, why it's easy to miss during local development but severe in production, and compare the JOIN fix against the batched WHERE IN fix, including when each is preferable.",
           "modelAnswer": "The N+1 query problem is a pattern where application code fetches N parent rows with one query and then issues one additional query per parent row to fetch related child data, for a total of N+1 round trips where a single well-constructed query (or a small, fixed number of them) could have answered the same logical question. It typically arises invisibly through an ORM's lazy loading, where simply accessing a relationship attribute inside a loop silently triggers a fresh query per iteration, with nothing in the code visually suggesting a database round trip is happening. It's easy to miss locally because every database round trip carries a roughly fixed cost -- network latency, connection and protocol overhead, parsing and planning -- that's small in absolute terms on a local machine with a small seed dataset; with 10 parent rows, N+1 costs 11 round trips instead of 1 or 2, adding a barely-noticeable amount of overhead. That fixed per-query cost doesn't shrink as N grows, though, so the identical code pointed at production data with 100,000 rows issues 100,001 round trips instead of a small constant number, and multiplying even a small fixed cost by a huge N produces real, user-visible latency -- often made worse by realistic network latency and connection contention exceeding the near-zero latency of local development. The JOIN fix replaces the N extra queries with a single query that joins parent and child tables together, which is simple and requires no application-side batching logic, but it duplicates every column from the 'one' side across every matching row on the 'many' side, and joining more than one one-to-many relationship in the same query multiplies row counts together rather than adding them, which can produce a surprisingly large result set once a second or third related collection needs to be loaded alongside the first. The batched WHERE IN fix instead runs a second query with all of the first query's fetched ids collected into one IN (...) list, then groups the results by parent id in application memory -- this stays at exactly two queries (or one more per additional relationship, with no multiplicative fan-out) regardless of N, and is the approach most ORM eager-loading features use internally, making it generally preferable whenever more than one related collection needs loading, while a straightforward single-relationship JOIN remains a perfectly reasonable, simpler choice when there's only one relationship to fetch and its row duplication is a non-issue for how the result will be consumed."
+        },
+        {
+          "id": "databases-n-plus-one-queries-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A single query LEFT JOINs authors to both posts and tags (via a post_tags junction) to fetch everything in one round trip. One particular author has written 4 posts, and each of those posts has 2 tags. How many result rows does this one author contribute?",
+          "options": [
+            "4 + 2 = 6 rows -- one row per post, plus one row per tag.",
+            "4 x 2 = 8 rows -- one row per (post, tag) combination, since two independent one-to-many relationships are joined together into the same flat result.",
+            "Exactly 1 row, since a JOIN never duplicates the 'one' side of any relationship.",
+            "4 rows, one per post, with all of that post's tags listed together inside a single column."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B correctly describes the combinatorial fan-out this concept specifically warns about: joining two independent one-to-many relationships (posts-per-author and tags-per-post) into one flat result multiplies the row count rather than adding it, because every (post, tag) pairing gets its own row -- 4 posts times 2 tags each is 8 rows for this one author, not 6. Option A describes what would happen if the two relationships were combined additively, which isn't how a flat SQL join works. Option C is the opposite of how joining a one-to-many relationship actually behaves -- it duplicates the 'one' side, it never collapses it. Option D describes a nested/aggregated result shape that a plain flat SQL JOIN does not produce on its own."
+        },
+        {
+          "id": "databases-n-plus-one-queries-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "An ORM's lazy loading means `for author in authors: print(author.posts)` can silently issue one query per iteration. What specifically makes this pattern hard to catch just by reading the code?",
+          "options": [
+            "The ORM raises a compiler-level warning every time lazy loading occurs, but most developers habitually ignore it.",
+            "Nothing about the expression `author.posts` visually distinguishes it from accessing a plain, already-loaded, in-memory attribute -- there's no syntactic signal that a database round trip is about to happen, so the pattern is invisible without specifically knowing this ORM's lazy-loading behavior or inspecting actual query logs.",
+            "Most ORMs support only eager loading, so a genuine lazy-loading N+1 pattern like this one cannot actually occur in practice.",
+            "The pattern is only a real problem when the authors collection is completely empty, in which case posts never gets populated."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B correctly names the core diagnostic difficulty: `author.posts` reads exactly like accessing a field that's already sitting in memory, with nothing in the syntax hinting that it's actually a trigger for a fresh database query -- this is precisely why N+1 sneaks into codebases that never write raw SQL directly. Option A invents a compiler warning mechanism ORMs generally don't provide (some frameworks offer runtime N+1 detection/logging, which is different from a compile-time warning on this specific line). Option C is false -- lazy loading is the actual default in most popular ORMs, which is exactly why this problem is so common. Option D inverts the actual failure condition -- the problem is worst with a large, non-empty authors collection, not an empty one."
+        },
+        {
+          "id": "databases-n-plus-one-queries-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A page needs authors along with both their posts and their tags-per-post. Why is running one batched WHERE IN query per relationship generally preferable here to joining both relationships into a single combined query?",
+          "options": [
+            "WHERE IN queries are unconditionally faster than JOIN queries, regardless of what data is actually being fetched.",
+            "Joining two independent one-to-many relationships into one query multiplies their row counts together (a combinatorial fan-out), while running one batched query per relationship keeps each relationship's own result free of duplication and avoids that multiplicative blowup entirely.",
+            "A JOIN cannot syntactically reference more than one additional table at all, so combining both relationships into a single query isn't possible in standard SQL.",
+            "WHERE IN queries automatically deduplicate their result rows, whereas JOIN queries have no mechanism to ever remove duplicate rows."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B is correct and matches this concept's core trade-off: a single combined JOIN across two one-to-many relationships produces one row per combination between them (posts times tags, not posts plus tags), which can inflate the result far beyond what either relationship alone would produce, while two separate batched WHERE IN queries -- one per relationship -- each return their own rows with no duplication, grouped together afterward in application memory. Option A overgeneralizes; a JOIN is often the simpler and perfectly adequate choice for a single relationship. Option C is false -- SQL supports joining arbitrarily many tables in one query; that's not the limitation here. Option D is fabricated -- neither construct has an automatic deduplication behavior by default; DISTINCT would need to be added explicitly to either."
         }
       ]
     },
@@ -361,6 +439,45 @@
           "type": "explanation",
           "prompt": "Explain the difference between session pooling, transaction pooling, and statement pooling in a tool like PgBouncer, including the trade-off each makes and the specific session-state-leakage risk that comes with transaction pooling.",
           "modelAnswer": "All three modes describe when a pooler returns a borrowed physical server connection back to its pool of available connections, and they trade connection-reuse efficiency against how much session state safely persists per logical client. Session pooling assigns one physical connection to one client for that client's entire session, only returning it to the pool once the client fully disconnects -- this is the safest mode, since a connection is never handed to a different logical client mid-session, so nothing about SET variables, prepared statements, temp tables, or advisory locks can leak between unrelated clients, but it provides the least reuse benefit, because a connection sits reserved for one client for as long as that client's session lasts, even during long idle periods. Transaction pooling, the most common real-world choice, returns the physical connection to the pool as soon as each individual transaction commits or rolls back, which means many different logical clients can share a small set of physical connections in rapid succession across many short-lived transactions -- this is where most of the real efficiency gain comes from, since a connection is reserved only for the brief duration of one transaction rather than an entire session. Its risk is exactly what makes it efficient: because the same physical backend process, with all its accumulated session state, gets handed to a completely different logical client for the next transaction, anything set at the session level rather than the transaction level -- a plain SET (as opposed to SET LOCAL), a PREPARE'd statement, a temp table, an advisory lock not explicitly released -- persists on that connection and can silently affect whichever unrelated client borrows it next, since nothing about ending one transaction automatically resets session-level state. Statement pooling returns the connection after every individual statement, which is the most aggressive and least commonly usable mode, because it fundamentally breaks any workflow relying on multiple statements within a single transaction seeing consistent state together. The practical mitigation for transaction pooling's leakage risk is using SET LOCAL wherever a setting only needs to apply for the current transaction (since it's automatically reverted at commit or rollback, unlike plain SET), and configuring the pooler's own reset query, such as PgBouncer's server_reset_query set to DISCARD ALL, so that any session-level state a particular code path failed to scope correctly is scrubbed before that connection is ever handed to the next client."
+        },
+        {
+          "id": "databases-connection-pooling-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "What specifically makes opening a new PostgreSQL connection more expensive than opening a connection to many other kinds of network services?",
+          "options": [
+            "PostgreSQL always imposes a multi-second artificial delay before accepting any new connection, regardless of current server load.",
+            "Beyond the TCP/TLS/authentication handshake common to most network services, PostgreSQL forks an entirely separate, dedicated OS backend process for that one connection, which persists for the connection's lifetime and carries its own real memory and CPU cost to create and initialize.",
+            "PostgreSQL requires every new connection to run a full VACUUM of the entire database before that connection can be used for anything.",
+            "PostgreSQL connections are more expensive only when SSL/TLS is enabled; a plaintext connection carries no cost beyond an ordinary TCP handshake."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B correctly names PostgreSQL's distinctive extra cost: forking and initializing a dedicated backend process per connection, which is a heavier model than the lightweight thread-per-connection or shared-worker approaches some other databases use, and which carries real memory and CPU overhead independent of whether the connection ever runs a query. Option A invents an artificial delay that doesn't exist. Option C fabricates a VACUUM-per-connection requirement that has no basis in how PostgreSQL actually establishes connections. Option D understates the cost -- the backend-process fork happens regardless of whether TLS is used at all; TLS negotiation is an additional, separate cost on top of it, not the sole source of extra overhead."
+        },
+        {
+          "id": "databases-connection-pooling-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A connection pool has a configured maximum of 20 connections, all 20 of which are currently borrowed, when a new request needs the database. What does a well-behaved pool typically do?",
+          "options": [
+            "It immediately opens a 21st connection to satisfy the new request, silently ignoring its own configured maximum.",
+            "It makes the new request wait (queue) briefly until one of the 20 connections is returned to the pool, rather than opening an unbounded number of additional connections beyond its configured maximum.",
+            "It immediately rejects the request with an unrecoverable error, identical to how PostgreSQL itself responds when max_connections is exceeded.",
+            "It forcibly closes and reopens whichever of the 20 connections has been open the longest, regardless of whether that connection is still actively in use."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B correctly describes the behavior that keeps a pool's whole purpose intact: bounding the total connection count means a pool at capacity has to make new demand wait for a connection to free up rather than exceeding its own configured maximum, which is exactly what protects the database's max_connections ceiling from ever being threatened by the pool's own behavior. Option A describes exactly the unbounded behavior a pool exists to prevent. Option C conflates a brief, recoverable queuing delay with a hard, unrecoverable rejection -- these are different outcomes with very different user impact. Option D invents a forced-eviction behavior that would risk interrupting a connection still genuinely in use, which a well-behaved pool avoids."
+        },
+        {
+          "id": "databases-connection-pooling-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "PgBouncer can be configured with `server_reset_query = DISCARD ALL`, run every time a connection is returned to the pool under transaction-mode pooling. What problem does this specifically defend against?",
+          "options": [
+            "It defends against PostgreSQL's max_connections limit being exceeded, by artificially reducing the number of connections considered to be in use.",
+            "It defends against leftover session-level state -- SET variables, prepared statements, temporary tables, advisory locks -- persisting on a physical connection and silently affecting whichever unrelated client borrows that same connection next.",
+            "It defends against SQL injection, by sanitizing any pending query text before it's sent to PostgreSQL.",
+            "It defends against the TCP handshake overhead, by caching a pre-authenticated connection object for later reuse."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B correctly identifies the reset query's purpose: DISCARD ALL clears session-level state -- prepared statements, temporary tables, session-level SET values, advisory locks, and similar -- from a physical connection before it's handed to the next logical client, closing exactly the session-state-leakage risk that transaction-mode pooling otherwise introduces. Option A is unrelated -- the reset query has no effect on connection counting against max_connections. Option C is fabricated; DISCARD ALL has nothing to do with sanitizing query text or preventing injection. Option D describes what pooling itself (reusing an already-established connection) accomplishes, not what the reset query specifically adds on top of that reuse."
         }
       ]
     }

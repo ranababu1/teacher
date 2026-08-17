@@ -121,6 +121,45 @@
           "type": "explanation",
           "prompt": "Explain the concrete trade-offs between storing a piece of data as JSONB versus as a normalized column, referencing constraints, type safety, and indexing specifically -- and describe what kind of data should tip the decision toward each.",
           "modelAnswer": "The decision comes down to whether a given piece of data is stable and well-known in shape, or genuinely variable from row to row. A normalized column gives you three things JSONB cannot provide for a value living inside a document: database-enforced constraints (NOT NULL, CHECK, FOREIGN KEY, UNIQUE) that make certain invalid states structurally impossible to store rather than merely discouraged by convention; real type safety, since a column has one declared type and comparisons against it work naturally, whereas every value extracted from JSONB comes back as jsonb or text and needs explicit casting for numeric or boolean comparisons, a step that's easy to forget and that fails silently (via incorrect text comparison) rather than loudly if you do; and precise, per-column statistics that help the query planner choose good plans, which are considerably weaker for values nested inside a JSONB document. A normalized column also fails loudly on a typo -- referencing a misspelled column name raises an immediate, specific error -- while a misspelled key inside a JSONB document silently returns NULL, a bug that produces wrong results with no error pointing at the cause. JSONB earns its place specifically when the data's shape is genuinely unpredictable per row in a way normalization can't sensibly capture: third-party webhook payloads whose shape you don't control, user-defined custom attributes with no fixed schema by design, or event payloads where different event types carry genuinely different fields and the set of event types keeps growing. In that situation, GIN indexing on the JSONB column (using @> for containment or ?/?&/?| for key existence, depending on which operator class you choose) provides reasonably fast querying into that variable structure without needing a rigid schema for data that fundamentally doesn't have one. The anti-pattern to avoid is using JSONB as a way to skip schema design for data that's actually stable and known -- a status field with five fixed valid values, a customer's name, an amount that participates in arithmetic -- because that trades away real, concrete guarantees (constraints, type safety, clear error messages, planner statistics) for a flexibility the data never actually needed in the first place."
+        },
+        {
+          "id": "databases-jsonb-type-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "What is the key structural difference between PostgreSQL's `json` and `jsonb` types?",
+          "options": [
+            "json supports containment queries with @>, while jsonb does not support any operators at all.",
+            "json stores the exact original text verbatim -- preserving whitespace, key order, and duplicate keys -- and re-parses that text on every query; jsonb parses the document once, at insert time, into a decomposed binary structure with no preserved formatting or duplicate keys, trading a small insert-time cost for faster reads.",
+            "json has been removed from current PostgreSQL versions entirely; jsonb is now the only valid type name.",
+            "jsonb stores data as plain text identical to json, but under a different type name kept only for backward compatibility."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B correctly describes the actual storage-strategy difference: json is a thin wrapper over the original text, re-parsed from scratch on every access, while jsonb does the parsing work once at write time and stores an already-decomposed binary structure that every subsequent read can use directly. Option A reverses which type supports which operators -- jsonb is the one with rich operator and indexing support; json has essentially none. Option C is false; json remains a valid, usable type in current PostgreSQL, just rarely the better default. Option D ignores the entire point of jsonb's binary decomposition, which is precisely what makes it different from, and generally faster to query than, json."
+        },
+        {
+          "id": "databases-jsonb-type-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A GIN index is created with `CREATE INDEX idx_events_payload ON events USING GIN (payload jsonb_path_ops);`. A query then filters using `payload ? 'type'` (the key-existence operator). What happens?",
+          "options": [
+            "The query uses the index efficiently, since jsonb_path_ops supports every JSONB operator, including key existence.",
+            "The query falls back to a sequential scan, because jsonb_path_ops only supports the containment operator @> -- not the ?, ?&, or ?| key-existence operators -- so the index exists but simply doesn't support the operator being used.",
+            "PostgreSQL raises an error, refusing to execute a query that uses an operator unsupported by the chosen operator class.",
+            "The index is automatically and silently rebuilt using the default jsonb_ops operator class the first time an unsupported operator is used against it."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B is correct and matches this concept's explicit warning: jsonb_path_ops is deliberately narrower than the default jsonb_ops, supporting only @> in exchange for a smaller, faster index for that one operator -- a query using ? against a jsonb_path_ops index gets no help from it at all and silently falls back to a full scan, exactly like a B-tree index that doesn't match a query's expression. Option A overstates jsonb_path_ops's coverage. Option C invents an error PostgreSQL doesn't raise -- an unsupported operator simply doesn't use the index, it doesn't fail the query. Option D invents an automatic-rebuild behavior that doesn't exist; operator class mismatches are silent performance issues, not self-correcting ones."
+        },
+        {
+          "id": "databases-jsonb-type-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A query filters using `(data->>'amount') > 100`, without casting the extracted value to a numeric type. What's the actual risk here?",
+          "options": [
+            "PostgreSQL raises an immediate type-mismatch error, refusing to run the comparison at all.",
+            "data->>'amount' returns text, so the comparison is silently performed as a text (lexicographic) comparison rather than a numeric one, which can produce wrong results -- for example, the string '9' sorting greater than the string '100' -- with no error to flag the mistake.",
+            "PostgreSQL automatically infers, from the key name 'amount', that the value should be treated as numeric, and casts it correctly without being asked.",
+            "The comparison always evaluates to NULL when comparing text against a number, silently excluding every row from any query that omits the cast."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B correctly names the exact risk this concept flags: ->> always returns text, and comparing text against a number using > performs a lexicographic string comparison rather than a numeric one, which can produce results that look plausible but are simply wrong -- '9' > '100' is true as a string comparison even though 9 is numerically less than 100. Option A is false; PostgreSQL doesn't reject this comparison outright, which is exactly what makes it dangerous -- it runs and returns a result, just not necessarily the intended one. Option C invents an automatic type-inference behavior based on key naming that PostgreSQL does not perform. Option D invents a blanket NULL-comparison rule that doesn't apply here; text-versus-number comparisons of this kind don't uniformly resolve to NULL, they resolve to an actual (often wrong) text comparison."
         }
       ]
     },
@@ -241,6 +280,45 @@
           "type": "explanation",
           "prompt": "Explain how tsvector, tsquery, and the @@ operator work together to support full-text search, why a GIN index on a generated tsvector column matters for performance at scale, and why ranking with ts_rank is a distinct concern from matching.",
           "modelAnswer": "to_tsvector transforms a document's text into a tsvector: a normalized, searchable representation produced by lowercasing the text, removing common stop words that carry little search value, and stemming each remaining word down to a shared root form, while also recording each surviving lexeme's position for later proximity-aware features. to_tsquery (or the friendlier plainto_tsquery for raw user input) builds a tsquery from search terms using the identical stemming process, which is exactly why a query for 'running' can match a document whose tsvector only contains the stemmed lexeme 'run' -- both sides get reduced to the same normalized form before any comparison happens, something a literal substring match like LIKE has no equivalent mechanism for at all. The @@ operator then evaluates whether a given tsquery's logical structure (its ANDed, ORed, or negated lexemes) is satisfied by a given tsvector, returning a plain boolean match/no-match result. None of this by itself solves the performance problem of a large table, though: recomputing to_tsvector on a document's raw text inside a query's WHERE clause means reprocessing every row's full text on every single search, with nothing available to index, since there's no stored representation of the transformed text to look up. Storing that transformation once, as a generated column (GENERATED ALWAYS AS (to_tsvector(...)) STORED) that recomputes only when the source text actually changes, gives PostgreSQL an actual column to build a GIN index on -- GIN indexes the individual lexemes inside each stored tsvector, so a query filtering with @@ against that column can look up matching rows directly instead of scanning and reprocessing every row's text at query time. Ranking is a genuinely separate concern layered on top of this: @@ only answers yes-or-no per row, with no notion of how strong a match is, so without an explicit ordering, matched rows come back in whatever order the plan happens to produce, which is not the same as best matches first. ts_rank computes a numeric relevance score per matched row -- optionally informed by field weighting via setweight, so a match in a title can outrank the same term appearing once in a long body -- and that score has to be computed and sorted across every row in the already-matched set. The GIN index makes finding that matched set fast; it provides no shortcut for scoring and sorting it, so a query matching a very large number of rows still pays a real, separate cost for ranking, regardless of how quickly the index found those rows in the first place."
+        },
+        {
+          "id": "databases-full-text-search-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "`to_tsvector('english', 'The quick foxes were running through the forest')` produces lexemes for 'forest', 'fox', 'quick', and 'run', but nothing at all for 'The', 'were', or 'through'. Why?",
+          "options": [
+            "to_tsvector has a maximum limit on the number of lexemes it stores per document, and those three words happened to be discarded to stay under that limit.",
+            "'The', 'were', and 'through' are common stop words carrying little search value, and to_tsvector's stop-word removal step discards them entirely before the remaining words are stemmed and stored.",
+            "Those specific words failed to reduce to any valid stemmed root, so PostgreSQL silently treated the stemming step as an error and dropped them.",
+            "to_tsvector only processes the first and last words of each sentence, discarding whatever falls in between that isn't a noun."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B correctly names the stop-word removal step: to_tsvector's processing pipeline explicitly drops common words like 'the', 'were', and 'through' that occur so frequently across ordinary text that they carry essentially no search-discriminating value, and would otherwise match nearly every document if kept. Option A invents a lexeme-count limit that doesn't exist as the mechanism here. Option C fabricates a stemming-failure explanation; stemming doesn't 'fail' and silently drop words -- stop-word removal and stemming are two separate, deterministic steps. Option D invents a position-based rule to_tsvector doesn't follow; it processes every word in the input, only removing the ones matched by the stop-word list."
+        },
+        {
+          "id": "databases-full-text-search-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A search feature passes raw, user-typed input like `running, foxes!!` directly into `to_tsquery('english', ...)` instead of `plainto_tsquery`. What's the likely problem?",
+          "options": [
+            "No problem -- to_tsquery and plainto_tsquery behave identically no matter what format the input text takes.",
+            "to_tsquery expects already-structured syntax with explicit &, |, or ! operators between terms, and can raise a syntax error on unexpected punctuation such as commas or exclamation marks in raw text; plainto_tsquery is specifically designed to accept unstructured free text safely instead.",
+            "to_tsquery silently strips all punctuation and behaves exactly like plainto_tsquery in every situation, so there is no actual difference in outcome.",
+            "to_tsquery requires its input to already be a valid tsvector value, so passing any plain string at all always fails."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B is correct and matches this concept's explicit guidance: to_tsquery is built for structured, programmatically-constructed query syntax and can reject raw punctuation it doesn't expect, while plainto_tsquery exists precisely to safely accept free-text, user-typed search input without that syntax-error risk. Option A contradicts the very reason both functions exist as separate tools with different intended inputs. Option C overstates to_tsquery's tolerance -- it does not universally behave like plainto_tsquery; its behavior on unexpected punctuation is exactly the risk in question. Option D is false; to_tsquery accepts plain text following its expected syntax, not only pre-built tsvector values."
+        },
+        {
+          "id": "databases-full-text-search-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A `search_vector` column is built as `setweight(to_tsvector('english', title), 'A') || setweight(to_tsvector('english', body), 'B')`. Two articles both contain the term 'python' exactly once -- one in its title, the other only in its body. Ranked by ts_rank, which one scores higher, and why?",
+          "options": [
+            "Neither -- ts_rank ignores setweight entirely and scores purely on raw term frequency, so both articles receive an identical score.",
+            "The article with 'python' in its title scores higher, because setweight tags title-derived lexemes with a higher weight category ('A') than body-derived lexemes ('B'), and ts_rank factors those weight categories into its computed relevance score.",
+            "The article with 'python' in its body scores higher, since category 'B' is processed before category 'A' in ts_rank's default evaluation order.",
+            "Both articles are excluded from the ranked results entirely, because setweight requires the search term to appear in both title and body for a row to qualify at all."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B correctly applies this concept's weighting mechanism: setweight marks which portion of a combined tsvector came from which source field, using a weight category, and ts_rank explicitly uses those categories -- weighted more heavily toward 'A' than 'B' -- when computing its relevance score, so a title match outranks an equivalent body-only match. Option A is false; incorporating weight categories into the score is exactly what setweight and ts_rank are designed to do together. Option C invents an alphabetical evaluation-order rule with no basis in how ts_rank actually works. Option D is fabricated -- setweight has no such all-fields-must-match requirement; it only affects scoring, not whether a row is included as a match at all."
         }
       ]
     },
@@ -357,6 +435,45 @@
           "type": "explanation",
           "prompt": "Explain the PostgreSQL extension model in general terms, then use the UUID-versus-bigint primary key trade-off as a concrete case study of how an extension (or a feature it historically provided) can change what's possible, and at what cost.",
           "modelAnswer": "PostgreSQL deliberately keeps its core minimal and ships a substantial amount of more specialized functionality -- additional data types, functions, operators, and index operator classes -- as extensions: self-contained bundles of SQL objects that exist on the server but aren't active in a given database until explicitly enabled there with CREATE EXTENSION. This keeps every database that doesn't need a particular piece of specialized functionality from paying any cost for it, while letting databases that do need it opt in with a single statement; many of the most commonly used extensions, including pg_trgm and uuid-ossp, are officially bundled with PostgreSQL's own distribution and maintained to the same standard as core, not third-party or lesser-trusted code. The UUID-versus-bigint case study illustrates two distinct lessons about extensions at once. First, uuid-ossp historically provided uuid_generate_v4() as the standard way to generate random UUIDs for use as primary keys -- functionality that has since been absorbed into PostgreSQL core itself as the built-in gen_random_uuid() in version 13 and later, meaning what once required an extension no longer strictly does, though the older function remains common in existing code and is worth recognizing rather than assuming it does something core genuinely cannot. Second, and more consequentially, the actual design decision this touches on -- UUID versus sequential bigint as a primary key strategy -- carries a real, structural performance trade-off regardless of which function generates the UUID: a sequential bigint identity column guarantees every new value is larger than every previous one, so inserts always append at one edge of the primary key's B-tree index, which is close to the cheapest possible insertion pattern; a random UUID has no such ordering guarantee, so each new value lands at an unpredictable, scattered position throughout the entire index, causing more page splits, more index bloat, and worse cache locality at meaningful insert volume. This is exactly the kind of cost that's easy to overlook if UUID adoption is treated as 'just switching the id type' rather than as a genuine architectural trade-off -- gaining coordination-free global uniqueness and non-guessable ids in exchange for measurably worse index insertion behavior, a trade-off that newer time-ordered schemes like UUID v7 attempt to soften by keeping global uniqueness while restoring much of the sequential key's append-friendly locality."
+        },
+        {
+          "id": "databases-postgresql-extensions-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A PostgreSQL server hosts three separate databases: app_db, reporting_db, and test_db. `CREATE EXTENSION pg_trgm;` is run while connected to app_db. What's true about reporting_db and test_db afterward?",
+          "options": [
+            "pg_trgm is now automatically available in all three databases, since extensions are installed once at the entire server/cluster level.",
+            "pg_trgm is enabled only in app_db -- CREATE EXTENSION is scoped to the specific database it's run against, so reporting_db and test_db would each need their own separate CREATE EXTENSION pg_trgm; statement before its functions and operators are usable there.",
+            "Extensions can only ever be installed in a database literally named 'postgres', and every other database must access it remotely.",
+            "Running CREATE EXTENSION in app_db permanently prevents that same extension from ever being installed in any other database in the same cluster."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B correctly states the scoping rule this concept makes explicit: CREATE EXTENSION applies to one specific database, not the whole cluster, so a multi-database server needs the statement run separately in each database that wants to use that extension's objects. Option A misdescribes the actual scope -- extensions are per-database, not per-cluster. Option C invents a restriction with no basis in how PostgreSQL extensions actually work; any database can have CREATE EXTENSION run against it, subject to privilege. Option D is fabricated -- there is no such mutual-exclusion behavior between databases in the same cluster."
+        },
+        {
+          "id": "databases-postgresql-extensions-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A developer using their application's regular database role tries to run `CREATE EXTENSION some_extension;` on a managed cloud PostgreSQL service, and it fails. What is the most likely explanation, per this concept?",
+          "options": [
+            "CREATE EXTENSION is deprecated syntax in all modern PostgreSQL versions and has been entirely replaced by ALTER DATABASE.",
+            "CREATE EXTENSION typically requires superuser privilege or a specifically granted privilege, and managed/cloud PostgreSQL providers often further restrict which extensions are allowed at all via an approved allow-list -- either of these, independently, can cause this to fail.",
+            "Extensions can only be created by the original author of that specific extension, verified through a license key tied to their account.",
+            "The extension must first be purchased separately from the PostgreSQL Global Development Group before it can be enabled on any server."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B correctly names both real-world causes this concept describes: an ordinary application role typically lacks the privilege CREATE EXTENSION requires by default, and separately, managed/cloud providers commonly restrict which extensions are installable at all regardless of privilege, via an approved allow-list. Option A is false -- CREATE EXTENSION remains standard, current PostgreSQL syntax. Option C invents an author-verification requirement that doesn't exist; extensions aren't gated by their original author's identity at install time. Option D is fabricated -- PostgreSQL's bundled and community extensions aren't sold or licensed per-install in this way."
+        },
+        {
+          "id": "databases-postgresql-extensions-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A system merges records generated independently by many offline mobile clients that may not sync with a central server for weeks at a time. Why is a UUID primary key a better fit for these records than a sequential BIGINT GENERATED ALWAYS AS IDENTITY column?",
+          "options": [
+            "UUIDs are always faster to index than sequential integers, regardless of insertion pattern or table size.",
+            "A sequential IDENTITY column's values are only guaranteed unique within its own database's sequence -- two offline clients generating ids independently, with no coordination or connectivity between them, could easily produce colliding values; a UUID's effectively unique value space makes independent generation safe without requiring any coordination at all.",
+            "UUIDs are mandated by the SQL standard for any table that might eventually be written to by more than one client.",
+            "Sequential IDENTITY columns cannot be used in any table that will later be queried by more than one application."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B correctly identifies the actual reason UUIDs fit this scenario: a sequential identity column's uniqueness guarantee depends on one shared sequence, which offline, unsynced clients have no way to coordinate against, making collisions likely when their independently-assigned ids are later merged -- while a UUID's effectively unique value space makes independent, uncoordinated generation across many separate clients safe by construction. Option A is false in general -- this concept explicitly describes UUID's insertion-locality cost compared to sequential integers; UUIDs aren't unconditionally faster. Option C invents a SQL-standard mandate that doesn't exist. Option D is fabricated -- sequential IDENTITY columns are used constantly in multi-client, multi-application systems; the actual issue is specifically about independent, uncoordinated generation, not multi-client access in general."
         }
       ]
     }

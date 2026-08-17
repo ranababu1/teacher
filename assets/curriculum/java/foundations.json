@@ -122,6 +122,45 @@
           "type": "explanation",
           "prompt": "A new engineer coming from a language like Python, where you just run a .py file directly, asks you to explain exactly what happens between typing `javac Hello.java` and seeing 'Hello, Java!' printed after running `java Hello`. Give a full explanation of the compilation and execution model, including the specific role the JVM plays.",
           "modelAnswer": "There are two genuinely separate steps here, run by two different tools. First, `javac Hello.java` is the compiler: it reads the Java source text, checks it for syntax errors and type mismatches, and -- if everything checks out -- writes a new file, Hello.class, containing bytecode: a compact set of instructions for an abstract, portable machine defined by the JVM specification, not real CPU instructions. This step produces no output and no running program by itself; it's purely a translation, and it's also where most 'silly' mistakes (typos, wrong types, mismatched braces) get caught, before the program has ever executed a single line. Second, `java Hello` launches the JVM and tells it to run the class named Hello. The JVM's classloader finds Hello.class, a bytecode verifier checks that it's well-formed and safe, and then the JVM begins executing it starting from the main method -- initially by interpreting the bytecode instruction by instruction, and, for code that turns out to run frequently, by JIT-compiling it into real native machine code on the fly for extra speed. This whole model exists because bytecode, unlike a C compiler's native output, is not tied to any specific operating system or CPU -- the exact same Hello.class file could be handed to a JVM running on Windows, macOS, or Linux and it would run correctly on each, because it's each machine's own JVM that does the final, machine-specific translation, not javac. The tradeoff for that portability is that you need a JVM installed on any machine that's going to run compiled Java, which is a genuinely different model from a language that has no separate compiled artifact at all."
+        },
+        {
+          "id": "java-jvm-and-bytecode-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A single file named Shapes.java contains: class Circle { } followed by public class Shapes { public static void main(String[] args) { } }. What happens when you run javac Shapes.java?",
+          "options": [
+            "Compilation fails, because a .java file may contain at most one class definition, public or not.",
+            "Compilation succeeds and produces both Circle.class and Shapes.class, because the file name only has to match the one public top-level class it contains -- Circle is a perfectly legal package-private class living in the same file.",
+            "Compilation fails, because Circle must also be declared public once the file already contains a public class.",
+            "Compilation fails, because Circle is defined before Shapes, and Java requires the public class to be declared first in a file."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The file-naming rule only constrains the one public top-level class in a file: the file name must match that class's name exactly. It says nothing about whether other, non-public classes may share the same file -- they can, freely, as long as none of them is also public. Circle has no access modifier here, making it package-private, which coexists perfectly legally with the public class Shapes in Shapes.java. Option A is wrong because multiple classes per file is routine, not forbidden. Option C is wrong because there's no rule that every class in a file must share the public class's visibility. Option D is wrong because Java imposes no ordering requirement among classes in a file based on which one happens to be public."
+        },
+        {
+          "id": "java-jvm-and-bytecode-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A long-running Java server process handles requests noticeably faster after running for several minutes than it did in its first few seconds, even though the workload and code never changed. What actually explains this?",
+          "options": [
+            "The JVM periodically re-reads and recompiles the original .java source files, looking for new optimization opportunities as it goes.",
+            "The JVM starts out interpreting bytecode instruction by instruction; its JIT compiler profiles execution in the background, identifies methods that are called often, and compiles just those hot methods into native machine code, transparently swapping them in for the interpreted version once ready.",
+            "The operating system's disk cache is the entire explanation -- once .class files are cached in memory, the JVM's own execution strategy has nothing further to do with the speedup.",
+            "Bytecode verification runs on every single method call until the JVM decides the program is safe, after which it stops, accounting for the entire speedup."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This is exactly the JIT warm-up effect described in the material: execution begins with plain interpretation, which is portable and starts instantly but redoes the same work on every pass through a loop or frequently-called method. The JIT compiler runs alongside it, profiling which methods are actually hot and compiling just those down to native machine code for the specific CPU the program is running on, then swapping the compiled version in without the program noticing. Option A is wrong because the JVM never re-reads or recompiles source text -- javac's job is already finished long before the JVM starts running anything. Option C is wrong because disk caching of .class files happens once, near start-up, and cannot account for a gradual speedup over minutes. Option D is wrong because bytecode verification is a one-time, per-class check done at class-loading time, not a per-call cost that tapers off."
+        },
+        {
+          "id": "java-jvm-and-bytecode-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Consider two separate problems in two separate programs: (1) int x = \"five\"; and (2) int[] nums = new int[3]; int y = nums[5]; Which statement correctly describes when each problem is caught?",
+          "options": [
+            "Both are caught by javac at compile time, since array bounds and type mismatches are both fully determined just by reading the source.",
+            "Problem (1) is a compile-time type error -- javac rejects assigning a String to an int and never produces a .class file at all; problem (2) compiles successfully because the index is only known to exceed the array's bounds once the program actually runs, throwing ArrayIndexOutOfBoundsException at run time.",
+            "Both are only caught at run time, because javac performs no type checking of any kind.",
+            "Problem (1) compiles fine because Java automatically converts string literals that look numeric; problem (2) is a compile-time error because the array's size, 3, is a fixed, known constant."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This tracks the compile-time vs run-time split directly: a type mismatch like assigning a String to an int variable is visible to javac just by looking at the declared types, with no need to run anything, so it's rejected before any .class file is produced. Whether index 5 is out of bounds for a length-3 array, though, depends on the actual runtime value of the index and the actual runtime size of the array -- information the compiler doesn't try to track for arbitrary array accesses -- so this compiles cleanly and only fails when the JVM actually executes that specific access. Option A overstates what javac checks. Option C is wrong because javac absolutely does perform type checking; that's a large part of what it does. Option D has both halves backwards -- there's no auto-conversion from String to int, and array-bounds checking is never done at compile time in Java."
         }
       ]
     },
@@ -243,6 +282,45 @@
           "type": "explanation",
           "prompt": "Explain, to someone who has only used a dynamically-typed language before, the difference between a primitive variable and a reference variable in Java, and why that difference matters in practice (not just in theory).",
           "modelAnswer": "In Java, every variable is one of two kinds, and the difference is about what the variable's own storage location actually contains. A primitive variable -- int, double, boolean, char, and a few others -- holds its value directly: the bits representing that number or boolean are sitting right there in the variable's slot, with nothing indirect about it. A reference variable -- anything that's a class type, an array, or String -- does not hold the object itself; it holds a reference, essentially an address, pointing to where the real object actually lives, separately, typically on the heap. This stops being an abstract distinction the moment you assign one variable to another or pass one into a method. Assigning one primitive variable to another copies the value itself, producing two fully independent variables from then on -- changing one can never affect the other. Assigning one reference variable to another copies the reference, not the object, so both variables end up pointing at the identical object; mutating that object's state through either name is visible through the other name too, because there is really only one object involved, just two labels for it. This is exactly why an array passed into a method can have its elements changed by that method in a way the caller sees afterward, while an int passed into a method can never have its value changed from the caller's perspective -- the method only ever receives a copy of the int's value, with no ongoing connection back to the caller's variable. Coming from a language where 'variable' doesn't usually force you to think about this distinction so explicitly, the practical payoff is being able to correctly predict, just by knowing whether a type is primitive or a reference, whether a change made in one place in your code is going to be visible somewhere else."
+        },
+        {
+          "id": "java-types-and-variables-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Given String name = null; if (name != null && name.length() > 3) { System.out.println(\"long name\"); }, why does this never throw a NullPointerException, even though name is null?",
+          "options": [
+            "&& and & behave identically in Java, so it wouldn't matter which one was used here.",
+            "&& short-circuits: because name != null evaluates to false, Java never evaluates the right-hand side name.length() > 3 at all, so the call that would otherwise throw is simply never made.",
+            "Java automatically inserts a null check before every method call, regardless of which logical operator is used in the surrounding expression.",
+            "name.length() quietly returns 0 instead of throwing whenever name is null, so the comparison is always false but never crashes."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "&& and || are short-circuiting: once the left operand of && is false, the overall result is already determined, so Java never bothers evaluating the right operand at all. That's precisely why name != null && name.length() > 3 is a safe, common idiom -- name.length() is only reached on the path where name is already known to be non-null. Option A is wrong and is the exact misconception this idiom guards against: & evaluates both sides unconditionally, so name != null & name.length() > 3 would call length() on a null reference and throw. Option C is wrong because Java has no such automatic null-checking mechanism. Option D is wrong because calling a method on a null reference throws NullPointerException; it does not return a default value."
+        },
+        {
+          "id": "java-types-and-variables-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "What do (double) (9 / 2) and (double) 9 / 2 each evaluate to?",
+          "options": [
+            "Both evaluate to 4.5, since casting to double anywhere in the expression forces the entire calculation to use floating-point division.",
+            "(double) (9 / 2) evaluates to 4.0, because the parenthesized integer division 9 / 2 truncates to 4 first, and only that already-truncated result gets cast to double; (double) 9 / 2 casts 9 to 9.0 before dividing, so the division itself is floating-point division, giving 4.5.",
+            "(double) (9 / 2) evaluates to 4.5 and (double) 9 / 2 evaluates to 4.0 -- the parentheses matter, but in the opposite direction from the previous option.",
+            "Both evaluate to 4, since casting an already-computed int result to double has no effect on its value."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Where the cast is placed changes when it takes effect. In (double) (9 / 2), the parentheses force 9 / 2 to be evaluated first as integer division, truncating toward zero to 4, and only that final int value gets cast to 4.0 -- the cast arrives too late to change how the division itself was performed. In (double) 9 / 2, the cast applies to 9 alone, promoting it to 9.0 before the division operator ever runs, which means the division sees a double and an int and performs genuine floating-point division, yielding 4.5. Option A is wrong because a cast only affects the operand it's directly attached to, not the whole expression. Option C reverses the correct pairing. Option D is wrong because 4.0 and 4 are numerically equal but the cast still changes the value's type and, in the other expression, its actual magnitude."
+        },
+        {
+          "id": "java-types-and-variables-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "What happens when this method is compiled? public static void main(String[] args) { int total; System.out.println(total); }",
+          "options": [
+            "It compiles fine and prints 0, since Java initializes every int variable to 0 by default.",
+            "It fails to compile with a \"variable might not have been initialized\" error, because local variables declared inside a method are never given an automatic default value -- unlike instance and static fields, which do get one.",
+            "It fails to compile because Java forbids declaring a variable and using it on separate statements.",
+            "It compiles fine but throws a NullPointerException the moment total is printed, since it has no value yet."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Local variables -- those declared inside a method -- are a deliberate exception to Java's default-value rules: they get no automatic initialization at all, and the compiler forces you to assign a value before the first read by rejecting the program outright if you don't. This is different from instance and static fields, which do receive automatic defaults (0 for numeric types, false for boolean, and so on) if left unassigned. Option A describes field defaults, not local variable behavior. Option C is wrong because declaring and later assigning a local variable across separate statements is completely normal; the issue here is reading before any assignment at all. Option D is wrong because this code never reaches run time in the first place -- javac rejects it before producing a .class file, so no exception is ever thrown."
         }
       ]
     },
@@ -359,6 +437,32 @@
           "type": "explanation",
           "prompt": "Explain the full contract the JVM expects from a program's entry point: the exact required signature, why each part of that signature is necessary, and the three ways a Java program can terminate.",
           "modelAnswer": "The JVM requires a method with the exact signature public static void main(String[] args) inside whichever class you name when you run java ClassName, and every part of that signature exists for a specific, concrete reason rather than as boilerplate. public is required because the JVM is calling this method from outside the class entirely, so the method has to be visible to an external caller. static is required because, at the moment the program starts, no instance of the class has been created yet -- there is no object for an instance method to be called on, and static methods are exactly the ones that can be invoked without one. void reflects that main doesn't hand a return value back to code that would consume it the way a normal method call does; its caller is the JVM's launcher, and a program instead communicates a completion status to the operating system through a process exit code. String[] args is always present as a parameter, holding whatever command-line arguments were supplied as an array of strings -- an empty array, not null, if none were given, and always strings even if the text looks numeric, requiring explicit parsing to use as a number. As for termination: a program can end by simply running to completion (falling off the end of main, or hitting a bare return), which exits with an implicit status of 0, meaning success by convention; it can end by explicitly calling System.exit(code), which halts execution immediately at that point, skipping everything after it, and reports whatever status code was passed; or it can end because an exception was thrown somewhere and never caught anywhere along the call chain back up to main, in which case the JVM prints a stack trace to standard error and exits with a nonzero status, signaling failure. All three are really the same underlying mechanism -- the JVM stops running the program and reports a status code -- triggered by three different circumstances."
+        },
+        {
+          "id": "java-main-method-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A program is run as java Calc 5 10, where Calc's main contains: int result = args[0] + args[1]; System.out.println(result); What happens?",
+          "options": [
+            "It compiles fine and prints 15, since args elements are automatically parsed to int whenever they're used in an arithmetic expression.",
+            "It fails to compile, because args[0] and args[1] are always String regardless of what the text looks like, so + performs string concatenation, producing a String value that cannot be assigned to an int variable.",
+            "It compiles fine and prints the text \"510\", because int is able to hold digit sequences produced by concatenation.",
+            "It compiles fine but throws NumberFormatException at run time, because \"5\" and \"10\" aren't recognized as valid int literals."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Every element of args is a String no matter what the command-line text looks like -- there is no automatic parsing to a numeric type. Applied to two String operands, + performs string concatenation, not addition, producing the String \"510\"; attempting to assign that String to a variable declared int is a compile-time type mismatch, so this program never produces a .class file at all. Option A is wrong because there is no implicit String-to-int conversion in Java. Option C is wrong because int cannot hold a String value regardless of what that string looks like -- this is exactly the error the compiler reports. Option D is wrong because the program never reaches run time in the first place; the failure is caught by javac before execution could ever begin."
+        },
+        {
+          "id": "java-main-method-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Given this main method: public static void main(String[] args) { System.out.println(\"A\"); if (args.length == 0) { System.exit(2); } System.out.println(\"B\"); } -- run with zero command-line arguments, what prints and what exit status does the process report?",
+          "options": [
+            "Prints A and B, then exits with status 0, because System.exit(2) only takes effect if no output has already been produced.",
+            "Prints only A -- the JVM halts immediately at the point System.exit(2) is called, skipping the second println entirely -- and the process reports exit status 2.",
+            "Prints A, then throws an uncaught exception, because System.exit requires args to be non-empty.",
+            "Fails to compile, because System.exit may only be called with the values 0 or 1."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "With zero arguments, args.length == 0 is true, so System.exit(2) executes right after \"A\" is printed. System.exit terminates the JVM immediately at the exact point it's called, skipping every remaining statement -- including the second println -- and reports whatever integer was passed, 2, as the process's exit status. Option A is wrong because System.exit takes effect the instant it's called, regardless of prior output. Option C is wrong because System.exit takes an int status code as its parameter, and calling it has nothing to do with args being empty or not -- it runs unconditionally once reached. Option D is wrong because System.exit accepts any int value as a status code, not just 0 or 1; those are only conventional meanings, not enforced restrictions."
         }
       ]
     }

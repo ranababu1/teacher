@@ -132,6 +132,32 @@
           "type": "explanation",
           "prompt": "Explain, to someone who understands regular functions but has never seen yield before, what makes a generator function fundamentally different from a regular function -- not just in syntax, but in execution model.",
           "modelAnswer": "A regular function, once called, runs from its first line straight through to a return statement or the end of its body, in one single, uninterrupted pass -- every call starts fresh, and once the function returns, all of its local state is gone. A generator function -- any function containing at least one yield statement -- behaves completely differently. Calling it doesn't run any of its code at all; it immediately hands back a generator object, an iterator that remembers where execution should begin. Only when something calls next() on that generator object does any code actually run, and even then, only up to the next yield statement: at that point execution genuinely pauses, mid-function, with every local variable's current value and the exact line of code preserved -- not discarded the way a regular function's locals are on return. The next call to next() doesn't restart the function from the top; it resumes execution from exactly that paused point, continuing until it hits another yield (pausing again) or reaches the end of the function body (which raises StopIteration automatically, signaling there's nothing left). This pause-and-resume model is what makes generators fundamentally different from 'a function that can return multiple things' -- they maintain live, suspended execution state between calls, which is exactly what enables lazy, on-demand production of values (one at a time, only when actually asked for) instead of a function needing to compute and hand back everything at once."
+        },
+        {
+          "id": "python-iterators-generators-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "```python\nnums = [1, 2, 3]\nit1 = iter(nums)\nit2 = iter(nums)\n\nprint(next(it1))\nprint(next(it1))\nprint(next(it2))\n```\nWhat gets printed, in order?",
+          "options": [
+            "1 2 1",
+            "1 2 3",
+            "1 2 2",
+            "It raises StopIteration on the third call, since nums has already been exhausted by it1"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "`iter(nums)` returns a brand-new, independent iterator object each time it's called -- `it1` and `it2` are two entirely separate iterators over the same underlying list, each tracking its own position. Advancing `it1` twice (getting `1`, then `2`) has no effect whatsoever on `it2`, which starts completely fresh from the beginning of `nums` when it's created and hasn't been advanced at all yet, so its first `next()` call returns `1`. This is exactly why two independent for loops over the same list don't interfere with each other -- each one gets its own iterator via its own call to `iter()`."
+        },
+        {
+          "id": "python-iterators-generators-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "```python\ngen = (x * 2 for x in range(3))\nprint(list(gen))\nprint(list(gen))\n```\nWhat gets printed?",
+          "options": [
+            "[0, 2, 4] then []",
+            "[0, 2, 4] then [0, 2, 4]",
+            "[] then [0, 2, 4]",
+            "RuntimeError: generator already executing"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "The first `list(gen)` fully consumes the generator, pulling every value until it's exhausted, producing `[0, 2, 4]`. A generator has no way to 'rewind' or reset itself -- once it's exhausted (its underlying code has run to completion and raised `StopIteration`), every subsequent attempt to pull a value from it, including a second `list(gen)`, immediately hits that same exhausted state and produces nothing at all: an empty list. This is exactly the tradeoff mentioned for generators versus list comprehensions -- a list can be iterated over as many times as you like, but a generator can only be consumed once, in one pass."
         }
       ]
     },
@@ -249,6 +275,45 @@
           "type": "explanation",
           "prompt": "Explain how contextlib.contextmanager turns a generator function into a context manager, and why the code after yield is typically wrapped in a try/finally.",
           "modelAnswer": "contextlib.contextmanager lets you define a context manager using a generator function that yields exactly once, instead of writing a full class with separate __enter__ and __exit__ methods. When the resulting object is used in a with statement, entering the block resumes the generator up to its yield -- this is effectively __enter__'s job, and whatever value is yielded becomes what an `as` clause binds. The with block's body then executes. When that body finishes (or raises), the with machinery resumes the generator again -- either normally (if the block completed without an exception) or by throwing the exception back into the generator at the exact point of the yield (if the block raised one) -- and whatever code comes after yield plays the role of __exit__. Wrapping that post-yield code in try/finally matters specifically because of the exception case: if the with block's body raises, that exception is thrown into the generator right at the yield, and without a try/finally around it, the cleanup code after yield would simply never run, since the thrown exception would propagate straight out of the generator before reaching it. Putting the cleanup in a finally block guarantees it still executes -- printing a log message, releasing a resource, closing a connection -- before that exception is allowed to continue propagating out of the with statement, mirroring exactly what a hand-written __exit__ method needs to do to honor the with statement's cleanup guarantee."
+        },
+        {
+          "id": "python-context-managers-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "```python\nclass Silencer:\n    def __enter__(self):\n        return self\n    def __exit__(self, exc_type, exc_value, traceback):\n        print(\"exit ran\")\n        return True\n\nwith Silencer():\n    print(\"before\")\n    raise ValueError(\"oops\")\nprint(\"after the with block\")\n```\nWhat gets printed?",
+          "options": [
+            "before / exit ran / after the with block",
+            "before / exit ran, and then the ValueError still propagates and crashes the program",
+            "exit ran / before / after the with block",
+            "before / exit ran (but the program crashes anyway, since __exit__ can only suppress built-in exceptions, not user-raised ones)"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "\"before\" prints, then `raise ValueError(\"oops\")` fires. `__exit__` still runs, as guaranteed, printing \"exit ran\" and receiving the exception's details as its three arguments. Because `__exit__` returns `True` -- a truthy value -- Python suppresses the exception entirely: it does not continue propagating after `__exit__` finishes. Execution then continues normally right after the `with` statement, printing \"after the with block\". `__exit__` treats every exception type identically for this purpose -- there's no distinction between built-in and user-defined exceptions in how the return value is interpreted."
+        },
+        {
+          "id": "python-context-managers-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "```python\nclass Inspector:\n    def __enter__(self):\n        return self\n    def __exit__(self, exc_type, exc_value, traceback):\n        print(exc_type, exc_value)\n        return False\n\nwith Inspector():\n    print(\"no problems here\")\n```\nWhat gets printed?",
+          "options": [
+            "no problems here / None None",
+            "no problems here -- __exit__ is never actually called at all, since no exception occurred",
+            "None None / no problems here",
+            "no problems here / <class 'NoneType'> <class 'NoneType'>"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "`__exit__` runs unconditionally when the `with` block ends, whether or not an exception occurred -- that's the entire point of the guarantee. Since the block here completes normally with no exception raised, Python calls `__exit__(None, None, None)`: all three of `exc_type`, `exc_value`, and `traceback` are the actual value `None` (not the class `NoneType`), specifically documenting 'nothing went wrong.' So after \"no problems here\" prints from inside the block, `__exit__` runs and prints `None None`."
+        },
+        {
+          "id": "python-context-managers-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "```python\nfrom contextlib import contextmanager\n\n@contextmanager\ndef broken_context():\n    print(\"setup\")\n    yield\n    print(\"teardown\")   # NOT wrapped in try/finally\n\nwith broken_context():\n    print(\"body\")\n    raise ValueError(\"bad\")\n```\nWhat happens?",
+          "options": [
+            "setup / body print, then the ValueError propagates uncaught -- \"teardown\" never prints, since there's no try/finally to run it before the thrown-back exception exits the generator",
+            "setup / body / teardown, and then the ValueError propagates",
+            "setup / teardown / body, with no error at all",
+            "The program hangs, because a generator with no try/finally around yield cannot be resumed after an exception"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "\"setup\" prints, then `yield` pauses the generator for the with block's body. \"body\" prints, then the `raise ValueError(\"bad\")` fires -- and because the block raised, the `with` machinery resumes the generator by throwing that exception back in at the exact point of `yield`. With no `try/finally` (or `try/except`) wrapped around the `yield`, the generator has nothing to catch it with, so the exception propagates straight out of the generator function immediately -- `print(\"teardown\")`, sitting after the unprotected `yield`, is simply never reached. This is exactly why the lesson's own examples wrap the post-yield cleanup code in `try/finally`: without it, an exception in the with block's body silently skips the cleanup entirely."
         }
       ]
     },
@@ -370,6 +435,45 @@
           "type": "explanation",
           "prompt": "A junior developer says: 'I added type hints to all my function signatures, so now my code is type-safe.' Explain what's true and what's missing from that statement.",
           "modelAnswer": "It's true that adding type hints is a meaningful, valuable step -- hints document intended types directly in the code, improve IDE autocomplete and inline help, and, crucially, make it possible for a separate static type checker like mypy, pyright, or pyre to analyze the codebase and catch type-related mistakes without ever running it. What's missing is the word 'now': writing the hints themselves does not make the code type-safe by itself, because Python's interpreter does absolutely nothing with type hints at runtime -- it doesn't check them, validate them, or enforce them in any way. A function hinted as def add(a: int, b: int) -> int can be called with completely mismatched types, like strings or lists, and Python will run it without complaint, doing whatever the function's actual code happens to do with those values (which might work by accident, might raise a totally unrelated error, or might produce a silently wrong result). The hints only become an actual safety net once a static type checker is genuinely run against the code -- as a manual step locally, or (much more reliably) wired into CI so it runs on every change -- and its output is actually acted on. Type hints without a checker running against them are documentation with the appearance of a guarantee, not a guarantee itself; the real type-safety benefit comes from the combination of accurate hints AND a checker actually being run and its findings addressed, not from the hints existing in the source code alone."
+        },
+        {
+          "id": "python-type-hints-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "```python\ndef transform(value: str, factor: int = 2) -> list:\n    return [value] * factor\n\nprint(transform.__annotations__)\n```\nWhat gets printed?",
+          "options": [
+            "{'value': <class 'str'>, 'factor': <class 'int'>, 'return': <class 'list'>}",
+            "{'value': <class 'str'>, 'factor': 2, 'return': <class 'list'>}",
+            "{} -- since transform has never actually been called, its annotations haven't been generated yet",
+            "{'value': <class 'str'>, 'factor': <class 'int'>} -- with no 'return' key, since return hints aren't stored in __annotations__"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "Type hints are stored as plain metadata on the function object the moment it's defined -- calling the function isn't required for `__annotations__` to exist. The dict maps each hinted parameter name to its annotated type object, and specifically includes a `'return'` key for the `-> list` annotation. Note that the default value `2` for `factor` does not appear in `__annotations__` at all -- only the *type hint* `int` does; defaults are a separate mechanism (visible instead via `__defaults__`) that `__annotations__` has nothing to do with."
+        },
+        {
+          "id": "python-type-hints-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Which pair of type hints are exactly equivalent in meaning?",
+          "options": [
+            "Optional[str] and Union[str, None]",
+            "Optional[str] and Union[str, int]",
+            "Union[str, None] and plain str, since None is just treated as a valid str value",
+            "Optional[str] and str | int"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "`Optional[X]` is defined to mean exactly `Union[X, None]` -- 'an X, or None' -- so `Optional[str]` and `Union[str, None]` are the identical hint written two different ways. `Union[str, int]` (option B) means 'a str or an int,' with no mention of None at all -- not equivalent. Option C is wrong on two counts: `None` is not a valid `str` value, and dropping it from the hint entirely changes the meaning. Option D pairs `Optional[str]` (str-or-None) against `str | int` (str-or-int), which describes a completely different set of allowed types."
+        },
+        {
+          "id": "python-type-hints-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A codebase has a function `def calculate(a, b): return a + b` with no type hints at all, sitting alongside several fully type-hinted functions elsewhere in the same file. Which statement is accurate?",
+          "options": [
+            "Python runs calculate() exactly the same way it would run any hinted function -- hints are never enforced either way -- and a static checker like mypy treats calculate's unhinted parameters as the implicit Any type, so it won't flag anything about how they're used",
+            "Python raises a SyntaxError, because hinted and unhinted functions cannot coexist in the same file",
+            "mypy refuses to check any of the hinted functions in the file until every function in that file has hints",
+            "calculate() runs measurably slower than a hinted equivalent, since Python must infer its parameter types at every call"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "Python's gradual typing model means hinted and unhinted code freely coexist, in the same function, file, or codebase, with zero restriction. Python itself never enforces hints on any function regardless of whether they're present, so calculate() runs identically to a hinted version. A static checker like mypy treats an unhinted parameter as the implicit `Any` type -- compatible with everything, and specifically not an error -- which lets teams add hints incrementally without needing an all-or-nothing rewrite before gaining any benefit. There's no runtime performance difference of any kind tied to the presence or absence of hints."
         }
       ]
     }

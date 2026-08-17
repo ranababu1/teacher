@@ -113,6 +113,45 @@
           "explanation": "Option 2 is the real, substantive reason: app, database, and cache differ in how often they change, how they scale, and how disruptive a restart is, and separate containers let each component's lifecycle be managed on its own terms -- redeploying the app ten times a day without touching the database, scaling the app without multiplying the cache, patching Redis without rebuilding the app image. Option 1 is false -- Docker places no such technical limit; the convention is a best practice, not an enforced rule. Option 3 is not reliably true and isn't the motivating reason even when it happens to be true. Option 4 confuses a side effect (different services often do end up on different base images) with a requirement -- nothing forces different base images, and it isn't the reason for the split in the first place."
         },
         {
+          "id": "docker-compose-multi-container-apps-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A container runs supervisord as PID 1, supervising nginx, an app process, and Postgres. The Postgres child process crashes and supervisord does not restart it. What does `docker ps` report about this container, and why?",
+          "options": [
+            "docker ps reports the container as Exited, since one of the processes it's running has died.",
+            "docker ps still reports the container as Up, because Docker's health/restart tracking only observes PID 1 (supervisord), which is still running fine, regardless of the state of any process it happens to be supervising.",
+            "docker ps reports the container as Restarting, since Docker automatically detects and tries to recover any child process failure.",
+            "docker ps reports a specific warning naming Postgres as the crashed component."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 is correct: Docker's container-level status is tied entirely to PID 1's liveness, and supervisord, as PID 1, is still alive -- it simply has a dead child it never restarted -- so docker ps shows Up with no indication that Postgres died. Option 1 is wrong -- the container only becomes Exited when PID 1 itself exits, not when some process it supervises does. Option 3 is wrong -- Docker has no visibility into, or automatic recovery mechanism for, individual processes supervised by something else running as PID 1. Option 4 is wrong -- Docker has no per-process awareness inside a container it isn't directly managing as PID 1; it cannot single out Postgres specifically."
+        },
+        {
+          "id": "docker-compose-multi-container-apps-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A team bundles a stateless app process and a Redis cache into a single container \"for simplicity,\" then tries to scale to three replicas to handle more traffic. What breaks?",
+          "options": [
+            "Nothing breaks -- Redis automatically forms a shared cluster across all three replicas' bundled instances.",
+            "Each replica ends up with its own separate, independent, empty Redis instance, so a cache hit recorded by one replica is invisible to the other two, defeating the entire purpose of caching.",
+            "Docker refuses to scale any container that includes a database or cache process, and the scale command fails outright.",
+            "The replicas fail to start because two containers cannot both bind Redis's default port on the same host."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 is correct: scaling the bundled container multiplies Redis right along with the app, producing three siloed, independent caches instead of one shared one -- a cache hit in replica 1 tells replicas 2 and 3 nothing, which is exactly backwards from what a shared cache is supposed to do. Option 1 invents automatic clustering behavior Redis and Docker have no mechanism for. Option 3 is false -- Docker has no such restriction; scaling succeeds mechanically, it just produces a broken caching architecture. Option 4 is false -- each replica is its own container with its own network namespace, so there's no port collision between them; the real problem is architectural, not a port conflict."
+        },
+        {
+          "id": "docker-compose-multi-container-apps-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Does splitting an app into separate app, database, and cache containers on a single Docker host provide stronger physical or hardware isolation between them, compared to running all three bundled in one container?",
+          "options": [
+            "Yes -- each container automatically gets its own dedicated, virtualized CPU and memory hardware.",
+            "No -- all the containers still share that one host's single kernel, CPU, and memory; splitting into multiple containers is about separating lifecycles (independent restart, scaling, versioning), not about separating hardware.",
+            "Yes, but only if each container is also given its own explicit --network flag at run time.",
+            "No, because Docker requires every container on a host to run inside one shared virtual machine regardless of how services are split."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 is correct and matches the concept's explicit misconception callout: multi-container splitting is entirely about lifecycle separation, not about physical isolation -- every container on one host still shares that host's one kernel, CPU, and memory, exactly as the very first module in this subject established. Option 1 is false -- containers share host hardware; there's no automatic per-container virtualized hardware allocation happening. Option 3 is false -- a --network flag changes which containers can reach each other over the network; it has no effect on hardware isolation. Option 4 is a garbled, false claim -- Docker containers don't require being wrapped in a shared VM by default at all; the point being made is simply that they share the host's kernel and hardware regardless."
+        },
+        {
           "id": "docker-compose-multi-container-apps-assess-explain1",
           "type": "explanation",
           "prompt": "A colleague argues: \"Bundling the app, database, and cache into one container is simpler -- one image, one docker run, one thing to think about. Why would I want three containers and all the extra networking complexity instead?\" Give a full, honest answer, including what the one-container approach genuinely does make simpler.",
@@ -229,6 +268,32 @@
           "explanation": "Option 2 is correct: Compose automatically creates a default network and attaches every service in the file to it, and that shared network provides exactly the DNS-based name resolution described in the prior module's networking concept -- the service's own name (\"db\") is directly usable as a hostname by any other service on that same file. Option 1 is wrong because manual IP lookup is unnecessary; DNS resolution is automatic. Option 3 is wrong -- each service still gets its own private network namespace, not a merged one; \"localhost\" inside app refers to app itself. Option 4 is wrong -- ports: only governs reachability from outside the Compose network (the host, external clients); services already on the same shared network can reach each other's container-internal ports directly, with no ports: entry required for that internal traffic."
         },
         {
+          "id": "docker-compose-file-structure-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "In a Compose file, the `db` service has no `ports:` entry at all -- only the `app` service does. Can `app` still reach `db` on db's container-internal port, e.g. `db:5432`?",
+          "options": [
+            "No -- without a ports: entry, db is completely unreachable from anywhere, including other services defined in the same file.",
+            "Yes -- ports: only governs reachability from OUTSIDE the Compose-managed network (the host, external clients); services already sharing that network can reach each other's container-internal ports directly by service name, with no ports: entry required.",
+            "Only if db is restarted after app has already started.",
+            "Only if both services explicitly list an identical top-level networks: entry, even though Compose already places them on a shared network by default."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 is correct: every service in a Compose file shares one default network unless configured otherwise, and any service on that network can reach any other service's container-internal port directly by service name -- ports: is strictly about exposing a port to something outside that shared network, not a prerequisite for internal reachability. Option 1 is wrong and is exactly the misconception this concept warns against. Option 3 is wrong -- restart order has nothing to do with whether a ports: entry exists. Option 4 is wrong -- an explicit top-level networks: section is unnecessary here; Compose's automatic default network already provides this connectivity with zero extra configuration."
+        },
+        {
+          "id": "docker-compose-file-structure-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "What is the difference between declaring `pgdata:` under a Compose file's top-level `volumes:` section and listing `pgdata:/var/lib/postgresql/data` under a service's own `volumes:` list?",
+          "options": [
+            "They are two competing, mutually exclusive ways to create the same volume -- a Compose file should only ever use one or the other.",
+            "The top-level section declares that a named volume exists as a project-scoped resource (and is where you'd attach configuration like external: true); the service's own list is where that specific service mounts the volume at a specific path inside its container -- the two normally work together.",
+            "The top-level section is purely optional documentation with no functional effect on the Compose file at all.",
+            "The service-level list is what actually creates the volume; the top-level section only renames it for display purposes in docker compose ps."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 correctly separates the two roles: the top-level volumes: section declares a named volume's existence as a project-scoped resource, which is where you'd mark it external or attach a specific driver, while a service's own volumes: list is what mounts a (possibly that same) volume at a specific container path for that one service -- they're complementary, not competing. Option 1 is wrong -- they aren't alternatives; a real Compose file commonly uses both together for the same volume. Option 3 is wrong -- the top-level section has a real functional purpose (letting Compose know a volume is a genuine, intentional resource, and where extra configuration can be attached), even though modern Compose can auto-create an undeclared volume referenced only at the service level. Option 4 is wrong -- creation happens in whichever place actually establishes the volume's existence for Compose, and renaming isn't what either section does."
+        },
+        {
           "id": "docker-compose-file-structure-assess-explain1",
           "type": "explanation",
           "prompt": "Explain the difference between what a service's build: or image: key does, what its own volumes: list does, and what the top-level volumes: section does, using a concrete example that includes all three.",
@@ -343,6 +408,32 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "Option 2 is the accurate, default behavior: depends_on's implicit condition is service_started, satisfied the moment the dependency's container process begins executing, with no check at all on the readiness of whatever is running inside it. Option 1 describes what condition: service_healthy, combined with an actual healthcheck:, would provide -- not the default. Option 3 is wrong for the same reason as option 1 -- a healthcheck existing doesn't get consulted unless condition: service_healthy is explicitly set. Option 4 understates it -- depends_on genuinely does affect real startup order, just not readiness."
+        },
+        {
+          "id": "docker-compose-depends-on-ordering-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Service `db` has a correctly-configured `healthcheck:` block, and `docker compose ps` correctly shows it transitioning to healthy. A dependent service `app` still crashes intermittently on startup because its `depends_on` is written in the plain list form, `depends_on: [db]`. Why doesn't db's healthcheck help here?",
+          "options": [
+            "The healthcheck must actually be broken, since docker compose ps reporting \"healthy\" can't be trusted on its own.",
+            "A plain list-form depends_on entry implicitly uses the default condition, service_started, which never consults the target's health status at all -- a healthcheck existing on a service has no effect on anyone else's startup ordering unless something explicitly opts in with condition: service_healthy.",
+            "Compose only respects a service's healthcheck if no other service has any depends_on relationship pointing at it.",
+            "Healthchecks configured in a Compose file only take effect for docker run invocations, not for docker compose up."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 is correct: the short list form of depends_on is shorthand specifically for condition: service_started, and that condition is satisfied the instant db's container process launches -- it never looks at db's health status, healthcheck or no healthcheck, unless app's depends_on entry is rewritten in the explicit map form with condition: service_healthy. Option 1 is wrong -- the healthcheck can be, and in this scenario is, working correctly and accurately reported; the gap is purely in how app's depends_on is written. Option 3 is wrong -- there's no such exclusivity rule; any number of dependents could reference db's health condition. Option 4 is wrong -- healthchecks defined in a Compose file are fully respected by docker compose up when properly referenced via condition: service_healthy."
+        },
+        {
+          "id": "docker-compose-depends-on-ordering-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A team adds condition: service_healthy to app's depends_on for db, with a correct healthcheck on db. Months later, a routine maintenance restart of db briefly causes app to fail to connect. Why didn't the healthcheck-gated depends_on prevent this?",
+          "options": [
+            "It should have -- this outcome indicates the healthcheck itself is misconfigured and needs fixing.",
+            "depends_on's condition only governs the sequencing of the very first docker compose up; it has no ongoing effect once the stack is already running, so a dependency becoming briefly unavailable later (a restart, a network blip) is a separate concern that only the application's own retry/backoff logic can handle.",
+            "condition: service_healthy re-checks db's health before every single request app makes to it, so this outcome should be structurally impossible.",
+            "Restarting a dependency service is unsupported in Compose and requires tearing down and recreating the entire stack."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 is correct and matches the concept's explicit point: a healthcheck-gated depends_on only sequences the initial startup of the whole stack -- it has already done its one job by the time a later restart happens, and has nothing further to say about it. Option 1 is wrong -- nothing about this scenario indicates a misconfigured healthcheck; it's an inherent limit of what depends_on's condition covers at all. Option 3 is wrong -- depends_on's condition is not re-evaluated on every request; it's checked once, during startup sequencing. Option 4 is wrong -- routine service restarts within a running Compose stack are normal and fully supported; they simply fall outside depends_on's startup-only guarantee."
         },
         {
           "id": "docker-compose-depends-on-ordering-assess-explain1",

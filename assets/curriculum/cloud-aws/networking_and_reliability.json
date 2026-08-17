@@ -117,6 +117,58 @@
           "explanation": "Both facts are true and both matter here: the security group's statefulness means the inbound-permitted SSH connection's response is automatically allowed back out with no explicit outbound rule needed, and separately, the default NACL (before anyone customizes it) allows all traffic in both directions, so it isn't blocking anything either. Option A is simply factually wrong given the described setup. Option B wrongly claims the security group is irrelevant -- it's very much part of why this works, specifically because of its stateful behavior. Option D is a fabricated exemption; no such special-casing of SSH exists in AWS's networking model, and if the default NACL had been replaced with a custom one lacking an outbound rule for the ephemeral port range, this exact SSH connection would fail despite the security group being correctly configured, exactly as explored in the stateless-NACL example."
         },
         {
+          "id": "cloud-aws-vpc-subnets-security-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A subnet's route table currently sends 0.0.0.0/0 to an Internet Gateway. An administrator changes that route table association so the same subnet's 0.0.0.0/0 route now points to a NAT Gateway instead, with no other change made to the subnet resource. What happens to the subnet's public/private status?",
+          "options": [
+            "Nothing changes; a subnet's public/private status is a fixed attribute set permanently at creation time.",
+            "The subnet becomes private, because publicness is determined entirely by where the route table's default route points, not by any inherent property of the subnet resource itself.",
+            "The subnet becomes unreachable entirely, since a subnet's route table association cannot legally be changed after creation.",
+            "The subnet remains public, because once an Internet Gateway route has ever been associated with a subnet, that status persists even after the route table changes."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "A subnet has no built-in 'public' flag at all -- its public or private status is entirely a consequence of what its associated route table's 0.0.0.0/0 route points to. Redirecting that default route to a NAT Gateway makes the subnet private going forward, with zero change to the subnet resource itself, exactly the point the underlying misconception directly addresses. Option A and D both incorrectly imagine some sticky or fixed public/private property independent of routing; option C is simply wrong -- route table associations can be changed freely after a subnet is created."
+        },
+        {
+          "id": "cloud-aws-vpc-subnets-security-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A production VPC needs application instances reachable in both us-east-1a and us-east-1b, with a public/private split in each AZ (a public subnet for load balancers/NAT, a private subnet for the app instances). What is the minimum number of subnets required, and why?",
+          "options": [
+            "2 subnets -- one public, one private -- since a single subnet's route table can apply different rules per Availability Zone.",
+            "1 subnet, since AWS automatically replicates a subnet's configuration across every AZ in the Region.",
+            "4 subnets -- a public and a private subnet in each of the two AZs -- because a subnet is permanently bound to exactly one Availability Zone at creation, so no single subnet can serve two AZs or provide two different visibility levels at once.",
+            "3 subnets, since public subnets can be shared across multiple AZs while private subnets cannot."
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "A subnet is created inside exactly one Availability Zone, permanently, and a single subnet also can't be 'half public, half private' since its visibility is a single route-table property applying to the whole subnet. Covering two AZs times two visibility levels therefore requires one subnet per combination -- four total -- with no way to collapse that number by sharing a subnet across AZs or visibility levels, since AWS provides no such capability for either dimension. Options A, B, and D each imagine some form of subnet sharing across AZs or visibility levels that doesn't exist in the VPC model."
+        },
+        {
+          "id": "cloud-aws-vpc-subnets-security-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A database's security group has an inbound rule for port 5432 whose source is set to the application tier's security group ID, rather than a CIDR range. What is the practical benefit of this pattern as the app tier autoscales, launching and terminating instances over time?",
+          "options": [
+            "It reduces AWS's billing cost for security group rule evaluation compared to a CIDR-based rule.",
+            "It automatically covers every current and future instance that carries the app tier's security group, with no manual rule updates needed as instances are added, removed, or replaced -- unlike a CIDR-based rule, which would need continual updates as instance IPs change.",
+            "It allows matching traffic to bypass NACL evaluation entirely, since security-group-to-security-group references are considered pre-authorized.",
+            "It is required because AWS does not permit CIDR ranges to be used as a source for a database port."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Referencing a security group ID as the source is the idiomatic AWS pattern for 'anything carrying this security group,' and it stays correct automatically as the app tier's actual instances and IP addresses change under autoscaling -- no rule maintenance required. Option A invents a billing effect that doesn't exist for this choice. Option C is wrong: NACL evaluation still applies to all traffic regardless of how a security group's source is expressed -- security groups and NACLs are independent layers. Option D is false; CIDR ranges are a perfectly valid and common source for any security group rule, including database ports -- referencing another security group is simply a better fit for this specific autoscaling scenario, not a required substitute."
+        },
+        {
+          "id": "cloud-aws-vpc-subnets-security-assess-mcq5",
+          "type": "multipleChoice",
+          "prompt": "A subnet's NACL inbound rules are: rule 100 DENY tcp 22 from 203.0.113.0/24; rule 200 ALLOW tcp 22 from 0.0.0.0/0; rule * DENY all (implicit default). A packet arrives on port 22 from 203.0.113.5. What happens to it?",
+          "options": [
+            "It is allowed, because rule 200 grants access from 0.0.0.0/0, which includes 203.0.113.5.",
+            "It is denied, because NACL rules are evaluated in ascending numeric order and rule 100 -- the first rule that matches this traffic -- denies it; rule 200 is never reached for this specific packet.",
+            "It is denied only if the attached security group also denies it, since NACL rules are merged together rather than evaluated in order.",
+            "It is allowed, because a more specific CIDR range is always evaluated ahead of a broader one regardless of its assigned rule number."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "NACL rules are evaluated strictly in ascending numeric order, and the first rule that matches the traffic wins -- evaluation stops there regardless of what a later rule with a higher number would have said. Rule 100 matches this specific packet's source CIDR and denies it, so rule 200's broader allow is never even reached for this traffic. Option A ignores rule ordering entirely. Option C invents a 'rules merge together' behavior that isn't how NACLs work -- each layer (NACL, then security group) is evaluated independently, and within a NACL, order matters. Option D fabricates a rule-specificity-based evaluation order; NACLs use explicit numeric priority, not automatic CIDR specificity ranking."
+        },
+        {
           "id": "cloud-aws-vpc-subnets-security-assess-explain1",
           "type": "explanation",
           "prompt": "A junior engineer asks why their application's inbound requests are visibly reaching their EC2 instance (confirmed via application logs), but clients report the connection times out with no response ever received. Explain the most likely category of misconfiguration and the systematic order you'd check things in to confirm it.",
@@ -235,6 +287,58 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "The described outages correlate specifically with database maintenance and AZ-level issues, and the web tier is already multi-AZ -- the described symptom points directly at the single-AZ database as the weakest link in the dependency chain, exactly the pattern the explanation warns is common (a carefully redundant compute tier sitting in front of a database that never got the same treatment). Enabling RDS Multi-AZ directly closes that specific gap by giving the database an automatically-failed-over standby in another AZ. Adding more EC2 instances (option A) or a bigger instance type (option D) addresses capacity, not availability, and doesn't touch the database single point of failure at all. Switching to an NLB (option C) is a Layer-4-vs-Layer-7 and latency/throughput decision, unrelated to the AZ-failure and maintenance-window symptoms described."
+        },
+        {
+          "id": "cloud-aws-alb-scaling-cost-reliability-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "One team needs to route HTTP requests to different target groups based on request path (e.g. /api/* vs everything else). A separate team needs to handle raw TCP traffic at the lowest possible latency, with no need for any HTTP-aware routing. Which load balancer type should each team choose?",
+          "options": [
+            "Both teams should use a Network Load Balancer, since NLBs support every kind of routing, including path-based routing.",
+            "The first team should use an Application Load Balancer, since Layer 7 path-based routing requires HTTP awareness that only an ALB provides; the second team should use a Network Load Balancer, since Layer 4 NLBs handle raw TCP/UDP with minimal latency but no HTTP semantics at all.",
+            "Both teams should use an Application Load Balancer, since ALBs always outperform NLBs regardless of protocol or use case.",
+            "The first team needs AWS's legacy Classic Load Balancer, since ALBs are incapable of routing based on request path."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Path-based routing depends on understanding HTTP request structure, which is exactly what distinguishes a Layer 7 ALB from a Layer 4 NLB -- an NLB has no visibility into HTTP paths, hosts, or headers at all, so option A is wrong. An NLB's whole value proposition is handling raw TCP/UDP with extremely low latency and no protocol-aware overhead, making it the right fit for the second team's stated requirement. Option C wrongly claims universal ALB superiority, ignoring that NLBs exist specifically for the latency/throughput profile ALBs aren't optimized for. Option D is simply false -- path-based routing to different target groups is a core, standard ALB capability."
+        },
+        {
+          "id": "cloud-aws-alb-scaling-cost-reliability-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A target group's health check is configured with unhealthy_threshold=3 rather than 1. What trade-off does this specific configuration choice make?",
+          "options": [
+            "There is no real trade-off; a higher threshold is strictly better in every scenario with no downside.",
+            "It avoids removing a target from rotation over a single transient blip (reducing unnecessary flapping), at the cost of continuing to route some live traffic to a genuinely failing target for the additional check intervals it takes to reach three consecutive failures.",
+            "It reduces the total number of health checks the ALB performs per hour, which lowers cost.",
+            "It guarantees a target will never be marked unhealthy due to a temporary network blip, no matter how many checks eventually fail."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Requiring multiple consecutive failures before flipping a target to unhealthy is a deliberate trade: it prevents a single transient hiccup from yanking a target out of rotation unnecessarily, but it also means a target that is genuinely and persistently failing still receives some traffic for the extra check intervals it takes to cross the threshold, rather than being removed at the very first failed check. Option A ignores that real trade-off entirely. Option C misattributes the setting to check frequency, which is actually controlled by the separate 'interval' setting, not the threshold. Option D overstates the guarantee -- a high threshold reduces false positives from single blips, but three consecutive failures still flips the target to unhealthy, it doesn't provide immunity from ever being marked unhealthy."
+        },
+        {
+          "id": "cloud-aws-alb-scaling-cost-reliability-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "An application stores session data in each instance's local memory and relies on ALB sticky sessions to route each user's requests back to the same instance every time. A team argues this fully solves the horizontal-scaling problem for this application. What is the flaw in that reasoning?",
+          "options": [
+            "There is no flaw; sticky sessions make any application, regardless of where it stores state, fully compatible with horizontal scaling.",
+            "Sticky sessions only function with Network Load Balancers, not Application Load Balancers, so this configuration would not work at all.",
+            "Sticky sessions solve the immediate routing symptom but reintroduce a single point of failure per user: if the specific instance a user is pinned to is lost, that user's session is lost too, even though the rest of the healthy fleet could have served them had the state been externalized instead.",
+            "Sticky sessions eliminate the need for health checks entirely, since a user's traffic is always routed to the same predetermined instance regardless of its health."
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "Sticky sessions address the routing consequence of local state (a given user needing to keep landing on the instance holding their data) without addressing the underlying fragility that local state creates: any instance loss -- a deploy, a crash, an AZ failure -- takes that instance's pinned users' sessions down with it, even while the rest of a perfectly healthy fleet sits idle and could have served them if the state had lived somewhere shared. Option A overstates what stickiness actually fixes. Option B is factually wrong -- ALBs support sticky sessions via cookies. Option D is also wrong: health checks continue operating independently of sticky-session routing, and an unhealthy sticky-pinned instance is still removed from rotation, which is precisely what strands the affected users' sessions."
+        },
+        {
+          "id": "cloud-aws-alb-scaling-cost-reliability-assess-mcq5",
+          "type": "multipleChoice",
+          "prompt": "An application depends on three internal services, each individually rated at 99.9% availability, with none of them having any redundancy of their own. What is the application's approximate effective availability ceiling, and why isn't it simply 99.9%?",
+          "options": [
+            "Still 99.9%, since availability figures for otherwise-unrelated dependencies don't combine or compound with each other.",
+            "Approximately 99.99%, since combining several already-reliable services generally improves the overall availability figure.",
+            "Approximately 99.7%, because the probability that all three unredundant dependencies are simultaneously available is roughly the product of their individual availabilities (0.999 x 0.999 x 0.999), which comes out lower than any single dependency's own figure.",
+            "Exactly 99.9%, because overall system availability is always set by whichever single dependency is individually the most reliable."
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "When an application depends on multiple services with no redundancy layered onto any of them, the probability that all of them are simultaneously up is approximately the product of their individual availabilities, not any single one of their numbers in isolation -- 0.999 cubed comes out to roughly 99.7%, meaningfully worse than 99.9% might suggest at a glance. Option A denies that availability composes at all, which is exactly the misconception this scenario tests. Option B invents an improvement that has no basis -- combining unredundant dependencies degrades the effective ceiling, it never improves it. Option D incorrectly assumes the best individual figure sets the ceiling, when in fact it's the combination -- specifically the weakest, least-redundant links multiplied together -- that determines the real effective availability."
         },
         {
           "id": "cloud-aws-alb-scaling-cost-reliability-assess-explain1",

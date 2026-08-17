@@ -113,6 +113,45 @@
           "explanation": "The defining behavioral difference is the check-then-act pattern: the `apt` module compares current package state against the declared desired state (`present`) and only performs an install when there's an actual difference, which is what makes it safe to include in a playbook that might run many times. A raw `shell` command has no such check built in -- it executes exactly what's written every time, with apt's own command-line behavior (which does handle 'already installed' reasonably) being the only thing standing in for it, and that safety property disappears entirely for commands that aren't already idempotent themselves. Option A ignores this meaningful behavioral difference; option C is factually wrong since `shell` is not OS-specific either; option D invents an irrelevant performance claim that isn't the actual point of the distinction."
         },
         {
+          "id": "devops-config-mgmt-declarative-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A team uses Terraform to create a virtual machine and Ansible to install and configure software on it afterward. According to this concept, how should the division of responsibility between the two tools be understood?",
+          "options": [
+            "They do the same job, so using both is redundant and either tool alone should be sufficient on its own.",
+            "Terraform's job is to bring the cloud resource itself into existence, and Ansible's job picks up from there, configuring what's already running on a machine that already exists -- provisioning answers 'does this resource exist,' configuration management answers 'what should be true about its internal state.'",
+            "Terraform must always run after Ansible finishes, never before, regardless of the specific task involved.",
+            "Ansible can only be used on machines that Terraform itself did not provision."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept draws this boundary explicitly: Terraform's job is to bring a cloud resource into existence, while configuration management tools pick up exactly where provisioning leaves off, configuring what's already running on a machine that already exists. Option A ignores that the two tools solve genuinely different problems at different layers. Option C reverses the typical, though not strictly required, ordering without justification. Option D invents a restriction the concept never states."
+        },
+        {
+          "id": "devops-config-mgmt-declarative-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A playbook task that starts a service appears before an earlier task that installs the package the service depends on. What happens when this playbook runs, according to this concept?",
+          "options": [
+            "Ansible automatically detects the missing dependency and reorders the tasks to install the package first.",
+            "The run still fails at the service-start task, in the exact order the tasks were written -- 'declarative' describes what each individual task asserts, not the playbook's execution order, which remains strictly sequential and is the author's own responsibility to get right.",
+            "Both tasks succeed regardless of order, since declarative tools are immune to ordering issues by design.",
+            "The playbook silently skips the failing task and continues on to the next one as if nothing happened."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept is explicit that tasks within a playbook still execute strictly top to bottom in the order written, and that declarative refers to what each task asserts, not to the playbook being free of ordering concerns -- a task starting a service before its dependency is installed still fails, exactly as it would imperatively. Option A invents automatic dependency resolution that Ansible does not perform. Option C contradicts the concept's explicit statement that order still matters. Option D misdescribes the default fail-and-stop behavior of a playbook run."
+        },
+        {
+          "id": "devops-config-mgmt-declarative-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A playbook task uses `shell: sed -i 's/old/new/' /etc/app.conf` instead of a purpose-built module. According to this concept, what guarantee does this specific task lose compared to the rest of the playbook?",
+          "options": [
+            "None -- shell tasks behave identically to purpose-built modules as long as the YAML syntax itself is correct.",
+            "The check-then-act, idempotent convergence behavior that purpose-built modules provide -- running this task twice re-executes the raw sed command each time, which can error, corrupt the file, or do nothing useful on a second run, entirely outside the tool's convergence guarantees.",
+            "Only the ability to run over a remote SSH connection, since shell commands require a different transport mechanism.",
+            "The ability for this specific task to be included in a playbook alongside other, non-shell tasks."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept names `shell:`/`command:` as genuine escape hatches that run an arbitrary command exactly as written, with none of the check-then-act behavior of purpose-built modules -- a task like this isn't idempotent at all, and running it repeatedly can produce inconsistent or broken results depending on the file's current content. Option A ignores this explicitly stated loss of guarantees. Option C invents a transport-layer restriction that doesn't exist -- shell tasks use the same SSH connection as any other task. Option D is false; shell tasks can freely coexist with other task types in the same playbook."
+        },
+        {
           "id": "devops-config-mgmt-declarative-assess-explain1",
           "type": "explanation",
           "prompt": "A teammate says: 'We don't need a configuration management tool -- we already have a shell script that installs and configures everything on a new server.' Explain what's actually missing from relying on that shell script alone, especially as the number of servers grows.",
@@ -227,6 +266,45 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "Idempotency requires convergence to the same end state regardless of how many times the operation runs, not merely the absence of errors. This task appends the line every time with no check for whether it's already present, so two runs leave two duplicate export lines, three runs leave three -- a different, and progressively worse, end state each time, despite never throwing an error. Option A describes exactly the misconception the question is testing. Option C overstates the case -- shell commands can be used safely when the underlying operation genuinely is idempotent on its own, or when the task itself adds an existence check; the issue here is this specific command's behavior, not shell tasks categorically. Option D invents an irrelevant distinction; the problem is the unconditional append, not which file is being appended to."
+        },
+        {
+          "id": "devops-config-mgmt-idempotency-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A scheduled, unattended configuration management run against 50 already-correctly-configured servers reports changed=0 on 49 of them, but changed=3 on one server, even though nobody intentionally changed anything on that server. According to this concept, what does this specific result indicate?",
+          "options": [
+            "A bug in the configuration management tool, since a routine run should never report any changes at all.",
+            "A concrete, actionable drift signal -- something on that one server had deviated from the declared desired state and was just corrected back to it, worth investigating the same way an unexpected Terraform plan diff would be.",
+            "Nothing meaningful -- changed counts fluctuate randomly from run to run and shouldn't be actively monitored.",
+            "That the playbook itself is broken and needs to be rewritten from scratch."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept draws this comparison directly: a nonzero changed count on a run that wasn't expected to change anything is a concrete, actionable signal that something on that machine had drifted, exactly like the drift-detection signal covered for Terraform state, just applied one layer down inside the machine. Option A misreads correct drift-correction behavior as a malfunction. Option C dismisses a signal the concept explicitly treats as worth watching like an operational metric. Option D draws an unsupported conclusion from a single machine's legitimate correction."
+        },
+        {
+          "id": "devops-config-mgmt-idempotency-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Two separate tasks in the same play both notify the same 'restart app' handler, and both tasks happen to report changed during the same run. How many times does the app actually restart, according to this concept?",
+          "options": [
+            "Twice -- once independently for each task that notified the handler.",
+            "Exactly once -- Ansible deduplicates notifications to a given handler and runs it at most once per play, after all regular tasks complete, regardless of how many tasks notified it.",
+            "Zero times -- handlers never run automatically and must always be triggered by a separate, manual step.",
+            "It restarts continuously in a loop until no task reports changed anymore."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept states this explicitly: Ansible deduplicates notifications and runs each distinct handler at most once per play, after all regular tasks complete, so even if both config files changed in the same run, the app restarts exactly once, not twice back to back. Option A misunderstands the deduplication behavior the concept describes. Option C is false -- a handler fires automatically once notified by a changed task. Option D invents looping behavior that doesn't exist in how handlers work."
+        },
+        {
+          "id": "devops-config-mgmt-idempotency-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A playbook is run a second time against a machine where a config file was manually edited since the first run. The template task reports 'changed' and overwrites the manual edit back to the file's declared desired state. Does this violate idempotency, according to this concept?",
+          "options": [
+            "Yes -- a genuinely idempotent playbook should never report changed or modify anything on a second run, under any circumstances.",
+            "No -- idempotency means the outcome is determined consistently by the relationship between current and desired state, not that every run is unconditionally a no-op; correcting genuine drift back to the declared state is exactly the reconciliation behavior that makes the tool useful.",
+            "Yes, because a truly idempotent tool would have somehow prevented the manual edit from happening in the first place.",
+            "No, but only because handlers were not involved in triggering this particular task."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept directly addresses this misconception: idempotency means the playbook does nothing when nothing needs to change, not that it's inert regardless of what's actually true on the machine -- if something has genuinely drifted, an idempotent run correctly reports changed and corrects it, which is exactly what makes the tool useful for ongoing reconciliation. Option A treats a legitimate correction as a violation. Option C imagines a capability (preventing external edits) that has nothing to do with idempotency as defined here. Option D is an irrelevant, unsupported qualifier."
         },
         {
           "id": "devops-config-mgmt-idempotency-assess-explain1",
@@ -347,6 +425,45 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "Git retains full history by design -- removing a line in a later commit does not delete the earlier commit or the blob data it introduced, so `git log -p` or checking out the earlier commit still reveals the original plaintext key. The only action that actually addresses the exposure is rotating the credential, since the key's validity, not its visibility in the latest file version, is what determines whether it can still be misused. Option A ignores that history persists; option C is the private-repository misconception directly -- clone access, forks, and CI caches already expose committed history regardless of the repository's public/private setting; option D is simply factually false about how git storage works."
+        },
+        {
+          "id": "devops-secrets-management-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A team encrypts all its secrets in a single Ansible Vault file protected by one shared passphrase known to the whole team. According to this concept, what problem does this genuinely solve, and what does it leave unsolved?",
+          "options": [
+            "It solves everything a dedicated secrets manager would -- encryption at rest is the entirety of what secrets management requires.",
+            "It solves the plaintext-in-git problem, since what's committed is ciphertext -- but it leaves fine-grained access control, audit logging, and credential rotation or expiration unsolved, since anyone with the shared passphrase can decrypt every secret with no record of who did so or when.",
+            "It solves fine-grained access control specifically, but leaves the plaintext-in-git problem completely unsolved.",
+            "It solves nothing meaningful, since Ansible Vault's encryption is easily broken by anyone with repository access."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept is explicit about exactly this trade-off: Vault genuinely solves plaintext-in-git, but the passphrase becomes a single, long-lived shared secret with no per-user access control, no audit log of who decrypted the file, and no automatic rotation of the credentials inside it. Option A overstates what encryption at rest alone provides, contradicting the concept's explicit list of remaining gaps. Option C reverses which problem is solved and which remains open. Option D is factually unsupported -- the concept never claims Vault's encryption itself is weak."
+        },
+        {
+          "id": "devops-secrets-management-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Why does hardcoding a database password directly into application source code specifically conflict with the CI/CD principle of 'build once, promote the same artifact through every environment'?",
+          "options": [
+            "It doesn't conflict at all -- hardcoded values have no meaningful relationship to how artifacts are promoted.",
+            "Because staging and production would need different password values, the artifact built from that source could no longer be the exact same bytes in both environments, reintroducing the per-environment divergence that build-once-promote-the-artifact exists to eliminate.",
+            "Because hardcoded secrets make the overall build process measurably slower to compile.",
+            "Because hardcoded secrets can only be read by the specific environment that originally built the artifact, not by any environment it's later promoted to."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept draws this connection explicitly: a secret baked into the artifact forces the artifact to differ by environment, which is precisely the kind of per-environment divergence the 'build once, promote the same artifact' principle exists to eliminate -- fetching secrets at runtime instead keeps the artifact identical everywhere. Option A ignores this explicitly stated conflict. Option C introduces an unrelated and unsupported performance claim. Option D misdescribes how hardcoded values actually behave -- they'd simply be wrong for other environments, not unreadable."
+        },
+        {
+          "id": "devops-secrets-management-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A CI pipeline's secret-masking feature is expected to catch and redact any secret value that appears in build log output. According to this concept, under what circumstance can a secret still leak despite this masking being in place?",
+          "options": [
+            "Masking is completely infallible, and no secret can ever leak through logs once it's enabled.",
+            "If the secret is base64-encoded, split across concatenated log lines, or otherwise transformed before being printed, since masking typically works by exact string match against the literal known secret value.",
+            "Masking only fails if the CI system's underlying infrastructure has itself been directly compromised.",
+            "Masking only applies to secrets stored in a dedicated secrets manager, not to any other kind of credential."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept states this limitation directly: masking typically works by exact string match, so a secret that's been transformed -- encoded, split, or truncated -- before being printed can slip through unmasked, because the masking system never sees the literal original string appear intact. Option A overstates masking's reliability, which the concept explicitly cautions against. Option C introduces an unrelated compromise scenario not discussed as the cause of masking failures. Option D is false -- masking operates on log output regardless of where the secret value originated."
         },
         {
           "id": "devops-secrets-management-assess-explain1",

@@ -117,6 +117,45 @@
           "explanation": "The bottleneck described -- primary CPU saturated by a mix of transactional and analytical query load -- is precisely what read replicas are built to relieve: routing the analytical/reporting queries to one or more replicas frees the primary's CPU for transactional traffic, at the cost of the replicas' data lagging the primary by a small, usually tolerable amount, which is generally acceptable for reporting use cases. Option A is the classic Multi-AZ misconception -- a standby cannot serve any query traffic at all during normal operation, so it does nothing for this bottleneck. Option C confuses backup retention (how far back you can restore to) with query capacity, which are unrelated. Option D is a red herring -- CPU capacity is a function of instance class/size, not which relational engine is running, and switching engines is a disproportionate, unrelated response to a workload-distribution problem."
         },
         {
+          "id": "cloud-aws-rds-managed-relational-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "During an RDS Multi-AZ failover, the database's DNS endpoint automatically updates to point at the newly promoted standby, with the whole process typically completing within roughly 60-120 seconds. Given this, what should application code do to handle a failover gracefully?",
+          "options": [
+            "Nothing; failover is instantaneous and completely invisible to any application already connected to the database.",
+            "Manually reconfigure the application's connection string to a new endpoint once failover completes, since the DNS endpoint does not update on its own.",
+            "Implement connection retry logic to handle the brief connection interruption during the failover window, since although the endpoint itself doesn't need to change, an in-progress connection is disrupted while the standby is being promoted.",
+            "Switch the application to use a read replica's endpoint instead of the primary's, since only read replicas remain reachable during a Multi-AZ failover."
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "RDS handles the DNS endpoint update automatically during Multi-AZ failover, so the application never needs a new connection string -- but that doesn't mean the failover is invisible: an existing connection is disrupted while the standby is promoted, and reaching the database again requires reconnecting, which is exactly why building in retry logic rather than assuming instantaneous continuity matters. Option A overstates the guarantee -- there's a real, if brief, disruption window. Option B is wrong because the DNS endpoint update is automatic, not manual. Option D confuses read replicas (a separate feature for read scaling) with the Multi-AZ standby itself, which is what actually gets promoted during this specific failover."
+        },
+        {
+          "id": "cloud-aws-rds-managed-relational-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A user submits a form that writes a new record to the primary RDS instance, and the application immediately redirects them to a page that reads that same record back from a read replica. What is the most likely risk, and why?",
+          "options": [
+            "There is no risk; read replicas are updated synchronously, so the new record is guaranteed to be visible immediately.",
+            "The read might not find the record yet, or might see a stale version of it, because replication to a read replica is asynchronous, introducing replication lag between when a write completes on the primary and when it becomes visible on that replica.",
+            "The read will fail outright, since read replicas cannot serve any read traffic for the first several seconds after any write occurs anywhere in the database.",
+            "This is only a risk if Multi-AZ happens to also be enabled on the same primary instance."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Read replicas receive data asynchronously, unlike a Multi-AZ standby's synchronous replication, which means there's a small, variable replication lag between a write completing on the primary and that write becoming visible on a given replica. A read-your-own-write pattern -- writing to the primary and immediately reading from a replica -- is exactly the case where that lag can surface as a visible bug, showing stale or missing data. Option A incorrectly attributes synchronous replication to read replicas, which is the Multi-AZ standby's behavior, not a read replica's. Option C invents an outright failure mode that doesn't reflect how replication lag actually behaves -- reads still succeed, they just may return stale data. Option D incorrectly ties this risk to Multi-AZ, which is an unrelated, separate feature."
+        },
+        {
+          "id": "cloud-aws-rds-managed-relational-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A company needs to retain the ability to restore their RDS database to any specific point in time within the last 2 years, for a regulatory retention requirement. Is RDS's automated backup and point-in-time recovery feature sufficient for this on its own?",
+          "options": [
+            "Yes, automated backups and point-in-time recovery support an effectively unlimited retention window by default.",
+            "No -- automated backups' point-in-time recovery window has a maximum retention of up to 35 days; a 2-year requirement needs manual or automated snapshots taken and retained deliberately as a separate, longer-term archival strategy.",
+            "Yes, as long as Multi-AZ is enabled, since the standby instance retains historical data indefinitely.",
+            "No, because RDS provides no backup or recovery capability of any kind beyond whatever a read replica happens to retain."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "RDS's automated backups and point-in-time recovery have a real, finite retention window -- up to 35 days -- so a 2-year regulatory requirement is well beyond what that feature alone provides. Meeting a longer-term retention need requires manual or automated snapshots taken and retained deliberately as a separate archival policy, since automated backups aren't designed as a substitute for long-term archival. Option A overstates the retention window, which is explicitly capped. Option C incorrectly attributes indefinite historical retention to the Multi-AZ standby, which only mirrors current data for failover purposes and isn't a historical archive. Option D understates RDS's real, genuine backup capability, which does exist -- it's just capped well short of 2 years."
+        },
+        {
           "id": "cloud-aws-rds-managed-relational-assess-explain1",
           "type": "explanation",
           "prompt": "A junior engineer says, 'We moved our database to RDS, so we don't really need to worry about database performance or security anymore -- AWS manages it.' Explain what's accurate and what's mistaken in that statement, being specific about where the actual dividing line falls.",
@@ -231,6 +270,32 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "Table-wide capacity metrics looking healthy while one specific key value's requests are throttled is the defining symptom of a hot partition: DynamoDB distributes items and throughput across partitions based on the partition key's hashed value, and every item sharing that one overrepresented key value lands on the same physical partition, which has its own individual throughput ceiling independent of the table's aggregate capacity. Option A invents a size-based limit that isn't the actual mechanism here -- this is a distribution problem, not a total-size problem. Option C fabricates a per-key outage, which isn't how DynamoDB throttling works. Option D is incorrect because a sort key is optional and orthogonal to load distribution -- distribution across partitions is entirely a function of the partition key, not whether a sort key exists."
+        },
+        {
+          "id": "cloud-aws-dynamodb-basics-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A table has partition key customerId and sort key orderDate#orderId. If this table had only a simple primary key (customerId alone, with no sort key), what specific capability would it lose?",
+          "options": [
+            "The ability to store more than one non-key attribute on each item.",
+            "The ability to fetch a range of items sharing the same partition key value -- such as all of one customer's orders within a date range -- in a single efficient query; without a sort key, a partition key value can only ever address one uniquely identified item.",
+            "The ability for the table to distribute items across more than one physical partition at all.",
+            "The ability to choose between provisioned and on-demand capacity modes for the table."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "A sort key's specific contribution is enabling multiple items to share the same partition key value while remaining individually addressable and range-queryable, since items within a partition are physically stored sorted by their sort key. Without one, a partition key value maps to exactly one item, with no notion of 'a range of items under this key' at all -- fetching a customer's orders in a date range would have no way to be expressed as a single efficient request. Option A is unrelated -- attribute count per item has nothing to do with sort keys. Option C is wrong -- partition distribution is governed by the partition key alone, independent of whether a sort key exists. Option D is also unrelated -- capacity mode is a separate table-level setting with no connection to key schema."
+        },
+        {
+          "id": "cloud-aws-dynamodb-basics-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A DynamoDB table grows from 1 million to 100 million items. A Query using one customer's exact partition key, and a Scan filtering on a non-key attribute across the whole table, are each run before and after this growth. What happens to each operation's latency?",
+          "options": [
+            "Both operations get proportionally slower, since DynamoDB latency is always a direct function of total table size regardless of which operation is used.",
+            "The Query's latency stays roughly the same, since it's routed directly to the one partition holding that customer's items regardless of the table's total size; the Scan's latency grows substantially, since it has to examine a portion of the table proportional to the table's new, much larger size.",
+            "Both operations get faster, since DynamoDB automatically adding more partitions as a table grows uniformly speeds up every kind of read, including Scans.",
+            "The Query becomes slower while the Scan's latency stays constant, since Scans always execute against a fixed-size sample regardless of table size."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "A Query addressed by the exact partition key is routed directly to the specific partition holding that data, so its cost is a function of how much data lives under that one key, not the table's overall size -- this is the scale-independence DynamoDB is specifically designed to provide for key-addressed access. A Scan has no partition key to route by, so it must examine a portion of the table proportional to its total size to evaluate the filter, meaning its cost grows as the table grows, independent of how few items actually match. Option A incorrectly generalizes the Scan's size-dependent cost to the Query as well. Option C invents a uniform speedup that doesn't apply to Scans, which read broadly regardless of partition count. Option D reverses which operation is size-independent."
         },
         {
           "id": "cloud-aws-dynamodb-basics-assess-explain1",
@@ -351,6 +416,32 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "This workload is close to a textbook DynamoDB fit: the access pattern is fixed and fully known in advance (fetch recent readings for one device ID, using deviceId as a natural high-cardinality partition key across 2 million distinct devices), and the write volume (2 million devices at roughly one write per second each) is extremely high and needs to scale with flat, predictable latency -- exactly what DynamoDB's partition-based model is designed to sustain without requiring the kind of read-replica/instance-sizing management RDS would need at this volume. Option A's blanket 'default to strongest consistency' reasoning ignores that this workload never actually needed multi-row relational transactions or ad-hoc joins in the first place. Option C misreads the requirement -- 'fetch the latest N readings for one device' is a query need S3 has no mechanism for at all beyond fetching by exact key; S3 would require pairing with an actual queryable index to serve this, not solve it alone. Option D is wrong because the scale and access-pattern profile described are specifically the case where the choice matters a great deal -- DynamoDB avoids an operational scaling battle that RDS would face at 2 million devices writing roughly every second."
+        },
+        {
+          "id": "cloud-aws-choosing-a-data-store-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A team needs to guarantee that a transfer between two bank accounts either fully succeeds (both the debit and the credit are applied) or fully fails with neither applied, even under concurrent access from other transfers. Which store's core strength most directly addresses this requirement?",
+          "options": [
+            "DynamoDB, because its partition key design automatically guarantees atomicity across any two items in a table.",
+            "RDS, because a relational engine's transactional guarantees -- committing or rolling back multiple related writes as a single atomic unit -- are specifically built for exactly this kind of multi-row, all-or-nothing requirement.",
+            "S3, because object versioning provides atomic multi-object updates across any two objects by default.",
+            "Any of the three stores handles this equally well, since atomicity is entirely a property of the application code and not something the underlying data store provides."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Strong, multi-row transactional guarantees -- exactly the 'debit one account and credit another as a single atomic unit, or neither happens at all' requirement -- is a core relational-database strength, built directly into a relational engine's commit/rollback machinery. Option A overstates DynamoDB's guarantees; while DynamoDB does support a narrower form of transactions for specific cases, its partition key design itself provides no automatic cross-item atomicity guarantee. Option C invents an atomic multi-object update capability that S3 versioning does not provide. Option D is incorrect -- transactional atomicity across multiple related writes is substantially a property of what the underlying store natively supports, not something application code can reliably bolt on afterward regardless of store."
+        },
+        {
+          "id": "cloud-aws-choosing-a-data-store-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A team wants to store scanned receipt images and also needs to query \"all receipts over $50 submitted by Finance-department employees last quarter,\" filtering on structured fields like amount, department, and date. Is S3 alone a sufficient store for this entire feature?",
+          "options": [
+            "Yes, S3's prefix-based listing can efficiently filter by amount, department, and date simultaneously as long as the key naming scheme is designed cleverly enough.",
+            "No -- S3 has no query language beyond fetching by exact key or listing by prefix; the receipt images themselves belong in S3, but the structured, filterable fields (amount, department, date) need a queryable store like RDS or DynamoDB alongside it.",
+            "Yes, because S3 Standard automatically indexes every object's metadata for arbitrary field-level queries.",
+            "No, because S3 is only capable of storing structured JSON documents and cannot store binary image data at all."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "S3 has no query language beyond fetching an object by its exact key or listing objects sharing a prefix -- it cannot filter on structured fields like amount or department at all, regardless of how the key naming scheme is designed. The receipt images themselves are exactly the kind of whole-blob access pattern S3 is built for, but the actual filtering requirement described needs a separate, genuinely queryable store like RDS or DynamoDB working alongside S3, exactly the multi-store pattern this concept describes for features with more than one distinct access pattern. Option A overstates what prefix-based listing can express -- it supports prefix matching, not multi-field filtering. Option C invents an automatic indexing capability S3 doesn't have. Option D is simply false -- S3 stores arbitrary bytes, including images, without any restriction to JSON."
         },
         {
           "id": "cloud-aws-choosing-a-data-store-assess-explain1",

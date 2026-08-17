@@ -117,6 +117,45 @@
           "type": "explanation",
           "prompt": "A senior engineer proposes: 'We don't need a retrieval system anymore -- let's just fine-tune the model on a fresh snapshot of our documentation every week, so it always knows the latest information.' Explain, mechanically, why weekly fine-tuning is a fundamentally different (and riskier) way to keep a model current than a retrieval system that leaves weights frozen, and identify a specific risk beyond staleness that this weekly-retraining plan introduces.",
           "modelAnswer": "A retrieval system never touches the model's weights at all -- it keeps the generation model completely frozen and simply changes what text is included in the prompt for a given call, by searching an index that can itself be updated in minutes whenever the underlying documentation changes. Fine-tuning is a categorically different operation: it runs real gradient descent, computing a loss against target completions and nudging every trainable weight to reduce that loss, which is slow, computationally expensive, and -- critically -- changes the model itself rather than just its input. Doing that every week doesn't just inherit the ordinary problems of fine-tuning for knowledge (weights encode facts diffusely rather than storing them verbatim, so even a fresh fine-tune isn't a reliable, exact lookup the way injecting retrieved text into a prompt is); it compounds a second, distinct risk across every retraining cycle: catastrophic forgetting. Each week's fine-tuning run nudges shared weights toward that week's documentation snapshot, with no guarantee that doing so leaves every previously-learned capability, including whatever the *previous* week's fine-tune reinforced, fully intact. Run this weekly for months and you have months of accumulated, uncontrolled weight drift, with no single point where anyone deliberately verified that some earlier capability hasn't quietly degraded along the way -- unlike a retrieval index, which can be corrected, rolled back, or inspected for exactly what text it will inject, with zero risk to the underlying model's other behaviors, because the model itself never changes."
+        },
+        {
+          "id": "llm-engineering-finetuning-mechanics-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "During an ordinary inference call to a model, which of the operations involved in a fine-tuning training step are actually performed?",
+          "options": [
+            "Only the forward pass -- logits are computed and a token is selected from the resulting distribution; no loss is computed, and no backward pass or optimizer step ever runs.",
+            "The forward pass and loss computation both run, but the backward pass and optimizer step are skipped.",
+            "The forward pass, loss computation, and backward pass all run, but the optimizer step is skipped to save time.",
+            "All four steps -- forward pass, loss computation, backward pass, and optimizer step -- run on every inference call, just using a very small learning rate."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "Inference only ever runs the forward pass and reads off a probability distribution to select a token from -- there is no target completion to compute a loss against, so nothing analogous to `loss.backward()` or `optimizer.step()` ever executes, which is exactly why running inference many times never changes the model's weights at all. Options B, C, and D all incorrectly assume some piece of the training-specific machinery runs during ordinary inference, when none of it does -- loss computation, gradients, and optimizer updates are exclusively part of a training step, never part of a generation call."
+        },
+        {
+          "id": "llm-engineering-finetuning-mechanics-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Per this module, why is catastrophic forgetting described as 'silent by default'?",
+          "options": [
+            "Because it only ever affects models that are deployed without any monitoring dashboard configured.",
+            "Because training loss on the target dataset keeps looking good -- it's the exact metric being directly optimized -- while performance on unrelated, untested capabilities can degrade with no error, warning, or signal from the training process itself; it's only detected by deliberately evaluating those other capabilities before and after.",
+            "Because forgetting only ever happens during the very first epoch of training, before most logging frameworks are typically initialized.",
+            "Because catastrophic forgetting always throws a specific, named exception that many teams accidentally catch and silently swallow in their training scripts."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The module is explicit that nothing about the fine-tuning process throws an error or warning when forgetting happens -- the target metric being trained for will reliably look good since it's exactly what's being optimized, while unrelated capabilities can quietly degrade, detectable only through deliberate evaluation of tasks outside the training objective. Option A, C, and D all invent specific mechanisms or triggers -- missing dashboards, a first-epoch-only timing, a swallowed exception -- that the module never describes; the actual reason is simply that nothing in the training loop checks or reports on capabilities it isn't currently optimizing for."
+        },
+        {
+          "id": "llm-engineering-finetuning-mechanics-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Per this module, what's the specific flaw in gating a fine-tune's deployment purely on whether it improved the one metric it was trained for?",
+          "options": [
+            "There's no real flaw -- if the target metric improved, that alone is sufficient evidence the fine-tune is safe to ship.",
+            "The target metric will reliably look good precisely because the training process was directly optimizing exactly that number, while telling you nothing about whether unrelated capabilities silently regressed -- only a broader before/after evaluation across other tasks, against the retained base-model baseline, can reveal that.",
+            "The flaw is that target-metric evaluation is always less accurate than LLM-as-judge evaluation, regardless of what specific capability is being measured.",
+            "The flaw is that target-metric-only gating requires re-running the full training job twice, which needlessly doubles compute cost without any real benefit."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The module explicitly calls out this exact mistake: gating deployment on the trained-for metric alone will always look successful, since that's precisely what the optimization was targeting, while providing zero visibility into whatever else might have quietly regressed -- which is why a broad regression suite compared against the retained base-model baseline is the recommended practice instead. Option A directly contradicts the module's core warning. Option C introduces an unrelated and unsupported comparison to LLM-as-judge evaluation. Option D misdiagnoses the issue as a compute-cost problem rather than a blind-spot-in-measurement problem."
         }
       ]
     },
@@ -237,6 +276,45 @@
           "type": "explanation",
           "prompt": "A teammate asks how a company can offer hundreds of enterprise customers their own 'custom fine-tuned' version of a very large model without provisioning hundreds of full copies of that model in production. Explain how LoRA-based adapters make this feasible, and specifically what does and does not get duplicated per customer.",
           "modelAnswer": "The key fact that makes this feasible is that a LoRA fine-tune never modifies the base model's own weights at all -- training only produces a separate, additive pair of small low-rank matrices (commonly called an adapter) for whichever layers were adapted, and those adapter files are typically megabytes in size rather than the many gigabytes a full copy of a large model's weights would require. What gets duplicated per customer is only that small adapter: each enterprise customer's fine-tune produces their own tiny A/B matrix pair, trained on their own data, capturing whatever narrow behavior shift is specific to them. What does NOT get duplicated is the base model itself -- the large, expensive-to-load set of original weights is loaded exactly once by the serving infrastructure and shared across every customer's requests. At request time, the system simply swaps in (adds) whichever customer's small adapter matrices onto that one shared base model before generating a response, and swaps in a different customer's adapter for the next request. This means the operational cost that scales with the number of customers is the cheap cost of storing and swapping small adapter files, not the expensive cost of storing and loading hundreds of full-size model copies -- which is precisely the cost structure that makes offering many customers their own custom behavior commercially viable in a way that would be impractical if every customer required a genuinely separate full fine-tune and a separate full model deployment."
+        },
+        {
+          "id": "llm-engineering-lora-peft-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Per this module, why does full fine-tuning with an Adam-family optimizer need roughly four times the raw parameter memory as a bare minimum, even before a single training example is loaded?",
+          "options": [
+            "Because Adam-family optimizers require four separate full copies of the training dataset to be held in memory simultaneously.",
+            "Because for every trainable parameter, memory must hold the weight itself, its gradient, and two optimizer moment tensors that Adam-family optimizers use to adapt step size per parameter -- four values per parameter at minimum, before activation memory is even counted.",
+            "Because the forward pass must be run four separate times per training example to compute a numerically stable loss estimate.",
+            "Because tokenizing text for training requires four times more memory than tokenizing the same text for inference."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The module breaks this down explicitly: the weight, its gradient, and two running-average optimizer moments per parameter together account for the roughly 4x figure, entirely independent of dataset size or activation memory. Option A misattributes the multiplier to dataset copies, which isn't what Adam-family optimizers store. Option C invents a repeated-forward-pass requirement the module never describes. Option D misapplies the multiplier to tokenization, an unrelated step in the pipeline."
+        },
+        {
+          "id": "llm-engineering-lora-peft-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Per this module, what's the practical risk of choosing a LoRA rank much higher than what the target adaptation actually needs?",
+          "options": [
+            "A higher rank always causes training to fail outright with an out-of-memory error, regardless of the model or hardware involved.",
+            "A higher rank increases memory and compute cost, and as it grows large enough to start approximating full fine-tuning, it also increases exposure to the same catastrophic-forgetting risk covered for full fine-tuning -- often without a corresponding gain in quality.",
+            "A higher rank makes the adapter's matrix shapes incompatible with the frozen base model, so it can no longer be added to it at inference time.",
+            "A higher rank is purely beneficial with no real tradeoff, since LoRA's design guarantees that more capacity can never hurt."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The module directly names this tradeoff: rank beyond what's needed costs more memory and compute, and as it grows large enough to resemble full fine-tuning, it inherits more of full fine-tuning's forgetting risk, with a higher-capacity update having more room to overfit narrowly rather than generalize -- often for little or no additional benefit. Option A overstates the consequence as a guaranteed hard failure. Option C is incorrect -- the matrix-shape math (A is d x r, B is r x k) works for any rank r, so compatibility isn't the issue. Option D directly contradicts the module's explicit warning about rank being a real tradeoff, not a free lever."
+        },
+        {
+          "id": "llm-engineering-lora-peft-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Per this module, what specifically makes it operationally feasible to serve many customers their own custom fine-tuned behavior using LoRA, in a way that full fine-tuning would not support as cheaply?",
+          "options": [
+            "LoRA adapters eliminate the need to load the base model at all, so no shared infrastructure is required for any customer.",
+            "Only the small adapter (the trained A and B matrices) differs per customer and can be swapped cheaply onto one shared, frozen base model loaded exactly once, whereas full fine-tuning would require storing and loading a separate full-size model copy per customer.",
+            "LoRA adapters automatically merge every customer's behavior into a single blended response, so only one adapter is ever needed regardless of how many customers exist.",
+            "Full fine-tuning and LoRA cost exactly the same to serve at scale; the only feasibility difference between them is in training time, not serving cost."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The module's serving example is explicit about this: the large base model is loaded once and shared, and only small, megabyte-scale adapter files differ per customer and get swapped in cheaply, in sharp contrast to full fine-tuning's requirement of a separate full-size model copy per customer. Option A is wrong -- the base model still must be loaded, just once rather than per customer. Option C invents an automatic-blending behavior the module never describes; each customer's adapter is kept and applied separately. Option D ignores the serving-cost difference the module explicitly attributes to what must be stored and loaded per customer."
         }
       ]
     },
@@ -357,6 +435,45 @@
           "type": "explanation",
           "prompt": "Explain, mechanically in terms of gradient updates, why a fine-tuning dataset with a nontrivial fraction of mislabeled examples doesn't just 'partially help' the fine-tune -- it can make the model measurably worse at the task than not fine-tuning at all. Also explain what role a held-out validation set plays in catching this before it ships.",
           "modelAnswer": "Every training example, correct or not, produces a gradient during backpropagation -- a specific, calculated direction and magnitude that the optimizer uses to nudge every trainable weight, with the explicit goal of making the model assign higher probability to that example's target completion given its input. The optimizer has no independent way to tell a correctly-labeled example from a mislabeled one; both are treated as equally trustworthy ground truth by default, and both produce a gradient applied with identical confidence. This means a mislabeled example isn't neutral or 'wasted' -- it actively teaches the model that, given an input like this one, the correct-sounding response looks like the (actually wrong) target it was paired with. A single isolated mislabel among thousands of correct examples might have a negligible net effect, since its individual gradient signal is small relative to everything else pulling in the right direction. But a *systematic* fraction of mislabeled examples -- the same kind of error repeated across many examples, as opposed to scattered, independent noise -- is a consistent, correlated signal that gradient descent is specifically good at learning, just pointed at the wrong target; enough of that correlated wrong-signal can outweigh the correct signal on exactly the inputs it affects, producing a fine-tuned model that's measurably worse on that slice of the task than the original, untouched base model would have been, precisely because it was actively taught the wrong association rather than merely left un-improved. A held-out validation set -- crucially, one that's itself been verified as accurately labeled, and drawn from a distribution that matches real usage -- is what catches this before deployment: since the mislabeling problem lives specifically in what the training set is teaching the model to output, checking performance against a clean, independent reference set that wasn't used for training is what reveals a gap between 'looks good because the model was fit to match this exact (flawed) data' and 'actually good at the underlying task,' a gap that watching training loss decrease on the flawed training set alone can never reveal, since training loss is measuring exactly the thing the flawed labels were used to define as correct."
+        },
+        {
+          "id": "llm-engineering-finetuning-dataset-prep-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Per this module, why can a model fine-tuned exclusively on bare prompt/completion pairs (no system prompt, no retrieved context, no conversation history) underperform in production even if every individual training label is correctly written?",
+          "options": [
+            "Bare prompt/completion pairs are always rejected outright by fine-tuning APIs, so this scenario could not actually occur in practice.",
+            "The model was trained on a mapping from an input shape it will essentially never see in production, since real requests include a system prompt, injected context, and history -- and there's no guarantee that what it learned from the clean, minimal training format transfers cleanly to that messier, fuller real request shape.",
+            "Bare prompt/completion pairs always take substantially longer to tokenize, which measurably slows down the model's convergence during training.",
+            "Fine-tuning APIs silently discard any training example that lacks an explicit system message before training begins."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The module ties this directly to format fidelity: training data teaches a mapping from a specific input shape to a desired output shape, and if that trained-on shape doesn't match what real requests actually look like, nothing guarantees the learned behavior transfers cleanly -- even though every individual label might be perfectly correct in isolation. Option A invents an API restriction the module never mentions. Option C attributes the problem to tokenization speed, an unrelated concern. Option D invents a silent-discard behavior that isn't part of how fine-tuning APIs are described as working."
+        },
+        {
+          "id": "llm-engineering-finetuning-dataset-prep-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Per this module, why can training loss keep decreasing steadily throughout a fine-tuning run even as the model increasingly just memorizes quirks specific to the training examples rather than learning behavior that generalizes?",
+          "options": [
+            "Training loss is measured only against the training data itself, so by construction it cannot distinguish genuine generalization from memorization of that same data -- only a held-out validation split drawn from a representative distribution can reveal that difference.",
+            "Training loss is effectively a random number generated independently of the model's actual weight values, so it carries no real information either way.",
+            "Training loss always rises sharply the moment memorization begins, so a steadily decreasing loss is, by itself, proof that memorization is not occurring.",
+            "Memorization is mathematically impossible under gradient descent, so this described scenario could not actually happen in a real training run."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "The module states this precisely: a steadily dropping training loss is consistent with genuine learning and with pure memorization alike, because it's only ever checked against the same data the model is being fit to -- which is exactly why a held-out validation split from a representative distribution is necessary to actually tell the two apart. Option B mischaracterizes training loss as meaningless noise, contradicting its real, direct relationship to the model's fit on the training data. Option C asserts the opposite of the module's point -- decreasing loss is explicitly described as compatible with memorization, not evidence against it. Option D denies a phenomenon the module treats as a real, common risk."
+        },
+        {
+          "id": "llm-engineering-finetuning-dataset-prep-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A support-ticket training dataset is built by pulling examples in raw database order until a fixed example count is reached, with no deduplication and no per-category cap. Per this module, what's the likely consequence, and why?",
+          "options": [
+            "No real consequence -- database order has no bearing on dataset composition, since every ticket is equally likely to be included regardless of order.",
+            "Whichever ticket category is most common in raw volume is likely to dominate the resulting dataset with many near-identical examples, and since gradient descent applies a gradient to every example rather than discounting repeated near-duplicates, that category's pattern gets disproportionately reinforced at the expense of others.",
+            "The dataset will automatically balance itself, since fine-tuning APIs enforce a hard cap on how many similar examples can be drawn from any single source category.",
+            "This concern only applies to classification-style tasks and has no relevance to tasks involving generated free-text replies like support-ticket responses."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The module's own debugging exercise describes exactly this setup and diagnosis: an unordered pull with no dedup and no per-category cap tends to let whichever category is most common in raw volume dominate the resulting dataset, and because gradient descent doesn't discount repeated near-duplicates as one signal counted once, that overrepresented category's pattern gets reinforced far more strongly than others. Option A ignores that real-world ticket categories are rarely uniformly distributed in raw order or volume. Option C invents an automatic safeguard that fine-tuning APIs don't provide. Option D incorrectly limits the concern to classification, when the module's own example is specifically about free-text support replies."
         }
       ]
     }

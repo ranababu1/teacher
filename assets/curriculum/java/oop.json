@@ -118,6 +118,45 @@
           "type": "explanation",
           "prompt": "Explain what encapsulation actually buys a class, using the idea of invariants, and explain why a private field with a getter that leaks a mutable reference only provides the appearance of encapsulation rather than the real thing.",
           "modelAnswer": "Encapsulation means bundling an object's state with the code permitted to touch it, and routing every outside interaction with that state through methods the class itself writes and controls -- typically by making fields private and exposing only deliberately-chosen public methods. The payoff is that the class can actually guarantee its invariants: rules about its own state that should always hold true, like a bank balance never going negative or a list never containing duplicate entries. If every path that can change that state is a method the class wrote, the class can put a check at the top of that method and be certain -- not hopeful, certain -- that the check is enforced on every single call, because there is no other way in. A public field offers no such guarantee: any code anywhere holding a reference to the object can assign directly to that field, bypassing every rule the class might want to enforce, since there's no method standing in the way to enforce anything. The subtler failure mode is a field that's private, with no public setter, but a getter that returns the actual internal object when that object happens to be mutable -- an ArrayList, say, rather than an int. This looks encapsulated from the outside: there's no way to write `obj.field = ...` directly. But the caller who receives that returned list can call .add() or .remove() or .clear() on it, and because it's the exact same object the class holds internally -- not a copy -- those mutations land directly on the class's real internal state, with the class having no idea it happened and no chance to validate or reject it. The fix is a defensive copy: return a new collection built from the internal one, so callers can look at (or even freely mutate their own copy of) the data without any of it reaching back into the object's actual internals. Real encapsulation requires thinking about every path data can flow out through, not just whether the field keyword happens to say private."
+        },
+        {
+          "id": "java-classes-objects-and-encapsulation-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "class Point { private int x; private int y; public Point(int x, int y) { this.x = x; this.y = y; } } Point p = new Point(); What happens?",
+          "options": [
+            "This compiles fine, since Java always provides a no-argument constructor for every class, regardless of what else is declared.",
+            "This fails to compile, because the moment a class defines any constructor of its own, the automatic no-argument default constructor disappears entirely -- Point has no accessible zero-argument constructor for new Point() to call.",
+            "This compiles fine and creates a Point with x and y both defaulting to 0.",
+            "This throws a NullPointerException at run time, since x and y are never initialized."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Java only supplies the automatic, do-nothing default constructor when a class defines no constructors at all. Point defines one constructor, taking (int, int), so that automatic default is gone -- there is no zero-argument constructor available for new Point() to invoke, and the compiler rejects the call rather than inventing one. Option A describes behavior that only holds for classes with no constructors written at all. Option C assumes a default constructor exists when it does not. Option D is wrong because this code never reaches run time in the first place -- the failure is caught by javac before any object could ever be created."
+        },
+        {
+          "id": "java-classes-objects-and-encapsulation-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "class Person { private String name; public Person(String name) { name = name; } public String getName() { return name; } } What does new Person(\"Amy\").getName() return, and why?",
+          "options": [
+            "\"Amy\", because name = name correctly assigns the constructor parameter's value into the field.",
+            "null, because the bare name on the left of name = name refers to the parameter, which shadows the field inside the constructor -- the assignment sets the parameter to itself, and the field name never receives the argument at all, keeping its default value.",
+            "This fails to compile, because Java forbids assigning a variable to itself.",
+            "\"\", because uninitialized String fields default to an empty string rather than null."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Inside the constructor, the parameter name shadows the field of the same name -- a bare name refers to the parameter, not this.name, unless this. is written explicitly. name = name is therefore a self-assignment of the parameter to itself; it never touches the field. Since String fields default to null when never explicitly assigned, getName() returns null, not \"Amy\". This is exactly the reflexive-this.field-name bug the material warns about: it compiles without any error and produces no exception, just a silently wrong result. Option A assumes the bare name resolves to the field, which is precisely the shadowing mistake. Option C is wrong because self-assignment is completely legal Java. Option D is wrong about String's actual default value, which is null, not an empty string."
+        },
+        {
+          "id": "java-classes-objects-and-encapsulation-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "public class Rectangle { private double width, height; public Rectangle(double width, double height) { if (width <= 0 || height <= 0) { throw new IllegalArgumentException(\"invalid\"); } this.width = width; this.height = height; } public Rectangle(double side) { System.out.println(\"creating square\"); this(side, side); } } What is wrong with the second constructor?",
+          "options": [
+            "Nothing -- this compiles and works exactly as intended.",
+            "This fails to compile, because a call to this(...) must be the very first statement in a constructor, and here it's preceded by a println statement.",
+            "This fails to compile, because a constructor is never allowed to call another constructor of the same class under any circumstance.",
+            "This compiles fine but silently skips the validation logic in the two-argument constructor."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Constructor chaining via this(...) is required to be the first statement in the constructor body -- Java enforces this so that an object's initialization always resolves down to one real path of field assignments, with nothing able to run before that delegation happens. Placing the println before this(side, side) violates that rule directly, so this fails to compile. Option A is wrong because this specific ordering is a real, enforced restriction. Option C is wrong because this(...) chaining is exactly what the surrounding material demonstrates working correctly, provided it's the first statement. Option D describes a plausible-sounding but incorrect outcome -- if it compiled, chaining would still run the validation; the actual problem is that it does not compile at all."
         }
       ]
     },
@@ -235,6 +274,45 @@
           "type": "explanation",
           "prompt": "A junior developer is confused about why their subclass constructor won't compile without a super(...) call, when their superclass 'obviously' has fields that need initializing anyway. Explain the rule around subclass constructors and super(...), and separately explain how overriding differs from overloading in terms of when the actual method to run is decided.",
           "modelAnswer": "Every subclass constructor's very first action, whether you write it explicitly or not, must be a call to some constructor of its superclass. If you don't write a super(...) call yourself, Java automatically inserts a call to the superclass's no-argument constructor as the first line -- but that only works if the superclass actually has an accessible no-argument constructor. If the superclass only defines constructors that take arguments, that automatic insertion has nothing valid to call, and the subclass constructor fails to compile unless you write an explicit super(...) call yourself, matching one of the superclass's real constructors. The reason this is enforced so strictly is structural: a subclass typically inherits fields from its superclass, and those fields need to be properly initialized by the superclass's own constructor logic before the subclass constructor's body does anything that might depend on them being in a valid state. Java guarantees this by making superclass construction unconditionally happen first, all the way up the inheritance chain, before any subclass's own constructor body runs its own statements. Separately, overriding and overloading are resolved completely differently, despite sounding similar. Overloading -- multiple methods sharing a name but differing in parameter list -- is resolved entirely at compile time, purely from the declared types of the arguments at each call site; the compiler bakes in which specific overload a given call will invoke before the program ever runs. Overriding -- a subclass redefining an inherited method with the identical signature -- is resolved at run time, based on the actual, real type of the object a method is called on, regardless of how the reference variable pointing at that object happens to be declared. That's why calling a method through a superclass-typed reference that actually points at a subclass object still runs the subclass's overridden version: the decision is deferred to run time and depends on what the object really is, not on the compile-time type of the variable used to reach it."
+        },
+        {
+          "id": "java-inheritance-extends-super-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "class Animal { private String name; protected int age; public Animal(String name, int age) { this.name = name; this.age = age; } } class Dog extends Animal { public Dog(String name, int age) { super(name, age); } public void printAge() { System.out.println(age); } public void printName() { System.out.println(name); } } What happens when Dog is compiled?",
+          "options": [
+            "Both printAge() and printName() compile fine, since Dog inherits both fields from Animal.",
+            "printAge() compiles fine because age is protected, which subclass code can reference directly; printName() fails to compile because name is private in Animal -- every Dog object still carries that field's storage, but Dog's own code cannot refer to it directly by name.",
+            "Both methods fail to compile, because a subclass can never directly reference any field declared in a superclass.",
+            "printName() compiles fine because private members automatically become protected once a class is inherited by a subclass."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "protected grants access to subclasses in addition to the declaring class itself, so Dog's code can reference age directly, and printAge() compiles fine. private, by contrast, restricts access to the declaring class only -- Dog still has the storage for name (every Dog object carries it), but Dog's own code has no direct way to name it, exactly the same as any unrelated outside code would face. Option A overlooks that inheriting a field's storage is different from being able to reference it by name. Option C is wrong because protected fields are specifically designed to be accessible from subclasses. Option D is wrong -- access modifiers are fixed at declaration and are never upgraded by the mere fact of being inherited."
+        },
+        {
+          "id": "java-inheritance-extends-super-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "class Base { public Base(int id) { } } class Derived extends Base { public Derived() { } } What happens when this is compiled?",
+          "options": [
+            "It compiles fine; Java inserts an implicit super() call using a no-argument constructor on Base.",
+            "It fails to compile, because Java tries to insert an implicit super() call as Derived's first action, but Base has no accessible no-argument constructor for that call to match -- Derived's constructor must instead explicitly call super(someInt).",
+            "It compiles fine, because Derived's constructor body has no statements of its own, so no superclass constructor call is required at all.",
+            "It fails to compile because Base's constructor parameter must share the same name as one used somewhere in Derived's constructor."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Every subclass constructor's first action, explicit or not, must be a call to some superclass constructor. Derived writes no explicit super(...) call, so Java tries to insert the implicit super() -- but Base only defines a constructor that takes an int, so there's no accessible no-argument constructor for that implicit call to match, and compilation fails. The fix would be writing super(someInt) explicitly as Derived's first statement. Option A assumes a no-argument constructor exists on Base when it does not. Option C is wrong because an empty constructor body still needs a superclass constructor call; 'first action' applies regardless of whether any other statements follow. Option D describes a rule Java has no version of at all -- parameter names never need to match across a super call."
+        },
+        {
+          "id": "java-inheritance-extends-super-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "class Animal { public void makeSound(String context) { } } class Dog extends Animal { @Override public void makeSound() { } } What happens when Dog is compiled?",
+          "options": [
+            "It compiles fine, and makeSound() overrides Animal's makeSound(String) since they share the same name.",
+            "It fails to compile, because @Override asserts this method overrides a superclass method, but Animal has no makeSound method with an empty parameter list -- the differing parameter list makes this a distinct, unrelated method rather than an override, and the annotation catches that mismatch.",
+            "It compiles fine, silently defining a new overloaded method alongside Animal's, with @Override simply having no effect.",
+            "It fails to compile because a subclass is never allowed to declare a method sharing a name already used in its superclass."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Overriding requires an identical signature -- same name AND same parameter types. makeSound() and makeSound(String) differ in parameter list, so Dog's method would ordinarily just be a new, unrelated overload rather than an override of Animal's method. Because @Override explicitly asserts an overriding intent, the compiler checks for a genuinely matching superclass method, finds none with a matching signature, and reports a compile error instead of silently letting the mismatch through. Option A is wrong because differing parameter lists never produce an override, regardless of a shared name. Option C describes exactly what would happen without @Override present -- the annotation's entire purpose is to turn that silent outcome into a caught error. Option D is wrong because declaring a same-named method with a different parameter list (an overload) is completely legal on its own; the actual problem here is specifically the incorrect @Override claim."
         }
       ]
     },
@@ -352,6 +430,32 @@
           "type": "explanation",
           "prompt": "A teammate asks: 'Why does Java let a class implement multiple interfaces but only extend one class -- isn't that an arbitrary, inconsistent restriction?' Explain why it isn't arbitrary, and give the practical rule of thumb for choosing between an abstract class and an interface.",
           "modelAnswer": "It isn't arbitrary -- it's a direct consequence of what each mechanism is allowed to carry. Extending a class inherits real implementation and real instance state: fields with actual values, and method bodies that may depend on that state. If Java allowed a class to extend two classes that each defined, say, a field named total with different meanings, or two conflicting implementations of the same method, there would be a genuine, unresolvable ambiguity about which field or which method body the subclass actually has -- this is the classic 'diamond problem,' and rather than inventing an arbitrary tie-breaking rule the way some languages do, Java avoids the situation entirely by disallowing multiple class inheritance. Interfaces, historically, declared no state and no implementation at all -- purely method signatures, contracts about what a class can do -- so there was never any state or implementation to conflict between two interfaces a class chose to implement; adopting five unrelated capability contracts on one class is perfectly safe because there's nothing shared between them to collide. Java 8's default methods reintroduced a limited form of shared implementation into interfaces, and true to the underlying concern, Java does force an explicit resolution -- a compile error -- in the one case where two implemented interfaces both provide a default method with the same signature, rather than silently picking one. As a practical rule of thumb: reach for an abstract class when you want to share real state and implementation across a family of closely related types, modeling genuine 'is-a' ancestry with only specific behavior deliberately left open; reach for an interface when you're describing a capability that unrelated classes might adopt independently, especially when a single class plausibly needs to satisfy several such capabilities at once -- and remember the two combine freely, since a class extending one abstract class can still implement as many interfaces as it needs."
+        },
+        {
+          "id": "java-interfaces-vs-abstract-classes-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "abstract class Shape { public abstract double area(); } Shape s = new Shape(); What happens?",
+          "options": [
+            "This compiles fine, creating a Shape object whose area() acts as an empty stub that does nothing when called.",
+            "This fails to compile, because Shape is abstract and Java refuses to let it be instantiated directly with new -- there is a real, structural gap (area() has no body anywhere in Shape) that would leave an incomplete object.",
+            "This compiles fine but throws an exception the first time area() is actually called on s.",
+            "This fails to compile only because Shape has no constructor defined -- adding one would make new Shape() legal."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "An abstract class is incomplete by design -- it can declare abstract methods with no body at all, and Java enforces, at compile time, that you can never instantiate such a class directly, precisely because doing so would produce an object with a method that has nowhere to dispatch to. new Shape() is rejected before the program ever runs. Option A and C both assume instantiation is allowed and only differ on when the problem would show up -- but the problem is caught immediately, at compile time, not deferred to construction or to calling area(). Option D is wrong because adding a constructor to Shape would not change its abstractness at all; the restriction comes from the abstract keyword and the unimplemented method, not from the absence of a constructor."
+        },
+        {
+          "id": "java-interfaces-vs-abstract-classes-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "interface A { default String greet() { return \"A\"; } } interface B { default String greet() { return \"B\"; } } class C implements A, B { } What happens when C is compiled?",
+          "options": [
+            "It compiles fine, and C's greet() returns \"A\", since interfaces are resolved in the order they're listed in implements.",
+            "It fails to compile with an error about inheriting unrelated defaults for greet() from A and B, unless C itself overrides greet() to resolve the conflict explicitly.",
+            "It compiles fine, and C's greet() returns \"B\", since the last interface listed always wins the conflict.",
+            "It compiles fine, and calling c.greet() throws a runtime exception because Java cannot decide which version to run."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "When a class implements two interfaces that each supply a default method with the exact same signature, Java does not pick one arbitrarily by listing order or any other implicit rule -- it treats the conflict as a compile error, forcing the class author to resolve it explicitly by overriding greet() in C (optionally calling A.super.greet() or B.super.greet() to pick one, or combining them). This is a deliberate, conservative design choice: a silent, arbitrary resolution would be more dangerous than demanding the author decide. Options A and C both invent a resolution-by-order rule that Java does not have. Option D is wrong because the failure happens at compile time, not as a runtime exception -- C never successfully compiles in the first place, so it could never be instantiated to call greet() on."
         }
       ]
     }

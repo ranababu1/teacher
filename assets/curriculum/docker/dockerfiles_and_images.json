@@ -118,6 +118,45 @@
           "explanation": "Option 2 is correct: cache validity for each instruction depends on both its own instruction, plus, for COPY/ADD, its file-content checksum, AND its specific parent layer being identical to last time. Once #3 misses, its own resulting layer differs from before, which makes it a different parent for #4 -- so #4 misses too, regardless of its own text, and the same logic cascades to #5. Option 1 is wrong because it ignores the parent-layer half of the cache check. Option 3 is nonsensical -- a miss doesn't cause Docker to silently reuse an old final result; it re-executes the remaining instructions. Option 4 is wrong because there's no per-instruction opt-out from the cascade based on whether an instruction references the earlier one -- the cascade is structural, based on layer parentage, not on any analysis of what each RUN command actually touches."
         },
         {
+          "id": "docker-dockerfile-layer-caching-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Besides comparing instruction text, what additional check does Docker perform specifically for COPY and ADD instructions when deciding whether to reuse a cached layer?",
+          "options": [
+            "It checks whether the instruction appears at the same line number in the file as it did last time.",
+            "It computes a checksum over the actual content of the files being copied, and treats any change in that checksum as a cache miss, even if the COPY line's own text is byte-for-byte identical to last time.",
+            "It checks only the copied files' last-modified timestamps on the host, ignoring their actual content.",
+            "It always re-executes COPY and ADD on every build, since file operations can never be safely cached."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 is correct and is exactly the extra rule the concept describes: COPY/ADD cache validity depends on a checksum of the actual copied file content, not merely the instruction's literal text, since the entire purpose of COPY is to bring in file content whose changes a content-blind cache would incorrectly ignore. Option 1 is wrong -- line position isn't part of the cache key at all. Option 3 is wrong -- timestamps aren't what's compared; content checksums are, which is why an edit that changes a file's content (even without changing its timestamp in some scenarios, or vice versa) is what actually matters. Option 4 is wrong -- COPY/ADD absolutely can hit the cache, precisely when their content checksum and parent layer both match."
+        },
+        {
+          "id": "docker-dockerfile-layer-caching-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A Dockerfile uses `CMD node server.js` (shell form) instead of `CMD [\"node\", \"server.js\"]` (exec form). What concrete problem does this create when `docker stop` is run against a running container?",
+          "options": [
+            "docker stop fails outright with a permissions error and cannot stop the container.",
+            "/bin/sh, not node, becomes PID 1, and since most shells don't forward SIGTERM to child processes by default, node never receives the signal, so docker stop waits out the full grace period before escalating to SIGKILL, skipping node's graceful-shutdown logic entirely.",
+            "node receives SIGTERM immediately regardless of form, since Docker signals every process inside the container simultaneously, not just PID 1.",
+            "Shell form causes the container to ignore docker stop entirely, requiring docker rm -f to remove it."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 correctly describes the shell-form gotcha: CMD node server.js is expanded to /bin/sh -c \"node server.js\", making the shell PID 1 while node runs as its child, and since docker stop signals PID 1 specifically, and shells don't forward SIGTERM to children by default, node never sees the shutdown signal at all, forcing Docker to wait out the grace period and then SIGKILL everything. Option 1 is wrong -- there's no permissions issue involved. Option 3 is wrong -- Docker signals PID 1 only, not every process in the container; that's precisely the mechanism causing this bug. Option 4 is wrong -- docker stop still eventually succeeds via SIGKILL after the grace period; it doesn't require a forced removal."
+        },
+        {
+          "id": "docker-dockerfile-layer-caching-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A project's build context contains a large .git directory and a frequently-appended debug.log file, and no .dockerignore file exists. Beyond slower context transfer, what specific caching problem can this cause for a `COPY . .` instruction?",
+          "options": [
+            "None -- .dockerignore only affects build speed, never caching correctness.",
+            "An unrelated change inside .git's internal objects, or a new line appended to debug.log, can change COPY . .'s overall content checksum, invalidating that layer's cache (and everything below it) for reasons that have nothing to do with actual application code changing.",
+            "Docker automatically excludes .git and any *.log files from the build context even without a .dockerignore, so this scenario can't actually happen.",
+            "The build fails outright with an explicit checksum-mismatch error whenever .git or a log file is present in the context."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 is correct: because COPY . . computes its cache validity from a checksum over everything in the context it copies, any file in that context changing -- including totally incidental churn like .git's internal objects or an appended log line -- changes that checksum and forces an unnecessary cache miss, cascading to every instruction below it. Option 1 understates the effect -- .dockerignore is also a caching-correctness tool, not just a speed optimization. Option 3 is false -- Docker does not apply any exclusions on its own; only an explicit .dockerignore file does that. Option 4 is false -- there's no explicit error; the build simply succeeds while quietly re-executing more than it needed to."
+        },
+        {
           "id": "docker-dockerfile-layer-caching-assess-explain1",
           "type": "explanation",
           "prompt": "Explain, using the mental model of a cache chain where a parent layer must match for a child layer to be reused, exactly why moving COPY package.json package-lock.json ./ and RUN npm ci before COPY . . makes routine rebuilds of a typical Node.js project dramatically faster.",
@@ -232,6 +271,32 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "Option 2 is correct: each FROM starts a brand-new stage from exactly the named base image's own filesystem, with zero automatic carryover from any earlier stage -- getting anything from builder into this stage requires an explicit COPY --from=builder naming exactly what to bring across. Option 1 is wrong because it assumes automatic inheritance, which multi-stage builds specifically do not do. Option 3 is wrong because it assumes Docker automatically figures out 'the one artifact you probably want,' which it never does -- COPY --from is always explicit about paths. Option 4 is wrong -- switching base images across stages via multiple FROM lines is the entire mechanism multi-stage builds are built on; it's fully valid syntax."
+        },
+        {
+          "id": "docker-multi-stage-builds-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A Dockerfile defines stages named deps, test, build, and production, in that order. Running `docker build .` with no --target flag builds which stage(s), and what gets tagged as the resulting image?",
+          "options": [
+            "Only the deps stage, since it appears first in the file.",
+            "All stages in order through to the last one written in the file (production here), with production's own result becoming the tagged image.",
+            "All four stages, and Docker prompts interactively for which one to tag.",
+            "Only whichever stage happens to be named \"production\", regardless of where it's positioned in the file."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 is correct: with no --target, Docker builds the full chain of stages in file order and, by default, tags the result of the very last stage written -- which is exactly why stage order in the file matters for a plain, no-flag build. Option 1 is wrong -- deps being first doesn't make it the default target; the LAST stage is. Option 3 is wrong -- Docker never prompts interactively during a build; it's fully deterministic from the Dockerfile and flags given. Option 4 is wrong -- it isn't the name \"production\" that matters, it's the stage's position as the last one in the file; a differently-named last stage would be tagged instead under identical rules."
+        },
+        {
+          "id": "docker-multi-stage-builds-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A Dockerfile has `FROM node:20-slim AS deps`, then `FROM deps AS build`, then later `FROM node:20-slim AS runtime`. What does the runtime stage inherit automatically from deps or build?",
+          "options": [
+            "Nothing at all -- runtime starts completely fresh from node:20-slim's own filesystem, exactly like deps and build did initially, and only receives whatever an explicit COPY --from brings across.",
+            "Everything from build, since build is the most recently completed stage before runtime begins.",
+            "Only node_modules, since that's the most commonly needed artifact in a Node.js project.",
+            "Everything from deps, because runtime happens to reuse the identical base image tag deps used."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "Option 1 is correct: every FROM, including this one, starts an entirely new, independent stage from that exact base image's own filesystem -- reusing the same base image tag (node:20-slim) as deps does NOT create any inherited relationship between the two stages; runtime and deps just happen to start from the same starting point, coincidentally. Anything runtime actually needs from deps or build must be brought across with an explicit COPY --from. Option 2 is wrong -- build being the most recent stage chronologically has no bearing on inheritance; only an explicit FROM <stage-name> or COPY --from=<stage-name> creates a real relationship. Option 3 is wrong -- nothing is copied automatically regardless of how commonly needed it is. Option 4 is wrong -- sharing a base image tag is not the same as one stage building on another; deps itself started fresh from that same tag too, with no special relationship to runtime as a result."
         },
         {
           "id": "docker-multi-stage-builds-assess-explain1",
@@ -352,6 +417,32 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "Option 2 is correct: EXPOSE is purely image metadata/documentation and never publishes a port on its own; only -p/--publish at docker run time, or -P to auto-publish every EXPOSEd port, actually creates the host-to-container port-forwarding rule, and none of those were used here. Option 1 directly misstates what EXPOSE does. Option 3 describes behavior Docker has no such 'first request' mechanism for -- it's invented. Option 4 is wrong for two reasons: it's not a permission issue, and more fundamentally the request never even reaches the container's network namespace to encounter any such issue, because nothing was published."
+        },
+        {
+          "id": "docker-volumes-and-networking-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A named volume `pgdata` is mounted into a Postgres container. The container is later removed with `docker rm -f`. What happens to the volume and its data?",
+          "options": [
+            "The volume is automatically deleted along with the container, since it was only ever used by that one container.",
+            "The volume and its data persist independently of the container's removal, and can be reattached to a brand-new container simply by mounting the same volume name again.",
+            "The volume's data is preserved but becomes permanently read-only after the container that created it is removed.",
+            "The volume persists only if the container was stopped gracefully before removal, not if -f (force) was used."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 is correct: a named volume's lifecycle is fully independent of any specific container -- removing the container that was using it, forcefully or not, does not delete the volume; only an explicit docker volume rm, or docker rm -v/docker compose down -v, actually removes it. Option 1 is exactly the misconception the concept warns against -- volumes are not scoped to the container's own lifecycle the way the writable layer is. Option 3 is wrong -- nothing about container removal makes a volume read-only; it remains fully writable by whatever mounts it next. Option 4 is wrong -- the -f flag on docker rm affects whether a running container is stopped first, not whether an attached named volume survives; the volume survives either way."
+        },
+        {
+          "id": "docker-volumes-and-networking-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Two containers are started with plain `docker run` commands, neither specifying a --network flag. Why can't one resolve the other by container name?",
+          "options": [
+            "Container name resolution only works when both containers are running on the same physical host, which isn't guaranteed here.",
+            "Both containers land on Docker's default bridge network, which, unlike a user-defined bridge network, does not provide automatic DNS-based name resolution between containers on it.",
+            "Name resolution between containers requires at least one of them to have a published port via -p.",
+            "Name resolution requires both containers to have been started from the exact same image."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 is correct: with no --network specified, both containers attach to the default bridge, which -- for legacy reasons -- doesn't run the embedded DNS resolution a user-defined bridge network provides; creating a network with docker network create and attaching both containers to it fixes this immediately. Option 1 is wrong -- the two containers ARE on the same host here; the issue is the network they're on, not physical placement. Option 3 is wrong -- publishing a port to the host has nothing to do with inter-container DNS resolution, which is purely about the network they share. Option 4 is wrong -- name resolution has no relationship to which image a container was started from."
         },
         {
           "id": "docker-volumes-and-networking-assess-explain1",

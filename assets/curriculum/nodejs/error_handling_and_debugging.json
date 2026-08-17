@@ -117,6 +117,45 @@
           "explanation": "try/catch is fundamentally tied to the currently executing call stack -- a throw is only caught if it happens while the corresponding try block's stack frame is still active. fs.readFile returns immediately (it's non-blocking), so the try block finishes and its stack frame is gone long before the callback (invoked later, once the actual file read completes) ever runs -- a throw inside that later callback has no matching catch anywhere nearby to reach. Option A is wrong -- the callback in this example does throw, deliberately, to illustrate the point. Option C is wrong -- try/catch catches any thrown value, not just TypeErrors specifically. Option D is wrong -- catch block parameter names have no special matching requirement to any other variable name in the code; this isn't a naming or syntax issue at all."
         },
         {
+          "id": "nodejs-error-propagation-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Inside a .then() handler in a Promise chain, the code executes `throw new Error('No orders found');`. What happens to that throw?",
+          "options": [
+            "It becomes an uncaught exception immediately, crashing the process, since .then() handlers aren't wrapped in any implicit try/catch.",
+            "It's automatically converted into a rejection of the Promise that this specific .then() call itself returns, which then propagates onward to the next .catch() (or the second argument of a later .then()) in the chain, exactly like a rejection originating from an earlier async call in the same chain would.",
+            "It silently terminates the entire chain, with no further callback -- including any .catch() -- ever running again.",
+            "JavaScript automatically catches it and converts it into a resolved value of undefined for the next .then() in the chain."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "A synchronous throw inside a .then() callback is caught internally by the Promise machinery and converted into a rejection of the Promise .then() returns -- there's no special syntax required to make this happen. That rejection then behaves exactly like any other rejection in the chain, skipping forward past subsequent .then() calls until it reaches a .catch(). Option A ignores that Promises specifically catch synchronous throws inside their handlers for exactly this purpose. Option C is wrong -- a .catch() further down the chain is precisely what does still run. Option D is wrong -- a throw becomes a rejection, not a silently resolved value."
+        },
+        {
+          "id": "nodejs-error-propagation-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Inside an async function's try block: `const orders = fetchOrders(user.id);` (missing await) is followed by `return summarize(orders);`, still inside the same try. If fetchOrders' Promise later rejects, does the surrounding catch block run?",
+          "options": [
+            "Yes -- try/catch catches a rejection from any Promise created inside the try block, whether it was awaited or not.",
+            "No -- try/catch only catches a rejection from a Promise that was actually awaited (or otherwise given a handler) inside the try block; since fetchOrders' Promise here was never awaited, its eventual rejection happens completely outside anything the try block is watching, and becomes an unhandled rejection instead.",
+            "Yes, but only if summarize(orders) itself explicitly checks whether its argument is a Promise before using it.",
+            "No, because try/catch cannot be used at all inside an async function -- only chained .catch() calls work there."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "try/catch only catches something the try block is actually still 'watching' at the moment of failure -- for a Promise, that means it was awaited (or given a .then/.catch) inside the try. Since fetchOrders(user.id) is called without await, the try block moves on immediately without pausing for it; by the time that Promise eventually rejects, the try/catch has long since finished running its body, and the rejection has nothing catching it, becoming an unhandled rejection instead. Option A describes a Promise auto-catching behavior that doesn't exist. Option C is irrelevant -- summarize receiving a Promise instead of real data is a separate problem from whether the rejection gets caught. Option D is wrong -- try/catch works perfectly well inside async functions, specifically for awaited Promises."
+        },
+        {
+          "id": "nodejs-error-propagation-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "An async function is passed directly as the request handler to http.createServer. Inside it, `await fetchDataThatMightReject()` is called with no surrounding try/catch anywhere in the handler. If that call rejects, what happens?",
+          "options": [
+            "http.createServer automatically awaits the handler's returned Promise and sends a built-in error response if it rejects.",
+            "http.createServer has no concept of Promises at all -- it invokes the handler and moves on, never awaiting or attaching a .catch() to whatever it returns; a rejection here becomes an unhandled promise rejection, the client's connection may simply hang since res.end() is never reached, and depending on Node's version, the process itself may crash.",
+            "The rejection is automatically logged to the console by Node's EventEmitter internals, with no further effect on the request or process.",
+            "Because the handler function is declared async, JavaScript guarantees its rejection is caught by the nearest enclosing scope automatically, even without an explicit try/catch."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "http.createServer (like EventEmitter-based APIs generally) has no built-in awareness that a handler might be async -- it calls the function and moves on, never inspecting, awaiting, or attaching a .catch() to whatever Promise that function returns. If the awaited call inside the handler rejects with no local try/catch, that rejection has nowhere to go: it's unhandled, the response is never finished (leaving the client hanging), and depending on Node's version and configuration, the whole process may crash. Options A and C invent automatic handling that non-Promise-aware APIs simply don't provide. Option D is wrong -- async only guarantees the function returns a Promise; it does not create any automatic catching behavior in whatever code calls that function."
+        },
+        {
           "id": "nodejs-error-propagation-assess-explain1",
           "type": "explanation",
           "prompt": "A junior developer asks: 'If try/catch, Promise chains, and async/await are all just different ways of handling errors, why does it matter which one I use for a given piece of code?' Using the async patterns module's coverage of callbacks/Promises/async-await as a starting point, explain why the error-handling mechanism has to match the asynchronous style actually being used.",
@@ -237,6 +276,45 @@
           "explanation": "Node's documentation is explicit that resuming normal operation after an uncaughtException is unsafe, precisely because such an exception escaped every try/catch in the code, which usually indicates a programmer error whose full impact on the program's state is unknown. The recommended pattern is exactly cleanup-then-exit: do whatever quick, synchronous cleanup is feasible (closing a server to stop new connections, flushing critical logs) and then explicitly exit, relying on a process manager or orchestrator to restart with clean state. Option A is the specific anti-pattern this concept warns against. Option C is wrong -- there's no general basis for assuming a retry would succeed when the underlying issue is an unanticipated bug, not a transient operational failure. Option D is wrong -- Node does not restart anything on your behalf; without an explicit process.exit(), the default behavior (absent any handler) is to crash immediately, and adding a handler that doesn't exit actively prevents that default, safer behavior."
         },
         {
+          "id": "nodejs-error-types-and-crashing-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Which of these is the best example of an operational error, as this concept distinguishes it from a programmer error?",
+          "options": [
+            "A TypeError caused by reading a property off a value that, according to the code's own design, should never have been undefined at that point.",
+            "A downstream payment API returning a 503 Service Unavailable during a temporary outage.",
+            "An off-by-one bug that corrupts an array's contents partway through a loop.",
+            "A violated invariant deep in application logic that reveals the program's own internal assumptions about its state were wrong."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "An operational error is a failure mode a correctly written program can expect to encounter simply because the outside world is unreliable -- a downstream service being temporarily unavailable is a textbook example, and a well-written caller should anticipate and handle it (retry, fall back, surface a clean error). Options A, C, and D all describe genuine programmer errors: bugs that reveal something about the code's own logic or assumptions was wrong, rather than the environment failing to cooperate as expected."
+        },
+        {
+          "id": "nodejs-error-types-and-crashing-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "What is the practical purpose of adding an explicit isOperational flag to a custom error class (such as class AppError extends Error)?",
+          "options": [
+            "It changes how JavaScript's built-in try/catch mechanism behaves specifically for that error type.",
+            "It turns an implicit, easy-to-get-wrong judgment call -- 'is this an anticipated failure or an unexpected bug' -- into an explicit, deliberate decision made at the moment the error is created, letting downstream error-handling code decide between a graceful response and a controlled crash based on that flag.",
+            "It's required by Node.js itself -- errors created without this flag are silently discarded by the runtime.",
+            "It automatically retries whatever operation caused the error, up to a configurable number of attempts."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "JavaScript's Error type has no built-in concept of 'this was anticipated' versus 'this is a bug' -- the isOperational flag is a purely application-level convention that makes that judgment explicit and visible at the point an error is constructed, so error-handling middleware (or any other centralized handler) can branch on it deliberately: a graceful, specific response for operational errors, versus a logged, generic response followed by a controlled exit for anything unmarked. Option A is wrong -- try/catch behaves identically regardless of any custom properties on the thrown value. Option C is wrong -- Node has no awareness of this application-defined flag at all; it's not a runtime requirement. Option D is wrong -- the flag carries no retry behavior; it's purely informational."
+        },
+        {
+          "id": "nodejs-error-types-and-crashing-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Why does deliberately calling process.exit(1) after logging a genuine programmer error work well as a production strategy, rather than being reckless?",
+          "options": [
+            "Because process.exit() automatically fixes the underlying bug before the next process starts.",
+            "Because in a typical production deployment, something is actively supervising the process specifically to restart it -- a process manager like pm2, a container orchestrator like Kubernetes, or a systemd unit with Restart=on-failure -- turning the crash into a brief, usually sub-second blip that replaces unknown, possibly-corrupted in-memory state with a fresh, known-good instance.",
+            "Because Node automatically spawns an internal replacement process whenever process.exit(1) is called, with no external supervision required.",
+            "Because a crashed process is inherently faster to restart than one that keeps running, regardless of what (if anything) is supervising it."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The strategy only works because production deployments virtually always run under something designed to notice a process exiting and bring up a fresh one quickly -- without that supervision, a crash really would just be an outage with no recovery. Given that supervision, though, exiting deliberately converts an unknown amount of potential state corruption into a clean, known-good restart, which is a better outcome than continuing to run atop possibly-corrupted state. Option A is wrong -- exiting does nothing to fix the underlying bug, only to limit the blast radius of its effects. Option C is wrong -- Node itself does not spawn replacement processes; that's specifically the job of external supervision. Option D is wrong -- the benefit isn't about restart speed in isolation, it's about replacing unknown corrupted state with a clean one, and that benefit disappears entirely without something actually restarting the process."
+        },
+        {
           "id": "nodejs-error-types-and-crashing-assess-explain1",
           "type": "explanation",
           "prompt": "A teammate argues: 'Our error-handling middleware should catch every error and always respond with a normal-looking JSON error response -- crashing the process is never acceptable in production, no matter what caused the error.' Explain what's right and what's dangerously wrong about this position, using the operational-vs-programmer-error distinction.",
@@ -355,6 +433,45 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "Both flags open the same Chrome DevTools Protocol-based debugging server; the difference is purely about timing. --inspect lets the script start running right away, and a client can attach at any point afterward to set breakpoints going forward from whenever it connects (missing anything that already ran before it attached). --inspect-brk additionally forces execution to pause immediately, on the very first line, until a debugging client actually attaches -- which is specifically useful for catching bugs in code that runs very early, before you'd otherwise have had a chance to attach anything. Option A undersells a real behavioral difference. Option C is wrong -- both flags work with any client speaking the same protocol, including both Chrome DevTools and VS Code. Option D is wrong -- console.log continues to work completely normally alongside the debugger; nothing about --inspect-brk disables it."
+        },
+        {
+          "id": "nodejs-debugging-tools-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A codebase has a `debugger;` statement left inside a function, and the app is run in production via a plain `node app.js`, with no --inspect flag and no debugging client ever attached. What happens when execution reaches that line?",
+          "options": [
+            "The process pauses indefinitely, waiting for a debugger client that will never attach, effectively hanging forever.",
+            "It's a complete no-op -- execution continues past it exactly as if it were a comment, since the debugger statement's pausing behavior is conditional on a debugger client actually being attached at that moment.",
+            "Node throws a ReferenceError, since debugger is not a valid statement outside of an active debugging session.",
+            "It automatically starts an --inspect-style debugging server on the spot, opening port 9229 for a client to attach to."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The debugger statement's entire behavior is conditional on whether a debugging client happens to be attached when execution reaches it -- with no client attached (an ordinary node app.js run), it executes with no effect at all, exactly like a comment. This is exactly what makes it reasonably safe to leave in code temporarily while actively debugging, though it should still be removed before committing. Option A confuses it with a genuine breakpoint set via an attached client, which does pause; without a client, there's nothing to pause for. Option C is wrong -- debugger is valid, standard JavaScript syntax regardless of debugging session state. Option D is wrong -- reaching a debugger statement never starts an inspector server on its own; that requires the --inspect flag at process startup."
+        },
+        {
+          "id": "nodejs-debugging-tools-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A script runs console.log('started') followed by console.error('config missing, using defaults'). It's launched as `node app.js > output.txt`, redirecting only stdout. What ends up in output.txt?",
+          "options": [
+            "Both lines -- 'started' and 'config missing, using defaults'.",
+            "Only 'started' -- console.error writes to stderr, a stream separate from stdout, so redirecting stdout alone does not capture it; it still prints directly to the terminal instead.",
+            "Only 'config missing, using defaults', since console.error output takes precedence over console.log when both are present in a redirected run.",
+            "Neither line -- redirecting stdout with a single > suppresses all console output entirely, from any method."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "console.log and console.error write to two genuinely separate OS-level streams -- stdout and stderr, respectively. `> output.txt` redirects only stdout, so only the console.log line ends up in the file; the console.error line still writes directly to stderr, which (unredirected here) continues printing straight to the terminal. Option A incorrectly assumes both streams get captured together. Option C invents a precedence rule that doesn't exist -- both streams operate independently, with no precedence between them. Option D is wrong -- redirection only affects the specific stream being redirected, not console output as a whole."
+        },
+        {
+          "id": "nodejs-debugging-tools-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A developer wants to (1) measure the precise elapsed time of an async database call without manually subtracting two Date.now() timestamps, and (2) render an array of result objects as an easily scannable grid instead of a wall of nested console output. Which console methods directly address these two needs, respectively?",
+          "options": [
+            "console.trace (for timing) and console.assert (for tabular data).",
+            "console.time/console.timeEnd (bracketing a section of code to report precise elapsed duration) and console.table (rendering an array of objects as a formatted, scannable table).",
+            "console.dir (for timing) and console.warn (for tabular data).",
+            "console.group (for timing) and console.count (for tabular data)."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "console.time(label)/console.timeEnd(label) bracket a section of code and print the exact elapsed time between the two calls, which is precisely the manual Date.now()-subtraction console.log would otherwise require you to do yourself. console.table(data) renders an array of objects as an actual grid in the terminal, dramatically easier to scan than repeated nested console.log calls. None of the methods in the other three options address either need: console.trace prints a call stack, console.assert conditionally logs a message, console.dir controls object-expansion depth, console.warn is just a stderr-writing variant of log, console.group indents related log lines, and console.count tracks how many times a labeled line has been logged -- none of which measure elapsed time or render tabular data."
         },
         {
           "id": "nodejs-debugging-tools-assess-explain1",

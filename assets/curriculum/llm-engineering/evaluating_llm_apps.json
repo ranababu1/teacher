@@ -117,6 +117,45 @@
           "type": "explanation",
           "prompt": "A QA engineer new to LLM-backed features asks why their usual approach -- write a test, assert the exact expected output, treat any failure as a bug to investigate -- doesn't seem to work here, and keeps producing tests that fail constantly for no apparent reason. Explain what's different about testing these systems and how you'd restructure their approach.",
           "modelAnswer": "The core difference is that an LLM-backed feature has two very different kinds of behavior bundled together, and the QA engineer's usual approach only really applies to one of them. The code that surrounds the actual model call -- how the prompt gets built, how the response gets parsed, what happens on a retry or an error, how a parsed result gets used downstream -- is ordinary deterministic code: given the same inputs, it behaves identically every single time, and it's completely appropriate, and important, to test it exactly the way they already know how to, ideally with the actual model call mocked out so those tests run fast, free, and independent of what the real model happens to do on any given day. The model's own generated content, though, is fundamentally different: even at a fixed prompt, sampling randomness (and, over longer timescales, silent model version updates behind a stable API) means the exact phrasing of a correct answer can and does vary between calls, so an exact-match assertion against that content isn't checking whether the answer is correct -- it's checking whether the model happened to phrase it identically to one specific sample that was captured when the test was written, which is a much narrower and less meaningful property. That's why exact-match tests against generated content fail constantly 'for no apparent reason': there usually isn't a bug, the test is just asking a question the system was never designed to reliably answer the same way twice. I'd restructure the approach into two tiers: keep writing ordinary, exact, deterministic unit tests -- mocking the model -- for everything around the call, treating any failure there exactly as they always have, as a real bug to fix. For the model's actual output quality, replace exact-match assertions with a set of weaker, genuinely-required properties -- does it parse into the right structure, does it mention what it must mention, does it avoid what it must avoid, is it within a reasonable length, and where a reference answer exists, is it semantically similar enough to it -- and, where variability itself is the concern, consider running the same case multiple times and tracking a pass rate over time as a quality signal rather than expecting a single run to prove correctness the way a deterministic assertion would."
+        },
+        {
+          "id": "llm-engineering-why-unit-tests-fail-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Per this module, why should the actual model call typically be mocked out when testing the deterministic scaffolding code around it (prompt construction, response parsing, retry logic, error handling)?",
+          "options": [
+            "Mocking the model call is a requirement most API providers impose in their terms of service for any automated test suite.",
+            "It makes those tests fast, free, and fully deterministic, so they test only the actual parsing/control-flow logic under test rather than depending on a real, nondeterministic model response that could vary between runs.",
+            "Mocking is the only way to achieve 100% code coverage in a continuous-integration pipeline.",
+            "It guarantees the model's response can never contain profanity or unsafe content during a test run."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The module frames the deterministic scaffolding code as ordinary, testable code that deserves the same rigor as any other unit-tested function, and mocking the model call is what makes that possible without the test's outcome depending on an actual, variable model response -- the test then genuinely isolates and verifies the parsing/control-flow logic itself. Option A invents a policy requirement the module never mentions. Option C overstates what mocking accomplishes -- it doesn't guarantee any particular coverage percentage. Option D is unrelated to why mocking is recommended here; content safety isn't the module's stated reason."
+        },
+        {
+          "id": "llm-engineering-why-unit-tests-fail-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A test suite for a code-generation feature checks that the generated code actually compiles and passes a real unit test suite, rather than comparing the generated source text against one fixed reference implementation. Per this module, which category of check is this, and why does it suit this task well?",
+          "options": [
+            "An exact-match check, since compiling and passing tests requires the generated code's text to be identical to a known-correct reference.",
+            "A must-include/must-exclude check, since it verifies that specific required and forbidden substrings appear somewhere in the generated code.",
+            "An executable or effect-based check, which sidesteps the exact-text problem entirely by evaluating the outcome the generated output produces rather than the text that produced it.",
+            "Semantic similarity, since compiling code and passing a test suite is fundamentally a measurement of embedding distance between two pieces of text."
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "The module names executable/effect-based checks specifically for tasks like generated code or SQL, where what matters is whether the output actually works when run, not whether its text matches any particular reference -- this lets many different, textually unrelated but equally correct implementations all pass. Option A is exactly what this approach avoids -- no fixed reference text is required. Option B mischaracterizes a compile-and-test check as substring matching, which is a different, weaker mechanism. Option D confuses an executable check with a semantic-similarity check, which the module describes as an embedding-based comparison to a reference answer, not a run-and-verify step."
+        },
+        {
+          "id": "llm-engineering-why-unit-tests-fail-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Per this module, why might an evaluation of LLM output quality run the same input multiple times and report a pass rate (e.g., 8 out of 10 runs passing) instead of relying on a single pass/fail verdict?",
+          "options": [
+            "Running the input multiple times is only useful for catching network failures, not for assessing output quality itself.",
+            "Because output genuinely varies across calls at nonzero temperature, a single passing run doesn't establish that the typical output would also pass -- a pass rate treats quality measurement closer to statistical sampling than to a one-shot deterministic assertion.",
+            "Because API providers charge a lower per-call rate when the same request is repeated multiple times in a row.",
+            "Because a model must be run several times consecutively on identical input to warm up its cache before an accurate response can be produced."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The module is explicit that because output genuinely varies even with fixed inputs at nonzero temperature, one lucky (or unlucky) sample proves less about typical behavior than it would for deterministic code, so a pass rate across several runs is a more honest measurement than a single binary verdict. Option A narrows the reason to an unrelated concern (network reliability) not mentioned in the module. Options C and D invent mechanisms -- billing discounts for repeated calls, or a cache-warming requirement -- that have nothing to do with the actual statistical reasoning the module gives."
         }
       ]
     },
@@ -237,6 +276,45 @@
           "type": "explanation",
           "prompt": "A team reports that their eval score has risen from 75% to 94% over three months of prompt iteration, but real user complaints about quality haven't decreased over the same period, and if anything have gotten slightly worse. Explain what's likely happened and how you'd diagnose and fix it.",
           "modelAnswer": "The most likely explanation is that the eval set has been overfit through the iteration process itself: if the team's typical workflow was to look at which specific eval cases were failing and adjust the prompt until those particular cases passed, repeated over many cycles, the prompt can become increasingly well-tuned to the exact examples in the eval set without becoming more generally correct on the broader range of real inputs those examples were only ever meant to sample from -- exactly the same generalization failure that overfitting to a fixed validation set represents in classical machine learning, just happening through manual prompt edits instead of automated training. The rising eval score in that scenario is real and reproducible on the eval set itself, but it's measuring something narrower than 'general quality' -- it's measuring 'performance on these specific cases,' which can drift further and further from real-world performance the more directly each iteration targeted the eval set's own failures rather than the underlying behavior. The gap between a climbing eval score and flat-or-worsening real complaints is exactly the symptom to watch for, and it appearing here is a strong signal that this is what happened, rather than the eval set simply reflecting a real, broad improvement. To diagnose it, I'd first check whether the eval set has been refreshed with new, unseen examples recently, or whether it's the same fixed set that's been directly targeted for months -- a stagnant, heavily-targeted set is the classic setup for this failure. To fix it, I'd introduce a genuinely held-out portion of examples that the team commits to never looking at directly while iterating, used only periodically to sanity-check that improvements on the rest of the set actually generalize; I'd add fresh examples sourced from recent real production traffic and recent real complaints, since those are exactly the cases most likely to expose whether the prompt has become narrowly tailored; and I'd start tracking real-world quality signals -- user feedback, escalation rates, spot-checks on brand-new production examples -- alongside the offline eval score specifically so a future divergence between the two gets caught quickly rather than discovered three months later."
+        },
+        {
+          "id": "llm-engineering-golden-eval-datasets-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Per this module, why does a golden/eval set built entirely from a handful of easy, hand-picked examples risk giving a misleadingly high score?",
+          "options": [
+            "Small eval sets are always statistically invalid, regardless of what specific examples they contain.",
+            "It systematically overrepresents happy-path cases and misses the actual distribution of real usage -- especially edge cases and known past failures -- so a high score on it doesn't establish good performance on the harder inputs real usage actually surfaces.",
+            "Hand-picked examples always require model-graded evaluation, which this module claims is inherently less reliable than every other grading method.",
+            "Most eval-running frameworks automatically reject datasets below a certain minimum size."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The module directly compares this to a biased few-shot example set: a small, convenient, hand-picked eval set overrepresents easy cases and never samples the harder, messier inputs -- including edge cases and past regressions -- that real usage includes, so a perfect score on it can coexist with genuinely poor real-world performance. Option A overgeneralizes about set size rather than composition, which isn't the module's actual point. Option C misattributes a grading-method claim to the module that it doesn't make -- the issue here is example selection, not which grading approach is used. Option D invents a technical constraint the module never describes."
+        },
+        {
+          "id": "llm-engineering-golden-eval-datasets-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A team's iteration workflow is: look at which eval cases are currently failing, patch the prompt until those specific cases pass, repeat. Per this module, what risk does this workflow create, and what is a concrete mitigation?",
+          "options": [
+            "There is no real risk -- making previously-failing cases pass is, by definition, an improvement worth keeping.",
+            "The prompt can become narrowly tailored to the exact examples in the eval set without becoming more generally correct on the broader distribution those examples were meant to sample -- the same overfitting risk a fixed validation set faces in machine learning; maintaining a genuine held-out portion never used to shape prompt edits is a concrete mitigation.",
+            "The main risk is that the eval set will run too slowly after repeated patching; the fix is to reduce the total number of eval examples.",
+            "The main risk is that a model provider will flag repeated similar prompt edits as abuse; the fix is to rotate between different model providers during iteration."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The module names this exact workflow as the mechanism behind eval-set overfitting, explicitly drawing the parallel to overfitting a validation set in classical machine learning, and recommends a held-out portion that's never directly used to shape specific edits as a core mitigation, alongside continuously refreshing the set and tracking real-world signals. Option A ignores the module's central warning that case-by-case patching can raise the eval score without producing general improvement. Options C and D invent unrelated operational concerns (runtime speed, provider abuse flags) that the module never raises."
+        },
+        {
+          "id": "llm-engineering-golden-eval-datasets-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Comparing two prompt versions, v2 scores a higher overall pass rate than v1, but the per-category breakdown shows v2 actually regressed specifically on the 'regression' category -- cases built from previously-fixed real production bugs. Per this module, what should this comparison actually conclude?",
+          "options": [
+            "v2 should ship immediately, since the aggregate pass rate is the number that matters for a ship decision.",
+            "The aggregate improvement is solid evidence that v2 is strictly better than v1 in every way that matters.",
+            "The rising aggregate is hiding a meaningful regression on exactly the category most likely to represent previously-fixed bugs recurring; the per-category breakdown, not the aggregate alone, should drive the decision, and the regression needs investigation before shipping.",
+            "Per-category breakdowns are only meaningful for classification-style tasks and shouldn't influence a general ship decision."
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "This maps directly onto the module's worked example: an aggregate can rise while a specific, important category gets worse, because gains elsewhere outweigh the regression in the total -- which is exactly why reading only the aggregate number is called out as a way to miss a regression that matters most, since it's the category built from previously-fixed real bugs. Options A and B both treat the aggregate as sufficient on its own, which the module explicitly warns against. Option D incorrectly limits when category breakdowns matter, when the module's own example uses a 'regression' category on a general-purpose comparison, not a classification task."
         }
       ]
     },
@@ -357,6 +435,45 @@
           "type": "explanation",
           "prompt": "A colleague argues: 'We've automated our evaluation with an LLM judge, so we can finally stop involving humans in quality assessment entirely.' Explain why this conclusion doesn't follow, tying your answer to the specific biases and the underlying generation mechanism, and describe what ongoing role human judgment should still play.",
           "modelAnswer": "The judge model is not a fundamentally different, more trustworthy kind of system than the one it's evaluating -- it produces its scores through the exact same probabilistic, token-by-token generation mechanism responsible for hallucination, inconsistency, and susceptibility to how a prompt is framed everywhere else in these systems. That means a judge's verdicts inherit real, specific, well-documented distortions: position bias can make a pairwise comparison's outcome depend on which response happened to be listed first rather than which is actually better; verbosity bias can make a longer, padded, less accurate response outscore a concise, correct one; self-preference bias can make a judge rate its own model family's outputs more favorably in a way that has nothing to do with genuine quality; and leniency drift can compress most real scores into an artificially narrow high band, making it hard to tell a genuinely excellent response from a merely adequate one. None of these are corrected simply by the judge being automated and consistent -- a biased judge applies its bias with just as much apparent consistency as an unbiased one would apply genuine judgment, so consistency alone is not evidence the scores are accurate. Concluding that automation removes the need for human involvement mistakes 'produces a number every time, cheaply' for 'produces an accurate number,' when those are genuinely separate properties that have to be established, not assumed. The role human judgment should keep playing is as the periodic, ongoing check against which the judge's own accuracy is measured: sampling a subset of judge verdicts regularly and having humans grade the same examples independently, computing an agreement rate, and treating a meaningful or growing disagreement as a concrete signal to revise the rubric, swap the judge model, or fall back to human grading for whichever specific quality dimension the judge is failing to track reliably. LLM-as-judge evaluation is genuinely valuable precisely because it lets that human effort be spent sparingly, as a calibration and audit mechanism, rather than as the entire evaluation pipeline -- but removing it entirely removes the only mechanism that can actually tell you whether the automated judge is still worth trusting."
+        },
+        {
+          "id": "llm-engineering-llm-as-judge-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A team uses the same model family as both the system under test and the judge grading a head-to-head comparison against a competing model's outputs. Per this module, what specific risk does this introduce, and what's the mitigation?",
+          "options": [
+            "Position bias -- mitigated by running each comparison twice with the response order swapped.",
+            "Self-preference bias -- the judge may rate outputs from its own model family more favorably independent of actual quality -- mitigated by using a genuinely independent judge model, ideally different from any system being compared.",
+            "Leniency drift -- mitigated by calibrating the score scale against a set of human-graded examples spanning the full quality range.",
+            "Verbosity bias -- mitigated by adding an explicit rubric instruction not to reward length or thoroughness for its own sake."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The module names this exact scenario as self-preference bias -- a documented conflict of interest when a model judges outputs from its own model family -- and its stated mitigation is a genuinely independent judge model, distinct from any system being compared. Option A describes an unrelated bias tied to presentation order, not model identity. Option C addresses generally inflated scores, not a family-specific favoritism. Option D addresses a length-correlated distortion, unrelated to which model family produced an output."
+        },
+        {
+          "id": "llm-engineering-llm-as-judge-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A judge schema declares a single required field, `score` (an integer from 1 to 5), with no other fields. Per this module's guidance on designing judge prompts, what is the likely downside of this design, and what's the recommended fix?",
+          "options": [
+            "There is no real downside -- a bare numeric score is described as the most reliable judge output format in this module.",
+            "The judge has no room to work through the rubric before committing to a number, the same scratchpad-loss issue that affects any schema forcing an immediate final answer; adding a `reasoning` field ordered before `score` recovers that space and makes the verdict auditable.",
+            "Integer-typed fields cannot be schema-constrained at all, so `score` needs to be changed to a string type before structured output will work.",
+            "A single-field schema is actually preferable specifically for judge prompts, since judge models are inherently more reliable than the systems they evaluate."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The module explicitly recommends ordering a `reasoning` field before `score` in a judge schema, tying this directly back to the structured-output module's point that a schema forcing an immediate final value removes room for the model to work through logic first; a single-field, score-only schema recreates exactly that problem for the judge. Option A contradicts the module's explicit recommendation. Option C is factually wrong about schema-constrained decoding, which handles integer fields normally. Option D wrongly claims judges are exempt from the same generation-mechanism limitations the module says apply to them just as much as to any other model output."
+        },
+        {
+          "id": "llm-engineering-llm-as-judge-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Per this module, why might a team prefer pairwise comparison over absolute rubric scoring specifically when deciding which of two concrete prompt versions to ship, even though pairwise comparisons don't produce a single trend-able score over time?",
+          "options": [
+            "Pairwise comparisons are described as immune to every documented judge bias, unlike absolute scoring.",
+            "Relative judgments ('which of these two is better') tend to be an easier, more internally consistent kind of judgment for a model to make than an absolute one ('is this a 3 or a 4'), which suits a direct, one-off choice between two concrete alternatives better than a standalone score would.",
+            "Pairwise comparison always requires strictly fewer total judge calls than absolute scoring, regardless of how many candidates are being compared.",
+            "Absolute scoring cannot be schema-constrained, while pairwise comparison verdicts always can be."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The module explains that pairwise comparisons tend to be more internally consistent because relative judgments are generally easier for a model to make than absolute ones, which is exactly why they suit a direct choice between two specific alternatives, even though they trade away a single ongoing trend-able score and scale combinatorially worse as more candidates are added. Option A overclaims immunity to bias -- pairwise comparisons still suffer from position bias specifically. Option C is contradicted by the module's own note that pairwise comparison needs combinatorially more comparisons as candidates grow. Option D is an invented technical claim the module never makes; either approach can use structured output."
         }
       ]
     }

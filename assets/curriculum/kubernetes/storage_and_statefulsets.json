@@ -107,6 +107,45 @@
           "explanation": "emptyDir is explicitly a Pod-scoped volume: the directory backing it lives on the node for as long as the Pod exists there, independent of any single container's lifecycle. A container restart replaces the container's own writable layer with a fresh one, but has no effect on the Pod-level emptyDir mount, which is exactly why it survives. Option A conflates the container's own ephemeral writable layer (which genuinely is wiped on restart) with the separate emptyDir volume. Option C inverts the actual distinction, which is about backing medium (disk vs tmpfs) affecting node-reboot survival, not container-restart survival. Option D describes a copy mechanism that doesn't exist -- nothing needs to be copied because the directory was never removed in the first place."
         },
         {
+          "id": "kubernetes-ephemeral-storage-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A container writes its own application logs to a local file at /var/log/app.log instead of stdout, with no volume mounted at that path. The container crashes and the kubelet restarts it in place. Can `kubectl logs --previous` retrieve the pre-crash contents of /var/log/app.log?",
+          "options": [
+            "Yes -- kubectl logs --previous always retrieves the full filesystem state of the previous container instance, including any files it wrote to local disk.",
+            "No -- kubectl logs --previous only retrieves what the previous container instance wrote to stdout/stderr, which is entirely separate from its writable filesystem layer; a file written to local disk and never sent to stdout is already gone the moment that container instance exits, restart or not.",
+            "Yes, but only if the container's root filesystem was configured with medium: Memory.",
+            "No -- kubectl logs --previous only works for Pods that have already been deleted, not for a container restarted in place within a still-running Pod."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "kubectl logs --previous surfaces the stdout/stderr stream the kubelet captured from the previous container instance -- it has nothing to do with that container's writable filesystem layer, which is an entirely separate thing and is discarded the instant the container exits, regardless of restart. A file written only to local disk and never emitted to stdout is unrecoverable through this command or any other, which is exactly why this concept calls out writing logs to stdout as the safer default. Option C invents a dependency on emptyDir's memory-backing option that has nothing to do with logs at all. Option D is wrong -- --previous works precisely for a container restarted in place within a still-running Pod; that's its primary use case."
+        },
+        {
+          "id": "kubernetes-ephemeral-storage-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A Pod's emptyDir volume is configured with `medium: Memory` instead of the default disk backing. Compared to a default, disk-backed emptyDir, what is the practical tradeoff?",
+          "options": [
+            "It behaves identically in every respect -- medium: Memory is purely a performance hint with no functional difference in durability.",
+            "The memory-backed volume's usage counts against the Pod's memory limit, and its data is lost even faster than a disk-backed emptyDir -- including on a full Pod-level tmpfs remount, and certainly on a node reboot -- since it's never written to persistent disk at all.",
+            "It survives a node reboot, unlike a disk-backed emptyDir, because tmpfs contents are automatically checkpointed to disk before a controlled shutdown.",
+            "It automatically converts into a PersistentVolume once the amount of data written exceeds a configurable size threshold."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "medium: Memory backs the emptyDir with tmpfs rather than the node's real disk, which is useful for latency-sensitive scratch data, but it comes with two real costs: that memory usage counts directly against the Pod's memory limit (unlike disk-backed emptyDir, which doesn't consume the Pod's memory budget), and the data is even more fragile than normal emptyDir, disappearing on events like a full remount and certainly never surviving a node reboot, since tmpfs by definition never touches persistent storage. Option A understates the real tradeoffs. Option C invents a checkpointing mechanism that doesn't exist. Option D invents an automatic-conversion behavior that has no basis in how emptyDir works."
+        },
+        {
+          "id": "kubernetes-ephemeral-storage-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Per this concept's own guidance, which scenario is hostPath actually a reasonable, appropriate design choice for, given that it permanently ties data to one specific node?",
+          "options": [
+            "A ReplicaSet-managed web application caching rendered pages, since using hostPath will helpfully cause the scheduler to avoid ever moving those Pods to a different node.",
+            "A DaemonSet Pod that needs to read that specific node's own log directory or interact with that node's own Docker socket, since a DaemonSet is itself inherently node-scoped by design, matching hostPath's own scope exactly.",
+            "A StatefulSet running a clustered database, since a StatefulSet's ordinal identity guarantee ensures the replacement Pod always lands back on the exact same node.",
+            "Any workload at all, as long as replicas: 1 is set, since a single replica removes any possibility of a reschedule ever occurring."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This concept is explicit that hostPath is 'a node-scoped escape hatch, appropriate mainly for workloads that are themselves inherently node-scoped by design' -- a DaemonSet is exactly that kind of workload, since by definition it runs one Pod per node and genuinely wants that specific node's own local resources. Option A is false and backwards -- hostPath doesn't influence scheduling decisions at all; the scheduler remains completely free to move a ReplicaSet's Pods regardless of what volumes they mount. Option C is false -- a StatefulSet's ordinal identity guarantees a stable Pod name and, via volumeClaimTemplates, a stable PVC -- it says nothing about which node the Pod lands on, so hostPath under a StatefulSet has exactly the same node-mismatch risk as under a Deployment. Option D is false -- a single replica can still be rescheduled onto a different node after a node failure or drain, with the exact same data-loss consequence described in this concept."
+        },
+        {
           "id": "kubernetes-ephemeral-storage-assess-explain1",
           "type": "explanation",
           "prompt": "Explain, precisely, the difference in scope between a container's writable filesystem layer, an emptyDir volume, and a hostPath volume, and why none of the three actually satisfies the general requirement 'this Pod's data must survive being rescheduled onto a different node.'",
@@ -222,6 +261,45 @@
           "explanation": "ReadWriteOnce is a node-level restriction, not a Pod-level one -- it reflects the fact that the underlying technology (typically a block device) can only be attached to a single node's kernel at a time. Any number of Pods scheduled onto that one node can mount and write to it simultaneously without conflict. Option A overstates the restriction to the Pod level, which is the single most common misreading of RWO. Option C confuses access mode with namespace scoping, an unrelated concept. Option D describes something closer to a write-once medium, which isn't what RWO means at all -- RWO volumes can be written to repeatedly for as long as they're mounted read-write."
         },
         {
+          "id": "kubernetes-persistent-volumes-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Why is a PersistentVolume a cluster-scoped resource (no namespace), while a PersistentVolumeClaim is namespaced?",
+          "options": [
+            "It's an arbitrary API design choice with no underlying reason -- either object could have been namespaced or cluster-scoped with no practical difference.",
+            "The real, physical storage a PV represents doesn't inherently belong to any one team's namespace, while a PVC is the application-facing request that naturally lives alongside the specific Pods and namespace that will actually consume it.",
+            "PersistentVolumes are actually namespaced too, but only become visible to users holding cluster-admin RBAC permissions.",
+            "A PersistentVolume must be cluster-scoped because only cluster-scoped objects are permitted to trigger a StorageClass's provisioner."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This split mirrors the deliberate abstraction the whole PV/PVC system is built around: the PV represents a real, physical resource that exists independently of any particular application team, so scoping it to a namespace wouldn't reflect reality -- a disk isn't 'owned' by a namespace the way an application's own objects are. The PVC, by contrast, is specifically the application-facing request, so it lives in the namespace of the Pods that will use it, exactly like other namespaced objects such as Deployments and Services. Option A dismisses a design choice that has a clear rationale. Option C is factually wrong -- PVs are genuinely cluster-scoped, not namespace-scoped-but-hidden. Option D invents a nonexistent admission rule."
+        },
+        {
+          "id": "kubernetes-persistent-volumes-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "What is the actual difference between a PVC that omits `storageClassName` entirely and one that explicitly sets `storageClassName: \"\"`?",
+          "options": [
+            "There is no difference at all -- both are treated identically by the binding controller.",
+            "Omitting the field causes the PVC to use whichever StorageClass the cluster has marked as default; explicitly setting it to an empty string deliberately opts out of dynamic provisioning altogether, so the PVC will only ever bind to a pre-existing, statically-provisioned PV.",
+            "Omitting the field opts out of dynamic provisioning entirely, while explicitly setting an empty string requests whichever StorageClass currently has the fastest provisioner.",
+            "Both settings leave the PVC permanently unbound unless a StorageClass is added to the cluster afterward."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This is a real, meaningful distinction called out directly in this concept: leaving storageClassName unset lets the cluster's default StorageClass (marked via an annotation) apply automatically, while explicitly setting it to an empty string is a deliberate signal that this PVC should never be dynamically provisioned, and should only bind to a PV that already exists from static provisioning. Option A collapses a distinction that genuinely changes behavior. Option C reverses the actual behavior of the two settings. Option D is wrong for the omitted-field case, which resolves to the default StorageClass rather than staying unbound."
+        },
+        {
+          "id": "kubernetes-persistent-volumes-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A PV's persistentVolumeReclaimPolicy is set to Retain. Its bound PVC is deleted. What state does the PV enter, and can a brand-new PVC automatically bind to it afterward?",
+          "options": [
+            "The PV is deleted immediately along with the PVC, exactly as it would be under a Delete reclaim policy -- Retain only protects the underlying cloud disk, not the PV object itself.",
+            "The PV enters a Released state, with its underlying data left fully intact, but it cannot be automatically bound to a new PVC -- an administrator must explicitly intervene first.",
+            "The PV immediately reverts to Available and silently rebinds to the very next PVC that requests a matching capacity and access mode, with no administrator action needed.",
+            "The PV keeps its original Bound status indefinitely, even with no PVC referencing it, until the entire cluster is restarted."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Retain's entire purpose is to prevent automatic destruction or automatic reuse: when the bound PVC is deleted, the PV object and its underlying real storage both survive fully intact, but the PV moves to Released rather than back to Available, specifically so it can't be silently claimed by an unrelated PVC that happens to request a similar size and access mode -- a human has to look at it and deliberately decide what to do next. Option A describes Delete's behavior, the opposite of what Retain does to the PV object. Option C describes the kind of automatic rebinding Retain specifically prevents. Option D invents a restart dependency that doesn't reflect how the state transition actually works."
+        },
+        {
           "id": "kubernetes-persistent-volumes-assess-explain1",
           "type": "explanation",
           "prompt": "Walk through, layer by layer, what happens when a Pod referencing a PersistentVolumeClaim is created in a cluster using dynamic provisioning -- from the PVC itself down to the real disk -- and explain specifically what a reclaim policy governs in that chain.",
@@ -335,6 +413,45 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "This is the core practical difference: a StatefulSet's controller recreates the same ordinal (web-2) and, if volumeClaimTemplates are defined, reattaches that ordinal's own dedicated PVC, carrying its data forward. A Deployment has neither mechanism -- its ReplicaSet generates a fresh, randomly-suffixed name for any replacement Pod, and a Deployment's Pod template supports at most one shared PVC reference across all replicas, not a distinct one per replica. Option A ignores the entire point of StatefulSet's identity guarantees. Option C is false -- Pod IPs are never guaranteed stable across a replacement in either controller; only the StatefulSet's Pod *name* and per-ordinal storage are preserved, not its IP. Option D confuses ReplicaSet revision retention (for Deployment rollbacks) with per-Pod state preservation, which is an unrelated mechanism."
+        },
+        {
+          "id": "kubernetes-statefulsets-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A team wants a StatefulSet's stable identity and per-replica storage guarantees, but doesn't want to pay the cost of strictly sequential Pod startup on scale-up. Which setting lets them opt out of the ordering specifically, without losing the other guarantees?",
+          "options": [
+            "There is no such option -- ordered startup is an inseparable part of what makes something a StatefulSet at all; opting out requires switching to a Deployment and losing every other guarantee too.",
+            "Setting the Pod management policy to Parallel, which removes the strict ascending/descending creation-and-deletion ordering while leaving ordinal naming and volumeClaimTemplates-based per-replica storage completely intact.",
+            "Temporarily setting replicas to a negative number, which forces the controller to create every Pod simultaneously as a side effect.",
+            "Removing the serviceName field, since that field is what actually causes ordered startup, independent of any podManagementPolicy setting."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This concept explicitly calls out Parallel pod management policy as 'an explicit opt-out of all this ordering, for StatefulSet users who only want the identity and storage guarantees without paying the sequential-startup cost' -- proof that ordering and identity/storage are genuinely separable properties, not one indivisible package. Option A overstates ordering as inseparable from StatefulSet-ness, which Parallel itself disproves. Option C describes an invalid, nonsensical operation. Option D misattributes ordering to serviceName, which actually controls the headless Service link for per-Pod DNS, not Pod creation/deletion ordering."
+        },
+        {
+          "id": "kubernetes-statefulsets-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A StatefulSet is deployed with correct volumeClaimTemplates and ordinal Pod naming, but its `serviceName` field points to a Service that doesn't exist yet, or that isn't actually headless. What specifically is lost as a result?",
+          "options": [
+            "Nothing about ordinal Pod naming or per-replica storage is affected -- those operate independently of any Service; what's lost is specifically the individual per-Pod DNS records (like web-1.web...svc.cluster.local) that a correctly configured headless Service would otherwise provide.",
+            "The entire StatefulSet fails to create any Pods at all, since a valid, existing headless serviceName is a hard prerequisite the API server validates at admission time.",
+            "The Pods lose their ordinal names and revert to ReplicaSet-style random name suffixes.",
+            "Every replica's PVC is deleted immediately, since serviceName is a required input to persistentVolumeClaimRetentionPolicy."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "The concept states this directly: 'a StatefulSet with no matching headless Service still gets stable Pod names and per-replica storage, but not the individual DNS entries.' Ordinal naming comes from the StatefulSet controller itself, and volumeClaimTemplates-based storage is independent of any Service; the only thing that genuinely depends on a correctly wired serviceName is the per-Pod DNS record used to address one specific replica by name. Options B, C, and D each invent a hard dependency that doesn't actually exist between serviceName and Pod creation, naming, or storage."
+        },
+        {
+          "id": "kubernetes-statefulsets-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "During a StatefulSet's initial scale-up, Pods are created in ascending ordinal order (0, then 1, then 2). During a rolling update to a new Pod template on an already-running StatefulSet, in what order are the existing Pods updated?",
+          "options": [
+            "The same ascending order as scale-up -- 0 first, then 1, then 2 -- since Kubernetes always processes ordinals from lowest to highest for any StatefulSet operation.",
+            "Descending order -- the highest-numbered Pod (2) is updated first, and the controller waits for it to become Ready before moving to the next-lower ordinal, the reverse of the ascending order used for scale-up.",
+            "All Pods are updated simultaneously regardless of ordinal, since rolling updates use the Parallel pod management policy by default.",
+            "A random order chosen independently at the start of each rollout."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This concept is explicit that rolling updates 'follow the same descending-ordinal discipline' as scale-down -- the highest-numbered Pod is updated first, with the controller waiting for it to become Ready before proceeding to the next-lower ordinal -- which is deliberately 'the reverse of the ascending-ordinal order used for initial scale-up.' It's an easy point to get backwards by assuming update order mirrors creation order, which is exactly why this is worth testing directly. Options A, C, and D all describe orderings the default OrderedReady policy does not use for rolling updates."
         },
         {
           "id": "kubernetes-statefulsets-assess-explain1",

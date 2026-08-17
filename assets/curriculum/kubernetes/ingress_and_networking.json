@@ -106,6 +106,45 @@
           "explanation": "Host- and path-based routing requires parsing the actual HTTP request -- a Layer 7 operation -- which is structurally outside what a Service does. A Service's entire mechanism (kube-proxy programming packet-rewriting rules) operates purely on IP addresses and ports, at Layer 4, and never inspects a packet's payload, so there is no configuration of any Service type that adds this capability. Options A, C, and D are all things ordinary Services genuinely do provide -- load-balancing across Ready backing Pods, a stable ClusterIP, and NodePort's node-level port exposure, respectively -- which is exactly why they're not the answer to what a Service *cannot* do."
         },
         {
+          "id": "kubernetes-ingress-need-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Before adopting Ingress, a team hand-rolls their own solution: an nginx Deployment with a manually maintained config file mapping hostnames to backend ClusterIP Services, fronted by its own single LoadBalancer Service. According to this concept, what is true about this workaround?",
+          "options": [
+            "It doesn't actually solve the underlying problem -- Services still can't express host-based routing no matter what fronts them.",
+            "It genuinely solves the same structural problem Ingress solves (one external IP, one place for certs, HTTP-aware routing), but requires hand-writing and maintaining that proxy configuration entirely outside Kubernetes' own object model, with no standard way for other tooling to read or generate it.",
+            "It's strictly worse than giving every application its own LoadBalancer Service, since it introduces a single point of failure with no compensating benefit.",
+            "It only works for path-based routing, never host-based routing, since nginx cannot inspect a Host header without a Kubernetes Ingress object present."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This concept explicitly frames the hand-rolled proxy as 'exactly the shape of the solution Ingress formalizes' -- it genuinely achieves one external IP, centralized TLS, and HTTP-aware routing, which is real progress over one-LoadBalancer-per-app. What it lacks is standardization: the routing configuration lives in a hand-maintained file outside any Kubernetes object, so nothing else in the ecosystem can read, generate, or reconcile it declaratively. Option A is false -- the workaround does solve the routing problem, just not in a standardized way. Option C ignores the genuine benefits (consolidated IP, cert management) the workaround provides. Option D is false -- plain nginx, configured by hand, can absolutely inspect Host headers; that capability has nothing to do with whether a Kubernetes Ingress object exists."
+        },
+        {
+          "id": "kubernetes-ingress-need-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "According to this concept, what specifically is the cost of provisioning a separate LoadBalancer-type Service for each of ten independent HTTP applications, beyond simple repetition?",
+          "options": [
+            "It's purely aesthetic -- ten Services behave identically to one in terms of cost and operational risk, just with more YAML files to maintain.",
+            "Each LoadBalancer Service provisions its own separately-billed cloud load balancer and external IP, multiplying the ongoing cloud cost by roughly ten, and creates ten independent DNS records and ten independent places a TLS certificate could expire unnoticed -- an operational sprawl problem that worsens as the number of exposed applications grows.",
+            "Only the DNS management cost actually multiplies; cloud load balancers themselves are provisioned free of charge regardless of how many are created.",
+            "The cost is entirely offset, because every LoadBalancer Service in a cluster automatically shares one TLS certificate across all of them by default."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This concept is explicit that this is 'a real, concrete cost problem well before it's an elegance problem': each LoadBalancer Service is billed independently by the cloud provider, and beyond raw dollar cost, ten separate entry points means ten separate DNS records to keep straight and ten separate surfaces where a certificate might silently expire -- sprawl that compounds as the count of exposed apps grows into the dozens. Option A dismisses a cost this concept treats as real and significant. Option C is false -- cloud load balancers are not free; that's precisely the point being made. Option D invents a certificate-sharing behavior that doesn't exist -- each LoadBalancer Service's TLS configuration, per this concept, is independent."
+        },
+        {
+          "id": "kubernetes-ingress-need-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Which pairing correctly matches each item to the network layer it actually operates at, per this concept's explanation of why a Service can't route by hostname or path?",
+          "options": [
+            "Destination IP/port rewriting is a Layer 7 concern; the HTTP Host header and URL path are Layer 4 concerns.",
+            "Destination IP/port rewriting (what kube-proxy does) is a Layer 4 concern; the HTTP Host header and URL path (what host/path routing would require reading) are Layer 7 concerns, one level above anything kube-proxy ever inspects.",
+            "Both destination IP/port rewriting and HTTP header inspection happen at Layer 4; Layer 7 in Kubernetes refers only to TLS termination.",
+            "The Layer 4 / Layer 7 distinction is a legacy networking term with no real bearing on what a Service can or cannot express."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This is the precise structural reason a Service cannot do host/path routing: kube-proxy's entire mechanism operates on addressing information (IP, port) at Layer 4, and the HTTP request -- including the Host header and URL path -- lives inside the packet's payload, which is Layer 7, a level kube-proxy's rewriting logic never parses at all. Option A reverses the two layers entirely. Option C incorrectly flattens the distinction, ignoring that HTTP itself is exactly what defines Layer 7. Option D dismisses a distinction that this concept treats as the direct, load-bearing explanation for the entire gap Ingress exists to fill."
+        },
+        {
           "id": "kubernetes-ingress-need-assess-explain1",
           "type": "explanation",
           "prompt": "Explain, in terms of what information is available at each network layer, exactly why a Service cannot route HTTP requests by hostname or path, and describe the operational cost problem that arises from trying to work around this by giving every application its own LoadBalancer Service instead.",
@@ -227,6 +266,45 @@
           "explanation": "Kubernetes core ships no built-in Ingress controller -- the API server will happily store a perfectly valid Ingress object with nobody watching it at all, which is exactly why ADDRESS stays blank indefinitely and no traffic is ever actually routed. Option A is false; there is no default controller bundled with the platform. Option C is false -- validation of an Ingress object's shape has nothing to do with whether a controller happens to be installed; the apply succeeds regardless. Option D is false and describes a fallback behavior that doesn't exist -- an unimplemented Ingress does nothing at all, rather than degrading to some other working configuration."
         },
         {
+          "id": "kubernetes-ingress-controllers-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "An Ingress rule uses `path: /orders` with `pathType: Exact`. Which of these requests actually matches this rule?",
+          "options": [
+            "Both /orders and /orders/123 match, since Exact still permits deeper path segments beneath the declared path, similar to Prefix.",
+            "Only /orders matches; /orders/123 does not, because Exact permits no additional trailing segments at all, unlike Prefix.",
+            "Neither matches anything unless an accompanying regex annotation is also configured on the Ingress.",
+            "Only /orders/123 matches, since Exact always requires at least one trailing path segment beyond the literally declared path."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "pathType: Exact requires the request path to match the declared path exactly, with zero tolerance for additional trailing segments -- that's the entire distinction between it and Prefix, which this concept defines specifically to allow matching deeper segments beneath the declared path. Option A describes Prefix's behavior, not Exact's. Option C invents a dependency on regex annotations that Exact matching has no need for. Option D inverts the relationship entirely -- Exact matches the bare declared path itself, not some path with a mandatory suffix appended."
+        },
+        {
+          "id": "kubernetes-ingress-controllers-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A client gets a 404 directly from the Ingress controller (not from any backend application) for a request whose host/path combination no Ingress rule declares at all. What does this specifically indicate, compared to what a 502 for a different request would indicate?",
+          "options": [
+            "A 404 here means the controller found a matching rule but the backend Service had no Ready Pods; a 502 would mean no rule matched at all.",
+            "A 404 here means the controller itself found no Ingress rule matching the request's host/path, so it never even attempted to select a backend; a 502, by contrast, indicates a rule DID match but the controller couldn't successfully reach a healthy backend behind the matched Service.",
+            "Both status codes are interchangeable in an Ingress controller and can represent any routing failure equally.",
+            "A 404 always originates from the backend application itself, having received the request but found no matching route of its own."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This distinction maps directly onto where in the routing chain the failure occurred: a 404 from the controller itself is a routing-rule failure -- nothing in the Ingress's own declared rules matched the request at all, so no backend was ever consulted. A 502, by contrast, means the controller's own routing succeeded (a rule matched, a Service was selected) but the attempt to actually reach a healthy Pod behind that Service failed -- exactly the situation in this concept's own debugging exercise, where an empty Endpoints object produced a 502 despite the Ingress rule being entirely correct. Option A swaps the two meanings. Option C ignores that these codes signal genuinely different failure points. Option D is wrong for this scenario -- the backend is never reached at all when the Ingress controller itself returns the 404."
+        },
+        {
+          "id": "kubernetes-ingress-controllers-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A cluster runs one healthy, correctly installed Ingress controller watching IngressClass `nginx-external`. A new Ingress object is applied with `ingressClassName: nginx` -- a typo; no IngressClass named exactly `nginx` exists. What is the most likely observed symptom?",
+          "options": [
+            "The controller treats any unrecognized class name as its own default and implements the rules anyway, logging only a warning.",
+            "The Ingress sits inert -- ADDRESS stays blank and no traffic is ever routed through it -- even though the controller itself is healthy and actively serving other, correctly-classed Ingress objects just fine; both the object and the running controller can look completely normal in isolation.",
+            "The API server rejects the Ingress object outright at apply time, since ingressClassName must reference an existing IngressClass to pass schema validation.",
+            "The controller automatically renames the typo'd class to the closest matching real IngressClass name via fuzzy string matching."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This is precisely the subtler failure mode this concept calls out: most controllers only watch Ingress objects naming their own class, so a class name that doesn't match anything real means nothing claims this specific Ingress, even while the very same controller is correctly serving every other Ingress in the cluster. Nothing about the Ingress object or the controller's own health looks wrong in isolation -- the mismatch is only visible by explicitly cross-checking ingressClassName against kubectl get ingressclass. Option A invents fallback behavior most controllers don't implement. Option C is false -- the API server doesn't validate that ingressClassName references an object that actually exists at apply time. Option D invents a fuzzy-matching feature that doesn't exist."
+        },
+        {
           "id": "kubernetes-ingress-controllers-assess-explain1",
           "type": "explanation",
           "prompt": "Trace, in order, exactly what happens to an HTTPS request for https://shop.example.com/orders/42 from the moment it reaches the cluster to the moment a specific backend Pod handles it, naming every component involved and what each one is responsible for.",
@@ -345,6 +423,45 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "This is exactly backwards from a common intuition, which is why it's worth stating precisely: a normal Service resolves to one stable virtual IP (its ClusterIP), with the actual spreading of traffic across replicas handled later by kube-proxy, not by DNS. A headless Service (clusterIP: None) has no virtual IP for DNS to return at all, so CoreDNS instead hands back the individual IPs of every currently-Ready backing Pod directly -- making DNS itself the discovery mechanism in that specific case. Option A is false because headless Services are explicitly defined by NOT having a ClusterIP. Option C swaps the two behaviors entirely backwards. Option D invents a hard dependency on SRV records that doesn't exist for basic A-record resolution of either Service type."
+        },
+        {
+          "id": "kubernetes-dns-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A Deployment-managed Pod named `web-7d9f8c9b7-4x2lp` runs behind a ClusterIP Service named `web`. Does this specific Pod have its own individual DNS record that another Pod could look up directly?",
+          "options": [
+            "Yes -- every Pod behind any Service automatically receives a per-Pod DNS record of this form, the same way a StatefulSet Pod does.",
+            "No -- an ordinary Deployment-managed Pod has no individual DNS record of its own under any Service configuration; only the Service in front of it is addressable by name. Per-Pod DNS records are specifically a feature of the StatefulSet-plus-headless-Service pairing, not a general property of Pods.",
+            "Yes, but only because this specific Pod's name happens to be longer than the Service's own name.",
+            "No, but only because this Pod's name contains a randomly generated hash suffix; a Deployment using a fixed, non-random Pod name would get one."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This concept is explicit that per-Pod DNS is introduced specifically through the StatefulSet-plus-headless-Service combination, not as something any Pod gets automatically. A Deployment-managed Pod, regardless of its name, has no individual DNS record under any Service configuration -- clients can only address the Service in front of it. Option A overgeneralizes a StatefulSet-specific feature to all Pods. Option C invents an irrelevant, made-up rule about name length. Option D is wrong -- the presence or absence of a random suffix in the Pod's name has nothing to do with whether it gets a DNS record; the actual determining factor is the StatefulSet-plus-headless pairing itself."
+        },
+        {
+          "id": "kubernetes-dns-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Per this concept, what is the most reliable way to reference a Service that lives in a different namespace than the calling Pod, given that a bare short name's resolution depends entirely on the calling Pod's own namespace search order?",
+          "options": [
+            "Always use the bare short name -- CoreDNS automatically searches every namespace in the cluster until it finds a uniquely matching Service.",
+            "Use at least `<service-name>.<namespace>` (letting the search list fill in the remaining .svc.cluster.local suffix), or the fully qualified name outright -- rather than depending on a bare short name whose resolution is contingent on whatever else happens to exist in the caller's own namespace.",
+            "Set ndots:1 in the calling Pod's own resolv.conf, which forces every lookup to be treated as already fully qualified regardless of namespace.",
+            "Rename the Service in the target namespace so that no other namespace in the cluster could ever contain a same-named Service."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This concept states the fix directly: 'use at least <service>.<namespace> ... or the fully qualified name outright, rather than depending on a bare short name.' A bare short name is resolved via the calling Pod's own search list, which always tries the caller's own namespace first -- a fact that makes cross-namespace bare-name lookups fragile in exactly the way this concept's own example demonstrates. Option A is false -- CoreDNS does not search every namespace; it only tries the specific suffixes in the calling Pod's own search list, in order, stopping at the first success. Option C misapplies the ndots setting, which controls a different aspect of resolver behavior (whether a name is treated as already fully qualified based on dot count), not namespace scoping. Option D is impractical and doesn't scale as organizational policy."
+        },
+        {
+          "id": "kubernetes-dns-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A new Service is created in the cluster. Roughly how soon does it become resolvable via CoreDNS, and why?",
+          "options": [
+            "It requires a manual DNS zone file update and a CoreDNS restart, similar to traditional on-premises DNS administration.",
+            "Typically within seconds, with no manual administration step at all -- CoreDNS's kubernetes plugin watches the API server for Service and Endpoints/EndpointSlice changes and answers queries from that continuously updated, in-memory view, rather than from any static zone file.",
+            "Immediately and unconditionally, because CoreDNS pre-generates DNS records for every possible future Service name in advance.",
+            "Only after CoreDNS's next scheduled resync, which per this concept defaults to once every 24 hours."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "CoreDNS's kubernetes plugin follows the exact same watch-and-react shape as every other controller covered in this curriculum: it watches Service and Endpoints/EndpointSlice objects and answers from that live state directly, with no static zone file anywhere and no separate DNS administration step. Option A describes traditional DNS administration, which this concept explicitly contrasts against. Option C invents a pre-generation mechanism that doesn't exist and wouldn't make sense (Kubernetes has no way to enumerate 'every possible future Service name'). Option D invents a specific 24-hour resync interval that this concept never states."
         },
         {
           "id": "kubernetes-dns-assess-explain1",

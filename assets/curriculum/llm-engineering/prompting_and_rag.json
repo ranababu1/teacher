@@ -117,6 +117,45 @@
           "type": "explanation",
           "prompt": "A colleague's prompt for extracting structured data from support tickets works reliably in testing but occasionally returns invalid or incomplete JSON in production, at low but nonzero frequency. Explain the likely underlying causes and how you'd make the pipeline robust against this, rather than just hoping it stops happening.",
           "modelAnswer": "The core issue is that a chat-tuned model generating JSON is still doing ordinary next-token generation, not executing a hard syntax-checked serialization routine -- so 'usually correct' rather than 'always correct' is the expected baseline behavior for JSON produced from a plain-text instruction alone, and low-frequency failures are exactly what that predicts: an occasional wrapped code fence, a dropped closing brace, a hallucinated or missing field, a number rendered as a quoted string. Testing often under-samples this because manual testing tends to reuse a small number of representative inputs, while production traffic eventually surfaces the wider range of ticket content -- unusual characters, unusually long text, edge-case categories -- that's more likely to trigger a rarer failure mode. Making the pipeline genuinely robust means not relying on the instruction text as the only safeguard: first, switch to a real constrained-decoding feature if the provider offers one (JSON mode, structured outputs, or function/tool calling), which restricts the model to only emit syntactically valid JSON tokens rather than merely being told to; second, always parse defensively downstream, wrapping the parse in error handling rather than assuming success, and stripping common wrapping artifacts like markdown fences before parsing; third, validate the parsed result against your actual required schema (right fields present, right types), not just against 'is this valid JSON at all,' since syntactically valid JSON can still be missing required data; and fourth, build in a bounded retry path that feeds the specific parsing or validation error back to the model and asks it to correct that exact problem, since a targeted retry with the actual error message tends to succeed far more often than either giving up immediately or retrying blindly with no feedback. None of this makes failures literally impossible, but it converts a rare unhandled crash into a monitored, recoverable, and measurable failure rate."
+        },
+        {
+          "id": "llm-engineering-prompt-engineering-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Why does the vague prompt 'write about dogs' tend to produce noticeably different output across repeated calls, according to this module's explanation of specificity?",
+          "options": [
+            "Because the tokenizer randomly reorders the words in short, vague prompts before encoding them.",
+            "Because the prompt leaves many dimensions -- topic angle, length, tone, audience, format -- entirely unconstrained, so many different continuations remain comparably plausible, and which one actually gets produced varies from call to call.",
+            "Because prompts under a certain word count automatically trigger a higher default temperature setting.",
+            "Because the model intentionally injects randomness into short prompts so its responses appear more creative."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Specificity works by narrowing the space of plausible next-token continuations; a vague prompt does the opposite, leaving length, audience, tone, structure, and topic angle all open, which means many genuinely different completions are all comparably probable, and different calls can land on different ones. Option A misattributes the effect to tokenization, which doesn't reorder anything. Option C and D invent mechanisms -- an automatic temperature bump or intentional randomness injection tied to prompt length -- that this module never describes; temperature is a setting you choose, not something the model changes based on how vague a prompt is."
+        },
+        {
+          "id": "llm-engineering-prompt-engineering-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A few-shot sentiment classifier is given three example reviews, all of which happen to be positive or neutral -- none negative. Per this module, what's the most likely consequence when a clearly negative new review is classified?",
+          "options": [
+            "The model will still classify it correctly as negative every time, since sentiment categories are well-known independent of which examples happen to be shown.",
+            "The model may misclassify the negative review or handle it inconsistently across calls, because few-shot prompting works by pattern completion from the specific examples shown, and none of these examples demonstrate what a negative classification looks like in this prompt's pattern.",
+            "The API call will fail with an error, because at least one example of every possible output label is required for few-shot prompting to function at all.",
+            "The model will refuse to produce any label outside the exact three categories demonstrated, including refusing to say 'negative.'"
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Few-shot prompting conditions the model on the specific in-context pattern the examples establish, not on an independent, guaranteed understanding of the task; when every example skews toward positive or neutral, the demonstrated pattern is skewed too, and the model has no in-context precedent for what a negative classification looks like here. Option A wrongly assumes general world knowledge always overrides a biased demonstrated pattern. Option C and D describe failure modes -- a hard error, or an outright refusal -- that the module never associates with unrepresentative few-shot examples; the actual risk is silent misclassification or inconsistency, not a crash or a refusal."
+        },
+        {
+          "id": "llm-engineering-prompt-engineering-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A layered prompt's system message instructs 'always respond in formal English,' but a few-shot example included lower in that same prompt is written in a casual tone. Per this module, what's the likely result?",
+          "options": [
+            "The system-level instruction always wins outright, since it appears earlier in the prompt, so the casual example has no effect on the output.",
+            "The few-shot example always overrides the system instruction, since content closer to the point of generation always wins entirely.",
+            "The two layers hand the model genuinely conflicting conditioning signals, and the result is often an unpredictable blend of both or an inconsistent choice between them across different calls.",
+            "The model detects the contradiction explicitly and pauses generation to ask the user which instruction should take priority."
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "The module describes internal contradictions across prompt layers as a common bug precisely because each layer looks fine in isolation, but together they leave the model with conflicting signals about which pattern to follow, typically producing an unpredictable blend or inconsistent choice rather than either layer cleanly winning. Options A and B both assume one layer deterministically and completely overrides the other, which the module doesn't support -- position alone doesn't guarantee dominance. Option D describes a clarifying-question behavior that isn't part of the base generation mechanism; the model doesn't pause to resolve conflicting instructions on its own."
         }
       ]
     },
@@ -237,6 +276,45 @@
           "type": "explanation",
           "prompt": "Explain why a RAG-based chatbot might confidently give a wrong answer to a question even though the correct information genuinely exists somewhere in the indexed document set, walking through where in the pipeline this could go wrong.",
           "modelAnswer": "The correct information existing somewhere in the indexed corpus only helps if every subsequent stage of the pipeline successfully carries it through to the final answer, and there are several independent points where that chain can break. The problem could originate in chunking, if the correct information was split awkwardly across a chunk boundary, leaving no single chunk that contains the complete, coherent answer, or if it was embedded inside a large chunk dominated by unrelated content, weakening its similarity score. It could originate in retrieval itself, if the query's embedding simply doesn't land close enough to the correct chunk's embedding in vector space -- this happens especially often when the question uses very different wording or terminology than the source document, or when the answer depends on an exact match (an ID, a specific term) that semantic similarity search handles less reliably than keyword search would. It could originate in augmentation, if the retrieved chunks are actually correct but the prompt doesn't include a firm enough grounding instruction, leaving room for the model to blend in its own unrelated trained-in assumptions rather than sticking strictly to what was retrieved. And even if retrieval and augmentation both worked perfectly, the failure could still originate in generation itself, since the model is still producing its answer through ordinary next-token prediction and can occasionally misread, oversimplify, or blend a nuance of the correct retrieved text with something else. Diagnosing which of these actually happened requires inspecting the pipeline at each stage rather than guessing -- checking what was actually retrieved for the failing query is usually the fastest and highest-value first step, since a large fraction of real-world RAG failures turn out to be retrieval failures rather than generation failures."
+        },
+        {
+          "id": "llm-engineering-rag-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A chunk contains the correct answer sentence buried among several unrelated sentences. A smaller, tightly-relevant chunk about only the query topic exists elsewhere in the index. Per this module, why does the larger chunk often rank below the smaller one during similarity search, even though it technically contains the answer?",
+          "options": [
+            "Vector databases apply a fixed length-based score penalty to any chunk over a certain character count.",
+            "The larger chunk's embedding represents an average of several different pieces of content, diluting the specific relevance signal, so it scores as a weaker match than a chunk that's purely about the query's topic.",
+            "Vector indexes silently truncate long chunks before embedding them, so part of the answer is dropped before indexing even happens.",
+            "Larger chunks are always processed by a separate, lower-quality embedding model reserved for bulk content."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The module explains chunk-size dilution directly: a large chunk's embedding has to represent multiple different pieces of information averaged together, which weakens its similarity score relative to a chunk whose content is tightly focused on the query topic. Options A, C, and D each invent a mechanism -- a fixed length penalty, silent truncation, or a separate lower-quality model for large chunks -- that the module never describes; the actual effect is purely about how averaging diverse content into one embedding dilutes its relevance signal, not any special-cased handling of chunk length."
+        },
+        {
+          "id": "llm-engineering-rag-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A user searches a RAG-indexed support knowledge base for a specific product SKU code. Per this module, why might pure semantic vector search underperform plain keyword search for this particular kind of query?",
+          "options": [
+            "Vector databases cannot store or index strings containing numeric characters, so SKU codes are dropped entirely.",
+            "Semantic embedding models only function on queries phrased as complete grammatical sentences, not short codes.",
+            "Two vectors can be semantically 'close' in a general sense without the embedding model having learned fine-grained distinctions between similar-looking exact identifiers, so an exact match may not be prioritized as strongly as it should be.",
+            "Keyword search is unconditionally more accurate than semantic search for every query type, which is why hybrid retrieval is never actually necessary."
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "The module specifically calls out exact strings -- error codes, SKUs, names, precise legal terms -- as a case where semantic similarity can underperform lexical matching, because the embedding model may not have learned fine-grained distinctions between similar-looking rare identifiers, even though it captures broader semantic relatedness well. Option A and B describe hard technical limitations that don't actually exist. Option D overstates the case in the opposite direction -- the module's actual conclusion is that hybrid systems combining both are common precisely because neither approach dominates for every query type."
+        },
+        {
+          "id": "llm-engineering-rag-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Which statement best reflects why this module says RAG substantially reduces, but structurally cannot eliminate, hallucination?",
+          "options": [
+            "RAG eliminates hallucination completely, because a grounded model can only copy retrieved text verbatim into its final answer.",
+            "Generation is still the same token-by-token probabilistic mechanism as always; if retrieval returns wrong or irrelevant chunks the model can still confidently generate an answer from that bad material, and even good, relevant context can occasionally get blended with the model's own prior beliefs.",
+            "RAG fails to reduce hallucination at all, because vector databases are inherently less reliable than relational databases.",
+            "RAG only reduces hallucination when the generation model's temperature is set above 1.0."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The module is explicit that RAG narrows the space of plausible continuations toward grounded content, which substantially helps, but generation remains the same probabilistic mechanism -- bad retrieval still produces confidently-phrased garbage, and even correct retrieved context can still be blended with or overridden by the model's trained-in assumptions. Option A overstates the guarantee retrieval provides. Option C mischaracterizes RAG as providing no benefit at all, which contradicts the module's central claim that it's one of the most effective mitigations available. Option D invents an unrelated dependency on a specific temperature threshold that the module never claims."
         }
       ]
     },
@@ -357,6 +435,45 @@
           "type": "explanation",
           "prompt": "A product manager asks: 'Can't we just fine-tune the model on all our documentation so it knows everything, and skip building this complicated retrieval system?' Explain, in terms a PM without a technical background could follow, why this wouldn't work as well as they expect, and what you'd propose instead.",
           "modelAnswer": "Fine-tuning is a way of adjusting the model through additional training so its default behavior shifts -- it's genuinely good at teaching a consistent style, tone, or way of formatting answers. But it turns out to be a surprisingly unreliable way to make a model 'know' specific facts on demand, for a concrete reason: the training process spreads what it learns across the model's internal parameters in a diffuse, statistical way, rather than storing anything like an exact, lookup-able copy of the original documents. In practice, that means a model fine-tuned on documentation can still get specific details wrong, blend information from different documents together, or simply not reliably reproduce a fact it only saw a handful of times during training -- the same underlying tendency that causes a model to occasionally state something confidently and incorrectly in general also applies to information baked in through fine-tuning. On top of that reliability gap, there are two more practical problems: whenever the documentation changes -- and documentation changes constantly -- the fine-tuned model doesn't automatically know about the update; it needs to go through another full, slow, and costly retraining cycle before it reflects the new information, whereas updating a retrieval-based system is closer to instant. And if a fine-tuned answer is wrong, there's no natural way to point at exactly which document it came from to check it, whereas a retrieval-based answer can show the exact passage it used, which matters a lot for trust and for catching mistakes. What I'd propose instead is retrieval-augmented generation: rather than trying to compress the documentation into the model's training, we keep the documentation as-is, searchable, and at the moment someone asks a question, we automatically find the specific relevant passages and hand them to the model along with the question, so it answers from the actual current text rather than from a fuzzy training-time memory of it. This ends up being cheaper to keep up to date, easier to verify, and in practice more accurate for exactly the kind of 'does the model know our documentation' need the fine-tuning idea was trying to solve."
+        },
+        {
+          "id": "llm-engineering-finetuning-vs-rag-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "According to this module, what does fine-tuning change that neither prompting nor RAG changes?",
+          "options": [
+            "Fine-tuning adjusts the model's weights, persistently shifting its default behavior without needing the same instruction repeated on every call, unlike prompting (per-call instructions) or RAG (per-call retrieved context).",
+            "Fine-tuning changes which tokenizer the model uses to encode input at inference time.",
+            "Fine-tuning permanently increases the size of the model's context window for all future calls.",
+            "Fine-tuning changes only the default temperature and top-p sampling values used at inference time."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "The module draws the three-lever distinction explicitly: prompting changes per-call instructions, RAG changes per-call available context, and fine-tuning is the one lever that actually adjusts model weights, so the shifted behavior persists without needing to be re-specified on every call. Options B, C, and D each describe a change fine-tuning does not make -- the tokenizer, the context window size, and the sampling defaults are all independent of the fine-tuning process itself."
+        },
+        {
+          "id": "llm-engineering-finetuning-vs-rag-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A team runs millions of calls per month and currently spends roughly 900 tokens of every single prompt re-explaining a fixed output format via instructions and few-shot examples. The desired format never changes, and the team has a large, clean, human-verified dataset of past correctly-formatted examples from production. Per this module's heuristic, what does this scenario best justify?",
+          "options": [
+            "Switching to RAG so the formatting examples can be retrieved per call instead of being hard-coded into the prompt.",
+            "Fine-tuning, since the behavior needing reinforcement is stable over time, is currently being re-specified at real recurring cost on every call, and a large, representative labeled dataset already exists -- exactly the scenario where fine-tuning earns its cost.",
+            "Raising the generation temperature so the model applies the format more creatively across different calls.",
+            "Doing nothing, since the per-call token cost of repeated instructions has no bearing on whether fine-tuning is worth pursuing."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This maps directly onto the module's 'case where fine-tuning actually wins' example: a stable, unchanging behavior, a real recurring cost from re-specifying it every call, and a large, high-quality labeled dataset already available. Option A misapplies RAG to a behavior-consistency problem rather than a knowledge problem, which is exactly the kind of lever confusion the module warns against. Option C is unrelated -- temperature affects sampling randomness, not format consistency. Option D ignores that token cost at this call volume is precisely the kind of real, recurring cost the module says justifies considering fine-tuning."
+        },
+        {
+          "id": "llm-engineering-finetuning-vs-rag-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A team fine-tunes their support model every night on that day's product pricing, hoping to keep it current, but pricing changes intraday and the model is still occasionally caught quoting stale prices. What does this module identify as the actual underlying mistake?",
+          "options": [
+            "The nightly schedule simply isn't frequent enough; running the same fine-tuning process hourly would fully solve the problem.",
+            "Fine-tuning is being used for a knowledge-freshness problem it is structurally ill-suited to regardless of how often it's run, since it doesn't provide precise, verbatim, on-demand recall and can't keep pace with information that changes faster than the retraining cycle; a retrieval index updated the moment pricing changes is the correct fix.",
+            "The base model being fine-tuned is too small to memorize pricing information accurately.",
+            "The fix is to lower the fine-tuning learning rate so the model retains pricing information for longer between retraining runs."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The module is explicit that this is the same fine-tuning-for-knowledge mismatch as the policy-text example, just applied to pricing: the mechanical unreliability of fine-tuning for exact, verbatim facts, and the inherent lag of a batch retraining cycle, don't go away just by running the job more often. Option A treats this as purely a scheduling problem, which misses that even more frequent retraining still can't match near-real-time changes and still doesn't guarantee precise recall. Options C and D propose unrelated technical tweaks (model size, learning rate) that don't address the structural mismatch the module identifies."
         }
       ]
     }

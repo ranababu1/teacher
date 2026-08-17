@@ -113,6 +113,45 @@
           "explanation": "Option 2 is correct: because containers share the host's single kernel, a root process inside one is genuinely UID 0 as far as the kernel is concerned, and root is specifically the identity that skips the permission checks that would otherwise cap an unprivileged process's reach through any gap in the container's isolation. Option 1 is wrong -- root inside a container is not cosmetic; it's real kernel-recognized privilege, as the first concept in this subject established. Option 3 invents an unrelated and false claim -- cgroup limits are independent of whether the contained process happens to run as root. Option 4 is wrong and is exactly the misconception this concept argues against -- namespaces limit visibility under normal operation, but don't eliminate the extra risk root adds the moment any other boundary has a gap."
         },
         {
+          "id": "docker-non-root-containers-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A container running as root writes output files into a bind-mounted host directory. What ownership do those files end up with on the host, and why?",
+          "options": [
+            "They're owned by the host user who ran docker run, because bind mounts always translate the container's UID to the calling host user's UID.",
+            "They're owned by root on the host, because bind mounts apply host filesystem permissions directly with no UID translation by default, and the process writing them inside the container is genuinely UID 0.",
+            "They're owned by a special \"nobody\" account, since Docker anonymizes all bind-mount writes for safety.",
+            "Ownership is left completely undefined and varies unpredictably between otherwise identical runs."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 correctly describes the bind-mount symptom from the concept: no UID translation happens by default, so a root process inside the container writing to a bind-mounted host path produces files genuinely owned by root on the host, which the developer's own unprivileged account then can't freely delete or edit without sudo. Option 1 invents a translation mechanism bind mounts don't perform by default. Option 3 invents an anonymization feature Docker doesn't have. Option 4 is wrong -- the outcome is deterministic and directly explainable by the container process's actual UID, not random."
+        },
+        {
+          "id": "docker-non-root-containers-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A Dockerfile places `USER appuser` before a later `RUN chown -R appuser:appgroup /app` instruction. What happens when this image is built?",
+          "options": [
+            "It builds fine, since USER only affects the container's runtime process, not any RUN instructions that come after it in the build.",
+            "The chown step fails or is effectively denied, because by that point the build is running as the unprivileged appuser, which lacks permission to change ownership of files it doesn't already own.",
+            "chown automatically runs as root regardless of the currently active USER, specifically to support this exact ordering pattern.",
+            "The build succeeds, but file ownership silently reverts back to root the moment the container actually starts."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 is correct: USER changes which user every subsequent instruction in the build runs as, including RUN -- so a chown placed after USER appuser executes as appuser, which typically lacks the privilege to change ownership of files, especially ones it doesn't already own. Option 1 is wrong -- USER affects every following instruction in the Dockerfile, not only the final CMD/ENTRYPOINT. Option 3 is wrong -- there's no special-case exemption that lets chown ignore the active USER; it runs with whatever privilege the current build context has. Option 4 is wrong -- there's no such automatic reversion; ownership is whatever the build steps actually set it to, and here the chown likely never fully succeeded in the first place."
+        },
+        {
+          "id": "docker-non-root-containers-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "How does user namespace remapping (--userns-remap) reduce the risk of a container-escape scenario compared to simply switching to a non-root USER inside the container?",
+          "options": [
+            "It disables cgroups entirely, so a compromised process can no longer consume unbounded host resources.",
+            "It maps root inside a container's own user namespace to an unprivileged, ordinary UID on the host, so even a process that is genuinely root inside its own container namespace has very little actual privilege from the host's point of view if it manages to escape.",
+            "It replaces namespaces entirely with a hardware-virtualized boundary functionally equivalent to a full separate VM kernel.",
+            "It automatically drops every Linux capability from every container, with no configuration required and no exceptions possible."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 correctly describes what user namespace remapping actually does: it's a mapping between the container's own root UID and an unprivileged host UID, so a namespace escape lands the attacker in a low-privilege host identity rather than genuine host root, shrinking the blast radius. Option 1 is wrong -- it's unrelated to cgroups, which continue to function independently. Option 3 is wrong -- it's a UID-mapping feature within the existing namespace/cgroup model, not a hypervisor-based redesign. Option 4 is wrong -- capability dropping is a separate, related-but-distinct mechanism (--cap-drop), not something userns-remap performs, and Docker's default capability set already isn't 'everything' even without remapping."
+        },
+        {
           "id": "docker-non-root-containers-assess-explain1",
           "type": "explanation",
           "prompt": "A teammate says: \"It's just a container, root inside it can't actually hurt anything outside -- why bother adding a non-root USER?\" Give a full answer explaining the real risk and the fix.",
@@ -229,6 +268,32 @@
           "explanation": "Option 2 correctly identifies the actual mechanism: distroless intentionally strips out the shell, package manager, and common CLI tools that Alpine, despite being much smaller than a full distribution, still includes by default -- that absence is what limits an attacker's options after an initial compromise, not some difference in the underlying kernel or container runtime. Option 1 is false -- both run on the exact same host kernel, per the very first concept in this subject; there's no separate, more secure kernel involved. Option 3 is false and nonsensical -- distroless images are ordinary containers and can absolutely be exploited at the application level; they just offer less to do afterward. Option 4 is false -- USER configuration is an independent, separate concern from which base image is chosen, and neither Alpine nor distroless automatically determines it."
         },
         {
+          "id": "docker-minimal-base-images-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A native Node.js addon works fine on node:20-bookworm-slim but fails to load with a shared-library error on node:20-alpine, using the exact same package.json and dependency versions. What's the most likely cause?",
+          "options": [
+            "Alpine-based images cannot run any Node.js application that uses native addons, under any circumstances.",
+            "The native addon ships a precompiled binary linked against glibc's dynamic linker, which doesn't exist on Alpine, since Alpine uses musl libc's differently-named dynamic linker instead.",
+            "The Alpine image is missing a required environment variable that node:20-bookworm-slim happens to set automatically.",
+            "Alpine images always disable native code execution entirely, for security reasons, regardless of the package involved."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 is correct and is exactly the musl/glibc compatibility gap the concept describes: a precompiled binary built assuming glibc's dynamic linker fails outright on Alpine, whose musl libc uses a different linker path entirely, even though the surrounding application code and dependency versions are otherwise identical. Option 1 overstates the problem -- many native addons work fine on Alpine, particularly if they compile from source against musl rather than shipping a glibc-linked prebuilt binary. Option 3 invents an unrelated environment-variable explanation not supported by the actual failure mode. Option 4 is false -- Alpine has no blanket restriction against native code; the issue is specifically a libc/linker mismatch for prebuilt glibc-linked binaries."
+        },
+        {
+          "id": "docker-minimal-base-images-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "What is the direct operational cost a team gives up by switching a production service's final image to a distroless base, compared to keeping it on an Alpine-based image?",
+          "options": [
+            "Distroless images cannot be pulled from private registries, only from public ones.",
+            "The ability to docker exec into a running container and use a shell to interactively investigate a live issue, since distroless images deliberately contain no shell binary at all.",
+            "Distroless images are incompatible with multi-stage builds and must be built as a single, monolithic stage.",
+            "Distroless images require an entirely different, incompatible container runtime than Alpine-based images do."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 is correct and is exactly the trade-off the concept names explicitly: distroless's lack of a shell, by design, means you can't exec in and poke around when something misbehaves in production -- a real, common debugging technique that Alpine (which does include a shell) still supports. Option 1 is false -- distroless images are ordinary OCI images and work with any registry. Option 3 is false -- distroless is specifically designed to be the FINAL stage of a multi-stage build, receiving artifacts from an earlier, full-featured builder stage. Option 4 is false -- distroless images run under the exact same container runtime as any other image; nothing about the runtime itself changes."
+        },
+        {
           "id": "docker-minimal-base-images-assess-explain1",
           "type": "explanation",
           "prompt": "Explain why choosing a minimal base image is a trade-off rather than a strictly dominant choice, using both Alpine's musl libc issue and distroless's lack of a shell as concrete examples, and describe how you'd decide between a full image, Alpine, and distroless for a given service.",
@@ -343,6 +408,32 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "Option 2 correctly identifies that a scan's result is a snapshot of public vulnerability knowledge at the time it ran, not a permanent guarantee -- new CVEs disclosed after that scan against package versions already frozen in the (unchanged) image are exactly the gap that makes recurring re-scanning necessary. Option 1 is the actual misconception this concept warns against -- a scan cannot verify against vulnerabilities that haven't been disclosed yet at scan time. Option 3 is factually wrong -- scanners specifically focus heavily on OS packages and dependency manifests, which is the entire point of the tool. Option 4 is wrong for a different reason -- age by itself isn't the mechanism; it's specifically new CVE disclosures against already-present package versions that create new risk over time, not the mere passage of time in the abstract."
+        },
+        {
+          "id": "docker-image-vulnerability-scanning-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "What two distinct steps does a container image vulnerability scanner perform, in order?",
+          "options": [
+            "It first automatically patches every known vulnerability it can, then reports which ones it fixed.",
+            "It first builds a precise inventory of exactly which packages, at exactly which versions, are present across all of an image's layers, then cross-references that inventory against public vulnerability databases to find matching known CVEs.",
+            "It first asks the image's own maintainers to supply a manifest of known issues, then verifies that manifest's accuracy against the image's actual contents.",
+            "It first runs the application in a sandbox to observe its live runtime behavior, then flags any behavior that looks anomalous."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 correctly describes the two-step mechanical process: inventory (identify exact package/version pairs across every layer, including OS packages and application dependency manifests) followed by cross-reference (match that inventory against CVE databases like the NVD and vendor feeds). Option 1 is false -- scanners identify vulnerabilities; they don't automatically patch anything. Option 3 is false -- scanners work independently of any manifest a maintainer might supply; they inspect the image's actual contents directly. Option 4 is false -- this describes a runtime/behavioral analysis technique, not what an image vulnerability scanner (which works on static image contents) actually does."
+        },
+        {
+          "id": "docker-image-vulnerability-scanning-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A team configures CI to fail the build on ANY vulnerability finding at all, regardless of severity or whether a fix is even available yet. What is the most likely practical consequence?",
+          "options": [
+            "This guarantees the team's images are permanently free of every vulnerability that could ever be disclosed against them, forever.",
+            "Builds start failing constantly over low-severity or currently-unfixable findings nobody can immediately act on, which tends to train the team to work around or stop trusting the gate entirely, undermining its actual value.",
+            "This policy has no meaningful downside at all, since more aggressive scanning is always strictly better regardless of the policy wrapped around it.",
+            "This configuration automatically causes the scanner itself to downgrade every finding to LOW severity so the pipeline keeps passing."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 matches the concept's explicit warning about over-strict gating: a fail-on-anything policy produces so much noise from low-severity and unfixable findings that teams start ignoring or routing around the gate, which is functionally the same as not scanning at all -- exactly why a severity threshold plus a tracked backlog for lower-priority findings is the more durable approach. Option 1 is false -- a scan can only reflect currently known CVEs; it cannot guarantee protection against anything not yet disclosed. Option 3 is false -- the concept explicitly identifies this as having a real downside (noise fatigue, workaround behavior). Option 4 is false -- scanners report severities based on actual CVSS data; a CI policy has no ability to alter how the scanner itself classifies findings."
         },
         {
           "id": "docker-image-vulnerability-scanning-assess-explain1",

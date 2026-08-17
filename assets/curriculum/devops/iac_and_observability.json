@@ -117,6 +117,45 @@
           "explanation": "The operational reason is about safety under repetition: pipeline steps get re-executed far more often than people expect, whether due to transient network retries, manually re-running a job, or scheduled reconciliation, and an idempotent apply guarantees those re-runs are safe no-ops when nothing has actually changed. Option A confuses idempotency (a correctness property about repeated execution) with performance, which isn't guaranteed either way. Option C is fabricated -- YAML syntax has nothing to do with idempotency. Option D might occasionally be a side effect of avoiding duplicate resources, but it isn't what idempotency means or guarantees."
         },
         {
+          "id": "devops-iac-declarative-idempotent-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "What is the key practical difference between a declarative IaC tool like Terraform and an imperative provisioning script, according to this concept?",
+          "options": [
+            "Declarative tools are always written in HCL, while imperative scripts are always written in Bash.",
+            "A declarative tool has you describe the desired end state and its own diffing engine determines what create, update, or destroy actions are needed, whereas an imperative script requires the author to hand-write existence checks themselves for safe repeated execution.",
+            "Imperative scripts can never be used to provision cloud infrastructure under any circumstances.",
+            "Declarative tools apply changes instantly with no review step, while imperative scripts always require manual review before running."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept's core distinction is that a declarative tool's diffing engine uniformly handles the 'does this already exist' comparison for every resource type, while an imperative script has no such built-in notion and needs that logic deliberately added by hand to behave safely on repeat runs. Option A invents a language requirement that isn't part of the actual distinction. Option C overstates the case -- imperative scripts absolutely can provision infrastructure, just without the same built-in safety. Option D fabricates an unrelated claim about review workflows."
+        },
+        {
+          "id": "devops-iac-declarative-idempotent-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Two engineers each keep their own local copy of Terraform state on their laptops for the same infrastructure, rather than using a shared remote backend with locking. What risk does this specifically create, according to this concept?",
+          "options": [
+            "No real risk, since Terraform automatically merges divergent local state files before every apply.",
+            "Their views of 'what currently exists' can diverge, and applying from either copy risks creating duplicated resources or silently clobbering the other engineer's changes, with no locking to prevent concurrent applies from racing each other.",
+            "The only risk is slightly slower apply times, since local state files are smaller than remote ones.",
+            "This is actually the recommended setup for small teams, since it avoids the operational complexity of a remote backend."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept is explicit that state needs to be stored somewhere shared and durable specifically because two divergent local copies can cause duplicated resources or clobbered changes, and that remote state with locking additionally prevents concurrent applies from racing each other. Option A describes a merge capability Terraform does not have for local state files. Option C trivializes a correctness risk as a mere performance concern. Option D directly contradicts the concept's explicit recommendation."
+        },
+        {
+          "id": "devops-iac-declarative-idempotent-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "After someone manually resizes a production instance in the cloud console during an incident, the next terraform plan shows a diff proposing to change the instance type back to what the .tf file has always said. Why does the diff read this way, according to this concept?",
+          "options": [
+            "Terraform has a bug that causes it to hallucinate changes that were never actually made.",
+            "From Terraform's perspective, the configuration never changed -- it's reality that deviated from it, so the plan is proposing to reconcile drifted reality back toward the declared configuration, not to undo a change Terraform itself is aware was intentional.",
+            "The plan is always incorrect immediately after a manual change and should be ignored until the state file is manually edited first.",
+            "This diff direction only occurs if the state file was corrupted during the manual change."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept explains this exact scenario directly: the configuration still says what it always said, and the plan looking like a 'revert' is precisely because reality is what deviated -- Terraform has no way to know the manual change was deliberate unless a human tells it so, by either updating the configuration or intentionally applying to correct the drift. Option A misattributes a normal, correct diff to a fabricated bug. Option C offers no justification and is not what the concept recommends. Option D invents an unrelated corruption scenario that isn't implied here."
+        },
+        {
           "id": "devops-iac-declarative-idempotent-assess-explain1",
           "type": "explanation",
           "prompt": "A new engineer asks why the team insists nobody should use the cloud console to make manual changes to resources managed by Terraform, even for a 'quick fix.' Explain the reasoning.",
@@ -237,6 +276,45 @@
           "explanation": "With no confirmed user-facing impact, paging (option A) is a textbook alert-fatigue-generating decision -- it interrupts a human for a condition that, in this case, correlates with expected, harmless load. Cause-based signals like CPU still have real diagnostic value, though, so removing monitoring entirely (option C) throws away information that could matter in a different scenario (for example, if a similar spike ever did correlate with degraded latency). Option D conflates an application log (meant for discrete events with rich context) with an infrastructure metric time series, which is the wrong tool for tracking a continuously varying numeric signal like CPU usage. The correct middle ground -- visible but not paging -- reflects that this is a cause-based signal worth watching, not a confirmed symptom worth interrupting someone over."
         },
         {
+          "id": "devops-monitoring-logging-alerting-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A team wants to know the exact stack trace and request context for one specific failed payment that a customer reported. Which telemetry type is best suited to answer this, and why, according to this concept?",
+          "options": [
+            "A metric, because metrics can be filtered down to a single event if graphed at a fine enough time resolution.",
+            "A log line, because logs carry discrete, granular, arbitrary detail for one specific event, whereas metrics are aggregated numbers that can only say something happened and roughly how much, not the specific detail behind one particular instance.",
+            "Either works equally well, since both metrics and logs store the same underlying information in different formats.",
+            "Neither -- request-specific detail like this can only ever be captured by adding a brand-new log statement after the fact."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept draws this distinction directly: a metric can tell you an error rate spiked at a given time, but to see the actual stack trace and specific request context behind even one of those failures, you need a log line -- metrics tell you that something happened and roughly how much, logs tell you exactly what happened for one specific instance. Option A misdescribes what metrics fundamentally are -- aggregated numbers, not per-event records. Option C ignores the fundamentally different granularity of the two telemetry types. Option D is an overstatement -- structured logging captures this detail already, given the example instrumentation shown in this concept."
+        },
+        {
+          "id": "devops-monitoring-logging-alerting-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "An engineer regularly greps through log files to count how many requests failed in the last hour, in order to estimate a failure rate. According to this concept, what does this pattern usually indicate?",
+          "options": [
+            "That the team has a mature, sufficient observability setup and no further instrumentation is needed.",
+            "That a metric is likely missing -- counting matching log lines to approximate a rate is slower, more expensive, and less accurate than incrementing a counter directly in the code at the moment the event happens.",
+            "That the logs are not being retained for a long enough period of time.",
+            "That structured logging has failed and the team should switch back to freeform log messages."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept names this exact pattern as a common mistake: using logs to answer a question metrics should answer, and states plainly that grepping logs to compute something that sounds like a rate or count is usually a sign a metric is missing, not that logs need to be searched harder. Option A misreads a workaround as evidence of maturity. Option C addresses an unrelated retention concern. Option D reverses the actual lesson -- structured logging isn't the problem here, using logs instead of a purpose-built metric is."
+        },
+        {
+          "id": "devops-monitoring-logging-alerting-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A team currently pages on-call for every single anomalous signal it monitors, regardless of urgency. According to this concept's discussion of alert tiering, what is the recommended alternative?",
+          "options": [
+            "Stop monitoring for anomalies that aren't urgent, since tracking them provides no value at all.",
+            "Route conditions by actual urgency: page for conditions requiring immediate human action, file a ticket for conditions worth investigating but not urgent, and put merely useful context on a dashboard, visible but silent.",
+            "Page every member of the team simultaneously for every anomaly so responsibility for triage is distributed.",
+            "Only ever page during business hours, regardless of how urgent any given condition actually is."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept explicitly describes this tiering as the practical way to manage the calibration tension in alerting -- not every abnormal signal deserves to wake someone up, and treating every anomaly as page-worthy is called out as one of the most common causes of on-call burnout. Option A discards genuinely useful signals entirely rather than routing them appropriately. Option C amplifies interruption rather than reducing it. Option D would leave genuinely urgent overnight incidents unaddressed until business hours, which the concept treats as a worse failure than over-paging."
+        },
+        {
           "id": "devops-monitoring-logging-alerting-assess-explain1",
           "type": "explanation",
           "prompt": "Explain the difference between symptom-based and cause-based alerting, and why most teams prefer symptom-based alerts as their primary page.",
@@ -355,6 +433,45 @@
           ],
           "correctOptionIndex": 0,
           "explanation": "This is precisely the gap between monitoring and observability described in the concept: pre-built dashboards aggregate along dimensions chosen in advance (service, region, and so on), and if the real failure mode cuts across some other combination of dimensions nobody anticipated, those dashboards can look entirely healthy while a real, specific problem is happening. Option B overreacts -- the dashboards remain useful for the failure modes they were built to catch; they're simply insufficient for this one. Option C treats headcount as a substitute for the right telemetry, which doesn't address the actual gap. Option D wrongly treats dashboard silence as proof no problem exists, which is exactly the mistaken inference this scenario is meant to correct."
+        },
+        {
+          "id": "devops-observability-and-postmortems-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A slow checkout request passes through five services, and each service's own latency dashboard reports normal average latency for the requests it handles. According to this concept, what specifically enables an engineer to find which single hop actually caused this one request to be slow?",
+          "options": [
+            "Checking each service's dashboard more carefully, since the bottleneck must be visible there if you look closely enough.",
+            "A distributed trace, which follows the single request across all five services as a set of connected spans, revealing exactly which hop consumed the bulk of the total time for that specific request -- something an average latency figure, computed across many other requests, cannot reveal.",
+            "Increasing the log verbosity on all five services and manually correlating timestamps by hand.",
+            "Nothing can localize this without redeploying the affected services with additional instrumentation first."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept demonstrates exactly this scenario with the trace waterfall example: five services' individual dashboards can each look healthy on average while a single request's time is overwhelmingly consumed inside one specific nested span, which only a trace -- following that one request's full path -- actually reveals. Option A repeats an approach the concept explicitly says would fail, since the slow query could be a rare outlier drowned out in an average. Option C describes a slow, error-prone manual substitute for what a trace already does automatically. Option D overstates the difficulty -- distributed tracing, if already in place, requires no redeploy to use during an investigation."
+        },
+        {
+          "id": "devops-observability-and-postmortems-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A postmortem's timeline shows a 45-minute time-to-detect and a 5-minute time-to-mitigate. According to this concept, what does this specific breakdown suggest the team should invest in first?",
+          "options": [
+            "Faster rollback tooling, since the overall time to fully resolve the incident was too long.",
+            "Better observability or alerting -- the long detection time suggests the problem existed and was impacting users well before anyone or anything noticed, whereas the short mitigation time suggests recovery tooling is already working well.",
+            "Nothing needs improvement, since the combined time to resolve was under an hour.",
+            "More thorough runbooks specifically for the mitigation step, since that is the step most likely to fail under pressure."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept is explicit that separating time-to-detect from time-to-mitigate is a high-leverage habit precisely because each points toward a different kind of gap: a long time-to-detect argues for better symptom-based alerting or richer telemetry, while a long time-to-mitigate argues for faster, more mechanical recovery paths -- and conflating the two obscures which one actually needs fixing. Option A misdiagnoses the fast mitigation as the problem when it's the detection delay that's long. Option C ignores that a 45-minute undetected outage is a serious gap regardless of the total elapsed time. Option D targets the wrong phase entirely -- mitigation was fast here, detection was slow."
+        },
+        {
+          "id": "devops-observability-and-postmortems-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A postmortem's only action item reads: 'Engineers should double-check config changes more carefully before deploying.' According to this concept, what is the core problem with this action item?",
+          "options": [
+            "It's fine as written, since it correctly identifies engineer carefulness as the systemic root cause.",
+            "It isn't verifiable or systemic -- there's no way to later check whether it was actually done, and it does nothing to make the underlying mistake any harder for the next person to make, unlike a concrete, owned, automated safeguard would.",
+            "It should have specifically named which engineer made the mistake, in the interest of transparency.",
+            "The only real problem is that it lacks a due date; adding one would make it fully adequate as written."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept explicitly contrasts a vague, unenforceable intention like 'be more careful' against action items that are concrete, owned, and verifiable -- the former does nothing to close the actual systemic gap and cannot be confirmed as done, while the latter (like adding schema validation to a pipeline) both closes the gap and can be checked later. Option A restates the flawed premise as if it were correct. Option C reintroduces exactly the blame-seeking framing this module's postmortem concept explicitly argues against. Option D wrongly implies a due date alone would fix a fundamentally unverifiable, non-systemic action item."
         },
         {
           "id": "devops-observability-and-postmortems-assess-explain1",

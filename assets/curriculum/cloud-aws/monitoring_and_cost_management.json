@@ -114,6 +114,45 @@
           "explanation": "A small number of genuinely slow requests mixed into a much larger number of fast ones is exactly the scenario Average is bad at surfacing -- the mean gets pulled only slightly by a handful of outliers, while a percentile statistic like p99 specifically reports what the slowest fraction of requests actually experienced. Lowering the threshold on an Average-based alarm (option A) doesn't fix the underlying blind spot; the average was never going to spike enough to cross a reasonable threshold in the first place. Increasing the period (option C) makes the problem worse, not better, by averaging over an even larger, more diluting window. Changing the namespace (option D) is purely organizational and has no effect on which statistic is being evaluated."
         },
         {
+          "id": "cloud-aws-cloudwatch-metrics-logs-alarms-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A team launches a brand-new EC2 instance and looks in CloudWatch for a memory-utilization graph. They find nothing at all -- not a flat line at zero, no metric exists whatsoever. What does this most likely indicate?",
+          "options": [
+            "Memory usage is currently at exactly 0%, so CloudWatch has nothing meaningful to graph yet.",
+            "EC2 does not publish guest-OS-level metrics like memory utilization by default, because the hypervisor has no visibility inside the instance's own operating system; getting this data into CloudWatch requires installing the CloudWatch agent on the instance itself.",
+            "Memory metrics simply take up to 24 hours to begin appearing after an instance's first launch.",
+            "The chosen instance type doesn't support memory monitoring; switching to a different instance family would make the metric appear automatically."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "An absent metric -- not a flat zero line, but no data series at all -- means nothing has ever been configured to collect and publish that value, which is exactly the case for memory utilization on EC2: the hypervisor can't see inside the guest OS to measure it, so AWS never publishes it as a default metric the way it does CPUUtilization. The CloudWatch agent, installed and run on the instance itself, is what's actually required to surface this data. Option A misreads an absent metric as a data point, when it's the complete absence of one. Option C invents a delay that isn't the actual cause. Option D fabricates an instance-family-based restriction that doesn't exist -- the agent requirement applies uniformly regardless of instance type."
+        },
+        {
+          "id": "cloud-aws-cloudwatch-metrics-logs-alarms-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A team notices their CloudWatch Logs bill has grown steadily every month for over a year, even though daily request volume and daily log line count have stayed essentially flat. What is the most likely explanation?",
+          "options": [
+            "CloudWatch Logs pricing increases automatically over time regardless of actual usage.",
+            "Log groups default to Never Expire retention, so every day's log lines accumulate indefinitely at CloudWatch Logs' per-GB storage price unless an explicit retention period is set -- a flat daily log volume still means the total amount of stored data, and therefore storage cost, keeps growing every month.",
+            "This pattern indicates a memory leak in the application causing increasingly verbose log lines each month.",
+            "CloudWatch Logs charges retroactively for an entire year's worth of logs once a log group crosses a size threshold."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Log groups default to Never Expire retention, meaning nothing is ever deleted unless someone explicitly sets a retention period -- so even with a perfectly flat daily log volume, the cumulative total stored keeps growing month over month, and storage cost grows right along with it. Option A invents a pricing mechanism that doesn't exist. Option C assumes a code-level cause when the described symptom (flat daily volume) explicitly rules out growing per-day verbosity. Option D fabricates a retroactive billing behavior that isn't how CloudWatch Logs pricing works -- storage is billed continuously as data accumulates, not retroactively triggered by a threshold."
+        },
+        {
+          "id": "cloud-aws-cloudwatch-metrics-logs-alarms-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "An alarm on a health-check metric is configured with treat-missing-data set to notBreaching. The monitored instance crashes entirely and stops reporting the metric altogether. What is the likely, and potentially dangerous, consequence?",
+          "options": [
+            "The alarm immediately transitions to ALARM, since notBreaching treats any missing data as an automatic breach of the threshold.",
+            "The alarm may remain in OK or INSUFFICIENT_DATA rather than firing, because notBreaching treats the absence of data as if the metric were not breaching the threshold -- so the worst-case failure (total silence from a crashed instance) can paradoxically avoid triggering the alarm meant to catch exactly that.",
+            "CloudWatch automatically switches the alarm's missing-data treatment to breaching after five minutes with no data.",
+            "CloudWatch deletes the alarm outright once its monitored resource stops reporting data for more than an hour."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "notBreaching specifically means missing data is treated as if the metric were fine, not as a breach -- so a total, complete failure that stops the metric from being reported at all can leave the alarm sitting calmly in OK or INSUFFICIENT_DATA instead of firing, which is precisely the opposite of what you'd want for an alarm meant to catch a crashed or dead instance. Option A describes the opposite setting's behavior (breaching), not notBreaching. Option C and D both invent automatic behavior changes that CloudWatch does not perform -- the configured missing-data treatment stays fixed unless someone explicitly changes it, and alarms are not auto-deleted for going quiet."
+        },
+        {
           "id": "cloud-aws-cloudwatch-metrics-logs-alarms-assess-explain1",
           "type": "explanation",
           "prompt": "Explain how an alarm's period, evaluation periods, and datapoints-to-alarm settings interact, and why misconfiguring them can cause both false positives (noisy pages for transient blips) and false negatives (missing a real, ongoing problem).",
@@ -228,6 +267,32 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "Checkout error rate is a symptom-based signal -- it directly reflects what a real user is experiencing right now, which is exactly the kind of condition worth interrupting a human for. Database CPU at 60% is a cause-based signal that frequently doesn't correspond to any actual user-facing problem at all (a database can run comfortably at 60% CPU indefinitely); using it as a page trigger risks exactly the alert-fatigue pattern described earlier in this concept. Option A gets the direction backwards -- elevated CPU catching a 'cause early' sounds appealing but produces far more false-positive pages than genuine early warnings, since most CPU elevation never actually becomes a symptom. Option C ignores that indiscriminate paging degrades response quality for everything, including real incidents. Option D overcorrects -- symptom-based alerts like a real checkout error-rate spike are exactly what paging exists for, not something to demote to dashboard-only."
+        },
+        {
+          "id": "cloud-aws-alerting-without-fatigue-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A team reasons: 'Even if we page for lots of low-value conditions, our on-call engineers are professionals -- they'll just triage carefully and give full attention to the real incidents whenever they occur.' What does this reasoning get wrong about how alert fatigue actually works?",
+          "options": [
+            "Nothing; disciplined engineers can reliably maintain full, undiminished attention to every single page regardless of how many low-value pages preceded it.",
+            "Habituation from frequent low-value pages doesn't selectively spare the rare real incident -- it dulls the response to all pages arriving from that same channel, including genuinely urgent ones, as a predictable consequence of ordinary human attention economics rather than a discipline failure on the responder's part.",
+            "This reasoning is correct as long as the team rotates on-call engineers frequently enough to avoid burnout.",
+            "Alert fatigue only affects pages sent outside business hours, so this concern doesn't apply to daytime paging."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The core mechanism behind alert fatigue is that habituation to noise doesn't discriminate -- a responder trained by a dozen harmless pages a week to expect 'oh, that one again' can't selectively suspend that learned response only for the one page that happens to be real, since they have no way to distinguish it in advance. This is described specifically as a structural, predictable consequence of attention economics, not a matter of individual discipline or professionalism. Option A assumes an ability to resist habituation that isn't realistic at any sustained volume of low-value interruptions. Option C and D both invent conditions (rotation frequency, time of day) that don't address the actual mechanism, which applies regardless of either factor."
+        },
+        {
+          "id": "cloud-aws-alerting-without-fatigue-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A team sets a static alarm threshold on request count low enough that it never fires during the normal overnight traffic dip. What is the likely trade-off of setting the threshold this way?",
+          "options": [
+            "There is no trade-off; a threshold that survives the overnight dip without firing is simply the correct threshold, with no downside.",
+            "The same threshold, set low enough to avoid firing during normal low-traffic hours, becomes too loose to reliably catch a genuine traffic drop during business hours, where that same absolute request count would actually represent a meaningful anomaly.",
+            "The threshold automatically recalibrates itself to the correct level during business hours without any further configuration needed.",
+            "This trade-off only applies to metrics evaluated with the Sum statistic, not with Average."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "A single static threshold has to work across a metric's entire range of normal variation, and a metric with real daily seasonality like request count has a very different 'normal' at 3am versus 2pm -- a number safely low enough to never trip during the expected overnight trough is, by the same token, far too low to distinguish a real business-hours problem from ordinary traffic, since business-hours traffic sits well above that threshold even when something is genuinely wrong. Option A ignores this seasonality mismatch entirely. Option C invents automatic recalibration that a plain static threshold does not have -- that adaptive behavior is specifically what anomaly detection provides instead. Option D is an arbitrary, unfounded restriction; the seasonality mismatch applies regardless of which statistic is chosen."
         },
         {
           "id": "cloud-aws-alerting-without-fatigue-assess-explain1",
@@ -348,6 +413,32 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "The scenario describes a real, sudden day-level spike that hasn't yet accumulated enough to breach a monthly budget -- exactly the gap AWS Budgets (option A) is poorly suited to catch quickly, since it's fundamentally a threshold-over-a-period tool, not a day-to-day pattern-deviation detector. Cost Anomaly Detection is purpose-built for precisely this case: it models expected day-to-day spend and alerts on a statistically unusual deviation as soon as it happens, regardless of whether the monthly total is anywhere near a budget limit yet. Tagging (option C) helps attribute spend once you're investigating, but doesn't itself detect or flag anything unusual. Savings Plans coverage reports (option D) are about commitment utilization, unrelated to detecting an unexpected spend spike."
+        },
+        {
+          "id": "cloud-aws-cost-optimization-strategies-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A team allocates an Elastic IP address for a planned migration, but the migration is delayed, leaving the IP unattached to any running instance for several weeks. Do they pay anything for this?",
+          "options": [
+            "No, Elastic IP addresses are always free regardless of whether they're attached to a running instance.",
+            "Yes -- AWS specifically charges an hourly rate for an Elastic IP that isn't associated with a running instance, precisely to discourage indefinitely holding a scarce public IPv4 address without actually using it.",
+            "No, Elastic IPs are only ever billed once actually associated with an instance; unattached time is always free.",
+            "Yes, but only if the account has fewer than five total Elastic IP addresses allocated."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "AWS deliberately charges for an idle, unassociated Elastic IP -- this is one of the specific, easy-to-miss bill-shock patterns called out directly: a resource that looks 'reserved but unused' and therefore intuitively free is, in this specific case, billed precisely because AWS wants to discourage squatting on scarce public IPv4 address space. Options A and C both assume the intuitive-but-incorrect 'unused should be free' framing. Option D invents a count-based exemption threshold that doesn't reflect how this charge actually works -- it applies based on association status, not total IP count."
+        },
+        {
+          "id": "cloud-aws-cost-optimization-strategies-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A monthly bill shows a $4,000 increase, and the finance team wants to know which team or project is responsible. Most of the newly created resources involved were never tagged with Environment, Team, or Project tags. What is the most direct consequence of this, and the recommended fix going forward?",
+          "options": [
+            "Nothing; AWS billing automatically attributes all spend to the IAM user who created each resource, regardless of whether it was tagged.",
+            "The increase can't be broken down by team or project using Cost Explorer's tag-based filtering, forcing a slow, manual reconstruction from resource names, launch timestamps, and CloudTrail history instead; the recommended fix is enforcing tagging at creation time -- via a tagging policy, an AWS Config rule, or a Service Control Policy -- rather than relying on everyone remembering to tag consistently.",
+            "Nothing can be done retroactively or going forward; once a resource is created untagged, AWS permanently loses any ability to ever attribute its cost.",
+            "This only matters for resources billed under a Savings Plan; On-Demand spend is always automatically attributed by account structure alone."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Untagged spend is exactly the governance blind spot described: without cost allocation tags, Cost Explorer has no team/project dimension to filter or group by for that spend, turning a two-minute query into a slow, manual investigation using whatever weaker signals (resource names, timestamps, CloudTrail) happen to be available. The fix is enforcing tagging at creation time through policy mechanisms, since relying purely on individual discipline tends to fail during exactly the rushed situations where good tagging matters most. Option A invents automatic IAM-based attribution that Cost Explorer's tag-based grouping does not provide. Option C overstates the permanence of the problem -- resources can still be tagged retroactively going forward, even if past unattributed spend can't be reconstructed precisely. Option D fabricates an arbitrary restriction to Savings Plans that has no basis; tagging and attribution apply identically to On-Demand spend."
         },
         {
           "id": "cloud-aws-cost-optimization-strategies-assess-explain1",

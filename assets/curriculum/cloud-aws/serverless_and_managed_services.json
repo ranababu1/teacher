@@ -117,6 +117,45 @@
           "explanation": "Being warm and steady for hours only guarantees enough environments existed for the *concurrency level already seen* -- it says nothing about a sudden 4x jump in simultaneous invocations, which requires roughly 4x as many concurrent execution environments as before. Whatever fraction of that new concurrency exceeds the previously warm pool has to be served by newly created environments, each paying a cold start. Option A is wrong because scaling to new environments is not instantaneous or invisible -- that's precisely what a cold start's added latency is. Option C invents a hard ceiling tied to 'highest concurrency seen so far' that doesn't reflect how Lambda scaling actually works (the real limits are the account/region concurrency limit and any configured reserved concurrency, not a ratchet based on historical peak). Option D is simply the misconception being tested -- duration of warmth doesn't scale the *number* of warm environments to match a new, larger burst."
         },
         {
+          "id": "cloud-aws-lambda-event-driven-execution-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A Lambda function triggered by S3 event notifications inserts a new database row for each uploaded file, using an auto-incrementing primary key. Under normal operation this works correctly, but occasionally two rows appear for what was clearly a single upload. What is the most likely explanation and the standard fix?",
+          "options": [
+            "This indicates two execution environments are corrupting each other's shared memory; the fix is to enable Provisioned Concurrency to force all invocations onto a single environment.",
+            "S3 event notifications, like other asynchronous triggers, deliver events at-least-once, so a failed or retried invocation can invoke the handler more than once for the same underlying event; the fix is to make the insert idempotent, for example using a deterministic key derived from the event so a duplicate invocation becomes a harmless overwrite rather than a second row.",
+            "This only happens when the function's memory setting is too low; raising the memory setting eliminates duplicate invocations entirely.",
+            "This is unavoidable, unfixable behavior inherent to S3 event notifications with no application-level remedy available."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Asynchronous triggers like S3 event notifications operate under at-least-once delivery, meaning Lambda will retry an invocation that fails or times out, which can result in the same underlying event genuinely triggering the handler more than once. An auto-incrementing key with no deduplication logic simply inserts a fresh row on every invocation, including retried ones, producing exactly the intermittent duplicate-row symptom described. The fix is to make the operation idempotent -- typically by deriving a deterministic key from the event itself so a duplicate invocation overwrites rather than duplicates. Option A misattributes this to environment-level memory corruption, which isn't how execution environments behave (each has its own independent state); option C incorrectly ties duplicate invocations to a memory setting; option D is defeatist and wrong -- idempotent design is the well-established standard fix."
+        },
+        {
+          "id": "cloud-aws-lambda-event-driven-execution-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A Lambda function's timeout is set to 10 seconds. At 9.8 seconds into an invocation, the handler is midway through writing a record to a database and hasn't yet flushed its final log line. What happens when the 10-second mark is reached?",
+          "options": [
+            "Lambda automatically extends the timeout slightly to let the in-progress database write finish cleanly before terminating.",
+            "Lambda forcibly terminates the execution at the 10-second mark regardless of what the code is doing at that instant, potentially leaving the database write partially applied and the log line unflushed.",
+            "The current line of code is allowed to finish, but the function is blocked from making any further database calls after that.",
+            "Lambda queues the invocation for a retry that preserves the in-progress database write while only discarding the unflushed log line."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Lambda enforces a configured timeout unconditionally -- once the limit is reached, the execution is forcibly terminated mid-run, with no grace period and no guarantee that any particular in-flight operation (a database write, a log flush) completes or rolls back cleanly first. This is a materially different failure mode from a slow-but-eventually-successful call on a traditional always-on server. Option A invents an automatic extension that doesn't exist; option C imagines a soft, code-aware cutoff that isn't how the hard timeout is enforced; option D fabricates a selective preservation of some effects and not others that Lambda has no mechanism to provide."
+        },
+        {
+          "id": "cloud-aws-lambda-event-driven-execution-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Which statement accurately describes the difference in how API Gateway and S3 event notifications invoke a Lambda function?",
+          "options": [
+            "API Gateway invokes Lambda asynchronously and returns a generic acknowledgment to the client without waiting for the function's actual response.",
+            "API Gateway invokes Lambda synchronously and waits for the function's response to return it to the caller, while S3 event notifications invoke Lambda asynchronously, with Lambda automatically managing retries on failure.",
+            "SQS messages require the Lambda function itself to actively poll the queue in a loop, since Lambda provides no built-in mechanism for retrieving queued messages.",
+            "EventBridge can only invoke Lambda synchronously and has no support for cron-like scheduled invocations."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "API Gateway is a synchronous trigger by design -- it needs the function's actual response to construct the HTTP response handed back to the caller, so it waits. S3 event notifications are asynchronous: the S3 service hands off the event and moves on, and if the invocation fails, Lambda's own retry mechanism (not S3's) handles retrying it, consistent with at-least-once delivery. Option A misdescribes API Gateway as asynchronous, which would make returning a real HTTP response to the client impossible. Option C is wrong -- Lambda polls SQS internally on the developer's behalf, requiring no polling code in the handler. Option D is wrong -- EventBridge explicitly supports schedule-based (cron-like) invocations, one of its most common use cases."
+        },
+        {
           "id": "cloud-aws-lambda-event-driven-execution-assess-explain1",
           "type": "explanation",
           "prompt": "A developer new to serverless notices their Lambda-backed API occasionally takes several seconds to respond, far slower than its typical ~50ms, with no pattern they can find in the request payload itself. They also notice that bumping the function's memory setting from 128MB to 1024MB made the typical case faster AND reduced their monthly bill, which confuses them since they didn't think their function needed more memory. Explain both observations.",
@@ -237,6 +276,32 @@
           "explanation": "The described requirements -- a small number of routes, no usage plans/API keys, no transformation templates -- are exactly the profile HTTP APIs are built for: they cover the common Lambda-fronting case more cheaply and simply, without needing any of the specialized capabilities that are actually REST-API-exclusive. Option A's 'more mature is always safer' reasoning ignores that REST API's extra maturity is entirely in features this service doesn't need, at a real cost premium. Option C is impractical and insecure for a normal client-facing or even internal HTTP-style API -- it would require distributing AWS credentials to callers just to make a request. Option D is factually wrong: both REST APIs and HTTP APIs support Lambda proxy integrations; that capability is not what distinguishes them."
         },
         {
+          "id": "cloud-aws-api-gateway-http-apis-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A Lambda function behind an HTTP API route returns `{\"orderId\": \"42\", \"status\": \"shipped\"}` directly, with no statusCode or body wrapper. CloudWatch Logs show the invocation completing successfully with no exception raised. What does the client see, and why?",
+          "options": [
+            "The client receives the JSON body successfully with an assumed 200 status, since API Gateway defaults to 200 whenever statusCode is omitted from the return value.",
+            "The client receives a 502 Internal Server Error, because API Gateway's proxy integration cannot construct a valid HTTP response from a return value that doesn't match the required statusCode/body shape, regardless of whether the function itself executed without error.",
+            "The client receives a 400 Bad Request, on the reasoning that the original request itself must have been malformed for the response to fail.",
+            "The request never actually completes, so CloudWatch would show a timeout rather than a successful invocation."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "API Gateway's proxy integration requires a specific return shape -- statusCode plus a string body -- to translate a Lambda return value into a real HTTP response. A plain business-data dictionary with neither field gives API Gateway nothing to construct a response from, so it falls back to a 502, entirely independent of whether the function's own logic succeeded -- which is exactly why CloudWatch shows a clean invocation despite the client-visible failure. Option A invents a default status API Gateway doesn't apply. Option C misattributes the failure to the request rather than the response shape. Option D contradicts the premise -- the scenario explicitly states the invocation completed successfully."
+        },
+        {
+          "id": "cloud-aws-api-gateway-http-apis-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Under a sudden traffic spike, some requests to an HTTP API-fronted Lambda function start failing. A team checks API Gateway's configured throttle settings and confirms the rate limit was never exceeded. What should they check next, and why?",
+          "options": [
+            "Nothing further; if API Gateway's throttle wasn't exceeded, the failures must be an unrelated transient network issue.",
+            "Lambda's own concurrency limits and CloudWatch throttle metrics, since Lambda enforces a separate, independent concurrency limit -- an account/region-wide shared limit and optionally a per-function reserved concurrency -- that can throttle invocations even when API Gateway's own throttle was never triggered.",
+            "The custom domain's DNS configuration, since throttling failures under load are almost always caused by DNS propagation delay.",
+            "The IAM permission granted to API Gateway to invoke the function, since a missing invoke permission produces symptoms identical to throttling."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "API Gateway throttling and Lambda's own concurrency limits are two genuinely separate, independently enforced layers -- clearing one doesn't guarantee clearing the other. A traffic spike can exhaust Lambda's account-wide or per-function concurrency even while comfortably staying under API Gateway's configured rate/burst limits, in which case Lambda itself throttles the invocation and returns an error back to API Gateway. Option A stops investigating prematurely, missing the second layer entirely. Option C introduces an unrelated cause -- DNS issues don't produce this kind of load-correlated failure pattern. Option D describes a permission problem, which would fail consistently regardless of load, not specifically under a traffic spike as described."
+        },
+        {
           "id": "cloud-aws-api-gateway-http-apis-assess-explain1",
           "type": "explanation",
           "prompt": "Walk through the full path of a single HTTP request from a browser to a Lambda-backed API and back, naming every point at which the request could be rejected or throttled before the Lambda function's own business logic ever runs, and why each of those points exists as a separate layer rather than being consolidated into one check.",
@@ -355,6 +420,32 @@
           ],
           "correctOptionIndex": 2,
           "explanation": "This workload is exactly the profile the framework identifies as favoring EC2/Fargate over Lambda: traffic is steady and predictable rather than spiky, meaning a well-utilized always-on fleet doesn't pay for idle capacity the way it would for a bursty workload, and the 30-second model-load cost is far more efficiently amortized by a small number of long-lived processes that load the model once and serve requests for hours or days, versus Lambda's per-environment Init cost being paid repeatedly across many execution environments even with Provisioned Concurrency softening (but not eliminating) that repetition. Option A's claim about more precise capacity matching doesn't offset the cost structure mismatch for genuinely steady, high-volume, predictable load. Option B is a partial fix at best -- Provisioned Concurrency avoids *cold-start* latency for already-warm provisioned environments, but doesn't change the fact that this workload's steady, high volume plays to a fixed fleet's cost strengths rather than Lambda's. Option D ignores that the specific numbers (steady vs. spiky traffic, expensive one-time setup cost) are precisely the inputs the decision framework is built around."
+        },
+        {
+          "id": "cloud-aws-managed-service-tradeoffs-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A team is deciding between packaging a new service as a container on ECS/Fargate versus as a set of Lambda functions, with ease of migrating away from AWS later being one factor among several. Which statement most accurately compares their lock-in profiles?",
+          "options": [
+            "Both have identical lock-in profiles, since both ultimately run on AWS-managed infrastructure regardless of how the workload is packaged.",
+            "Lambda has lower lock-in than containers, because Lambda functions are inherently simpler and therefore always easier to rewrite from scratch.",
+            "The containerized approach is generally more portable, since a container image and its runtime behavior are portable by construction, while Lambda's handler signatures, event payload shapes, and IAM-based invocation model are AWS-specific and require genuine rewriting to port to another environment.",
+            "Lock-in isn't a meaningful concept for either choice, since AWS guarantees full API compatibility with every other major cloud provider."
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "A container image's portability is essentially what the container standard exists to provide -- migrating a containerized service mainly means re-pointing the same image at a different orchestrator. Lambda's specific handler signature, its trigger-specific event payload shapes (like the API Gateway proxy format), and its IAM-based invocation model are all AWS-specific constructs with no direct equivalent elsewhere, so porting away requires genuinely rewriting that boundary layer, not just redeploying. Option A ignores this real difference in portability. Option B's 'simpler is more portable' reasoning doesn't hold -- simplicity of an individual function doesn't make its AWS-specific event/handler contract any less AWS-specific. Option D describes a guarantee that does not exist; no cloud provider offers full cross-provider API compatibility."
+        },
+        {
+          "id": "cloud-aws-managed-service-tradeoffs-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A production incident on a Lambda-based service requires inspecting a suspected memory leak by attaching a live profiler to the running process, the way an engineer might on a long-running EC2 instance. Why is this generally not possible on Lambda, and what's the practical alternative?",
+          "options": [
+            "It is possible; Lambda execution environments support direct SSH access identically to EC2 instances.",
+            "Lambda execution environments are ephemeral, provider-managed, and created and destroyed by AWS according to its own internal logic, with no persistent host exposed for direct access -- the practical alternative is relying on log- and metric-based observability tools such as CloudWatch Logs and X-Ray tracing instead of live process inspection.",
+            "It's impossible because Lambda functions are architecturally incapable of leaking memory, so this class of bug cannot occur in the first place.",
+            "Direct host access is only unavailable for functions using Provisioned Concurrency; ordinary on-demand functions do expose the underlying host for live inspection."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Reduced debugging visibility is a direct, structural consequence of Lambda managing infrastructure dynamically on your behalf -- there's no persistent, single-tenant host to attach a profiler or debugger to, since AWS creates, reuses, and destroys execution environments behind the scenes as part of the platform's own management. This pushes CloudWatch Logs and X-Ray tracing from a nice-to-have into something close to mandatory for diagnosing exactly this kind of issue. Option A fabricates SSH access that doesn't exist for Lambda. Option C incorrectly claims Lambda functions can't leak memory -- a handler that grows an in-memory cache unboundedly across invocations on a long-warm environment absolutely can exhibit memory-leak-like symptoms. Option D invents a distinction based on Provisioned Concurrency that has no bearing on host-level access, which is unavailable for all Lambda execution environments regardless of concurrency configuration."
         },
         {
           "id": "cloud-aws-managed-service-tradeoffs-assess-explain1",

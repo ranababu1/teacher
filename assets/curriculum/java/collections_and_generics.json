@@ -118,6 +118,45 @@
           "type": "explanation",
           "prompt": "Explain why a class that overrides equals() to compare objects by their content, but doesn't also override hashCode(), can cause a HashSet or HashMap to behave incorrectly -- specifically, why a lookup can fail to find an object that is genuinely already present according to equals().",
           "modelAnswer": "HashSet and HashMap rely on hashing for fast operations: when an object is inserted, its hashCode() is computed and used to decide which internal storage bucket it goes into; when a lookup happens later, the hash code of the object being looked up is computed the same way, to figure out which single bucket needs to be searched, and only within that one bucket does equals() get used to check for an actual match against whatever else is already there. For this two-step process to work, there's a strict contract every class has to honor: any two objects that are .equals() to each other must produce the same hashCode(). If a class overrides equals() to compare by content but leaves hashCode() as Object's default -- which is based on the object's identity, essentially its memory address -- then two separately-constructed objects holding identical data will be .equals() to each other (since the content matches) but will very likely compute different hash codes (since they're different objects in memory). The practical consequence shows up at lookup time: inserting one such object stores it in whichever bucket its hash code points to; looking it up later via a different-but-equal object computes a different hash code and searches an entirely different bucket, where the original entry was never placed. Because the search never even reaches the bucket containing the real match, equals() never gets a chance to run and confirm anything -- the lookup reports 'not found' even though an equals()-equal object is sitting in the collection, just in the wrong bucket as far as this particular lookup's hash code is concerned. The fix is always to override hashCode() alongside equals(), deriving both from the exact same set of fields, so that equal objects are guaranteed to compute equal hash codes and therefore always land in, and get searched in, the same bucket."
+        },
+        {
+          "id": "java-collections-list-set-map-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Set<String> tags = new HashSet<>(); boolean firstAdd = tags.add(\"java\"); boolean secondAdd = tags.add(\"java\"); System.out.println(firstAdd + \" \" + secondAdd); What prints?",
+          "options": [
+            "true true, because add() always returns true whenever it's given a valid, non-null argument.",
+            "true false, because add() returns whether the element was actually newly added -- the first call adds \"java\" and returns true, the second call finds it already present, does nothing, and returns false.",
+            "This throws an exception on the second add() call, because Set forbids adding a value that's already a duplicate.",
+            "false true, because add() reports whether the set's size changed as a result of the call, and duplicate detection happens only after size is already checked."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "A Set's core contract guarantees no duplicates, and add() communicates whether it actually changed anything by returning a boolean: true if the element was genuinely new and got added, false if an equal element was already present and the call was silently a no-op. The first add(\"java\") has nothing to collide with yet, so it succeeds and returns true; the second finds \"java\" already there, changes nothing, and returns false. Option A is wrong because add() specifically reports success or no-op, not a constant true. Option C is wrong because attempting to add a duplicate is not an error condition in Java -- it's an ordinary, silent no-op. Option D garbles the actual mechanism; there's no separate 'size check before duplicate check' step."
+        },
+        {
+          "id": "java-collections-list-set-map-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "List<Integer> key = new ArrayList<>(List.of(1)); Map<List<Integer>, String> map = new HashMap<>(); map.put(key, \"first\"); key.add(2); System.out.println(map.get(key)); What is the most likely outcome, and why?",
+          "options": [
+            "\"first\" -- HashMap always finds a key by checking every stored entry one by one with equals(), so mutating the key afterward doesn't matter.",
+            "Often null -- mutating key after insertion changes its hashCode() (since List's hash code depends on its current contents), so get(key) computes a different bucket than the one the entry was actually stored under at insertion time, and the lookup fails to find it.",
+            "This throws a ConcurrentModificationException, since a list that's currently a live map key can never be mutated.",
+            "\"first\" -- HashMap automatically detects the mutation and re-hashes every affected key entry on the spot."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "HashMap locates entries by computing a key's hash code to pick a bucket, and List's hashCode() is defined in terms of its current elements -- so key.add(2) changes what key.hashCode() returns. The entry itself is still physically sitting in the bucket the original hash code pointed to, but map.get(key) computes key's new, current hash code and looks in a different bucket, one that was never given this entry. Nothing throws; the lookup simply fails silently. Option A misdescribes HashMap's actual lookup mechanism, which is bucket-based, not a scan of every entry. Option C invents a protection Java's mutable collections don't have. Option D describes a re-hashing-on-mutation feature that HashMap does not implement -- it has no way to even detect that a key it's holding was just mutated elsewhere."
+        },
+        {
+          "id": "java-collections-list-set-map-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Why is List<String> names = new ArrayList<>(); generally preferred over ArrayList<String> names = new ArrayList<>(); for a local variable only ever used through basic List operations?",
+          "options": [
+            "There's no real difference at all; it's purely a stylistic preference with no practical consequence either way.",
+            "Declaring the variable's type as the interface means every use of names is checked only against List's contract, so the concrete implementation on the right-hand side can later be swapped (to LinkedList, say) by changing just that one line, without touching any other code that only ever called List methods on names.",
+            "ArrayList<String> names = new ArrayList<>(); actually fails to compile, since a variable's declared type is required to be an interface whenever a generic collection is involved.",
+            "List<String> names = new ArrayList<>(); runs measurably faster at run time, since interface-typed method calls skip virtual dispatch entirely."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Declaring the left-hand type as the interface deliberately restricts what the rest of the code is allowed to assume about names -- only List's own contract, nothing ArrayList-specific. That's precisely what makes swapping the concrete implementation later a one-line change: as long as every other use of names only ever called List methods, changing just the right-hand side to new LinkedList<>() keeps everything else compiling and working unchanged. Option A understates a real, practical software-engineering benefit. Option C is simply false -- declaring a variable with a concrete class type is completely legal Java. Option D is fabricated; there is no such blanket run-time performance difference from the declared type of a reference variable."
         }
       ]
     },
@@ -239,6 +278,45 @@
           "type": "explanation",
           "prompt": "Explain type erasure to a developer who is confused about why they can't create a generic array (new T[10]) inside a generic class, even though the class compiles fine everywhere else it uses T.",
           "modelAnswer": "Java implements generics using type erasure: the compiler uses your type parameters, like T in a generic class, to check that your code uses types consistently while you're writing and compiling it, but once compilation finishes, that type parameter information is discarded from the resulting bytecode. Wherever an unbounded T appeared in your source, the compiled class effectively treats it as Object, inserting whatever casts are needed automatically so the erased code still behaves correctly. This is why, for instance, List<String> and List<Integer> end up being represented by the exact same run-time class -- there's no T, no String, no Integer baked into the compiled class file at all; that information only ever existed for the compiler's own benefit, during the one phase where it's actually checking your code. The reason this specifically breaks new T[10] is that creating an array in Java is not just about type-checking -- arrays are required to know their own real, concrete element type at run time, so that the JVM can perform array-store checks (rejecting, say, an attempt to put a String into an Integer[] at run time). By the time new T[10] would actually execute, T has already been erased and no longer corresponds to any real type the JVM could give the new array as its element type -- there's simply nothing concrete left to create an array of. This is precisely why generic classes that need an internal array, like the standard library's own ArrayList, are implemented by creating a plain Object[] internally instead, and inserting an explicit (marked-unchecked) cast back to T whenever an element needs to be handed back out to a caller as that specific type -- a workaround that only exists because of, and only makes sense once you understand, type erasure."
+        },
+        {
+          "id": "java-generics-and-type-erasure-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "List names = new ArrayList(); names.add(\"Amy\"); names.add(42); String first = (String) names.get(0); String second = (String) names.get(1); Which line is the actual root cause of the bug here, and when does the problem actually surface?",
+          "options": [
+            "names.add(42); is the root cause, and the compiler catches it immediately at that exact line, before the program can even run.",
+            "names.add(42); is the root cause -- a value of the wrong intended type entering the raw, unparameterized list -- but with no type parameter for the compiler to check against, this line compiles without complaint; the problem only surfaces later, as a ClassCastException at the cast on a following line, in a different part of the code from where the actual mistake was made.",
+            "String second = (String) names.get(1); is the root cause, since casts are inherently unsafe and should never appear in correct code.",
+            "There is no actual bug here; this code compiles and runs correctly, printing normally."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "names is declared as a raw List, with no element type parameter for the compiler to enforce -- so names.add(42) compiles just as readily as names.add(\"Amy\") did, since both are legal Objects as far as an unparameterized List is concerned. The actual mistake -- putting an Integer into a list only ever meant to hold Strings -- is invisible right where it happens. It only becomes visible much later, when (String) names.get(1) tries to cast that Integer to String and the JVM throws ClassCastException at run time, in code that may be far removed from the add() call that actually caused the problem. Option A wrongly assumes the compiler tracks intended element types on a raw list. Option C blames the cast itself rather than the type mismatch the cast merely exposes. Option D is wrong because this exact sequence is precisely the runtime-ClassCastException bug generics were introduced to catch earlier."
+        },
+        {
+          "id": "java-generics-and-type-erasure-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "public static <T> T max(List<T> items) { T largest = items.get(0); for (T item : items) { if (item.compareTo(largest) > 0) { largest = item; } } return largest; } Why does this specific method fail to compile as written?",
+          "options": [
+            "It compiles fine exactly as written, for any type T supplied at the call site.",
+            "T has no bound here, so the compiler only knows T is some type extending Object -- and Object declares no compareTo() method, so item.compareTo(largest) doesn't resolve to any method the compiler can find; T needs to be declared as <T extends Comparable<T>> for that call to be legal.",
+            "for-each loops can never be used with a type parameter that has no explicit bound, under any circumstance.",
+            "List<T> is illegal syntax on a method parameter; it must be written as List<? extends T> instead."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "With no bound on T, all the compiler can assume about it is that it's some subtype of Object -- and Object has no compareTo() method at all, so item.compareTo(largest) fails to compile, since there's no guarantee whatever type T ends up being actually supports that call. Adding a bound, <T extends Comparable<T>>, restricts T to only types that do implement Comparable<T>, which is exactly what makes compareTo() a legal call inside the method body. Option A ignores this missing bound entirely. Option C is fabricated -- for-each loops work fine over List<T> regardless of any bound on T; the failure is specifically about calling compareTo(), not about iterating. Option D is wrong -- List<T> as an ordinary parameter type is completely standard generic syntax."
+        },
+        {
+          "id": "java-generics-and-type-erasure-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A method needs to copy every element out of a source list into a destination list, only ever reading from source and only ever writing into destination, without requiring either list to be an exact type match for T. Following PECS (Producer Extends, Consumer Super), which parameter types are correct for static <T> void copy(source, destination)?",
+          "options": [
+            "List<? super T> source, List<? extends T> destination -- source produces values, so it should use super, and destination consumes them, so it should use extends.",
+            "List<? extends T> source, List<? super T> destination -- source is only ever read from (a producer of values), so it uses extends; destination is only ever written into (a consumer of values), so it uses super.",
+            "List<T> source, List<T> destination -- wildcards are never appropriate when copying between two lists that share the same type parameter T.",
+            "List<? extends T> source, List<? extends T> destination -- both parameters should use extends, since both are Lists related to T."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "PECS: Producer Extends, Consumer Super. source is only read from inside copy(), producing the values being moved -- so ? extends T is correct, letting callers pass a List<Integer> or any other subtype-of-T list as the source. destination is only written into, consuming those values -- so ? super T is correct, letting callers pass a List<Number> or any other supertype-of-T list as the destination, as long as it's guaranteed able to hold a T. Option A reverses the two roles entirely. Option C would work but is needlessly restrictive, forcing both lists to be exactly List<T> when callers might reasonably want to pass related, non-identical types. Option D would let source work correctly but would break destination, since adding a T to a List<? extends T> is exactly the operation Java's wildcard rules forbid, for safety."
         }
       ]
     },
@@ -356,6 +434,32 @@
           "type": "explanation",
           "prompt": "Explain the structural difference between Comparable and Comparator -- not just what each one is used for, but why a class can only have one Comparable ordering while supporting unlimited Comparators, and when you'd reach for each.",
           "modelAnswer": "Comparable<T> is a capability a class bakes into itself, once: implementing it means writing a single method, compareTo(T other), that defines the one ordering the class's own author considers 'natural' for that type -- and because it's exactly one method with exactly one required signature, a class can express exactly one Comparable ordering, never several. Comparator<T>, by contrast, is not a method on the class being ordered at all -- it's a completely separate object, implementing its own single method, compare(T a, T b), that some other piece of code writes to express whatever ordering it happens to need at that moment. Because a Comparator lives outside the class it orders, entirely, nothing stops any number of different Comparators from existing for the same type simultaneously, each expressing a different ordering, defined by different pieces of code, for different purposes, with zero coordination required between them and zero changes needed to the class itself. This asymmetry maps directly onto when to reach for each: Comparable is the right choice when a type genuinely has one obvious, intrinsic ordering that essentially everyone using that type would expect by default -- numbers ordering by magnitude, dates ordering chronologically -- and baking that into the class itself means callers get correct default sorting for free, with no per-call setup. Comparator is the right choice for every other ordering need: sorting by a different field, sorting in reverse, sorting by a combination of fields with specific tie-breaking rules, or sorting a type that has no obvious natural order at all (or one whose source code you don't even have access to modify). In real code, it's completely normal for a type to define one sensible Comparable natural order and still have several different Comparators defined elsewhere for specific contexts that need something else -- the two mechanisms are complementary, not competing."
+        },
+        {
+          "id": "java-comparable-vs-comparator-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Comparator<Student> cmp = Comparator.comparing((Student s) -> s.grade).thenComparing(s -> s.gpa, Comparator.reverseOrder()); Two students, X (grade \"B\", gpa 3.5) and Y (grade \"A\", gpa 2.0), are compared with cmp.compare(X, Y). What does this comparison actually decide on, and what is the result's sign?",
+          "options": [
+            "It decides based on gpa first, since thenComparing was written second in the chain but is actually evaluated with higher priority than comparing.",
+            "It decides based on grade alone, since \"B\".compareTo(\"A\") is already nonzero -- gpa is never even consulted for this particular pair, because thenComparing only breaks ties when the primary comparison returns exactly zero. The result is positive, since \"B\" sorts after \"A\".",
+            "It throws an exception, because the two students differ in both grade and gpa at the same time.",
+            "It returns zero, treating X and Y as equal, because the chain combines both criteria into a single averaged comparison."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "thenComparing is a tie-breaker, consulted only when the comparison before it in the chain returns exactly zero. Comparing X and Y by grade alone already produces a nonzero result -- \"B\" comes after \"A\" alphabetically, so comparing((s) -> s.grade) returns a positive value for compare(X, Y) -- and that nonzero result is what the whole chain returns immediately, without ever reaching the gpa-based thenComparing at all. Option A reverses how the chain actually evaluates; earlier keys are checked first and take priority. Option C invents a failure mode chained Comparators simply don't have. Option D is wrong because Comparator chaining never averages or blends criteria -- each key is checked in strict sequence, only falling through to the next on an exact tie."
+        },
+        {
+          "id": "java-comparable-vs-comparator-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "class Item implements Comparable<Item> { String label; int priority; public int compareTo(Item other) { return Integer.compare(priority, other.priority); } } -- equals() and hashCode() are left as Object's defaults. Item a = new Item(\"apple\", 1); Item b = new Item(\"banana\", 1); TreeSet<Item> set = new TreeSet<>(); set.add(a); set.add(b); System.out.println(set.size()); What prints, and why?",
+          "options": [
+            "2, because a and b are clearly different objects with different labels, so both are kept regardless of what compareTo() returns.",
+            "1, because TreeSet uses compareTo() as its sole notion of equality internally, and a.compareTo(b) returns 0 (same priority) -- so even though a and b are not .equals() to each other, TreeSet treats them as duplicates and keeps only one.",
+            "This throws an exception, because compareTo() returning 0 for two objects that are not .equals() violates a rule the compiler enforces.",
+            "2, because leaving equals() and hashCode() as Object's defaults makes TreeSet fall back to comparing object identity instead of using compareTo() at all."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Unlike HashSet, which uses equals()/hashCode() to detect duplicates, TreeSet (and TreeMap) use compareTo() -- or a supplied Comparator -- as their entire notion of 'are these the same element' internally. a and b both have priority 1, so a.compareTo(b) is 0, and TreeSet treats that as 'already present,' silently keeping only the first one added and discarding the second, regardless of the fact that their labels differ and they are not .equals(). Option A assumes TreeSet checks equals(), which it specifically does not for this purpose. Option C invents a compiler-enforced consistency rule between compareTo() and equals() that doesn't actually exist -- it's a strongly recommended convention, not something Java checks or rejects. Option D is wrong because TreeSet's behavior here is not conditional on what equals()/hashCode() happen to be; it always uses compareTo()/Comparator for its internal ordering and duplicate detection."
         }
       ]
     }

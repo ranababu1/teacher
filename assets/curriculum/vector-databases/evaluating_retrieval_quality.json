@@ -116,6 +116,45 @@
           "explanation": "ANN recall@k and retrieval-quality recall@k are computed against entirely different ground truths -- exact brute-force search in one case, human-judged relevance in the other -- so a system can legitimately score well on one and poorly on the other; there's no contradiction, because they're not measuring the same thing. A high ANN recall specifically rules out the approximate index as the source of a retrieval-quality problem (it's faithfully reproducing what exact search over these embeddings would find), which points investigation toward earlier stages of the pipeline -- the embedding model, how documents were chunked, or filtering logic -- as the likely source of the retrieval-quality gap. Option A and C both wrongly assume the two metrics must agree since they share a name and formula. Option D is a fabricated resolution -- averaging two numbers that answer different questions produces a number that doesn't correspond to any real, meaningful quantity."
         },
         {
+          "id": "vector-databases-recall-precision-at-k-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Given retrieved = ['docA', 'docB', 'docC', 'docD', 'docF'] and relevant = {'docA', 'docC', 'docF', 'docH'}, precision@5 and recall@5 both count the same 3 hits (docA, docC, docF) in the top 5, yet the two metrics report different values. Why?",
+          "options": [
+            "precision@5 divides the hit count by k (5), while recall@5 divides the same hit count by the total number of truly relevant items that exist (4) -- different denominators applied to the same numerator, since precision asks 'how much of what I got back is useful' while recall asks 'how much of what I should have gotten did I actually get.'",
+            "precision@5 and recall@5 should always be identical whenever they share the same numerator; a difference here indicates a bug in one of the two formulas.",
+            "precision@5 counts hits among the top 5 retrieved items, but recall@5 counts hits among a completely different, unrelated set of retrieved documents.",
+            "The difference only arises because docH was never actually a genuine member of the relevant set in the first place."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "Both metrics start from the same 3 hits, but precision@5 = 3/5 = 0.6 (dividing by k, what was actually looked at) while recall@5 = 3/4 = 0.75 (dividing by the total count of truly relevant items, 4, regardless of whether all of them were retrieved). This difference in denominator is by design, not a bug, which rules out option B. Option C is factually wrong -- both metrics operate on the identical top-5 retrieved set; only the denominator differs, not the set being counted. Option D is a non-sequitur -- docH being a genuine, but unretrieved, member of the relevant set is exactly why recall@5 isn't a perfect 1.0; it doesn't explain the precision/recall denominator difference itself."
+        },
+        {
+          "id": "vector-databases-recall-precision-at-k-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "As k increases from 3 to 10 for a fixed query and a fixed ranked result list, which statement about precision@k and recall@k is guaranteed to be true?",
+          "options": [
+            "Both precision@k and recall@k are guaranteed to increase or stay the same as k grows, never decreasing.",
+            "Recall@k is guaranteed to increase or stay the same as k grows -- it can never decrease, since already-found relevant items are never un-found -- but precision@k has no such guarantee, since it depends entirely on whether the additional items pulled in as k grows happen to be relevant, and can rise, fall, or stay flat.",
+            "Precision@k is guaranteed to increase or stay the same as k grows, but recall@k has no such guarantee and can move in either direction.",
+            "Neither metric has any guaranteed direction as k changes; both are equally unpredictable in general."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The explanation states this directly: recall@k is monotonically non-decreasing in k, since fetching more results can only add relevant items or leave the count unchanged, never remove one already found. Precision@k has no equivalent guarantee, because it depends on whether the specific additional items included as k grows happen to be relevant or not -- it can go up, down, or stay flat. Option A wrongly extends recall's guarantee to precision as well. Option C has the guarantee backwards, assigning it to precision instead of recall. Option D denies the real, stated guarantee that does hold for recall specifically."
+        },
+        {
+          "id": "vector-databases-recall-precision-at-k-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A team computes recall@10 for their RAG system using the raw, unfiltered top-10 results straight from the ANN index, even though every real production query applies a tenant and permissions filter on top of similarity search. What's the problem with this evaluation approach?",
+          "options": [
+            "There is no problem -- metadata filters never change which documents appear in a top-k result, so evaluating with or without them produces identical numbers.",
+            "The evaluation measures a system that doesn't actually exist in production -- filtering can change which documents make it into the top k in ways that matter, so skipping the same filters real queries apply makes the evaluation optimistic by construction, with the gap only surfacing once real, filtered traffic hits the system.",
+            "This approach is fine as long as the golden dataset's own relevance judgments were also produced without considering permissions.",
+            "This is only a problem for systems using post-filtering; systems using pre-filtering or filtered graph traversal are unaffected by this kind of evaluation/production mismatch."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This is the evaluation/production mismatch the explanation warns about directly: real queries always apply metadata filters, and filtering can meaningfully change which documents survive into the top k (as the metadata-filtering concepts earlier in this subject demonstrated concretely), so measuring against unfiltered results evaluates a system configuration that never actually runs in production. Option A denies a mechanism (filtering changing top-k membership) the subject has already established in detail. Option C proposes a workaround that doesn't fix the actual mismatch -- the relevance judgments and the retrieval being measured both need to reflect the same real, filtered production behavior. Option D fabricates an exemption for other filtering strategies; the mismatch is about whether evaluation applies the SAME filters production does, regardless of which specific filtering strategy is in play."
+        },
+        {
           "id": "vector-databases-recall-precision-at-k-assess-explain1",
           "type": "explanation",
           "prompt": "Explain why using a retrieval system's own top-k similarity results as the 'relevant set' to evaluate that same system's precision and recall is a circular, meaningless measurement, and describe what a genuine relevance ground truth actually requires.",
@@ -238,6 +277,45 @@
           "explanation": "A golden dataset's relevance judgments must be produced independently of the system being measured, precisely so the metric can distinguish a genuinely good system from a genuinely bad one. Deriving the relevant set from the system's own output collapses that distinction entirely -- any system's results trivially match themselves, so precision and recall against a self-derived ground truth are always perfect, telling you nothing about actual retrieval quality. Option A misidentifies this as merely an efficiency shortcut rather than a fundamental measurement flaw. Option C is a fabricated, irrelevant condition -- the choice of similarity metric has no bearing on this circularity problem. Option D is wrong for a different reason -- speed isn't the issue here; the approach is fast precisely because it isn't actually measuring anything."
         },
         {
+          "id": "vector-databases-building-golden-dataset-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A team delays building any golden dataset because they believe it needs to contain thousands of human-judged queries before it can be statistically meaningful, and ships their RAG feature without one. What does the explanation say about this reasoning?",
+          "options": [
+            "The team is correct -- a golden dataset with fewer than a few hundred queries provides no meaningful signal at all and isn't worth building.",
+            "A small, well-chosen golden dataset (as few as roughly 30-100 queries) that actually exists and actually gets run is worth far more than a large, comprehensive one that never gets built, or gets built once and then abandoned -- size matters less than whether it's actually maintained and extended over time.",
+            "Golden datasets should only ever be built after a feature has already been running in production for at least a year, regardless of desired size.",
+            "The team's plan is fine, since an LLM can always generate thousands of trustworthy relevance judgments quickly enough to make a large dataset practical from day one."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The explanation is direct about this tradeoff: a large dataset that never gets built provides zero value, while a small set of 30-100 well-chosen queries is tractable to build and maintain, catches meaningful regressions, and -- critically -- actually gets used, which matters more in practice than raw size. Option A overstates the size requirement the explanation never makes. Option C invents an arbitrary launch-timing rule with no basis in the actual guidance, which explicitly discusses building a first golden dataset for a brand-new, pre-launch feature. Option D is wrong on two counts -- it isn't just about scale, and LLM-generated labels still require human spot-checking before being trusted, which the explanation flags as a real caveat, not an assumption to rely on unconditionally."
+        },
+        {
+          "id": "vector-databases-building-golden-dataset-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A team builds a 50-query golden dataset consisting entirely of easy, unambiguous natural-language questions. What risk does this create, according to the explanation?",
+          "options": [
+            "There is no risk -- 50 queries is already more than enough for a statistically meaningful evaluation, regardless of what kind of queries they are.",
+            "A set containing only easy, unambiguous queries reports reassuring numbers that don't reflect how the system actually performs on harder real-world cases -- short keyword queries, near-duplicate disambiguation, and negation or precise-distinction pairs -- that a well-chosen set should deliberately include.",
+            "Natural-language questions are inherently invalid inputs for a golden dataset; only short, keyword-style queries should ever be included.",
+            "This is only a problem if the dataset happened to be built with LLM assistance rather than entirely by hand."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The explanation explicitly lists the query-type variety a well-chosen small set should cover -- short keyword-like queries, natural-language questions, near-duplicate disambiguation cases, and negation/precise-distinction cases -- specifically because a set of only easy queries will report reassuring numbers that don't reveal how the system handles the harder queries real usage actually contains. Option A ignores that coverage, not raw count, is what determines whether the dataset can catch real problems. Option C overcorrects into banning an entire query category the explanation actually recommends including alongside others, not excluding. Option D attributes the risk to labeling method, when the actual problem here is query selection, independent of how the (correct, in this case, easy) judgments were produced."
+        },
+        {
+          "id": "vector-databases-building-golden-dataset-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A team uses an LLM to bootstrap relevance labels for their golden dataset, reasoning that because the LLM is more capable than their retrieval system, its judgments must already be trustworthy without any further review. What risk does the explanation identify in this reasoning?",
+          "options": [
+            "There is no risk -- a more capable model's relevance judgments are correct by definition, regardless of the specific case being judged.",
+            "Being more capable than the system under test doesn't make a labeler immune to the same categories of mistake -- an LLM labeler relying heavily on surface-level similarity can still mislabel exactly the adversarial cases (negation, precise distinctions) a golden dataset most needs to get right, so human spot-checking of a meaningful sample remains necessary.",
+            "LLMs cannot be used for relevance labeling under any circumstances, since doing so is always a circular measurement.",
+            "The risk only exists if the LLM used for labeling is literally the same model used for retrieval; using any different model is automatically safe with no review needed."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The explanation's toy_llm_labeler example demonstrates exactly this: a labeler can be considerably more sophisticated than the system it's helping evaluate and still share the same underlying blind spot (like being fooled by negation, since so much surface wording overlaps), which is precisely why LLM-assisted labels need a human to spot-check a meaningful sample, especially the adversarial cases, before being trusted as ground truth. Option A denies the entire point the worked example demonstrates. Option C overstates the concern into an outright ban, when the explanation explicitly endorses LLM assistance as a legitimate accelerant, with a caveat, not a prohibition. Option D invents a false sense of safety -- a different model can still share the same category of surface-similarity blind spot, even if it isn't literally the same model being evaluated."
+        },
+        {
           "id": "vector-databases-building-golden-dataset-assess-explain1",
           "type": "explanation",
           "prompt": "Describe an end-to-end process for creating a first golden dataset for a brand-new RAG feature that has no production query logs yet, including how you'd make sure it actually catches real problems rather than just reporting reassuring numbers.",
@@ -354,6 +432,45 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "A false negative's defining characteristic is that it's a document that should be in the results but isn't -- there's no representation of 'the thing that's missing' anywhere in what a reviewer is actually looking at, so nothing prompts them to go looking for it. This is a structural limitation of reviewing visible output, independent of how careful or diligent the reviewer is, which is exactly why option A is wrong -- more care doesn't create visibility into something that isn't there. Option C invents an unrelated, narrow cause (model staleness) as if it were the general explanation. Option D is also wrong -- even a reviewer deeply familiar with the corpus faces the same structural blind spot, since familiarity with the corpus doesn't make an absent result visible in the list being reviewed."
+        },
+        {
+          "id": "vector-databases-retrieval-validation-pitfalls-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A developer tests their retrieval system with queries phrased using the same vocabulary the underlying documents use, and it scores excellently. Real user queries, phrased more casually with different words, score much worse against that exact same, unchanged retriever. What does this illustrate?",
+          "options": [
+            "The retriever must have been silently reconfigured between the two tests, since one unchanged system cannot legitimately produce two different scores.",
+            "Query selection bias: a developer testing their own system unconsciously gravitates toward vocabulary already in their head from the documents themselves, which doesn't represent how real users actually phrase queries, so manual testing structurally can't reveal the resulting performance gap.",
+            "This proves the retriever is fundamentally unusable and should be discarded entirely in favor of a completely different architecture.",
+            "This is expected and not actually a concern, since developer-style queries are the primary use case any real system needs to support well."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This is exactly the query selection bias the explanation describes: the same, unchanged retriever produces very different scores purely because of which queries were used to test it, since a developer's own vocabulary tends to overlap heavily with the documents' vocabulary in a way real users' paraphrased, casual phrasing does not. Option A wrongly assumes the retriever itself must have changed, when the worked example holds it fixed and only varies the query set. Option C draws an overly drastic conclusion from a specific, well-understood, and addressable bias, rather than a wholesale architectural failure. Option D inverts the actual lesson -- real user phrasing, not developer phrasing, is what the system actually needs to handle well in production."
+        },
+        {
+          "id": "vector-databases-retrieval-validation-pitfalls-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "After an index parameter change, a developer manually re-checks only the two queries they happened to test during initial development, both of which still return correct results, and concludes the change is safe. What does this kind of manual spot-check fail to protect against?",
+          "options": [
+            "It fails to protect against regressions in query patterns the developer didn't happen to re-check, since a change that breaks other queries produces no visible signal at all unless those specific queries are re-tested -- exactly what an automated evaluation against the full golden dataset, rerun on every change, is designed to catch.",
+            "It fails to protect only against changes to the embedding model specifically; index parameter changes are inherently always safe to validate through manual spot-checking alone.",
+            "Nothing -- if the two originally-tested queries still return correct results, this is mathematically sufficient to guarantee that no other query pattern has regressed.",
+            "It fails only in the specific case where the developer forgets to round their reported recall numbers to three decimal places."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "This is the structural limitation the explanation calls out directly: manual spot-checking doesn't run again automatically and only covers whatever specific queries someone happened to re-try, so a regression affecting different query patterns produces no signal at all to a reviewer who never looked at those patterns -- exactly the gap an automated check against the full, fixed golden dataset closes by re-running every case, every time. Option B invents an unfounded exemption for one category of change. Option C overclaims a guarantee that two correct results provide no actual basis for. Option D trivializes a structural blind spot into a cosmetic rounding issue, which isn't the mechanism at play at all."
+        },
+        {
+          "id": "vector-databases-retrieval-validation-pitfalls-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Why is a metric like zero-result rate (the fraction of real queries that come back with no results after filtering) valuable as a production monitoring signal, distinct from offline golden-dataset evaluation?",
+          "options": [
+            "It requires no relevance labels or human judgment at all and can be tracked continuously on live traffic, catching problems in close to real time that a periodically-run, fixed offline golden dataset hasn't yet been extended to cover.",
+            "It is a complete replacement for golden-dataset evaluation, since it directly measures whether the results a query does return are actually relevant.",
+            "It only becomes a meaningful signal once the underlying golden dataset has grown to include at least several hundred queries.",
+            "It can only be computed by re-running a system against the fixed historical queries already present in the golden dataset, not against real, live production traffic."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "The explanation frames zero-result rate as valuable specifically because it needs no relevance labels at all -- it's a direct, measurable signal computable continuously on real, live traffic, catching a category of problem (queries returning nothing) as it happens, well before a periodic golden-dataset run would surface it, and independent of whatever cases the golden dataset happens to already cover. Option B overclaims -- the explanation presents it as one layer among several (alongside golden-dataset evaluation and periodic manual review), not a replacement for judging actual relevance. Option C invents a dependency on golden-dataset size that doesn't exist; zero-result rate is computed directly from a live query log, unrelated to the golden dataset's size. Option D reverses the actual relationship -- zero-result rate is specifically valuable BECAUSE it runs against real production traffic, not fixed historical queries."
         },
         {
           "id": "vector-databases-retrieval-validation-pitfalls-assess-explain1",

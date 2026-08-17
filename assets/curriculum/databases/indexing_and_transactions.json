@@ -121,6 +121,45 @@
           "type": "explanation",
           "prompt": "Explain, in your own words, how a B-tree index turns a lookup that would otherwise require scanning every row into something close to a logarithmic-time operation, and describe two concrete situations where PostgreSQL will not use an index even though one exists on the filtered column.",
           "modelAnswer": "Without an index, PostgreSQL's only option for finding rows matching a condition is a sequential scan: reading every page of the table and checking every row, an operation whose cost grows linearly with the table's size. A B-tree index avoids this by maintaining a separate, balanced tree structure where entries are sorted by the indexed column's value, organized into pages such that each level of the tree narrows the search into a much smaller subset of the data below it. Looking up a specific value means descending from the root through a small number of internal pages -- each comparison eliminating a large fraction of the remaining possibilities -- until reaching the relevant leaf page, which holds pointers to the actual matching rows in the table's heap. For a table with a million rows, this typically takes on the order of twenty comparisons instead of a million, which is the practical meaning of 'logarithmic' here. Because leaf pages are also linked together in sorted order, the same structure efficiently supports range queries, not just exact matches. That said, an index's existence doesn't guarantee its use. If a predicate matches a large fraction of the table -- low selectivity, such as a status filter matching 90% of rows -- the planner will often correctly prefer a sequential scan, because an index scan for that many rows means scattered, pointer-by-pointer lookups across the heap, which costs more than one efficient sequential read of the whole table. Separately, if the query applies a function to the indexed column, such as `WHERE lower(email) = ...` against a plain index on `email`, the index simply has no entries corresponding to the computed expression being filtered on, and PostgreSQL falls back to a sequential scan unless a matching expression index has been created on `lower(email)` specifically."
+        },
+        {
+          "id": "databases-indexing-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "An index exists on `products(name)`. Why can `WHERE name LIKE 'widget%'` use that index, while `WHERE name LIKE '%widget'` cannot?",
+          "options": [
+            "PostgreSQL rejects any LIKE pattern with a leading wildcard as a syntax error, so the second query never runs at all.",
+            "A B-tree index is sorted by the column's natural value order, so 'starts with widget' corresponds to one contiguous range the index can jump straight to, while 'ends with widget' matches values scattered arbitrarily throughout that sorted order, with no single contiguous range to target.",
+            "Trailing wildcards require a GIN index and leading wildcards require a B-tree index, and this query is simply using the wrong index type.",
+            "Both patterns use the index equally well; the difference only shows up when the table has more than a million rows."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B is correct: a B-tree's usefulness for a LIKE pattern depends entirely on whether the pattern picks out a contiguous slice of the sorted order it maintains. 'widget%' does -- every matching value sorts somewhere between 'widget' and 'widgeu' (the next string after incrementing the last character), a single walkable range. '%widget' doesn't -- values ending in 'widget' can begin with any letter at all and are scattered throughout the entire sorted range, so the index can't narrow the search at all and a sequential scan (or a different index type such as a trigram index, outside this concept's scope) is needed instead. Option A is false -- leading-wildcard LIKE is valid SQL, it simply can't use a plain B-tree efficiently. Option C invents an index-type requirement that isn't how this works. Option D is wrong -- this is a structural limitation of B-tree ordering, not a scale-dependent one."
+        },
+        {
+          "id": "databases-indexing-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "An index exists on `employees(last_name, first_name)`. Which query can this index actually help answer efficiently?",
+          "options": [
+            "WHERE first_name = 'Amara', filtering by first name alone.",
+            "WHERE last_name = 'Chen' AND first_name = 'Amara', filtering on both columns in the index's declared order.",
+            "WHERE first_name = 'Amara' OR last_name = 'Chen', an OR across the two columns.",
+            "No query can use this index unless it filters on every indexed column simultaneously with equality."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "A multicolumn B-tree index is sorted first by its leftmost column, and only within each group of equal leftmost values is it further sorted by the next column -- like a phone book sorted by last name, then first name within each last name. `last_name = 'Chen' AND first_name = 'Amara'` follows that ordering exactly, narrowing first to the 'Chen' section and then to 'Amara' within it, so the index helps directly. Option A fails because first_name alone, without the leading last_name column pinned down, has no contiguous range in this sort order -- Amaras are scattered across every last-name section. Option C also can't use this single index efficiently for the OR as a whole, since 'any first_name' has the same problem as option A. Option D overstates the requirement -- the index can also help `WHERE last_name = 'Chen'` alone, using just its leading column, without needing first_name specified at all."
+        },
+        {
+          "id": "databases-indexing-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A table has five separate indexes defined on it. What is the direct cost of this on every single INSERT into that table?",
+          "options": [
+            "None -- indexes only affect the performance of SELECT queries, never INSERT, UPDATE, or DELETE.",
+            "The INSERT must also add a corresponding new entry to each of the five indexes, so write cost scales up with the number of indexes defined on the table, in addition to the storage each index occupies on disk.",
+            "Only the primary key's index is updated immediately; the other four secondary indexes are updated lazily the next time VACUUM runs.",
+            "The cost is fixed at exactly one extra write regardless of how many indexes exist, because PostgreSQL batches every index update into a single write-ahead log record."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Every index is a data structure that must stay correct and current, so any statement that changes the table's rows -- INSERT, UPDATE, or DELETE -- has to update every index defined on that table, not just the heap. Five indexes means paying that update cost five times over on every write, which is exactly why 'index every column just in case' is not a free optimization: it directly slows down writes and consumes additional storage. Option A ignores this write-side cost entirely. Option C invents a lazy-update mechanism that doesn't exist -- indexes are kept transactionally consistent with the table at write time, not deferred to VACUUM (which handles dead-row cleanup and statistics, not index population). Option D is false; there's no such batching that makes the per-index cost disappear."
         }
       ]
     },
@@ -241,6 +280,45 @@
           "type": "explanation",
           "prompt": "Using the classic bank transfer example (debit one account, credit another), explain all four ACID properties by describing concretely what could go wrong if each one, individually, were absent.",
           "modelAnswer": "Without Atomicity, the debit and credit could be applied as two independent operations with no guarantee they succeed or fail together -- a crash between them could leave the debit permanently applied with the credit never happening, causing $100 to simply vanish from the system with no record that anything went wrong. Atomicity guarantees the transaction is all-or-nothing: either both the debit and credit take effect, or neither does, with no reachable in-between state. Without Consistency, there would be no guarantee that the transaction's logic actually preserves the invariants the application depends on -- for instance, nothing would ensure the credited amount actually equals the debited amount, or that account balances never end up in a state the business considers invalid; consistency is partly the database enforcing declared constraints (like a CHECK preventing negative balances) and partly the application's own responsibility to write correct transaction logic for the rules the database can't express directly. Without Isolation, a second, concurrent transaction reading account balances partway through the transfer could see the debit already applied to account A but not yet see the credit applied to account B -- observing a snapshot of the world where $100 is simply missing from the total, even though the transfer will shortly complete correctly; isolation controls how much of one transaction's in-progress work other concurrent transactions are allowed to see. Without Durability, a successful COMMIT would not actually guarantee the transfer survives a crash immediately afterward -- the changes might exist only in memory, and a power loss moments after the client was told 'success' could silently lose the entire transaction, leaving the client believing money moved when, after recovery, it hadn't. Durability closes this gap by ensuring COMMIT doesn't return success until the change is durably persisted to storage that survives a crash."
+        },
+        {
+          "id": "databases-acid-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A transaction is supposed to debit $100 from account A and credit the same $100 to account B, but a bug in the application logic instead credits only $50 to account B. Both statements execute successfully and violate no declared constraint. What does this reveal about the Consistency property?",
+          "options": [
+            "PostgreSQL will detect the mismatch between the debited and credited amounts and automatically roll back the transaction.",
+            "Consistency is partly the database's job (enforcing declared constraints such as CHECK and NOT NULL) and partly the application's responsibility to write correct transaction logic -- the database has no way to know 'credited amount must equal debited amount' unless that invariant is expressed as an enforceable constraint.",
+            "This scenario is impossible, because Atomicity guarantees the credited and debited amounts always match exactly.",
+            "This proves Durability was violated, since the two amounts don't reconcile with each other."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B is correct: the database enforces the rules it can express as constraints, but 'debited amount equals credited amount across two different rows' isn't something a single-row CHECK constraint can verify -- it's a property of the transaction's own logic, and PostgreSQL has no way to know this specific invariant exists unless the application encodes it correctly in the statements it runs. Option A is wrong because no constraint was violated -- both UPDATEs individually succeed, so PostgreSQL has nothing to reject. Option C confuses Atomicity (all statements take effect together, or none do) with Consistency (the transaction's logic must actually be correct) -- Atomicity says nothing about whether the amounts written are the *right* amounts, only that whatever was written takes effect together. Option D misattributes the bug to Durability, which is about surviving crashes after commit, not about whether the transaction's logic was correct in the first place."
+        },
+        {
+          "id": "databases-acid-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A single standalone UPDATE statement runs with no explicit BEGIN/COMMIT around it, and the process crashes immediately after PostgreSQL reports the statement complete. What happens to that UPDATE?",
+          "options": [
+            "It is lost, since no explicit transaction was ever started to make it durable.",
+            "PostgreSQL automatically wraps every standalone statement in an implicit, single-statement transaction, so Atomicity and Durability still apply -- the change survives the crash exactly as it would inside an explicit BEGIN/COMMIT block.",
+            "It applies only to some of the matching rows, since there is no transaction boundary guaranteeing all-or-nothing behavior for a bare statement.",
+            "PostgreSQL requires an explicit BEGIN before any write statement, so the UPDATE would never have been allowed to run in the first place."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B is correct: every standalone statement outside an explicit BEGIN/COMMIT block is still wrapped in its own implicit transaction by PostgreSQL, so it gets the same Atomicity and Durability guarantees as any explicit transaction -- if PostgreSQL reported the statement as done, its change is already durably committed and will survive a subsequent crash. Explicit BEGIN/COMMIT blocks matter specifically when *multiple* statements need to succeed or fail together as one unit; a single statement already gets this for free. Option A is the misconception this question targets. Option C is wrong -- a single UPDATE statement is itself atomic across all the rows it matches, with or without an explicit transaction wrapped around it. Option D is false; standalone write statements are completely normal and require no explicit BEGIN."
+        },
+        {
+          "id": "databases-acid-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Inside a transaction, a SAVEPOINT is created immediately before a risky statement that then fails with a constraint violation. What does ROLLBACK TO that savepoint do, compared to issuing a plain ROLLBACK?",
+          "options": [
+            "They're equivalent -- both discard every statement in the transaction all the way back to BEGIN.",
+            "ROLLBACK TO the savepoint undoes only the statements that ran after the savepoint and returns the transaction to a normal, continuable state; a plain ROLLBACK would discard the entire transaction, including whatever succeeded before the savepoint was even created.",
+            "ROLLBACK TO the savepoint immediately commits every statement before the savepoint, while a plain ROLLBACK defers that decision until COMMIT is issued.",
+            "ROLLBACK TO a savepoint only works if the failed statement was a SELECT; INSERT, UPDATE, or DELETE failures always require a full ROLLBACK of the entire transaction."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B is correct and is exactly SAVEPOINT's purpose: it marks an intermediate point within a transaction that ROLLBACK TO can later return to, undoing only what happened after that point and leaving the transaction in a normal state that can continue -- statements before the savepoint remain in effect, uncommitted, exactly as they were. A plain ROLLBACK has no such selectivity; it discards the whole transaction unconditionally. Option A collapses the very distinction the question is asking about. Option C invents a commit-on-rollback behavior that doesn't exist -- nothing is committed until COMMIT is actually issued for the whole transaction. Option D is fabricated; SAVEPOINT and ROLLBACK TO work identically regardless of which kind of statement failed."
         }
       ]
     },
@@ -361,6 +439,45 @@
           "type": "explanation",
           "prompt": "Explain the difference between a non-repeatable read and a phantom read, and explain concretely how PostgreSQL's MVCC snapshot mechanism relates to preventing each one under different isolation levels.",
           "modelAnswer": "A non-repeatable read occurs when a transaction reads the same specific, already-existing row twice and gets two different values, because another transaction updated that row and committed in between the two reads -- the identity of the row doesn't change, only the value it holds. A phantom read occurs when a transaction runs the same set-matching query -- one that returns however many rows currently satisfy some condition -- twice, and gets a different set of matching rows the second time, because another transaction inserted or deleted a row that changes which rows satisfy the condition; here it's the membership of the result set that changes, not a value within one already-identified row. Both anomalies trace back to the same underlying mechanism in PostgreSQL: MVCC snapshots, and specifically when a transaction's snapshot is taken. Under READ COMMITTED, PostgreSQL's default, every individual statement takes its own fresh snapshot of whatever has committed as of the instant that statement begins -- so if another transaction commits a change (an update to an existing row, or an insert of a new one) between two statements in the same transaction, the second statement's fresh snapshot reflects that new commit while the first statement's snapshot did not, producing either a non-repeatable read or a phantom read depending on whether the changed thing was an existing row's value or the membership of a matching set. Under REPEATABLE READ, PostgreSQL takes exactly one snapshot for the entire transaction, fixed at its first statement, and every subsequent statement in that transaction continues to use that same snapshot no matter what commits elsewhere afterward -- so a row updated by another transaction after the snapshot was taken is invisible to later statements, preventing the non-repeatable read, and a row inserted by another transaction after the snapshot was taken is likewise invisible, preventing the phantom read, both as direct consequences of the identical single-snapshot mechanism rather than two separately implemented protections."
+        },
+        {
+          "id": "databases-isolation-levels-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A developer explicitly starts a transaction with `BEGIN ISOLATION LEVEL READ UNCOMMITTED` in PostgreSQL, hoping to observe another concurrent transaction's uncommitted changes. What actually happens?",
+          "options": [
+            "PostgreSQL rejects the ISOLATION LEVEL clause outright with a syntax error, since READ UNCOMMITTED isn't a recognized keyword.",
+            "PostgreSQL accepts the syntax but internally treats it identically to READ COMMITTED, so the transaction still never sees another transaction's uncommitted changes -- a genuine dirty read is not reproducible in PostgreSQL at any isolation level.",
+            "PostgreSQL honors the request literally, and the transaction sees uncommitted changes from concurrently running transactions, exactly as the SQL standard describes for this level.",
+            "PostgreSQL allows dirty reads under this setting, but only between statements within the same session, never across separate concurrent sessions."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B is correct: PostgreSQL accepts READ UNCOMMITTED as a valid level name purely for SQL-standard compliance, but its actual behavior is indistinguishable from READ COMMITTED -- a transaction only ever sees other transactions' committed changes, never their in-progress, uncommitted ones. This is a deliberate PostgreSQL-specific property, not a universal fact about every relational database. Option A is wrong -- the syntax is valid and accepted. Option C describes what the SQL standard's nominal definition of READ UNCOMMITTED would allow, but not what PostgreSQL actually does. Option D invents a same-session-only dirty read exception that PostgreSQL doesn't implement at all."
+        },
+        {
+          "id": "databases-isolation-levels-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Under SERIALIZABLE isolation, a transaction's own individual reads and writes each look completely valid on their own, yet PostgreSQL aborts it with a serialization_failure error. What does this indicate, and what must application code do about it?",
+          "options": [
+            "It indicates a bug in the transaction's SQL that must be found and fixed before the transaction can be attempted again.",
+            "PostgreSQL detected that this transaction's pattern of read/write dependencies with other concurrently running transactions could not have arisen from any valid one-at-a-time ordering of those transactions; the application must catch this specific error and retry the entire transaction from the start.",
+            "It indicates a deadlock between two sessions, and the application must manually identify and release the conflicting locks before retrying.",
+            "It means the transaction exceeded PostgreSQL's configured statement timeout and needs to be rewritten to execute faster."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option B is correct: SERIALIZABLE builds on REPEATABLE READ's snapshot mechanism and additionally tracks read/write dependencies across concurrently running transactions, aborting one of them when the overall pattern couldn't have resulted from any valid serial (one-at-a-time) execution order -- even though nothing about that transaction's own statements looks wrong in isolation. This is the mechanism working as designed, not a bug, and application code using SERIALIZABLE must be structured to catch that specific error and retry the whole transaction. Option A misdiagnoses a normal, expected outcome as a code defect. Option C confuses this with deadlock detection, a different mechanism with a different error. Option D invents an unrelated timeout-based cause."
+        },
+        {
+          "id": "databases-isolation-levels-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Two concurrent transactions, both running under REPEATABLE READ, each read `seats_remaining = 1` for the same flight and each independently decides to book the last seat, resulting in two confirmed bookings for one seat. Which statement best characterizes this outcome?",
+          "options": [
+            "It's a phantom read, since a row's visibility to the query changed between two reads.",
+            "It's a non-repeatable read, since the seats_remaining value was read and then later changed by a write.",
+            "It's write skew -- REPEATABLE READ's guarantees against dirty reads, non-repeatable reads, and phantom reads are all technically satisfied here, yet the two transactions' individually-correct decisions combine into a result that violates an invariant neither transaction could see was being violated on its own.",
+            "It's a dirty read, since one transaction's booking decision was effectively based on the other transaction's in-progress, uncommitted work."
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "Option C is correct: neither transaction ever re-read a changed value for the same row (ruling out non-repeatable read), and no new row appeared or disappeared from either transaction's snapshot (ruling out phantom read), and neither transaction ever observed the other's uncommitted data (ruling out dirty read) -- each transaction's own view of the world was entirely self-consistent under its REPEATABLE READ snapshot. The bug only exists when considering both transactions together: two individually valid decisions, made from two separate but equally valid snapshots, combine into an outcome that violates a cross-row invariant ('total bookings must not exceed seats_remaining') that no single transaction's isolation guarantee was ever designed to protect. This is exactly why SERIALIZABLE (or explicit row locking with SELECT ... FOR UPDATE) is needed for this specific class of problem, not REPEATABLE READ."
         }
       ]
     }

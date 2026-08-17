@@ -121,6 +121,45 @@
           "type": "explanation",
           "prompt": "Explain the difference between cache-aside and write-through caching, including a concrete scenario where you'd prefer one over the other.",
           "modelAnswer": "Cache-aside (lazy loading) puts the application in charge of the cache on the read path: check the cache first, and only on a miss does the application fetch from the database and populate the cache with what it just fetched. The cache is passive -- it never proactively knows about writes at all unless the application explicitly tells it to invalidate or update a key. Write-through instead updates the cache on the write path: every write goes to the database and the cache together, synchronously, so the cache is guaranteed to reflect the latest value immediately after any write completes, with no gap. The practical tradeoff is about which keys end up cached and how fresh they are after a write versus after being read. Cache-aside only ever caches data that's actually been requested, which is efficient when access is skewed toward a hot subset of data -- a typical content site, where most traffic hits a small number of popular pages -- but it leaves a staleness window after any write, bounded only by the TTL, until the next read happens to miss and refresh it. Write-through keeps the cache and database coherent immediately after every write, which matters when reads-immediately-after-write need to be correct -- a user updates their own profile and expects to see the change instantly on the very next page load -- but it pays the cost of populating the cache for every write, including writes to data that might never actually be read again, and it makes every write slightly slower and dependent on the cache also succeeding. In practice, I'd reach for cache-aside as the default for read-heavy, write-light data where brief staleness after a rare write is tolerable (product descriptions), and write-through when writes are relatively infrequent but must be immediately visible on the next read from potentially any instance (a user's own settings or permissions, where read-your-own-write correctness matters more than saving the write-time cost)."
+        },
+        {
+          "id": "system-design-caching-strategies-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Per the concept's discussion of when caching is and isn't worthwhile, which workload is the worst candidate for adding a cache?",
+          "options": [
+            "A read-heavy workload where the same expensive query is repeated by many users.",
+            "A write-heavy workload with very few repeated reads, where cached entries would be constantly invalidated and rewritten with almost nothing ever being read from them.",
+            "A read-heavy workload where the underlying data is expensive to compute but rarely changes.",
+            "A workload where a small number of popular keys account for most of the traffic."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept states directly that caching is a bad idea \"when the workload is write-heavy with few repeated reads, since the cache would be constantly invalidated and rewritten with almost nothing to show for it: pure overhead, no benefit.\" Options A, C, and D all describe exactly the profile the concept identifies as good caching candidates -- read-heavy, expensive-to-compute-but-cheap-to-serve, and skewed toward a hot subset of keys, which cache-aside in particular is described as handling well."
+        },
+        {
+          "id": "system-design-caching-strategies-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Why does the concept describe write-back (write-behind) caching as generally reserved for data like counters or analytics buffers, rather than durable transactional records?",
+          "options": [
+            "Write-back requires a database that supports write-through, which counters typically lack.",
+            "Write-back acknowledges the write to the caller before the data is flushed to the database, so if the cache node crashes before that flush completes, the write can be lost entirely -- a risk tolerable for counters or analytics but not for durable records.",
+            "Write-back is slower than write-through for every operation, so it's only used where write latency doesn't matter.",
+            "Write-back is identical to write-around, and the two terms are used interchangeably in the concept."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept states write-back \"writes to the cache first, acknowledges success to the caller immediately, and asynchronously flushes to the database later... it risks real data loss if the cache node crashes before the flush completes -- it's generally reserved for data that can tolerate that risk, like counters or analytics buffers, rather than durable transactional records.\" Option A invents a compatibility requirement not present in the material. Option C is backwards -- write-back is explicitly described as the fastest write path of the three, not the slowest. Option D is false; write-around and write-back are distinct patterns with opposite behavior on the write path (write-around bypasses the cache; write-back writes to it first)."
+        },
+        {
+          "id": "system-design-caching-strategies-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A caching strategy that looks correct on paper (explicit invalidation on the application's main write path, plus a TTL as backup) still produces stale-cache bugs in production. Per the concept, what is the first, most likely explanation to investigate?",
+          "options": [
+            "The cache's hardware is failing intermittently.",
+            "There is a \"second writer\" -- another code path (a batch job, an admin tool, a different service) that modifies the same underlying data without going through the invalidation logic the main application relies on.",
+            "TTL-based expiry and explicit invalidation can never be combined, so one of them must be misconfigured.",
+            "The database itself has a bug causing it to return incorrect data."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept names this explicitly: \"a code path that writes to the database without going through whatever invalidation or write-through logic the rest of the system relies on... this 'second writer' problem is, in practice, the leading cause of 'impossible' stale-cache bugs... the first question to ask when a stale-cache bug appears is almost always 'is there another writer we forgot about?'\" Option A is a far less likely explanation left unaddressed by the material. Option C is false -- the concept explicitly recommends combining both as belt and suspenders. Option D assumes a database bug rather than the far more common application-level gap the concept actually identifies."
         }
       ]
     },
@@ -241,6 +280,45 @@
           "type": "explanation",
           "prompt": "Explain to a teammate why 'we're scaling the database' can mean two very different things -- replication and sharding -- and how to tell which one an actual situation calls for.",
           "modelAnswer": "Replication and sharding solve two structurally different bottlenecks, even though both get casually described as \"scaling the database.\" Replication makes multiple full copies of the same data, with one node (the leader, in the common leader-follower setup) accepting writes and propagating them to the others, which mainly serve reads. It's excellent for two things: increasing how much read traffic the system can serve, since reads can be spread across many copies, and increasing availability, since a follower can be promoted if the leader fails. What it cannot do is increase write capacity or total storable data size, because every replica still has to receive and apply the exact same stream of writes and hold the exact same full dataset as every other replica -- adding more copies of a firehose doesn't make the firehose itself flow faster. Sharding, in contrast, splits the data itself into disjoint pieces spread across independent nodes, typically by hashing or ranging some shard key. Because each shard only holds and processes its own slice of the data, both write throughput and total storage capacity genuinely increase as you add shards -- this is the only one of the two tools that raises those particular ceilings. The cost is real added complexity: choosing a shard key that both distributes load evenly and matches your dominant query patterns, handling queries that need data from multiple shards (which lose the simplicity of a single-node query or transaction), and the operational difficulty of resharding as data grows unevenly over time. So the practical diagnostic is to ask, concretely: is the system struggling to serve enough reads (replication's job), or is it struggling to accept enough writes or store enough data on one machine (sharding's job)? Applying the wrong tool -- sharding a read-bound system, or trying to replicate your way out of a write-bound one -- adds real cost while leaving the actual bottleneck exactly where it was."
+        },
+        {
+          "id": "system-design-database-replication-and-sharding-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "In multi-leader replication, two data-center leaders each accept a different, concurrent write to the same record before either write has propagated to the other. What does this scenario require that leader-follower replication does not?",
+          "options": [
+            "A conflict-resolution mechanism to reconcile the two divergent writes once they propagate to each other, since multi-leader replication allows more than one node to accept writes to the same data.",
+            "Nothing extra -- multi-leader replication automatically serializes concurrent writes across leaders in the order they were issued.",
+            "A shard key, since this is fundamentally a sharding problem rather than a replication one.",
+            "A rollback of one of the two data centers to a previous backup, since concurrent writes across leaders cannot be reconciled any other way."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "The concept states that multi-leader replication \"introduces write conflicts: if two leaders accept different, concurrent writes to the same record, something has to reconcile them once the writes propagate to each other\" -- unlike leader-follower, where a single leader accepting all writes means there's only one order in which writes happen, so this kind of conflict can't occur in the first place. Option B is false and describes exactly the problem multi-leader replication introduces rather than avoids. Option C confuses this with sharding, a structurally different concept about splitting data rather than replicating it. Option D overstates the fix -- the concept describes reconciliation, not wholesale rollback to a backup, as the answer to conflicting concurrent writes."
+        },
+        {
+          "id": "system-design-database-replication-and-sharding-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Following the \"BAD SHARD KEY: signup_date\" example, why does hashing by signup_date create a hotspot even though every user is assigned to some shard?",
+          "options": [
+            "Because hashing by date is computationally slower than hashing by user_id, causing that shard's CPU to run hot.",
+            "Because every user who signs up on the same day lands on the same shard, so all of that day's write traffic concentrates on one shard while older shards sit comparatively idle -- distributing rows across shards is not the same as distributing load evenly over time.",
+            "Because signup_date is not a valid data type to hash, so the hashing function fails and defaults all traffic to shard 0.",
+            "Because sharding by any date field is impossible; only numeric IDs can be used as shard keys."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept's example shows that sharding by signup_date means \"every new signup today lands on the SAME shard as every other signup today... that shard absorbs 100% of today's write traffic -- a hotspot,\" while older shards sit nearly idle -- the problem isn't that rows aren't distributed (each day does map to a shard), it's that write traffic is temporally concentrated on whichever shard owns \"today.\" Option A invents a computational-speed explanation not discussed anywhere in the concept. Options C and D are both fabricated technical claims -- dates can be hashed like any other value, and there's no restriction to numeric-only shard keys anywhere in the material."
+        },
+        {
+          "id": "system-design-database-replication-and-sharding-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A team treats their read replicas as their disaster-recovery backup strategy, reasoning \"we always have multiple up-to-date copies of the data.\" Per the concept's misconceptions, why is this risky?",
+          "options": [
+            "Replicas are read-only, so no backup strategy can ever use them for any purpose.",
+            "A replica lags behind the leader by some amount and will faithfully replicate destructive mistakes (like an accidental DELETE) shortly after they happen on the leader, so it is not a substitute for actual point-in-time backups or snapshots.",
+            "Replicas only replicate schema changes, not the underlying data, so they are never useful for recovery.",
+            "Replication lag guarantees replicas are always more up to date than the leader, which makes them unsuitable as backups."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept's misconception addresses this directly: replicas are \"a slightly-in-the-past view, not a live mirror,\" and critically, a replica \"that faithfully replicates a destructive mistake, like an accidental DELETE, moments after it happens on the leader\" is \"not a substitute for actual point-in-time backups or snapshots.\" Option A is false -- replicas being read-only for client queries is unrelated to why they're unsuitable as a backup strategy, which is about them mirroring destructive writes. Option C misstates what replication does -- it replicates the actual data, not just schema. Option D is backwards -- replicas lag behind the leader; they are never ahead of it."
         }
       ]
     },
@@ -361,6 +439,45 @@
           "type": "explanation",
           "prompt": "Explain why 'is this system consistent?' is not really a well-formed question, and what a more useful question looks like, using at least two concrete features as examples.",
           "modelAnswer": "'Is this system consistent?' treats consistency as one global, binary property of an entire system, but real systems -- especially at scale, with replication and sharding -- almost always provide different consistency guarantees for different operations, chosen deliberately based on what each specific operation actually needs. A single product might use strong consistency for a payment or balance update, because a stale read there could approve a transaction against money that isn't really there, which is a real financial correctness failure worth paying extra write latency and reduced availability-under-partition for. The same product might use plain eventual consistency for a 'like' counter or a view count, because being off by a handful for a few seconds is invisible to users and utterly inconsequential, while the read/write volume on that counter is likely enormous -- paying strong consistency's coordination cost on every single increment would be a real, constant performance tax bought for a guarantee nobody needed. And the same product might use an in-between guarantee, like read-your-own-writes, for something like a user's own newly posted comment, because users do notice and care if their own action doesn't show up immediately, even though they'd never notice if a different user's view of that same comment lagged by a second or two. So the more useful question isn't 'is the system consistent' but 'what consistency guarantee does this specific read or write actually need, given the real cost of it being wrong, and what am I willing to pay in latency or availability to get it' -- asked per operation, not once for the whole system. Answering it well requires understanding both the mechanisms (quorum configuration, synchronous vs. asynchronous replication) and the actual business cost of staleness for each specific feature, not assuming stronger is always better or that weaker is always an acceptable shortcut."
+        },
+        {
+          "id": "system-design-consistency-tradeoffs-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A cluster has N=5 replicas, configured with W=3 and R=3. Per the pigeonhole-principle argument in the concept, why does this configuration guarantee a read will see the most recent write?",
+          "options": [
+            "Because 3 out of 5 replicas is a majority, and majorities are defined to always be up to date.",
+            "Because W + R (3 + 3 = 6) exceeds N (5), so the set of replicas acknowledging the write and the set of replicas queried by the read cannot be fully disjoint -- at least one replica must belong to both sets and will have recorded the write.",
+            "Because the write is always sent to the same 3 replicas that the read later queries, by convention.",
+            "Because with W=3 and R=3, all 5 replicas are updated synchronously before the write is acknowledged."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept's quorum example lays this out explicitly as a pigeonhole-principle argument: two sets of size 3 drawn from a pool of 5 cannot be fully disjoint, since 3+3=6 exceeds 5, so at least one replica must be common to both the write's acknowledging set and the read's querying set. Option A invents an unrelated, incorrect definition of \"majority.\" Option C is false -- the concept never claims the specific replicas are the same each time, only that overlap is mathematically guaranteed regardless of which specific replicas happen to be chosen. Option D is wrong -- with W=3, only 3 of the 5 replicas need to acknowledge the write, not all 5."
+        },
+        {
+          "id": "system-design-consistency-tradeoffs-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Per the concept's comparison of synchronous and asynchronous replication, what is the specific risk of asynchronous replication that is easy to forget when only thinking about read staleness?",
+          "options": [
+            "Asynchronous replication makes every write permanently unrecoverable, even before any failure occurs.",
+            "If the leader fails before a write has replicated to a follower, and that follower is then promoted to leader, an already-acknowledged write can be lost entirely -- not just delayed.",
+            "Asynchronous replication requires twice the network bandwidth of synchronous replication under all conditions.",
+            "Asynchronous replication prevents the system from ever using quorum reads or writes."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept calls this out explicitly as a closing risk: with asynchronous replication, \"if the leader fails before replicating, a write acknowledged to the client can be LOST if a follower is promoted without it\" -- a data-loss risk distinct from, and easy to overlook alongside, the more commonly discussed replication-lag/staleness issue. Option A overstates the risk into an absolute that isn't what's described -- most writes do replicate successfully; the risk is specifically about the failure-before-replication window. Option C is a fabricated bandwidth claim not discussed anywhere in the concept. Option D is false -- quorum mechanics are a separate, compatible concept from sync/async replication mode."
+        },
+        {
+          "id": "system-design-consistency-tradeoffs-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Per the concept's \"match, don't maximize\" framing, why is applying strong consistency to every operation in a system, including a rarely-changing product description page, considered a mistake even if the system \"can afford\" the performance cost?",
+          "options": [
+            "Because strong consistency is technically impossible to implement for read-only pages.",
+            "Because it pays real coordination latency and reduced availability-under-partition on every operation, including the vast majority where nobody would ever have noticed staleness anyway -- the goal is matching each operation's actual requirement, not maximizing the guarantee wherever budget allows.",
+            "Because strong consistency can only be applied to numeric fields, not text content like product descriptions.",
+            "Because product description pages are always sharded, and sharded data cannot use strong consistency."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept's misconception states this directly: strong consistency \"reduces availability under partition... and adds coordination latency to every single operation using it, including the vast majority of operations where nobody would ever have noticed staleness anyway -- the actual engineering skill is matching the guarantee to each operation's real requirement, not maximizing consistency wherever the budget allows.\" Option A is false -- strong consistency is technically implementable for read-only pages; the concept's objection is about cost-effectiveness, not feasibility. Options C and D are fabricated technical constraints that appear nowhere in the material."
         }
       ]
     }

@@ -117,6 +117,45 @@
           "explanation": "Option 2 is correct: docker logs captures and shows only stdout and stderr, so exactly and only the startup/fatal-error messages this application actually writes there will appear -- the detailed request logs written to a separate file are entirely invisible to docker logs, regardless of how much other output the container is producing elsewhere. Option 1 is wrong because Docker never merges arbitrary files into the captured log stream. Option 3 is wrong -- there's no rule against an application splitting its output between a file and stdout; docker logs simply only reflects the stdout/stderr half of that split. Option 4 inverts the actual priority and invents a 'more complete' heuristic Docker has no concept of -- Docker doesn't evaluate file logs at all, favorably or otherwise."
         },
         {
+          "id": "docker-logs-and-log-drivers-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A container using the default json-file log driver is stopped with `docker stop` and later started again with `docker start`. What happens to its previously captured log history?",
+          "options": [
+            "It's discarded the moment the container stops, since only a running container's logs are retained.",
+            "It's preserved -- the json-file log is tied to the container object and survives stop/start exactly like the writable layer does; only docker rm actually discards it.",
+            "It's automatically archived into a separate, compressed file that docker logs can no longer read afterward.",
+            "It's preserved only if --log-opt max-file=0 was explicitly set at run time."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 is correct: the json-file log lives on the host, keyed to the container object, and behaves exactly like the writable layer with respect to lifecycle -- stop/start leaves it fully intact, and only removing the container with docker rm actually discards it. Option 1 is wrong -- stopping a container never touches this log data. Option 3 invents an automatic archiving behavior Docker doesn't perform. Option 4 is wrong -- max-file=0 isn't a real, meaningful retention setting for this purpose, and log preservation across stop/start doesn't depend on any --log-opt value at all."
+        },
+        {
+          "id": "docker-logs-and-log-drivers-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A container is started with `--log-driver=awslogs`, shipping its captured output to CloudWatch Logs. Running `docker logs` against this container afterward typically results in what?",
+          "options": [
+            "The exact same output as if json-file were used, since docker logs works identically regardless of which driver is configured.",
+            "An explicit error indicating the configured logging driver does not support local read-back, because the daemon never kept a locally readable copy for drivers like awslogs.",
+            "An empty but successful result, since awslogs is specifically designed to suppress all local output.",
+            "Docker automatically detects the awslogs driver and transparently fetches the output from CloudWatch on your behalf."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 is correct: most non-local drivers, including awslogs, don't support reading logs back through docker logs at all -- the command returns an explicit error stating that the driver doesn't support this, an accurate reflection of the fact that no locally readable copy was ever kept. Option 1 is wrong -- docker logs' usefulness is driver-dependent, not universal. Option 3 is wrong -- there's no local copy to return, empty or otherwise; the command errors rather than succeeding with nothing. Option 4 is wrong -- Docker performs no such automatic CloudWatch fetch; you'd need to use CloudWatch's own console or API directly."
+        },
+        {
+          "id": "docker-logs-and-log-drivers-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "What does `docker logs --tail 100 -f mycontainer` do, specifically?",
+          "options": [
+            "It shows only the first 100 lines ever logged by the container, then stops.",
+            "It shows the most recent 100 lines of already-captured output, then stays attached and streams any new lines as they're written, until Ctrl+C detaches the reader (without affecting the running container).",
+            "It deletes every line from the log file except the last 100 before displaying what remains.",
+            "It restarts the container and then shows only log lines generated after that restart."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 is correct: --tail 100 limits the initial output to the most recent 100 lines rather than the container's entire history, and -f keeps the command attached, streaming new lines live -- exiting with Ctrl+C only detaches this particular log-reading command and has zero effect on the container itself. Option 1 is wrong -- --tail returns the most recent lines, not the earliest ones. Option 3 is wrong -- docker logs is a read-only operation; it never modifies or truncates the underlying log file. Option 4 is wrong -- docker logs never restarts anything; it only reads already-captured output and optionally streams new output as it's produced."
+        },
+        {
           "id": "docker-logs-and-log-drivers-assess-explain1",
           "type": "explanation",
           "prompt": "Explain what the default json-file logging driver actually does -- where the data lives, what happens to it across docker stop/start versus docker rm, and why an operator would deliberately configure log rotation even for an application they consider well-behaved.",
@@ -231,6 +270,32 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "Option 2 is correct: exec creates a genuinely new, independent process inside the target container's existing set of namespaces -- it never attaches to, restarts, pauses, or replaces PID 1. Option 1 describes docker attach, a different command entirely. Option 3 is wrong -- exec does not restart anything or change the container's configured entrypoint; the container's original command keeps running throughout. Option 4 is also wrong and describes behavior Docker doesn't have -- PID 1 is never paused or swapped out by an exec session; it continues running completely independently of whatever the exec'd process is doing."
+        },
+        {
+          "id": "docker-exec-shells-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "What is the key difference between `docker exec -it mycontainer sh` and `docker attach mycontainer`?",
+          "options": [
+            "They are functionally identical -- both connect directly to the container's existing PID 1 process.",
+            "exec starts a brand-new, independent process inside the container's existing namespaces, while attach connects your terminal directly to the stdin/stdout/stderr of the container's already-running PID 1 process, with no new process created.",
+            "attach can only be used on stopped containers, while exec always requires the target container to be running.",
+            "exec requires the container to have originally been started with -it, while attach has no such requirement."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 correctly draws the distinction: exec spins up a separate process sharing the container's namespaces, safe to kill without affecting PID 1, while attach is a direct terminal connection to PID 1 itself, with no new process involved -- killing or disrupting an attach session can directly affect the real application process. Option 1 is wrong and conflates the two fundamentally different operations. Option 3 is wrong -- attach also requires a running container (there's no stdio to attach to on a stopped one), and it's exec, not attach, that's typically associated with running containers specifically. Option 4 is wrong -- neither command's availability depends on how the container was originally started with respect to -it."
+        },
+        {
+          "id": "docker-exec-shells-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Someone execs into a running container and manually starts a background diagnostic script with `docker exec -d`. They later run `docker restart` on that container. What happens to the manually-started script?",
+          "options": [
+            "It automatically restarts along with the container, since exec'd processes inherit the container's own restart policy.",
+            "It does not come back -- it was never registered as part of the container's actual startup command, so only the container's real CMD/ENTRYPOINT process restarts; the manually-started script simply ceases to exist with no trace.",
+            "Docker pauses the script during the restart and transparently resumes it once the container is back up.",
+            "The restart fails with an error until the manually-started process is explicitly stopped first."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 is correct: a process started via docker exec is never part of the container's tracked lifecycle -- it has no restart-policy hook, so a docker restart brings back only the container's actual CMD/ENTRYPOINT process, and the manually-started script is simply gone, with nothing recorded anywhere that it ever ran. Option 1 is wrong -- restart policies apply only to the container's own designated main process, never to anything started separately via exec. Option 3 invents pause/resume behavior Docker has no mechanism for regarding exec'd processes. Option 4 is wrong -- docker restart doesn't check for, or get blocked by, any exec'd processes still running inside the container."
         },
         {
           "id": "docker-exec-shells-assess-explain1",
@@ -351,6 +416,32 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "Option 2 is correct: a container only transitions to unhealthy once the number of CONSECUTIVE failed checks reaches the configured --retries threshold -- with 2 failures against a threshold of 3, the container is still considered healthy (assuming it was healthy or past its start-period already), and a single subsequent passing check would reset the failing streak back to 0 without ever reaching unhealthy at all. Option 1 is wrong because Docker deliberately does not flip status on the very first failure, specifically to avoid flapping on transient, one-off blips. Option 3 is wrong -- starting only applies during the configured start-period window immediately after container start, not indefinitely, and there's no 'manually mark healthy' mechanism gating that transition. Option 4 is wrong -- --interval affects how frequently checks run and therefore how quickly a failing streak accumulates over wall-clock time, but it doesn't change how the failing-streak-versus-retries comparison itself works at any given point."
+        },
+        {
+          "id": "docker-healthchecks-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "What specifically does a HEALTHCHECK's `--start-period` value control?",
+          "options": [
+            "The total number of times the healthcheck will ever run before Docker permanently stops checking.",
+            "A grace window immediately after container start during which check failures do not count toward the --retries threshold, letting a service with a slow startup avoid being marked unhealthy for still-legitimate startup time.",
+            "The minimum amount of time a container must run before docker ps will report any status for it at all.",
+            "The delay before the container's main process is even started, comparable to a startup sleep."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 is correct and matches the concept's description precisely: start-period exists specifically so that a service with a real, expected startup sequence (loading models, running migrations, warming caches) isn't punished with an unhealthy status for failures that occur purely because it's still legitimately starting up. Option 1 is wrong -- start-period doesn't cap the total number of checks ever run; --retries and ongoing --interval checks continue indefinitely afterward. Option 3 is wrong -- docker ps reports container status (Up, Exited, etc.) regardless of any healthcheck configuration; start-period only affects the health-status portion. Option 4 is wrong -- the container's main process starts immediately as normal; start-period only affects how healthcheck failures are counted afterward, not when the process itself begins running."
+        },
+        {
+          "id": "docker-healthchecks-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A service's HEALTHCHECK is written to verify not just its own readiness, but also that a third-party payment API it depends on is currently reachable. What's the problem with this design?",
+          "options": [
+            "There is no problem -- a healthcheck should always verify every external dependency a service relies on.",
+            "A brief, unrelated outage in the third-party API would flip this service to unhealthy even though the service itself is functioning correctly, potentially triggering unnecessary restarts or removal from load-balancer rotation for a problem that isn't this service's own fault.",
+            "HEALTHCHECK commands are technically incapable of making outbound network calls, so this check would simply always fail regardless of the payment API's actual status.",
+            "This design is fine as long as --retries is set to a sufficiently high number."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Option 2 correctly identifies the cascading-failure risk the concept warns about: gating a service's own health status on an unrelated third party's reachability means that third party's problems get misattributed as this service being unhealthy, potentially causing unnecessary restarts or rotation removal for a service that's otherwise working fine. Option 1 is wrong and is exactly the flawed reasoning the concept argues against -- a health check should verify the service's own readiness, not reach out to check unrelated external dependencies. Option 3 is false -- HEALTHCHECK commands can be any command, including ones that make network calls; that's not a technical limitation here. Option 4 is wrong -- a higher --retries value only delays how many consecutive failures are needed before flipping unhealthy; it doesn't fix the fundamental problem of coupling this service's health to an unrelated dependency's uptime."
         },
         {
           "id": "docker-healthchecks-assess-explain1",

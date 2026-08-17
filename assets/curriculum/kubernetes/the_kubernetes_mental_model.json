@@ -113,6 +113,45 @@
           "explanation": "The core value of a declarative manifest isn't its file format -- it's that the desired state it describes gets persisted and continuously reconciled by a controller for as long as the object exists, which is exactly what makes Kubernetes self-healing after failures. A one-off imperative script, however it's written, achieves a state at the moment it runs and then has zero further effect; nothing is left watching. Option A is false -- a bash script full of kubectl commands obviously can create objects, that's what kubectl create/run do. Option C is false -- the Kubernetes API actually communicates in JSON internally; YAML is purely a convenience format kubectl converts client-side. Option D misses the entire point of the question -- the difference is behavioral (ongoing reconciliation vs. one-time action), not stylistic."
         },
         {
+          "id": "kubernetes-declarative-imperative-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "kubectl apply uses a three-way strategic merge rather than a simple two-way diff between the YAML file and the live object. What is the third input to that merge, and what specific problem does including it solve?",
+          "options": [
+            "The third input is the previous git commit hash of the file; it lets apply detect whether the file was renamed since the last commit.",
+            "The third input is the kubectl.kubernetes.io/last-applied-configuration annotation recording what was applied last time; it lets apply distinguish a field you deleted from your file from a field some other actor (a webhook, the HPA) added out of band, which a live-object-only diff couldn't tell apart.",
+            "The third input is a complete audit log of every kubectl command ever run against the object; it lets apply revert any change made by kubectl edit.",
+            "The third input is the object's resourceVersion; it lets apply detect concurrent writers and reject the apply outright with a conflict error."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "A plain two-way diff between the new file and the live object can't tell 'this field is missing from my file because I deleted it' apart from 'this field was never mine to manage in the first place.' The last-applied-configuration annotation resolves exactly that ambiguity by recording what the file declared last time, so apply can compare all three: if a field was in last-applied but is missing from the new file, it gets removed; if a field was never in last-applied, apply leaves it alone even if it's present on the live object. None of the other options describe a real mechanism apply uses -- there is no git-hash comparison, no built-in audit-log replay, and while resourceVersion is used elsewhere for optimistic concurrency, it is not the third input to the strategic merge."
+        },
+        {
+          "id": "kubernetes-declarative-imperative-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A pipeline runs `kubectl create -f service.yaml` on every deploy and fails with `AlreadyExists` on the second and every subsequent run. If the pipeline instead ran `kubectl apply -f service.yaml` with the exact same unchanged file every time, what would happen on the second run?",
+          "options": [
+            "It would also fail with AlreadyExists, because both create and apply refuse to touch an object that already exists.",
+            "It would succeed and change nothing, because apply diffs the file against the live state and the last-applied-configuration annotation, finds no difference, and effectively applies an empty patch.",
+            "It would succeed, but only by first deleting and then recreating the object from scratch, causing a brief outage on every single run.",
+            "It would succeed only if a --force flag were also passed; without it, apply behaves identically to create when the object already exists."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This is exactly the idempotency property that distinguishes apply from create: create has no diffing logic at all and always attempts a raw insert, so it fails the moment an object with that name already exists. apply, by contrast, computes what actually needs to change and issues a no-op patch when nothing has changed, which is precisely why it's safe to run repeatedly in a CI pipeline. Option C describes a delete-and-recreate strategy that apply does not use for ordinary field changes, let alone a no-op; option D is wrong because apply's idempotent behavior on an unchanged file requires no special flag."
+        },
+        {
+          "id": "kubernetes-declarative-imperative-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A Deployment's YAML omits spec.replicas entirely, and a Horizontal Pod Autoscaler is separately adjusting the live replica count based on load. While the HPA currently has it scaled to 8, someone reapplies the exact same file (still with no replicas field). What happens to the replica count?",
+          "options": [
+            "apply resets replicas back to the Kubernetes default of 1, since the field is absent from the file and the file is treated as the source of truth for everything.",
+            "apply leaves the HPA-managed replica count of 8 untouched, because the three-way merge sees that replicas was never part of the last-applied-configuration this file manages, so there is nothing to correct or remove.",
+            "apply fails outright, refusing to proceed because the live object's replicas value doesn't match anything recorded in the file.",
+            "apply and the HPA immediately enter a fight, alternately setting replicas to 1 and then 8 on every reconciliation pass."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The three-way merge only reconciles fields that were actually present in a previous last-applied-configuration -- since replicas was never declared by this file, it was never 'claimed' by apply in the first place, so apply has nothing to diff or correct for that field and leaves whatever the HPA set it to alone. This is exactly the mechanism, from the same explanation, that lets apply coexist safely with the Horizontal Pod Autoscaler and other out-of-band actors: it only touches fields it actually manages. Option A describes what would happen with a naive two-way diff against a default value, not the real three-way merge behavior; options C and D describe failure modes that don't occur in practice."
+        },
+        {
           "id": "kubernetes-declarative-imperative-assess-explain1",
           "type": "explanation",
           "prompt": "A junior engineer asks why Kubernetes 'bothers' with a declarative model instead of just running a deployment script the way it's traditionally done in server ops. Explain the core motivation, and walk through at least one concrete failure scenario where the difference actually matters in practice.",
@@ -228,6 +267,45 @@
           "explanation": "The scheduler's sole output is a node assignment written back to the API server; the kubelet on that node independently discovers the assignment by watching, and is the only component that actually talks to the container runtime to start containers. Option B inverts the responsibility -- kubelets never negotiate placement with each other, and there is no such peer-to-peer capacity query mechanism. Option C is wrong on two counts: the scheduler never talks to a kubelet directly at all, and there's no persistent connection between them by design -- everything is mediated through the API server. Option D is false -- the scheduler and kubelet are entirely separate processes with entirely separate, non-overlapping responsibilities (deciding placement vs. executing on that placement)."
         },
         {
+          "id": "kubernetes-control-plane-architecture-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Why does etcd typically run as a cluster with an odd number of members (3 or 5) rather than an even number like 4?",
+          "options": [
+            "Odd numbers are purely a naming convention with no technical basis; an even-numbered etcd cluster works identically in every respect.",
+            "etcd uses the Raft consensus algorithm, which requires a strict majority (quorum) of members to agree on writes; a 4-member cluster tolerates the same single member failure as a 3-member cluster while needing an extra host to achieve it, so an odd count maximizes fault tolerance per member added.",
+            "Odd numbers are required because the API server can only maintain persistent connections to an odd number of backend hosts at a time.",
+            "etcd requires an odd number of members so the scheduler and controller-manager can each be pinned to a distinct half of the cluster."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Raft quorum is a strict majority of members, so a 3-member cluster needs 2 to agree and tolerates 1 failure, while a 4-member cluster needs 3 to agree and still only tolerates 1 failure -- the fourth member adds cost and no additional fault tolerance. A 5-member cluster tolerates 2 failures. This is why etcd deployments favor odd counts: every additional pair of members should buy an additional failure of tolerance, which only happens by moving from one odd number to the next. None of the other options describe anything etcd, the API server, the scheduler, or controller-manager actually do."
+        },
+        {
+          "id": "kubernetes-control-plane-architecture-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "The scheduler process crashes and stays down for two minutes before restarting. During that outage, what happens to the kubelets already running on every node and to the controllers already running inside controller-manager?",
+          "options": [
+            "They keep running completely normally and are unaffected, because none of them ever held a direct connection to the scheduler in the first place -- they only watch and write to the API server, oblivious to whether the scheduler happens to be up, down, or restarting.",
+            "Every kubelet immediately enters a degraded retry loop, since kubelets require a live TCP connection to the scheduler in order to accept new Pod bindings.",
+            "controller-manager also crashes shortly afterward, since its controllers depend on a direct RPC call to the scheduler on every reconciliation pass.",
+            "Any Pod that was already scheduled before the crash gets un-scheduled and reverted to Pending until the scheduler comes back online."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "This is the direct payoff of routing every component's communication through the API server instead of allowing direct component-to-component calls: nothing else in the cluster holds a connection to the scheduler, so nothing else needs special handling for the scheduler being unavailable. kubelets keep managing already-assigned Pods and watching for new bindings that simply won't arrive until the scheduler is back; controller-manager's controllers keep reconciling everything unrelated to scheduling decisions. None of the other options are true -- there is no direct kubelet-to-scheduler connection, no controller-manager-to-scheduler RPC dependency, and already-scheduled Pods are never un-scheduled just because the scheduler is temporarily down."
+        },
+        {
+          "id": "kubernetes-control-plane-architecture-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A ReplicaSet controller crashes immediately after creating 1 of the 3 Pods it had determined were needed, then restarts 5 seconds later. Given that Kubernetes controllers are level-triggered rather than edge-triggered, what does it do upon restarting?",
+          "options": [
+            "It resumes from a saved checkpoint recording that 1 of 3 Pods was already created, and creates exactly the remaining 2.",
+            "It has no memory of the partial work at all; it simply reruns its normal loop, reads the current desired count (3) and the current actual count (1, since one Pod really was created before the crash), computes the same diff of 2, and creates 2 more Pods -- arriving at the correct result with no special crash-recovery logic.",
+            "It re-creates all 3 Pods from scratch, including a duplicate of the one that already exists, resulting in 4 total Pods.",
+            "It refuses to act until an administrator manually reconciles the discrepancy, since the controller has no way to know whether the first Pod's creation actually succeeded."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Level-triggered reconciliation means the controller never tracks 'progress' through a multi-step operation -- every pass just recomputes desired-minus-actual from current reality and acts on whatever gap remains. That's precisely why a mid-operation crash needs no bespoke recovery path: on restart, the controller runs the exact same loop body, observes 1 Pod already exists (because it really was created and persisted in etcd before the crash), and creates the 2 that are still missing. Option A describes edge-triggered/checkpointed behavior, which is exactly what Kubernetes controllers deliberately avoid; options C and D describe failure modes that would occur under a naive edge-triggered design, not the level-triggered one Kubernetes actually uses."
+        },
+        {
           "id": "kubernetes-control-plane-architecture-assess-explain1",
           "type": "explanation",
           "prompt": "Explain, in your own words, why Kubernetes controllers are designed to react to the current difference between desired and actual state (level-triggered) rather than to the specific sequence of events that produced that difference (edge-triggered), and why this design matters for a system that has to tolerate components crashing and restarting.",
@@ -337,6 +415,45 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "Containers in the same Pod share a network namespace by default -- one Pod IP, one port space, and localhost reachability between them -- which is precisely why two containers in one Pod can't both bind the same port. Option A is false by default: PID namespaces are isolated per container unless the Pod explicitly sets shareProcessNamespace: true. Option C is false: each container has its own independent root filesystem from its own image; only explicitly declared shared volumes (like emptyDir) are visible across containers, and only at the specific paths where each container chooses to mount them. Option D is false and conflates 'same Pod' with 'same image' -- a Pod's containers are typically built from entirely different images serving different purposes, such as an app and a sidecar."
+        },
+        {
+          "id": "kubernetes-pods-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A Pod defines two init containers, `fetch-config` and `run-migration`, listed in that order, followed by one regular container `app`. If `fetch-config` fails (a non-zero exit code) and the Pod's restartPolicy is `Always`, what happens?",
+          "options": [
+            "`run-migration` and `app` start immediately anyway, since init container failures are only logged as warning events and never block anything.",
+            "The kubelet restarts `fetch-config` according to the restartPolicy; `run-migration` and `app` will not start until `fetch-config` eventually exits successfully, because init containers run strictly in the order listed and none of the regular containers start until every init container has completed successfully.",
+            "The kubelet skips `fetch-config` after one failed attempt and proceeds directly to `run-migration`, since init containers are treated as best-effort by design.",
+            "The whole Pod object is permanently deleted the moment any init container fails, forcing a controller to create an entirely new Pod."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Init containers are a strict, ordered gate: each one must exit successfully before the next init container (or, once all are done, the regular containers) is allowed to start at all. A failing init container is restarted according to the Pod's restartPolicy just like a regular container would be, but critically, nothing downstream of it -- neither run-migration nor app -- starts until it eventually succeeds. There is no best-effort skipping and no automatic whole-Pod deletion triggered purely by an init container failure; the Pod simply stays not-Ready, retrying the failed init container, until it either succeeds or the Pod's backoff/restart behavior is otherwise addressed."
+        },
+        {
+          "id": "kubernetes-pods-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A developer runs `kubectl run debug-pod --image=busybox` to get a bare Pod with no owning Deployment, ReplicaSet, or other controller. The node it lands on is later drained and removed from the cluster. What happens to debug-pod?",
+          "options": [
+            "A replacement Pod is automatically created on a different node, exactly as if it had been managed by a Deployment, because the scheduler itself tracks and re-places all Pods regardless of ownership.",
+            "debug-pod is gone permanently, and nothing recreates it -- a bare Pod has no controller running a reconciliation loop that would notice its absence and act on it, so it simply stays deleted.",
+            "The kubelet on whichever node it would have been rescheduled to automatically adopts it, preserving its original name and IP.",
+            "The API server itself detects the orphaned Pod and re-creates it as a built-in safety default, independent of any controller."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Self-healing in Kubernetes isn't a property of Pods themselves -- it comes entirely from a controller's reconciliation loop noticing that the observed count no longer matches a declared desired count and acting on the gap. A bare Pod created directly has no such controller watching it, no ReplicaSet declaring 'there should be one of these,' so when it's lost along with its node, there is genuinely nothing left to notice the loss or recreate it. This is exactly why Pods are almost never created directly in production -- they're created indirectly through a Deployment, StatefulSet, or Job specifically to get this reconciliation guarantee, which a bare Pod deliberately lacks."
+        },
+        {
+          "id": "kubernetes-pods-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A single container inside a running, multi-container Pod crashes due to an unhandled exception, while the rest of the Pod is unaffected. Assuming a normal restartPolicy, what happens to the Pod's identity (its name and IP address) as a result?",
+          "options": [
+            "The whole Pod is deleted and a brand-new Pod is created with a new name and new IP, since any single container's failure is treated as a failure of the entire Pod.",
+            "The kubelet restarts just that one container in place, within the same Pod object -- the Pod keeps its original name and IP throughout, unlike what happens when the Pod object itself is deleted or evicted.",
+            "The Pod's IP changes but its name stays the same, because IP addresses are reassigned to a Pod every time any of its containers restart, for security isolation.",
+            "Nothing restarts automatically at all; a human must manually delete the Pod before any controller will create a working replacement."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This is the distinction between container-level restart and Pod-level replacement: when one container inside a Pod crashes, the kubelet restarts that specific container in place, within the same Pod object, and the Pod's name and IP are completely unaffected because the Pod itself was never deleted -- only one process inside it was. Full Pod replacement, with a new name and new IP, only happens when the Pod object itself is deleted, evicted, or lost with its node, which is an entirely different scenario driven by a controller creating a fresh replacement, not by the kubelet's ordinary container-restart behavior."
         },
         {
           "id": "kubernetes-pods-assess-explain1",

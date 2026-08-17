@@ -118,6 +118,71 @@
           "explanation": "Helm's value precedence, from lowest to highest, is: the chart's bundled values.yaml, then -f/--values files (later files overriding earlier ones), then --set flags, which always win regardless of where they appear on the command line. So image.tag=2.0 from --set overrides both image.tag: \"1.5\" from values-a.yaml and image.tag: \"1.0\" from the chart's default. Option A and B both misstate the precedence order (values.yaml is actually the lowest-precedence source, not the highest, and -f files are overridden by --set, not the reverse). Option D is wrong -- Helm is specifically designed to let the same key be set in multiple layered sources; that's the entire point of the override mechanism, not an error condition."
         },
         {
+          "id": "kubernetes-helm-charts-templating-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A chart's Chart.yaml has `version: 2.3.0` and `appVersion: 1.4.0`. The chart author fixes a bug in a template (say, a missing label) without changing anything about the application image itself. Which field, if any, should change as a result?",
+          "options": [
+            "Neither field needs to change -- Chart.yaml's version fields are purely decorative and have no bearing on chart behavior.",
+            "version should be bumped (e.g., to 2.3.1), since it tracks how many times the chart's own packaging has changed; appVersion should stay at 1.4.0, since it tracks the version of the deployed application, which hasn't changed at all.",
+            "appVersion should be bumped instead, since any change to the packaging is considered part of the application's own versioning by Helm.",
+            "Both fields must always be incremented together in lockstep, since Helm enforces that version and appVersion stay synchronized."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This concept is explicit that version and appVersion are 'deliberately independent, since you can ship a packaging fix without the application itself changing at all, or vice versa.' A template-only bug fix is exactly that case: the chart's own packaging changed, so version should move, while the actual application deployed by the chart is unchanged, so appVersion stays put. Option A dismisses fields that genuinely do communicate meaningful information to chart consumers (e.g., helm search, artifact repositories). Option C reverses which field tracks which concern. Option D invents an enforcement rule Helm doesn't have -- nothing requires these two numbers to move together."
+        },
+        {
+          "id": "kubernetes-helm-charts-templating-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A template wraps a resources block in `{{- if .Values.resources }} ... {{- end }}` rather than rendering it unconditionally. What problem does this conditional specifically guard against?",
+          "options": [
+            "It prevents Helm from crashing outright the moment .Values.resources is referenced anywhere in the chart.",
+            "It avoids emitting a resources: key with no meaningful content when resources hasn't actually been set for a given install -- rendering it unconditionally regardless of whether the value exists could produce output that's semantically empty or syntactically invalid depending on what follows.",
+            "It causes Helm to automatically substitute a hardcoded default resources block whenever the condition evaluates to false.",
+            "It's purely a stylistic convention with no effect on whether the rendered YAML is valid either way."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The conditional exists precisely because emitting a key like resources: with nothing meaningful underneath it -- which is what happens if resources was never set and the block renders anyway -- can range from harmless to outright invalid YAML depending on the surrounding structure, so gating the whole block on the value actually being present avoids that failure mode entirely. Option A overstates what an unset value would do -- referencing an unset map in a template doesn't crash Helm by itself. Option C invents an automatic substitution behavior the conditional doesn't provide; the else-branch here is simply 'emit nothing.' Option D understates the real, structural effect this conditional has on the rendered output's validity."
+        },
+        {
+          "id": "kubernetes-helm-charts-templating-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "What do the leading `{{-` and trailing `-}}` whitespace-trim markers actually do in a Go template, and why does this concept treat them as more than a cosmetic detail?",
+          "options": [
+            "They tell the template engine to treat the enclosed expression as a raw string literal instead of evaluating it.",
+            "They strip the newline and indentation immediately before/after the tag, preventing stray blank lines from accumulating around conditionals and loops -- and because stray blank lines inside a nested block can shift indentation, this can determine whether the rendered output is even valid YAML, not merely how it looks.",
+            "They raise this particular value's precedence above any --set flag supplied later on the command line.",
+            "They force the template engine to render the enclosed block as JSON instead of YAML."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This concept states this directly: the trim markers strip surrounding whitespace/newlines, which is 'a purely cosmetic-looking detail that actually determines whether the rendered file is even valid YAML, since stray blank lines inside a block scalar can shift indentation in ways that break parsing.' It's a structural correctness mechanism disguised as a formatting nicety. Option A confuses trim markers with an entirely different templating concept (literal-string escaping). Option C invents a connection to Helm's values-precedence system that doesn't exist -- trim markers are purely about template whitespace, unrelated to value resolution order. Option D is false; the trim markers have no bearing on output format."
+        },
+        {
+          "id": "kubernetes-helm-charts-templating-assess-mcq5",
+          "type": "multipleChoice",
+          "prompt": "A chart's values.yaml defines `resources: { requests: { cpu: 100m, memory: 128Mi } }`. An override values file sets only `resources.requests.memory: 512Mi`. What does the merged, final value of `resources.requests` end up being?",
+          "options": [
+            "{ cpu: 100m, memory: 512Mi } -- the deep merge replaces only the specific key the override sets, preserving cpu from the chart's default since the override never mentioned it.",
+            "{ memory: 512Mi } -- specifying any key under requests in an override file replaces the entire requests map wholesale, discarding cpu entirely.",
+            "Helm raises an error, since resources.requests is defined in two different sources and can't be automatically reconciled.",
+            "{ cpu: 100m, memory: 128Mi } -- the override is ignored entirely because it only sets a nested key rather than the whole resources block."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "This concept is explicit that value merging is 'a deep merge on maps, not a wholesale replacement' -- exactly the scenario given as its own example: overriding only resources.requests.memory keeps cpu: 100m from the chart's default untouched, changing only the specific key the override actually names. Option B describes a shallow/wholesale-replace merge strategy, which is precisely the behavior this concept says Helm does NOT use. Option C invents an error condition; layered value overrides across multiple sources are the entire point of the mechanism, not a conflict. Option D incorrectly claims nested overrides are ignored, when they're exactly what a values override file is designed to express."
+        },
+        {
+          "id": "kubernetes-helm-charts-templating-assess-mcq6",
+          "type": "multipleChoice",
+          "prompt": "What is the specific difference between what `helm lint` checks and what `helm template` checks?",
+          "options": [
+            "They're functionally identical; helm lint is simply an older, deprecated alias for helm template.",
+            "helm lint runs structural checks against the chart itself (missing required values, malformed chart metadata, YAML that won't parse) without necessarily needing to produce full rendered output; helm template actually renders the chart's templates into final YAML using the given values, letting you inspect exactly what would be sent to the API server.",
+            "helm template only works after a chart has already been installed as a live release; helm lint is the only one of the two that works beforehand.",
+            "helm lint requires an active connection to a Kubernetes cluster to run, while helm template works entirely offline."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This concept describes both commands with distinct roles: helm lint catches structural chart-authoring mistakes (missing values, malformed metadata, unparseable YAML) as a fast first check, while helm template performs the full rendering step and prints the literal output that would be applied, letting you read or diff it before it ever reaches a cluster. Option A collapses two genuinely different commands into one. Option C is backwards and also wrong on the facts -- neither command requires an existing release; both operate on a chart directory directly. Option D is false -- neither command requires a live cluster connection; both are local, offline operations."
+        },
+        {
           "id": "kubernetes-helm-charts-templating-assess-explain1",
           "type": "explanation",
           "prompt": "A teammate maintaining 15 microservices across 4 environments (dev/staging/prod/sandbox) asks why the team should adopt Helm instead of continuing to hand-maintain a separate YAML file per service per environment. Explain the core problem Helm's templating solves, and walk through what changes concretely for a single configuration change (like a new default resource limit) once the switch is made.",
@@ -237,6 +302,71 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "Helm 3 stores each revision's rendered manifests and values as a Secret object (named sh.helm.release.v1.<release>.v<revision>) in the release's namespace -- one Secret per revision, not per release, and governed by ordinary Kubernetes RBAC exactly like any other Secret. Option A describes Helm 2's architecture; Tiller was removed entirely in Helm 3, which talks to the Kubernetes API directly using the user's own credentials. Option C is false -- the whole point of storing state in-cluster is that helm history/rollback work from any machine with cluster access, not just the one that ran the original install. Option D is wrong on both counts: it's a Secret, not a ConfigMap, and there's one per revision, not one shared across all revisions of a release."
+        },
+        {
+          "id": "kubernetes-helm-releases-lifecycle-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "The same chart `my-app` is installed twice: once as release `team-a-web` and once as release `team-b-web`, each with its own values file. `team-a-web` is then rolled back to an earlier revision. What happens to `team-b-web` as a result?",
+          "options": [
+            "team-b-web is also rolled back automatically, since both releases share the same underlying chart and Helm keeps sibling releases derived from it synchronized.",
+            "Nothing happens to team-b-web at all -- each release has its own independent revision history and its own live objects; the two releases only share the chart template they both happened to be installed from, nothing more.",
+            "team-b-web's own revision counter resets to 1, since rolling back any release derived from a shared chart resets version tracking cluster-wide.",
+            "Helm refuses to roll back team-a-web at all unless team-b-web is rolled back in the same operation."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This concept is explicit that 'upgrading or rolling back one has zero effect on the other; they only share the chart they both happen to have been installed from, the same way two houses built from the same blueprint share nothing structurally once built.' Each release's revision history, live objects, and current values are entirely independent bookkeeping, keyed by release name. Options A, C, and D all invent a cross-release coupling that doesn't exist in Helm's actual design -- releases are deliberately isolated from one another even when derived from the same chart source."
+        },
+        {
+          "id": "kubernetes-helm-releases-lifecycle-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A chart's templates include a Deployment, a Service, and a ConfigMap. After several `helm upgrade` calls, the team runs `helm rollback web 2`. How does this differ from running `kubectl rollout undo deployment/web` directly?",
+          "options": [
+            "They're functionally identical -- helm rollback simply calls kubectl rollout undo internally on every Deployment in the chart, and does nothing else.",
+            "helm rollback reverts the entire rendered set of objects the chart produces -- the Deployment, the Service, and the ConfigMap together, as one unit -- based on the release's own higher-level revision history, whereas kubectl rollout undo only reverts that one specific Deployment's own rollout history, with no awareness of the Service or ConfigMap at all.",
+            "kubectl rollout undo actually reverts more objects overall than helm rollback, since it acts directly on the cluster rather than going through Helm's abstraction layer.",
+            "Neither command is capable of acting on more than one object per invocation; both require being run separately against each object in the chart."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This concept draws this distinction directly: a Helm release's revision history is 'a separate, higher-level concept -- it versions the entire rendered set of manifests a chart produces ... not any single object's own history,' while a Deployment's own rollout history (from the Deployments concept) covers only that one object. Rolling back a release can therefore revert several objects together as one atomic unit, something a single Deployment's rollout history has no way to express on its own. Option A wildly understates what helm rollback actually reverts. Option C reverses which mechanism has the broader scope. Option D is false for helm rollback specifically, which is precisely what lets it act on multiple objects in one command."
+        },
+        {
+          "id": "kubernetes-helm-releases-lifecycle-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A release has been upgraded 15 times under the default `--history-max` setting of 10. Can `helm rollback web 2` still succeed?",
+          "options": [
+            "Yes, always -- history-max only limits how many revisions helm history displays on screen; it never actually deletes any revision's underlying stored data.",
+            "Not necessarily -- history-max caps how many old revisions Helm actually retains before pruning the oldest ones, so if revision 2 has already been pruned to stay within the limit of 10, its stored manifests are simply gone and a rollback to it can no longer succeed.",
+            "Yes, because Helm always guarantees revision 1 and every subsequent even-numbered revision are retained regardless of history-max.",
+            "No -- rollback is only ever possible to the single immediately preceding revision, regardless of what history-max is set to."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This concept states plainly that revision Secrets 'accumulate over time and are not deleted automatically,' and that history-max 'caps how many old revisions Helm retains before pruning the oldest' -- with the direct consequence that 'retaining fewer revisions ... limits how far back helm rollback can reach, since a pruned revision's manifests are simply gone.' With 15 upgrades and a cap of 10, early revisions (potentially including revision 2) may already have been pruned, making that specific rollback target unavailable. Option A misdescribes history-max as a display-only limit rather than an actual retention/pruning policy. Option C invents an even/odd retention guarantee that doesn't exist. Option D is false -- helm rollback can target any retained revision, not just the immediately preceding one."
+        },
+        {
+          "id": "kubernetes-helm-releases-lifecycle-assess-mcq5",
+          "type": "multipleChoice",
+          "prompt": "A CI pipeline's very first deploy of a brand-new release runs `helm upgrade web ./my-app -f values-prod.yaml` (without the --install flag). What happens?",
+          "options": [
+            "It succeeds and performs a first-time install automatically, since helm upgrade silently falls back to install behavior whenever no prior release exists.",
+            "It fails, because there is no existing release named web yet for helm upgrade to act on -- helm upgrade expects a release to already exist, which is exactly the gap the --install flag exists to close.",
+            "It succeeds, but creates the release starting at revision number 0 instead of 1, to signal that it took the upgrade code path.",
+            "It always succeeds identically to helm install, since upgrade and install have been fully interchangeable commands since Helm 3."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "helm upgrade on its own has no built-in fallback for a nonexistent release -- it's designed to act on a release that's already installed. This concept describes helm upgrade --install as the command specifically designed to remove the need for a pipeline to branch on 'does this release already exist yet,' which only makes sense if plain helm upgrade doesn't already handle that case on its own. Option A invents exactly the fallback behavior that --install is needed to add. Option C invents a nonstandard revision-numbering behavior. Option D is false -- if upgrade and install were fully interchangeable, there would be no reason for --install to exist as a distinct, separately documented flag."
+        },
+        {
+          "id": "kubernetes-helm-releases-lifecycle-assess-mcq6",
+          "type": "multipleChoice",
+          "prompt": "A team decides that instead of debugging a confusing `helm upgrade`, they'll just run `helm uninstall web` followed by `helm install web ./my-app`. Besides the brief availability gap, what specific capability do they lose by doing this instead of fixing the upgrade?",
+          "options": [
+            "Nothing meaningful -- uninstalling and reinstalling preserves the release's revision history internally, so helm rollback to any earlier revision still works afterward.",
+            "The entire revision history built up by every prior install and upgrade, since uninstalling deletes the release's tracked revision Secrets entirely -- meaning helm rollback can no longer reach any of those earlier states once the fresh install starts a brand-new history at revision 1.",
+            "Only the single most recent revision is lost; every earlier revision remains rollback-able after the reinstall completes.",
+            "The application's persistent data is always deleted as a direct, guaranteed consequence of running helm uninstall, regardless of what storage mechanism backs it."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This concept is direct about the real cost: 'uninstalling deletes the release's tracked Secrets entirely, not just the live application objects,' so the entire revision history -- and the ability to roll back to any of those earlier states -- is gone, with the fresh install starting over at revision 1. Option A claims the opposite of what actually happens. Option C understates the loss, which is total, not limited to the most recent revision. Option D overclaims a guaranteed data-deletion behavior; whether persistent data survives depends on separate mechanisms (like a PVC's reclaim policy from the Storage concept), not on helm uninstall itself universally destroying it."
         },
         {
           "id": "kubernetes-helm-releases-lifecycle-assess-explain1",

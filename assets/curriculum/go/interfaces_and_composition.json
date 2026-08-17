@@ -118,6 +118,45 @@
           "explanation": "An interface value is internally a pair of a concrete type descriptor and a concrete value. Assigning a nil pointer of a specific type into an interface-typed slot populates the type half of that pair (here, *MyType) even though the value half remains a nil pointer -- and comparing the whole interface to nil requires both halves to be empty, which they aren't. Option A describes the common, incorrect intuition. Option C is wrong -- this assignment compiles and runs completely normally; it's legal Go, just surprising in its consequence. Option D is wrong -- this behavior is about interface value structure and applies uniformly regardless of the concrete type's own kind."
         },
         {
+          "id": "go-interface-satisfaction-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A third-party package `weather`, written years ago, defines `type Forecaster struct{...}` with a method `Predict(city string) string`. In your own, much newer package, you write:\n\n```go\ntype Predictor interface {\n\tPredict(city string) string\n}\n```\n\nDoes weather.Forecaster satisfy your Predictor interface?",
+          "options": [
+            "No, not unless the weather package is modified to add an explicit declaration stating that Forecaster implements Predictor.",
+            "Yes, automatically -- its method set already matches Predictor's, and Go's structural typing requires no declared relationship at all; the weather package's author never needs to know your interface exists.",
+            "No, it only satisfies Predictor if you first embed weather.Forecaster inside a new type declared in your own package.",
+            "Yes, but only once you explicitly import the package where Predictor happens to be declared into the weather package's own source."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Interface satisfaction is purely structural and can be established retroactively, from a completely different, unrelated package -- the moment weather.Forecaster's method set matches Predictor's declared signatures, it satisfies Predictor, full stop, with zero coordination or modification required on the weather package's side. This is exactly what lets a caller define a small interface capturing only what it needs from an existing type it doesn't control. Option A describes Java-style explicit implementation, which Go doesn't use. Option C is wrong -- no embedding step is needed; the plain, unmodified weather.Forecaster value itself already satisfies Predictor. Option D is nonsensical -- packages don't import 'into' other packages this way, and no such import is required regardless."
+        },
+        {
+          "id": "go-interface-satisfaction-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A codebase defines a 15-method Storage interface (Read, Write, Delete, List, Backup, Restore, and so on), intending it as a general abstraction over 'anything that stores data.' Based on the reasoning behind Rob Pike's proverb 'the bigger the interface, the weaker the abstraction,' what's the likely practical consequence?",
+          "options": [
+            "The interface becomes more useful as an abstraction, since it captures more of what a storage system can conceivably do in one place.",
+            "In practice, almost nothing besides the single concrete type the interface was designed alongside is likely to satisfy all 15 methods simultaneously, so it buys little real substitutability -- the opposite of what makes a small interface like io.Reader valuable.",
+            "Go's compiler refuses to compile an interface declaration with more than a small, fixed number of methods, so this code wouldn't build at all.",
+            "The interface will automatically be satisfied by more types than a smaller one would be, since it describes more overall capability."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The size of an interface's method set directly determines how many types can plausibly satisfy it: a one-method interface only requires having that one method, while a fifteen-method interface requires having all fifteen simultaneously, a bar that in practice only the type it was designed alongside is likely to clear. This is the concrete mechanism behind the proverb -- a large interface narrows its own substitutable set down toward essentially one implementation, which defeats the actual point of introducing an interface (having something to substitute in its place, in production or in tests). Option A states the naive, intuitive-but-wrong belief the proverb directly refutes. Option C is wrong -- Go imposes no such method-count limit on interfaces. Option D is backwards -- more required methods means fewer types can satisfy them all, not more."
+        },
+        {
+          "id": "go-interface-satisfaction-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Given `type Shape interface { Area() float64; Perimeter() float64 }` and a function `func describe(s Shape) {...}`, what happens when code calls `describe(42)`?",
+          "options": [
+            "It compiles fine, since Go automatically wraps any value to satisfy an interface parameter, regardless of its actual method set.",
+            "It fails to compile, with an error naming exactly which method(s) int is missing -- Go's structural typing removes the need for a declared 'implements' relationship, but the type-checking performed at each call site is exactly as static and strict as ever.",
+            "It compiles successfully, but panics at runtime the first time describe tries to call .Area() on the int value.",
+            "It fails to compile only because 42 is an untyped constant; passing an ordinary int variable in its place would compile without any error."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Implicit satisfaction only removes the need to declare a relationship between a type and an interface -- it does not relax the type-checking itself. The compiler still verifies, at this exact call site, whether the provided value's method set satisfies Shape's requirements, and int has neither an Area() nor a Perimeter() method, so the call fails to compile with a precise error identifying the missing method(s). Option A invents an automatic-wrapping behavior Go doesn't have. Option C is wrong -- this is caught at compile time, well before any runtime call could occur. Option D is wrong -- an int variable would fail exactly the same way as the literal 42, since neither has the required methods; the untyped-constant status of 42 is irrelevant here."
+        },
+        {
           "id": "go-interface-satisfaction-assess-explain1",
           "type": "explanation",
           "prompt": "Explain why Go favors small, one- or two-method interfaces as idiomatic design, connecting this directly to how implicit, structural interface satisfaction works.",
@@ -239,6 +278,45 @@
           "explanation": "Embedding promotes and allows shadowing only at the outer type's (Base's) own call sites -- it creates no mechanism for a value typed as the embedded type (Impl) to ever reach 'upward' toward whatever struct might embed it. A variable declared as plain Impl, regardless of where its value originally came from, always calls Impl's own methods directly, exactly as if embedding didn't exist at all. Option A describes behavior that would require dynamic/virtual dispatch, which Go's embedding does not provide. Option C is a red herring -- receiver kind doesn't change which type's method set is being resolved against. Option D is wrong -- Go allows an outer struct and an embedded type to both define methods with the same name; that's exactly what shadowing handles, not a compile error."
         },
         {
+          "id": "go-struct-embedding-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Given `type Engine struct{ Horsepower int }`, `func (e Engine) Start() string {...}`, and `type Car struct { Engine; Brand string }`, which statement correctly describes accessing a Car value c's embedded Engine?",
+          "options": [
+            "Once Engine is embedded, c.Engine is no longer valid syntax -- only the promoted c.Start() and c.Horsepower are accessible.",
+            "Both c.Start() (via promotion) and c.Engine.Start() (explicit, through the embedded field's own type name) work and call the exact same underlying method -- embedding adds promotion on top of ordinary field access, it doesn't remove or replace it.",
+            "c.Engine.Start() fails to compile, because an embedded field has no name assigned to it at all, so it cannot be referenced explicitly.",
+            "Embedding replaces Engine's fields with Car's own independent copies, so c.Horsepower and c.Engine.Horsepower can diverge and hold different values."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "An embedded field is still genuinely present and addressable by its type name, exactly like an ordinary named field would be -- embedding only adds promotion on top of that, it never takes normal field access away. c.Engine.Start() and c.Start() both resolve to the identical Engine.Start() method; the promoted form is purely a compiler-generated convenience for the exact same access. Option A and C both wrongly claim the embedded field's own name becomes unusable, which contradicts how promotion is described to work. Option D is wrong -- there's exactly one Horsepower value; c.Horsepower and c.Engine.Horsepower are two ways of referring to that same single field, not independent copies."
+        },
+        {
+          "id": "go-struct-embedding-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Given `type C struct{ Value int }`, `type B struct { C }`, and `type A struct { B }`, does `a.Value` compile for a variable `a` of type A, even though A does not embed C directly?",
+          "options": [
+            "No -- promotion only reaches one embedding level deep; A would need to embed C directly to access Value.",
+            "Yes -- promotion is recursive: A gets B's promoted members, and since B itself promotes C's Value through its own embedding of C, that promotion chains all the way through to A as well, as long as nothing along the way introduces a naming conflict.",
+            "No, this is a compile error, because Go explicitly disallows a promoted field from being promoted a second time through another layer of embedding.",
+            "Yes, but only if A, B, and C are all declared within the same source file."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Promotion chains through multiple levels of embedding: A embeds B, and B embeds C, so C's promoted fields and methods reach A too, passed along through B, without A ever needing to embed C directly itself. This is what lets a struct be assembled from several layers of small, independently-defined pieces without hand-written forwarding code at each layer. Option A and C both wrongly limit promotion to a single level, which the recursive promotion rule directly contradicts. Option D is wrong -- there's no such same-file requirement; promotion works identically regardless of how the types are distributed across files or even packages."
+        },
+        {
+          "id": "go-struct-embedding-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "`type Wrapper struct { io.Writer }` is constructed as `w := Wrapper{}`, with no Writer ever assigned, and code then calls `w.Write([]byte(\"hi\"))`. What happens?",
+          "options": [
+            "It compiles and silently does nothing, since an unset embedded interface field defaults to a harmless no-op implementation.",
+            "It panics at runtime with a nil pointer dereference: the embedded io.Writer field is nil (an interface variable's zero value), and Write() forwards the call into that nil interface, which has no concrete implementation behind it to actually handle the call.",
+            "It fails to compile, since Go requires every embedded interface field to be explicitly initialized within the struct literal that constructs it.",
+            "It automatically falls back to writing to os.Stdout, since that is io.Writer's documented default target whenever a Writer field is left unset."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "An embedded interface field is an ordinary interface variable underneath, and its zero value is nil exactly like any other unassigned interface. Write() is promoted onto Wrapper and forwards the call straight into that nil io.Writer, and since there is no real implementation behind it to dispatch the call to, this panics at runtime rather than doing nothing or silently succeeding. Option A invents a no-op default that interface zero values don't have. Option C is wrong -- Go allows constructing a struct literal with an embedded interface field left unset; that's exactly what creates this risk in the first place, rather than being rejected at compile time. Option D is wrong -- there is no such automatic stdout fallback anywhere in Go's interface semantics."
+        },
+        {
           "id": "go-struct-embedding-assess-explain1",
           "type": "explanation",
           "prompt": "A developer says: 'I embedded Base in Derived and overrode one of its methods, so now Derived behaves polymorphically wherever Base is expected -- just like inheritance.' Explain precisely what part of this is true and what part is a dangerous misunderstanding.",
@@ -358,6 +436,45 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "Go deliberately splits what classical inheritance conflates into two independent tools: struct embedding handles code reuse, by promoting an embedded type's fields and methods onto the outer struct with no inheritance relationship recorded anywhere; interfaces handle polymorphism, by letting any type with a matching method set be used interchangeably wherever that interface is expected, entirely independent of any embedding relationship. Option A is wrong -- embedding alone provides no polymorphism, since it involves no dynamic dispatch, as the earlier Struct Embedding concept demonstrated directly. Option C is wrong -- goroutines and channels address concurrency, an entirely separate concern from code reuse or polymorphism. Option D is wrong -- both reuse and polymorphism are fully supported in Go, just via these two separate, deliberately decoupled mechanisms rather than one combined class hierarchy."
+        },
+        {
+          "id": "go-composition-over-inheritance-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "What specifically is the 'fragile base class problem' that this concept says Go's composition-based approach is designed to avoid?",
+          "options": [
+            "The base class in an inheritance hierarchy is inherently more prone to compiler bugs than a derived class, due to how virtual method tables are generated for it.",
+            "A subclass in classical inheritance is structurally welded not just to a base class's public method signatures but often to specifics of its actual internal implementation, so a seemingly safe internal change to the base class can silently break subclasses that happened to depend on exactly how it behaved.",
+            "Base classes in most inheritance-based languages cannot be modified once any subclass has been defined, making bug fixes to shared behavior effectively impossible.",
+            "The fragile base class problem only affects languages without automatic garbage collection, since manual memory management is the actual root cause of subclasses breaking."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The fragile base class problem is about coupling depth, not compiler mechanics or memory management: a subclass typically depends on more than just what a base class's public interface promises -- it can depend on the actual, internal way the base class does things, so a change that looks perfectly safe from the base class's own point of view can still break subclasses relying on behavior that was never part of any explicit contract. Composition avoids this because an embedding or embedded-interface relationship only ever depends on the embedded type's own public method set, exactly like any other ordinary caller would. Option A and D invent unrelated causes (compiler bugs, garbage collection) the material never claims. Option C is wrong -- base classes remain fully modifiable in inheritance-based languages; the problem is that modifying them can have unpredictable downstream effects, not that modification is impossible."
+        },
+        {
+          "id": "go-composition-over-inheritance-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Why does this concept recommend adding sync.Mutex to a struct as a plain, unexported named field (`mu sync.Mutex`) rather than embedding it?",
+          "options": [
+            "Embedding sync.Mutex is actually illegal Go syntax -- the compiler specifically rejects embedding any type from the sync package.",
+            "Embedding it would promote Lock() and Unlock() directly onto the outer type's own exported surface, letting any caller of that type bypass whatever internal locking discipline the type's own methods are trying to maintain -- a plain named field avoids leaking that control to outside callers.",
+            "A plain named field makes the mutex measurably faster at runtime, since methods reached through promotion carry extra dispatch overhead compared to methods reached through a named field.",
+            "Embedding sync.Mutex would force the outer struct to also embed sync.WaitGroup, or the code would fail to compile."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This is a concrete case where promotion is actively unwanted: embedding sync.Mutex would make Lock/Unlock part of the outer type's own public API purely as an accidental side effect of embedding, letting any caller lock or unlock the mutex directly and potentially interfere with whatever locking discipline the type's own methods rely on internally. A plain named field lets the type's own methods call mu.Lock()/mu.Unlock() internally while keeping that capability entirely out of reach for outside callers. Option A is wrong -- embedding sync.Mutex is syntactically legal; it's simply poor design given what it exposes. Option C invents a performance difference the material never claims. Option D invents an unrelated compile-time requirement."
+        },
+        {
+          "id": "go-composition-over-inheritance-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A team builds `type Base struct{...}`, `type Middle struct { Base; ... }`, and `type Top struct { Middle; ... }`, layering fields across three levels purely to mirror a class hierarchy from a previous project written in another language. Beyond looking unusual, what's the actual problem with this design according to this concept?",
+          "options": [
+            "It reintroduces the same fragile, rigid coupling a classical inheritance chain would have -- each layer is tightly bound to the exact shape of the layer directly beneath it, so a change to Base can still ripple unpredictably up through Middle and Top, without gaining any of embedding's real benefit of independent, swappable pieces.",
+            "Go's compiler enforces a hard limit of two levels of struct embedding, so this specific three-level example would fail to build.",
+            "Nested embedding like this carries no functional consequence at all -- idiomatic Go discourages it purely for aesthetic, stylistic reasons.",
+            "Each additional layer of embedding doubles the outer struct's memory footprint, regardless of which fields are actually involved."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "The anti-pattern isn't about syntax working or not working -- it works fine mechanically -- it's that stacking embedding purely to mimic a hierarchy recreates exactly the structural coupling composition was meant to eliminate: each layer is sequentially, rigidly dependent on the one beneath it, so a change to Base can still ripple upward unpredictably, and none of the layers are actually independent or swappable, which is the entire benefit small, composed pieces are supposed to provide. Option B invents a compiler restriction that doesn't exist -- Go permits embedding to any depth. Option C understates the real, structural cost the material describes; it's not merely a style complaint. Option D invents a memory-cost claim with no basis in how embedding actually works -- the memory footprint is simply the sum of the fields actually declared across the layers, nothing more."
         },
         {
           "id": "go-composition-over-inheritance-assess-explain1",

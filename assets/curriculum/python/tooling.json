@@ -111,6 +111,32 @@
           "type": "explanation",
           "prompt": "Explain to a teammate who has only ever used print() why they should switch to the logging module for a project that's about to be deployed, and what logging.getLogger(__name__) buys them over calling logging.info() directly.",
           "modelAnswer": "print() has no concept of severity, no timestamps by default, and no way to selectively silence it -- every print() call always produces output, always goes to stdout, and looks identical whether it's a routine status update or a sign of real trouble. Once code runs somewhere you can't just sit and watch (a deployed service, a scheduled job, another developer's machine), that undifferentiated stream becomes a liability: you either see everything, including noise you don't care about, or you go back and manually delete print() calls, which is easy to get wrong and annoying to undo later. logging solves this by attaching a severity level (DEBUG through CRITICAL) to every message and letting you set a threshold -- change one configuration line, and DEBUG-level noise disappears from production while WARNING and above still show, with zero changes to the call sites themselves. As for logging.getLogger(__name__) specifically: calling logging.info() directly reaches for a single shared, anonymously-named root logger, so every part of the program looks the same in the logs and you can't turn one module's verbosity up or down independently. Passing __name__ names the logger after that specific module's dotted path, so log records report exactly where they came from, and -- critically for any codebase bigger than a script -- you can later say 'set myapp.database to DEBUG, leave everything else at WARNING' while actively investigating one part of the system, without touching a single log call anywhere in the code."
+        },
+        {
+          "id": "python-logging-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "```python\nimport logging\n\nlogging.basicConfig(level=logging.WARNING)\nlogging.basicConfig(level=logging.DEBUG)   # trying to lower the level afterward\n\nlogger = logging.getLogger(__name__)\nlogger.debug(\"checking cache\")\n```\nWhat happens?",
+          "options": [
+            "Nothing is printed -- the second basicConfig() call is a no-op, since a handler was already configured by the first call, so the effective level remains WARNING",
+            "\"checking cache\" is printed, since the second basicConfig() call successfully lowers the level to DEBUG",
+            "It raises an error, since basicConfig() can only ever be called once per program",
+            "Nothing is printed, but only because logger.debug() requires an explicit handler argument to work at all"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "basicConfig() only has an effect the first time it's called with no handler already configured -- once the first call has set one up, later calls (without passing force=True) are silently ignored, even though they don't raise any error. So the effective level stays WARNING (30) from the first call, and logger.debug() (level 10) is still below that threshold and gets filtered out, printing nothing. This exact behavior is a well-known sharp edge -- it especially trips people up in notebooks or test suites where basicConfig() might already have run once earlier."
+        },
+        {
+          "id": "python-logging-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "```python\nimport logging\n\nlogger_a = logging.getLogger(\"myapp.jobs\")\nlogger_a.setLevel(logging.DEBUG)\n\nlogger_b = logging.getLogger(\"myapp.jobs\")   # same name, requested elsewhere in the code\n\nprint(logger_a is logger_b)\nprint(logger_b.level == logging.DEBUG)\n```\nWhat gets printed?",
+          "options": [
+            "True then True",
+            "False then True",
+            "True then False",
+            "False then False"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "`logging.getLogger(name)` returns the exact same logger object every time it's called with the same name string -- there's no per-call duplication. So `logger_a` and `logger_b`, despite being obtained from two separate calls (potentially in two different parts of a codebase), are literally the same object in memory: `logger_a is logger_b` is `True`. Since `logger_b` is that same object, the level set via `logger_a.setLevel(logging.DEBUG)` is naturally already reflected on it -- `logger_b.level == logging.DEBUG` is also `True`. This is exactly why `logging.getLogger(__name__)` is a safe, idiomatic pattern to call repeatedly throughout a module without worrying about creating redundant loggers."
         }
       ]
     },
@@ -225,6 +251,32 @@
           "type": "explanation",
           "prompt": "A teammate says: \"We already review every pull request by hand, so I don't see what automated tests add.\" Explain what a test suite catches that manual code review typically does not, and why plain assert statements in pytest are enough without a special assertion API.",
           "modelAnswer": "Code review is good at catching things a human reading the diff can reason about -- unclear logic, missing edge-case handling, style issues -- but it doesn't re-execute the rest of the codebase to confirm that a change didn't quietly break some unrelated behavior three modules away that the reviewer never looked at and has no reason to suspect. An automated test suite does exactly that, every time, in seconds: it re-verifies previously-working behavior on every change, which is specifically what catches regressions -- bugs introduced by a change to code that used to work fine. It also documents expected behavior in an executable, continuously-verified form, unlike a comment or design doc that can silently drift out of date without anyone noticing. As for plain assert: pytest deliberately rewrites assert statements at import time so that a plain `assert calculate_total(cart) == 42` produces a detailed report showing the real computed value versus the expected one, without needing a dedicated method like assertEqual(). That's a deliberate design choice to keep the barrier to writing a test as low as possible -- if you can write a boolean condition, you can write a pytest test, with no separate assertion vocabulary to learn."
+        },
+        {
+          "id": "python-testing-pytest-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "```python\nimport pytest\n\n@pytest.fixture\ndef resource():\n    print(\"setup\")\n    yield \"value\"\n    print(\"teardown\")\n\ndef test_uses_resource(resource):\n    print(\"test body\")\n    assert False   # deliberately failing\n```\nWhat gets printed, and does the fixture's teardown still run despite the test failing?",
+          "options": [
+            "setup / test body / teardown -- and the test is still reported as failed",
+            "setup / test body -- teardown never runs, since the test raised before reaching it",
+            "setup / teardown / test body -- pytest runs teardown before the test body for safety",
+            "setup / test body -- and the process crashes with an unhandled AssertionError before pytest can report anything"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "A fixture's teardown code (everything after `yield`) is guaranteed to run once the test using it finishes, regardless of whether that test passed or failed -- this mirrors the same unconditional-cleanup guarantee covered for `finally` and context managers elsewhere. So even though `assert False` causes `test_uses_resource` to fail, pytest still resumes the `resource` fixture after the test concludes, running `print(\"teardown\")` before moving on. The test is correctly reported as a failure -- the guaranteed teardown doesn't change or hide that outcome, it just ensures cleanup code isn't skipped because of it."
+        },
+        {
+          "id": "python-testing-pytest-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A test named `test_checkout` asserts five different things in one function: the total is calculated correctly, inventory is decremented, a confirmation email object is created, a discount code is applied correctly, and an invalid discount code raises an error. It fails. Based on this lesson's guidance on what makes a good test, what's the most accurate criticism?",
+          "options": [
+            "Bundling five distinct behaviors into one test makes it hard to tell, from the failure alone, which of the five things actually broke -- it should be split into several smaller, descriptively-named, focused tests",
+            "Nothing is wrong with it -- as long as every assertion eventually runs, one test function covering many behaviors is always the most efficient structure",
+            "The test should be renamed test_1 through test_5 instead of using one descriptive name",
+            "pytest refuses to execute a test function containing more than one assert statement"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "One of the core qualities of a good test is checking one behavior per test -- when a test this broad fails, all you know is that *something* among five unrelated behaviors broke, not which one, and you have to dig into the failure output or debug manually to find out. Splitting it into five focused, descriptively-named tests (like `test_checkout_calculates_total_correctly`, `test_checkout_rejects_invalid_discount_code`, and so on) means a failure immediately tells you exactly what broke, just from the test's name. Option D is false -- pytest has no restriction on the number of assert statements per test function; the issue here is purely a design/readability one, not something pytest enforces or forbids."
         }
       ]
     },
@@ -338,6 +390,19 @@
           "type": "scenario",
           "prompt": "You're handed a bug report: \"the export feature sometimes produces a corrupted file, but only for some users, and I can't tell why.\" Walk through how you'd approach this using the reproduce / narrow down / hypothesize / verify workflow, and explain where breakpoint() versus print() would each be more useful.",
           "modelAnswer": "First, reproduce reliably: try to find a specific input or user account that triggers the corruption consistently, rather than working from a vague \"sometimes\" -- this might mean asking the reporting user for their exact data, or writing a script that generates many export scenarios until one reliably fails. Without a repeatable trigger, you can't confirm a fix actually worked versus the bug just not showing up this time. Second, narrow down: isolate which stage of the export pipeline first produces bad output -- if the pipeline reads data, transforms it, and writes a file, check the data right after each stage rather than only at the very end, to figure out which specific stage is where correct data first becomes incorrect. For a straightforward, narrow check like \"is this one specific value already wrong right after step 2,\" a quick print() might be enough. But if the corruption seems to depend on a particular combination of several fields, or only shows up after many loop iterations, breakpoint() is more efficient -- you can pause once inside the loop, inspect several related variables interactively without having predicted in advance exactly which ones to print, and step forward iteration by iteration until the exact moment something goes wrong. Third, form a specific hypothesis once narrowed down -- e.g. \"I think a certain character encoding is being mishandled for names containing non-ASCII characters\" -- rather than a vague \"something about international users.\" Finally, verify: confirm the fix specifically addresses that hypothesis, and rerun the original reliable reproduction case to make sure it no longer corrupts the file, rather than assuming the bug is fixed just because the specific report stopped complaining."
+        },
+        {
+          "id": "python-debugging-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "While paused at a breakpoint() inside a function called outer(), the very next line calls helper(). Which pdb command steps execution INTO helper() so you can inspect what happens inside it, line by line, rather than running it to completion in one jump?",
+          "options": [
+            "s (step)",
+            "n (next)",
+            "c (continue)",
+            "l (list)"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "`s` (step) follows execution into a function call, pausing again at the very first line inside it -- exactly what's needed to inspect helper()'s internals. `n` (next) deliberately does the opposite for a call on the current line: it runs the entire called function to completion in one jump and pauses again only once control returns to the current function, without stopping anywhere inside the callee. `c` (continue) runs until the next breakpoint or program end, skipping far more than just one function call. `l` (list) only shows the surrounding source code -- it doesn't affect execution at all."
         }
       ]
     },
@@ -452,6 +517,19 @@
           "type": "explanation",
           "prompt": "Explain, to someone who has only used a tool like Google Docs' version history, how git's local-repository-plus-remote model differs from a single shared online document, and why that difference matters for collaboration.",
           "modelAnswer": "In something like Google Docs, there's essentially one authoritative copy of the document living on a server, and every edit you make is sent there more or less immediately -- there isn't really a meaningful separate 'your own copy' that exists independently. Git works differently: a full, complete repository -- every commit, every branch, the entire history -- lives on your own machine the moment you clone or initialize it, and you can commit, create branches, inspect history, and even undo changes entirely offline, because none of that touches any server at all. GitHub (or another host) holds a separate copy of that same repository, and the two only synchronize when you explicitly push (send your local commits up) or pull (bring the remote's commits down) -- there's no automatic, continuous syncing happening in the background. This matters for collaboration because it means multiple people can work independently, each accumulating their own local commits, without needing constant connectivity or fear of instantly overwriting each other's in-progress work the way simultaneous edits to a single live document might collide. The tradeoff is that reconciling everyone's independent work requires a deliberate step -- pushing, pulling, and sometimes merging -- rather than it happening automatically and invisibly, which is exactly what pull requests are designed to manage in a structured, reviewable way before changes land on a shared branch like main."
+        },
+        {
+          "id": "python-git-github-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Developer A makes three commits locally but never runs git push. Developer B clones the project from GitHub right now. Which of A's three local commits will B's clone contain?",
+          "options": [
+            "None of them -- since A never pushed, GitHub's copy (and therefore B's fresh clone, which comes from GitHub) has no knowledge of any of A's three local commits",
+            "All three, since git automatically syncs local commits to GitHub in the background as they're made",
+            "Only the first of the three, since git automatically pushes the earliest unpushed commit after a period of inactivity",
+            "It depends on whether B's clone command includes a special synchronization flag"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "A local repository and its GitHub remote only synchronize through explicit commands -- push and pull (or fetch) -- never automatically or in the background. A's three commits exist only in A's local repository until A explicitly pushes them. Since that push never happened, GitHub's copy of the repository is completely unaware any of those commits exist, and B's clone -- which copies directly from GitHub -- naturally contains none of them either. There's no partial or automatic syncing behavior of any kind; the commits simply don't exist anywhere outside A's own machine yet."
         }
       ]
     }

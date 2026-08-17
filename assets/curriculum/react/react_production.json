@@ -114,6 +114,19 @@
           "type": "scenario",
           "prompt": "Your `<SearchResults query={query} />` component fetches new results every time query changes as the user types quickly. Users occasionally report seeing results that don't match what's currently in the search box. Diagnose the likely cause and describe, in general terms, how you'd fix it.",
           "modelAnswer": "This is the classic stale-response race condition: every keystroke that changes query triggers a new fetch, and because network responses aren't guaranteed to resolve in the order their requests were sent, an older request (for an earlier, now-outdated query) can resolve after a newer one. If the effect's .then callback unconditionally calls a state setter with whatever it received, the last response to arrive wins and overwrites state, regardless of whether it corresponds to what's currently typed in the box -- which is exactly the symptom being reported. The fix is to make sure only the response belonging to the most recently fired request is allowed to update state: either a cleanup-flag pattern (a local isCurrent variable per effect instance, flipped to false in that effect's cleanup, checked before calling any setter), or an AbortController that actually cancels the previous in-flight request when a new one starts, aborting it in the effect's cleanup function. Either approach ensures a slow, now-outdated response can no longer clobber the state with results that don't match the current query."
+        },
+        {
+          "id": "react-api-integration-and-loading-states-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "```jsx\nfunction SearchResults({ results, isLoading, error }) {\n  if (isLoading) return <Spinner />;\n  if (error) return <p>Something went wrong.</p>;\n  return (\n    <ul>\n      {results.map((r) => <li key={r.id}>{r.name}</li>)}\n    </ul>\n  );\n}\n```\nA search that legitimately returns zero results (not an error, not still loading) renders as what with this code, and what does the concept recommend instead?",
+          "options": [
+            "This already handles the empty case correctly, since results.map on an empty array simply produces no extra list items, which is exactly the intended behavior.",
+            "It renders an empty <ul> with no visible content at all, which looks indistinguishable from a bug (or a component that forgot to render anything) rather than clearly communicating \"no results found\" -- the fix is an explicit branch for the empty case with its own message.",
+            "It throws a runtime error, since .map cannot be called on an array that has zero elements.",
+            "It automatically falls through to the error branch, since an empty array is treated as a falsy value."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Calling .map on an empty array is perfectly legal and simply produces no <li> elements -- it doesn't throw, ruling out option C, and an array (empty or not) is still a truthy reference type, ruling out option D. The real problem is that a genuinely empty, successful result renders as a bare, content-free <ul>, which looks exactly like something broke or like nothing has loaded yet -- indistinguishable from the loading or error states it's supposed to be different from. The concept is explicit that empty deserves its own deliberate branch and message ('No results found', for instance) rather than silently falling through to whatever the success branch happens to produce for zero items."
         }
       ]
     },
@@ -221,6 +234,19 @@
           "type": "explanation",
           "prompt": "You're building the Update part of a CRUD UI for editing a blog post. A teammate says the update form doesn't need any loading or error state because 'it's just a PUT request.' Explain why they're wrong, referencing the pattern used for Create.",
           "modelAnswer": "A PUT request is still a network request, and network requests take a nonzero amount of time and can fail -- for exactly the same reasons a POST (Create) request can: a dropped connection, a validation error from the server, a permissions issue, a timeout. If the update form has no in-flight indicator, the user has no feedback that anything is happening after clicking Save, and might click it again, submitting a duplicate or conflicting update. If it has no error handling, a failed update silently does nothing from the user's perspective -- they believe their edit was saved when it wasn't, discovering the truth only later, if ever. This is exactly the same three-state shape (in-flight, success, error) already used for the Create form: disable the submit control and show feedback while the PUT is in flight, redirect or update the UI on a successful response, and surface an actionable error message if it fails. The HTTP verb being PUT instead of POST doesn't change any of that -- it's the same kind of network request with the same kinds of possible outcomes."
+        },
+        {
+          "id": "react-crud-and-authentication-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "```jsx\nfunction ProtectedRoute({ children }) {\n  const { currentUser } = useCurrentUser(); // isLoading isn't tracked or checked at all\n\n  if (!currentUser) return <Navigate to=\"/login\" replace />;\n  return children;\n}\n```\nuseCurrentUser() takes a brief moment on app startup to determine whether a previously-stored token is still valid. What's the practical bug with ProtectedRoute as written here?",
+          "options": [
+            "There is no bug -- currentUser is null precisely when, and only when, there's no valid session at all.",
+            "While the validity check is still in progress, currentUser is momentarily null (since it hasn't resolved one way or the other yet), so this redirects every single user -- including ones with a perfectly valid session -- to /login before the check has had a chance to finish.",
+            "Navigate can only be rendered inside a component wrapped in React.memo, so this throws a runtime error immediately.",
+            "children is always undefined until currentUser is confirmed, so this crashes before the redirect check can even run."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "currentUser starts out null before the validity check has resolved, for exactly the same reason any state does before an async operation finishes -- and this component treats 'null right now' as identical to 'definitely not authenticated,' which isn't true during that brief startup window. Every user, including ones whose session is completely valid, gets bounced to /login the instant the app loads, only to (at best) bounce back once the check actually resolves -- a jarring, incorrect redirect. The concept's fix is exactly what's missing here: track and check an isLoading state from useCurrentUser too, and render a loading indicator while that check is still in flight, only deciding to redirect once it has actually completed."
         }
       ]
     },
@@ -328,6 +354,19 @@
           "type": "explanation",
           "prompt": "Explain why useState(null) often needs an explicit type argument like useState<User | null>(null), while useState(0) doesn't need one.",
           "modelAnswer": "TypeScript infers a useState call's type from its initial value when that value already makes the intended type clear. useState(0) makes number the obvious inferred type, since 0 is unambiguously a number and the state is presumably meant to hold numbers going forward. useState(null), by contrast, only has null to infer from, so TypeScript infers the narrowest possible type -- literally null -- with no information suggesting the state should ever hold anything else. That inferred null-only type then rejects the very code that's typically written right after, such as setUser(fetchedUserObject) once an API call resolves, because a value typed strictly null can never legally become anything else. Supplying an explicit type argument, useState<User | null>(null), tells TypeScript the real intended type upfront -- either a User or null -- so both the initial null value and the later call that sets it to an actual User object both type-check correctly."
+        },
+        {
+          "id": "react-typescript-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "```tsx\ninterface AlertProps {\n  message: string;\n  duration?: number;\n}\n\nfunction Alert({ message, duration }: AlertProps) {\n  return <div>{message} (visible for {duration}ms)</div>;\n}\n\n<Alert message=\"Saved!\" />\n```\nduration is marked optional and no default is supplied in the destructuring. What is duration inside Alert for this usage, and does TypeScript flag anything here?",
+          "options": [
+            "duration is 0, and TypeScript flags nothing, since an optional numeric prop automatically defaults to its type's zero value.",
+            "duration is undefined, and TypeScript does not flag this as an error -- marking a prop optional with ? only means callers may omit it; it does not supply a runtime fallback value, so \"(visible for undefinedms)\" would actually render.",
+            "TypeScript throws a compile-time error here, since every prop declared in an interface must always be explicitly passed by every caller, optional or not.",
+            "duration automatically becomes the string \"undefined\" cast to a number, which avoids any rendering issue."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The ? in duration?: number only tells TypeScript that a caller is allowed to omit this prop -- <Alert message=\"Saved!\" /> is valid, with no compile error, because duration is optional. But marking something optional doesn't magically produce a sensible fallback value at runtime; without an explicit default in the destructuring (like duration = 3000), duration is genuinely undefined inside Alert, and the JSX would render the literal, unhelpful text \"(visible for undefinedms)\". TypeScript only catches shape mismatches -- passing the wrong type, or omitting a required prop -- not missing runtime defaults for props you've already told it are allowed to be absent."
         }
       ]
     },
@@ -435,6 +474,19 @@
           "type": "explanation",
           "prompt": "A test suite has several tests asserting on a component's internal state values directly, by reaching into a returned hook's internals or a component instance. Explain, in terms of what happens during a refactor, why this is considered an anti-pattern in the React Testing Library philosophy.",
           "modelAnswer": "Internal state values -- which hook holds them, what they're named, how they're structured -- are implementation details that a real user interacting with the rendered page has no way to observe and no reason to care about. A test that asserts on those details directly is coupled to exactly how the component happens to be built today. If a later, entirely valid refactor changes any of that -- switching from useState to useReducer, splitting logic into a differently-named custom hook, restructuring how a value is stored internally -- without changing anything about what the component actually looks like or does from a user's perspective, that refactor breaks these tests anyway. That's a false failure: the tests are reporting a problem where none actually exists for any real user, and repeated false failures like this train a team to distrust red test results, undermining the entire value of having a test suite. Testing the rendered, visible outcome instead -- what text appears, what happens after a simulated click -- ties tests to behavior that genuinely has to stay correct regardless of implementation, so they only fail when something a user would actually notice has actually broken."
+        },
+        {
+          "id": "react-testing-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A test wants to assert that \"Apple\" is NOT present in the rendered output after a list has been filtered. Using `screen.getByText(\"Apple\")` directly for this assertion (e.g. wrapped in a `.not.toBeInTheDocument()` expectation) would be a mistake. Why?",
+          "options": [
+            "getByText only works for headings, not for list items like \"Apple\".",
+            "getByText throws an error immediately if no matching element is found, so the test would fail with a thrown error before ever reaching the intended \"not present\" assertion -- queryByText, which returns null instead of throwing, is the correct tool for asserting something is absent.",
+            "getByText is case-sensitive in a way that would fail to match \"Apple\" for unrelated reasons.",
+            "getByText and queryByText behave identically in every situation, so there's no meaningful difference to worry about here."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "getByText is designed for the case where you expect a match to exist -- if nothing matches, it throws immediately, which would crash the test right there rather than letting an assertion about absence run at all. queryByText exists specifically for the opposite case: it returns null when nothing matches (instead of throwing), which is exactly what a `.not.toBeInTheDocument()`-style assertion needs to check against. This is precisely why Testing Library provides both variants -- get* for 'this should exist, fail loudly if it doesn't,' and query* for 'this might legitimately not exist, and that's fine to check for.'"
         }
       ]
     },
@@ -548,6 +600,19 @@
           "type": "scenario",
           "prompt": "A junior developer wraps every single component in the app with React.memo and every function passed as a prop with useCallback, 'to be safe.' Explain, using the idea of measuring first, why this might not actually be a good idea, even if it doesn't break anything functionally.",
           "modelAnswer": "Wrapping everything defensively skips the step that actually justifies reaching for memo/useCallback in the first place: measuring, with the React DevTools Profiler or similar, whether a given component's re-renders are both frequent and expensive enough to matter. Without that measurement, most of this memoization is very likely being applied to components that were already cheap to re-render, where the cost of the memoization itself (a shallow prop comparison on every render, a dependency array to maintain correctly) can be comparable to, or in some cases larger than, the cost of the re-render it's meant to prevent -- delivering no real performance benefit while making the codebase harder to read and reason about, and introducing a new class of bug (a dependency array that's wrong or goes stale) that wasn't a risk before. The productive approach is the reverse order: profile the app under realistic conditions, find components that are both re-rendering often and taking a meaningful amount of time to do so, apply memo/useCallback/useMemo specifically to those, and then profile again to confirm the change actually helped -- rather than applying it everywhere upfront on the assumption that it can only help."
+        },
+        {
+          "id": "react-performance-optimization-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A teammate says: \"Since AnalyticsPage loads a 2MB charting library and feels slow to first show anything, let's wrap the chart component in React.memo to fix it.\" Why is React.memo the wrong tool for the specific problem being described?",
+          "options": [
+            "React.memo would actually make the initial load slower, since wrapping a component in it triggers an extra network request of its own.",
+            "React.memo only affects whether an already-loaded component skips re-rendering on subsequent updates -- it does nothing about how much JavaScript has to be downloaded and parsed before the app becomes interactive in the first place, which is what's actually causing the slow initial load. Code splitting/lazy loading (React.lazy plus Suspense) is the tool built for that.",
+            "React.memo cannot be applied to any component that internally uses a third-party charting library.",
+            "React.memo and code splitting are two different names for the exact same underlying mechanism, so either one would fix this equally well."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The problem described -- a slow initial load caused by a large library's JS having to be downloaded and parsed -- is a bundle-size problem, not a re-render problem, and memo has nothing to say about bundle size at all; it only ever decides whether to skip re-rendering a component that's already loaded and mounted. Reaching for memo here wouldn't reduce the amount of JS shipped or fetched on first load by even one byte. Code splitting via React.lazy and Suspense is the concept's actual tool for this specific problem, since it defers fetching that heavy component's code until it's genuinely needed, rather than bundling it into what every visitor downloads upfront regardless of whether they ever use it."
         }
       ]
     },
@@ -653,6 +718,19 @@
           "type": "explanation",
           "prompt": "Explain, to someone deciding between a purely client-side-rendered React app and a server-side-rendered one, the real tradeoff involved -- not just 'SSR is better for SEO.'",
           "modelAnswer": "With client-side rendering, the server's initial response is a nearly empty HTML shell plus a JS bundle; the browser has to download and execute that JS before any real content appears, which creates a genuine gap between the page arriving and the page having visible content -- worse on slow connections or devices -- and a crawler or link-preview bot that doesn't execute JS may see only that empty shell, which is where the common SEO concern comes from. The upside is infrastructure simplicity: a static file server or CDN is sufficient, since nothing needs to run application code per request. With server-side rendering, the server itself runs the React components and sends back HTML that already contains real, visible content, so there's no gap between arrival and visible content, and crawlers see real content immediately without needing to execute JS at all. The cost is that an actual server (or an equivalent pre-rendering/caching layer) now needs to run React code on every request rather than just handing out static files -- meaningfully more infrastructure to run, scale, and maintain. Neither option is simply 'better' -- CSR trades initial content speed and default SEO behavior for infrastructure simplicity, and SSR trades that simplicity for faster initial content and better default SEO. Next.js is the most common way to get SSR (and related capabilities) within the React ecosystem, without needing to go into its specific API here."
+        },
+        {
+          "id": "react-deployment-and-architecture-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "An SSR page's initial HTML response already shows a fully-rendered product list. The instant the page appears, a user clicks \"Add to Cart\" on the first visible item -- but for a brief moment, nothing visibly happens. What's the most likely explanation?",
+          "options": [
+            "SSR pages never support click handlers at all; only purely client-side-rendered apps can ever respond to click events.",
+            "The JS bundle needed to hydrate the page (attaching real event handlers to the already-rendered markup) may not have finished downloading and running yet -- the HTML looks complete and interactive, but nothing actually responds to events until hydration finishes.",
+            "The server has to fully re-render the entire page from scratch in response to every click, which explains the brief delay.",
+            "This indicates a bug specific to this app; a correctly built SSR page is otherwise always fully interactive the instant any content becomes visible."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "SSR's server-rendered HTML gives the page real, visible content immediately, but that markup has no attached event handlers until the JS bundle sent alongside it actually finishes downloading and running -- the hydration step that attaches interactivity to already-rendered content. Until hydration completes, the page can look completely ready while still not responding to clicks, exactly the brief window described here; this is a normal, expected characteristic of SSR (sometimes felt as visible-but-not-yet-interactive), not evidence of a broken click handler or a per-click round trip to re-render the whole page server-side."
         }
       ]
     }

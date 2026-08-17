@@ -115,6 +115,123 @@
           "type": "explanation",
           "prompt": "A developer familiar with Python asks you to explain JavaScript closures and how the classic loop-variable bug in JavaScript compares to the equivalent bug in Python. Write an explanation connecting the two languages.",
           "modelAnswer": "JavaScript closures work on the same underlying principle as Python closures: both languages use lexical scoping, meaning a function's enclosing scope is fixed by where it's written in the source code, not by when or how it's later called. So in both languages, a nested function that reads a variable from its enclosing function keeps a live connection to that variable even after the enclosing function has already returned -- that live connection is the closure. One small difference in mechanics: Python requires you to declare `nonlocal x` inside a nested function before you can reassign (not just read) an enclosing variable, because Python treats any name assigned inside a function as local to that function by default; JavaScript has no equivalent rule for regular assignment (`count += 1` inside a nested function just directly updates the enclosing count), so no extra keyword is needed there. The classic loop bug is identical in root cause across both languages: if you create several closures inside a loop that all reference the loop's counter variable, they don't each get 'their own' value from their own iteration -- there is only one counter variable for the entire loop, shared by every closure created inside it, and since those closures are usually called only after the loop has fully finished, they all see whatever final value the loop left behind. In JavaScript, this specifically happens with `var` (function-scoped, one variable for the whole loop); switching to `let` fixes it because the language specification gives every iteration of a let-declared for loop a fresh, independent binding automatically. Python has no equivalent language-level fix -- its for loops never create a new scope per iteration -- so Python code needs an explicit workaround, most commonly giving the closure its own parameter defaulted to the loop variable's current value (`lambda i=i: i`), since default argument values are evaluated once, immediately, at definition time. Same disease, same underlying mechanism, but JavaScript patched it at the language level for one common case while Python still requires a manual fix."
+        },
+        {
+          "id": "js-closures-scope-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "```javascript\nconst user = { name: \"Ada\" };\nuser.name = \"Grace\";\nuser = { name: \"Linus\" };\n```\nWhich statement is true about this code?",
+          "options": [
+            "Both assignments succeed; user's name changes twice, ending as \"Linus\".",
+            "The first assignment (user.name = \"Grace\") throws TypeError, since user is declared with const.",
+            "The first assignment succeeds, but the second (user = { name: \"Linus\" }) throws TypeError: Assignment to constant variable.",
+            "Both assignments throw TypeError, because nothing about a const object can ever be changed."
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "const only prevents rebinding the name user to a new value -- it says nothing about mutating the object user currently points to. user.name = \"Grace\" mutates the existing object's property in place, which is completely allowed. user = { name: \"Linus\" } tries to point user at a brand-new object entirely, which is reassigning the const binding itself, so it throws TypeError: Assignment to constant variable. Options A and D miss that the two assignments behave differently (mutation vs. reassignment); option B wrongly flags the allowed mutation as an error instead of the actual reassignment."
+        },
+        {
+          "id": "js-closures-scope-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "```javascript\nfunction total(items) {\n  for (var idx = 0; idx < items.length; idx++) {\n    var subtotal = items[idx] * 2;\n  }\n  console.log(idx, subtotal);\n}\ntotal([1, 2, 3]);\n```\nWhat does this log?",
+          "options": [
+            "ReferenceError: idx is not defined",
+            "3 6",
+            "undefined undefined",
+            "2 6"
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "var is function-scoped, so both idx and subtotal declared inside the for loop are actually hoisted to the top of total() and remain accessible after the loop finishes, regardless of the for statement's braces. The loop runs for idx = 0, 1, 2 (items.length is 3), and then increments idx to 3, at which point idx < items.length (3 < 3) is false and the loop exits -- so idx is 3 by the time console.log runs. subtotal keeps whatever value it was last assigned during the final iteration (idx = 2), which is items[2] * 2 = 6. Option D wrongly assumes the loop stops at the last valid index rather than the failing check; option A wrongly assumes for-loop variables are block-scoped, which is only true for let/const, not var."
+        },
+        {
+          "id": "js-closures-scope-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "```javascript\nconsole.log(greet());\nconsole.log(count);\nvar count = 10;\n\nfunction greet() {\n  return \"hi\";\n}\n```\nWhat happens when this runs?",
+          "options": [
+            "It throws a ReferenceError on the first line, because greet is used before it's defined.",
+            "It prints \"hi\", then undefined -- function declarations are hoisted with their full body, but var is only hoisted with an initial value of undefined.",
+            "It prints \"hi\", then 10, because all code above the function's own definition is evaluated first.",
+            "It throws a TypeError on the second console.log because count isn't a number yet."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Function declarations are hoisted completely, including their bodies, so greet() can be called from a line above its definition and correctly returns \"hi\" -- ruling out option A. var count, on the other hand, is hoisted but only initialized to undefined during the hoisting phase; the actual assignment count = 10 hasn't executed yet at the point of the second console.log, so it prints undefined rather than 10, ruling out option C. Neither line throws an error at all, ruling out option D -- reading an already-initialized-to-undefined var is completely legal, it just isn't the value you might expect."
+        },
+        {
+          "id": "js-closures-scope-assess-mcq5",
+          "type": "multipleChoice",
+          "prompt": "```javascript\nfor (var i = 1; i <= 3; i++) {\n  setTimeout(() => console.log(i), 0);\n}\n```\nWhat does this log?",
+          "options": [
+            "1, 2, 3 -- each setTimeout callback captures the value of i at the moment it was scheduled.",
+            "4, 4, 4 -- var creates one shared i for the whole loop, and by the time the callbacks run, the loop has already finished with i at 4.",
+            "3, 3, 3 -- var creates one shared i for the whole loop, and it stops at the last value the loop body actually ran with.",
+            "It throws ReferenceError because i is out of scope inside the setTimeout callback."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "var is function/global-scoped, not scoped to the loop body, so there is exactly one i shared by every callback scheduled during the loop. setTimeout callbacks are asynchronous, so none of them run until after the entire synchronous for loop has already finished. The loop increments i until i <= 3 is finally false -- that happens once i reaches 4 -- so every callback closes over that same final shared i and logs 4, 4, 4. Option C is a common trap: it assumes the loop variable freezes at its last used value rather than continuing to the value that actually failed the condition. Switching var to let would give each iteration its own independent i, printing 1, 2, 3 instead."
+        },
+        {
+          "id": "js-closures-scope-assess-mcq6",
+          "type": "multipleChoice",
+          "prompt": "```javascript\nfunction makeAccumulator(start) {\n  let total = start;\n  return function add(amount) {\n    total += amount;\n    return total;\n  };\n}\n\nconst accA = makeAccumulator(10);\nconst accB = makeAccumulator(100);\n\nconsole.log(accA(5));\nconsole.log(accB(1));\nconsole.log(accA(5));\n```\nWhat does this print?",
+          "options": [
+            "15, 101, 20",
+            "15, 101, 15",
+            "15, 1, 20",
+            "5, 1, 5"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "Each call to makeAccumulator creates a brand-new total variable and a new add closure over it, so accA and accB have completely independent state -- calling accB never touches accA's total. accA's total starts at 10; accA(5) makes it 15 and returns 15. accB's total starts at 100 (unaffected by accA); accB(1) makes it 101 and returns 101. Calling accA(5) again continues from accA's own persisted total of 15 (not back to 10), landing at 20. This is the same mechanism as makeCounter: the returned function keeps a live, private connection to its own enclosing scope's variable, and that connection persists across separate calls to that same returned function."
+        },
+        {
+          "id": "js-closures-scope-assess-mcq7",
+          "type": "multipleChoice",
+          "prompt": "```javascript\nfunction makeToggle() {\n  let on = false;\n  return function flip() {\n    on = !on;\n    return on;\n  };\n}\n```\nWhich statement about this code is correct?",
+          "options": [
+            "This throws a ReferenceError because on is reassigned inside flip without first declaring it with nonlocal, the way Python would require.",
+            "JavaScript has no equivalent of Python's nonlocal requirement here -- flip can reassign the enclosing on directly, because JS doesn't treat assignment inside a nested function as automatically creating a new local variable.",
+            "on inside flip refers to a brand-new local variable that shadows the outer on, so the outer on never actually changes.",
+            "flip must declare its own local on variable before it can flip it, the same way Python would require inside a nested function."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "In Python, assigning to a name inside a nested function makes that name local to the nested function by default, so reassigning (not just reading) an enclosing variable requires an explicit nonlocal declaration. JavaScript has no such rule: on = !on inside flip is a plain assignment to the existing enclosing on via the closure, and it just works with no extra keyword. Option A invents a nonlocal-like requirement that JavaScript doesn't have, so there's no ReferenceError. Options C and D both wrongly assume flip creates its own separate on -- it doesn't; on inside flip is the very same variable as the outer on, which is exactly why flip is able to change it from call to call."
+        },
+        {
+          "id": "js-closures-scope-assess-mcq8",
+          "type": "multipleChoice",
+          "prompt": "```javascript\nfunction checkAccess(role) {\n  if (role === \"admin\") {\n    let message = \"Welcome, admin!\";\n    console.log(message);\n  }\n  console.log(message);\n}\ncheckAccess(\"admin\");\n```\nWhat happens when this runs?",
+          "options": [
+            "Logs \"Welcome, admin!\" and then logs \"Welcome, admin!\" again.",
+            "Logs \"Welcome, admin!\" and then throws ReferenceError: message is not defined, because message is scoped to the if block and doesn't exist outside it.",
+            "Logs \"Welcome, admin!\" and then logs undefined, because message is hoisted to the top of checkAccess the same way a var would be.",
+            "Throws a ReferenceError immediately on the console.log inside the if block, before anything is printed."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "message is declared with let, so it is genuinely block-scoped to the if statement's { } -- it exists only for the duration of that block, and it's not hoisted to the top of checkAccess the way a var declared in the same spot would be. The console.log inside the if block runs after message has already been declared and assigned within that same block, so it succeeds and prints \"Welcome, admin!\". But the second console.log, outside the if block entirely, references a message that simply doesn't exist in that outer scope at all, throwing ReferenceError: message is not defined. This is a stricter error than the temporal-dead-zone ReferenceError -- message isn't 'not yet initialized', it's out of scope completely, the same way it would be if the if block had never run at all."
+        },
+        {
+          "id": "js-closures-scope-assess-mcq9",
+          "type": "multipleChoice",
+          "prompt": "```javascript\nconsole.log(double(4));\n\nconst double = function (n) {\n  return n * 2;\n};\n```\nWhat happens when this runs?",
+          "options": [
+            "Prints 8 -- function expressions are hoisted completely, just like function declarations.",
+            "Prints undefined -- double is hoisted like a var and initialized to undefined, so calling it just returns undefined.",
+            "Throws ReferenceError: Cannot access 'double' before initialization -- double is hoisted into the temporal dead zone, not hoisted with its function value the way a full function declaration would be.",
+            "Throws TypeError: double is not a function."
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "Only function declarations (function double(n) { ... }) are hoisted completely, body included, which is what lets you call them from a line above their definition. Here, double is a function expression assigned to a const, so const's hoisting rules apply: double is hoisted into the temporal dead zone and isn't initialized until its declaration line actually executes. Calling double(4) before that line runs accesses double while it's still in the TDZ, throwing ReferenceError: Cannot access 'double' before initialization -- not a TypeError (option D), and not a silently-wrong undefined the way a var-based function expression would behave (option B)."
+        },
+        {
+          "id": "js-closures-scope-assess-mcq10",
+          "type": "multipleChoice",
+          "prompt": "```javascript\nfunction run() {\n  let score = 0;\n  score = score + 5;\n  let score = 10;\n  console.log(score);\n}\nrun();\n```\nWhat happens when this runs?",
+          "options": [
+            "Logs 15.",
+            "Logs 10.",
+            "Throws SyntaxError: Identifier 'score' has already been declared -- let can be reassigned but not redeclared in the same scope.",
+            "Logs 0, because the second let score = 10 creates a separate, shadowed variable."
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "let allows a variable to be reassigned (score = score + 5 is fine) but does not allow the same identifier to be declared again with let in the same scope. The second `let score = 10;` line redeclares score in the very same function-body scope where it was already declared, which is a SyntaxError -- caught before the function even runs, so nothing is logged at all. This is a real, permanent difference from var, which happily allows redeclaring the same name with var multiple times in the same scope without complaint."
         }
       ]
     }

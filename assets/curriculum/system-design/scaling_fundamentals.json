@@ -117,6 +117,45 @@
           "type": "explanation",
           "prompt": "A stakeholder asks: \"Why can't we just buy the biggest possible database server and call our availability problem solved?\" Explain, in terms a non-distributed-systems engineer could follow, why a single machine -- no matter how large -- cannot satisfy a high-availability requirement on its own, and what actually has to change architecturally.",
           "modelAnswer": "Machine size and machine count answer two completely different questions. Size determines how much traffic or data one machine can handle before it runs out of CPU, memory, or IO -- and yes, buying a bigger machine genuinely raises that ceiling, sometimes dramatically. But availability is a question about what happens when something breaks -- a disk failure, a kernel panic, a botched OS patch, the physical host losing power, or even just a routine maintenance reboot -- and a single machine, whatever its size, is always exactly one such failure away from being completely unavailable. Buying a bigger single machine does not create a second, independent thing that could take over when the first one is down; it just makes the one existing thing faster, while leaving the number of independent fault domains at exactly one. A 99.99% (or any serious) uptime target is fundamentally a statement about tolerating failures, not about raw capacity, so it can only be satisfied by having at least two machines that can fail independently of each other, with a mechanism (replication for data, a load balancer or failover process for traffic) to keep serving requests when one of them is down. In other words: solving a capacity problem is a vertical-scaling question (\"is this box big enough\"), but solving an availability problem is inherently a horizontal-scaling question (\"what happens to the other box when this one dies\"), and no amount of spending on a single box can convert one into an answer for the other."
+        },
+        {
+          "id": "system-design-vertical-vs-horizontal-scaling-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "According to the cost-curve pattern typical of cloud instance pricing described in the concept, why does 'vertical scaling hits a ceiling' involve more than just 'eventually there's no bigger box to buy'?",
+          "options": [
+            "Because larger instances are billed hourly while smaller ones are billed per-second, making cost comparisons unfair.",
+            "Because price-per-unit-of-capacity (e.g., price per vCPU) typically increases at the top of the instance ladder, so resizing into the largest tiers costs disproportionately more per unit of resource well before you physically run out of bigger options.",
+            "Because vertical scaling always requires extended downtime to migrate to a new machine, and downtime cost dominates the calculation.",
+            "Because cloud providers legally cap the amount of compute any single customer can rent, regardless of price."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The 'Ceiling on Vertical Scaling' section distinguishes a physical ceiling (there IS a largest instance eventually) from an economic one that usually bites first: pricing for top-tier instances is typically superlinear, so price-per-vCPU climbs as you move up the ladder (the cost-curve example shows it going from 1.00x to 1.75x per vCPU from baseline to top tier). That means the economic ceiling arrives before the physical one in most real cases. Option A misstates billing mechanics not discussed in the material. Option C is not established as an inherent property of vertical scaling -- resizing is described as requiring little more than a resize and maybe a restart. Option D is fabricated; no such blanket legal cap is described anywhere in the concept."
+        },
+        {
+          "id": "system-design-vertical-vs-horizontal-scaling-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A team says: \"We upgraded from 10 to 40 app servers, so we now have exactly 4x the throughput capacity.\" Based on the concept's second misconception about server count and capacity, when is this claim actually true?",
+          "options": [
+            "Always, as long as the load balancer is configured correctly.",
+            "Only if each unit of work is fully independent and never needs to touch shared state such as a common database, cache, or lock -- otherwise some of the added capacity is consumed by contention and coordination overhead rather than useful work.",
+            "Only if all 40 servers are the exact same instance size as the original 10.",
+            "Never -- horizontal scaling capacity gains are always sublinear regardless of workload."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept's second misconception addresses this directly: \"N times the servers gives N times the capacity\" only holds for embarrassingly parallel workloads with no shared state. The moment servers share a database, cache, or lock, some capacity is consumed by contention rather than useful work -- in the extreme, if a shared bottleneck is already saturated, adding more servers in front of it buys no additional throughput at all. Option A ignores this entirely. Option C is irrelevant -- the concept never conditions the claim on instance size matching. Option D overstates the point -- linear scaling is achievable for genuinely independent workloads, it isn't universally sublinear."
+        },
+        {
+          "id": "system-design-vertical-vs-horizontal-scaling-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Per the \"Choosing Between Them: Sequencing, Not Ideology\" section, which of the following is a valid, independent reason to move from vertical to horizontal scaling, distinct from simply having hit a capacity ceiling?",
+          "options": [
+            "The engineering team finds distributed systems more technically interesting to work on.",
+            "An availability requirement (e.g., a 99.99% uptime SLA) that no single machine can satisfy on its own, because one machine -- however large -- is always exactly one fault domain.",
+            "The current cloud provider's largest instance type became slightly cheaper this quarter.",
+            "The application was originally written in a language that doesn't support multithreading."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept names two distinct forces that justify moving to horizontal scaling: hitting the vertical ceiling (capacity or cost), or -- the one people most often miss -- an availability requirement that no single machine can meet regardless of size, since a single machine is always exactly one fault domain. Option A is a preference, not an architectural justification given anywhere in the material. Option C would, if anything, reduce pressure to move off vertical scaling. Option D describes a language limitation unrelated to the fault-domain argument the concept actually makes."
         }
       ]
     },
@@ -237,6 +276,45 @@
           "type": "explanation",
           "prompt": "Explain, to a developer who has only ever run a single server, what \"statelessness\" means for a web service, why it matters specifically for horizontal scaling, and how real applications that clearly do have state (logins, carts, uploads) achieve it in practice.",
           "modelAnswer": "Statelessness doesn't mean an application has no data or memory of anything -- almost every real application needs to remember who's logged in, what's in a cart, or what a user uploaded. What it actually means is that no single server process is the exclusive holder of that data in a way that makes it \"special\" -- any instance, given the right request and access to the same shared resources as every other instance, can produce the identical, correct result. The reason this matters specifically for horizontal scaling is that a load balancer, by default, treats all backend instances as interchangeable and routes each incoming request to whichever one is best positioned to handle it right now -- it does not guarantee that two requests from the same user land on the same instance. If a service keeps meaningful data in one process's local memory (a plain in-memory dict, a variable, a local file), then the very next request from that same user might hit a different instance that has never seen that data, producing bugs that look random and are maddening to reproduce -- logged-out users, vanishing cart items, missing uploaded files. Real applications solve this by moving that state somewhere every instance can reach identically: either an external shared store (a database or a cache like Redis) that all instances query over the network, or by pushing the state into the request itself, most commonly as a signed token (like a JWT) that the client sends back on every request, which the server can verify and read without needing to remember anything locally at all. Both approaches share the same underlying idea: state still exists, it's just no longer pinned to the process memory of one arbitrary machine that happened to handle an earlier request."
+        },
+        {
+          "id": "system-design-load-balancing-and-statelessness-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "What is the key functional difference between an L4 (transport-level) and an L7 (application-level) load balancer, as described in the concept?",
+          "options": [
+            "L4 balancers only work with UDP, while L7 balancers only work with TCP.",
+            "L4 balancers route based purely on IP address and port without inspecting the traffic's content, while L7 balancers understand the application protocol (e.g., HTTP) and can route based on things like URL path, headers, or cookies.",
+            "L4 balancers can only be used on-premises, while L7 balancers are cloud-only.",
+            "L4 balancers require the backend to be stateless, while L7 balancers work equally well with stateful backends."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept explicitly defines L4 as working purely with IP addresses and ports, blind to request content, and L7 as understanding the protocol running on top (e.g., HTTP), which enables content-based routing decisions like sending /api/* to one pool and /static/* to another. Option A misstates the protocol distinction -- neither layer is restricted to only one of TCP or UDP in the way described. Option C is fabricated; deployment location isn't tied to OSI layer anywhere in the material. Option D is wrong -- statelessness is a separate concept from which layer the load balancer inspects, and the concept never ties either layer to a statelessness requirement."
+        },
+        {
+          "id": "system-design-load-balancing-and-statelessness-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A system uses consistent hashing to route requests to a pool of backend servers that each maintain a local cache. Why is consistent hashing specifically well-suited to this setup, compared to round robin?",
+          "options": [
+            "Consistent hashing guarantees perfectly equal request counts across all backends at all times, which round robin cannot do.",
+            "Consistent hashing routes the same key to the same backend repeatedly, letting that backend build a useful local cache for that key, and when the pool resizes, only a small fraction of keys get remapped rather than a wholesale reshuffle.",
+            "Consistent hashing eliminates the need for health checks because it never routes to an unhealthy backend.",
+            "Consistent hashing is simply faster to compute than round robin, which is the concept's stated reason it's chosen for caching workloads."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept explains that consistent hashing routes based on a hash of a key so the same key tends to reach the same backend, which lets that backend build a useful local cache -- and crucially, when the backend pool changes size, only a small fraction of keys get reassigned rather than the wholesale reshuffling a naive hash-and-mod approach would cause. Option A is false -- round robin, not consistent hashing, is the one that guarantees equal request counts; consistent hashing can produce uneven distribution across backends. Option C is fabricated -- consistent hashing doesn't replace health checks anywhere in the material. Option D mischaracterizes the tradeoff -- the concept never claims consistent hashing is chosen for raw computational speed."
+        },
+        {
+          "id": "system-design-load-balancing-and-statelessness-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A backend's health check endpoint simply returns HTTP 200 OK unconditionally, without checking whether it can reach its database. What failure mode does this create, per the concept's discussion of health checks?",
+          "options": [
+            "It has no downside, since the load balancer only cares that the process is running at all.",
+            "It creates a false-positive health check: the load balancer keeps routing real traffic to an instance that reports healthy but cannot actually serve requests correctly because a real dependency it needs is down.",
+            "It causes a thundering herd, where all instances receive traffic simultaneously right after a deploy.",
+            "It forces the load balancer to fall back to sticky sessions for that backend."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept warns specifically that a health endpoint returning \"200 OK\" without exercising real dependencies like database connectivity can report healthy while the actual request path is broken -- a false positive that defeats the whole point of health checking. Option A ignores this explicitly named failure mode. Option C describes a different, separate issue (recovery flooding) covered in the same section but not the one caused by this scenario. Option D is fabricated -- health check quality has no described relationship to sticky sessions in the concept."
         }
       ]
     },
@@ -357,6 +435,45 @@
           "type": "explanation",
           "prompt": "A colleague says: \"CAP theorem is basically obsolete advice now -- modern databases like Cassandra and DynamoDB just give you both consistency and availability.\" Explain what's right and wrong about this claim.",
           "modelAnswer": "What's right: modern distributed databases have gotten much better at making the CAP tradeoff feel less painful in practice, mainly by making consistency tunable per operation rather than a single fixed setting for the whole system. Cassandra and DynamoDB, for example, let you choose a consistency level per read or write (like requiring acknowledgment from a quorum of replicas versus just one), and outside of an actual network partition, a well-run cluster can genuinely serve requests that are both fast/available and strongly consistent almost all of the time -- partitions, in a healthy, well-connected data center network, are relatively rare events, not a constant condition. What's wrong: the claim that they give you \"both, full stop\" ignores that the tradeoff hasn't disappeared, it's just been made configurable and pushed to the moment it actually matters. The instant a real partition occurs -- a node genuinely can't reach enough of its peers to confirm a write or read is current -- that same database has to make the CAP choice for whatever consistency level you configured: a request demanding strong consistency will now be rejected or delayed rather than risk staleness (behaving CP for that request), while a request configured for a weaker consistency level will still get an immediate, possibly-stale answer (behaving AP for that request). So it's more accurate to say these systems let you choose, per operation, which side of the tradeoff you want to be on when a partition eventually happens -- not that they've found a way to avoid the tradeoff existing at all. CAP isn't obsolete; it's been productized into a configuration knob rather than an up-front, whole-system architectural decision."
+        },
+        {
+          "id": "system-design-cap-theorem-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A node passes its own internal check that no foreign-key constraint or application invariant has been violated by a transaction, but it disagrees with another replica about the current value of a key during a network partition. What does this scenario illustrate?",
+          "options": [
+            "The node has violated ACID consistency, which automatically means it has also violated CAP consistency.",
+            "The node can be perfectly ACID-consistent (its own internal invariants hold) while the system as a whole fails CAP consistency, because CAP consistency is about agreement between multiple nodes, not a single node's internal correctness.",
+            "This is impossible -- ACID consistency and CAP consistency are the same guarantee, so one cannot hold without the other.",
+            "The node's disagreement proves the system is not partition tolerant."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept is explicit that CAP's \"Consistency\" is not the same word as ACID's \"C\" -- a system can be perfectly ACID-consistent on every individual node while still failing CAP consistency if nodes disagree with each other during a partition. Option A conflates the two distinct guarantees the concept works hard to separate. Option C directly contradicts the concept's central clarifying point about the two terms. Option D confuses partition tolerance (continuing to operate despite the network dropping messages) with the consistency guarantee actually being discussed here."
+        },
+        {
+          "id": "system-design-cap-theorem-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Coordination services like ZooKeeper and etcd are typically built to lean CP rather than AP. Based on the concept's reasoning about mapping real systems to the tradeoff, why?",
+          "options": [
+            "Because leader-election and configuration data changes so rarely that availability doesn't matter for them.",
+            "Because two nodes simultaneously believing they are the leader (\"split brain\") is a far more damaging outcome than briefly refusing to answer a request, so these systems favor correctness over responsiveness.",
+            "Because ZooKeeper and etcd are older technologies that predate AP-style design.",
+            "Because CP systems are always faster than AP systems under normal operation."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept explains that coordination services lean CP specifically because a wrong answer (electing two leaders at once) is far more damaging than temporary unavailability -- it's a judgment about which failure mode is more tolerable for that particular data, not a general ranking of technologies. Option A is not the stated reasoning and mischaracterizes how much this data changing matters. Option C is an appeal to age the concept never makes -- CAP-based design choices aren't framed as being about a technology's era. Option D is false and unsupported; CP vs. AP is about behavior during partitions, not baseline speed under normal conditions."
+        },
+        {
+          "id": "system-design-cap-theorem-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A system serves requests that are both fully consistent and always available during normal operation. A partition then occurs, and for its duration the system starts rejecting some requests rather than risk stale answers. Per the concept's discussion of common misreadings of CAP, does this contradict the system being \"CP\"?",
+          "options": [
+            "Yes -- a true CP system must sacrifice availability at all times, not just during partitions.",
+            "No -- CAP is specifically a statement about tradeoffs during an actual partition; outside of a partition, a well-designed system can serve both consistent and available responses simultaneously, and this doesn't make it any less \"CP\" in how it behaves once a partition actually occurs.",
+            "Yes -- if the system was ever available and consistent at the same time, it was never really CP in the first place.",
+            "No, but only because the system must secretly be AP during normal operation and only switches to CP during partitions, which the concept describes as a design flaw."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept directly addresses this misreading: CAP does not mean a system is always sacrificing one property at every moment -- under normal, healthy network conditions, a well-designed system can serve both simultaneously, and the theorem only forces the choice specifically during an actual partition. Options A and C both wrongly assume CP requires constant sacrifice rather than partition-specific behavior. Option D invents a \"design flaw\" framing that isn't supported by the material -- behaving both-and during normal operation, then choosing C over A during a partition, is exactly correct CP behavior, not a flaw."
         }
       ]
     }

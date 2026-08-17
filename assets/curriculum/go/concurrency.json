@@ -117,6 +117,45 @@
           "explanation": "The concrete resource difference is stack size and who does the scheduling: a goroutine's stack starts tiny (~2KB) and grows/shrinks dynamically as needed, while a typical OS thread reserves a large, fixed-size stack upfront regardless of actual need. Combined with the Go runtime multiplexing many goroutines onto a much smaller number of real OS threads (an M:N scheduler), this is what makes spinning up thousands of goroutines cheap where spinning up thousands of OS threads would not be. Option A is wrong -- goroutines do run genuinely concurrently (and in parallel across multiple cores when GOMAXPROCS > 1), it's not a sequential simulation. Option C is wrong -- there's no such fixed cap; production Go programs routinely run into the hundreds of thousands of goroutines. Option D is wrong -- goroutines can access heap-allocated data exactly like any other Go code; that's unrelated to why they're lightweight."
         },
         {
+          "id": "go-goroutines-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A developer says: 'My Go program is running on an 8-core machine, so launching 8 goroutines guarantees all 8 run in true parallel, at the exact same instant.' What's the flaw in this claim?",
+          "options": [
+            "Nothing is wrong with it -- Go always runs exactly as many goroutines in parallel as there are available cores.",
+            "Starting a goroutine with `go` guarantees concurrent structure (independent, interleavable progress), but whether execution actually becomes parallel -- multiple goroutines running at the exact same physical instant on separate cores -- depends on GOMAXPROCS and runtime scheduling decisions, not merely on how many goroutines you happened to start.",
+            "Goroutines can never run in parallel under any circumstances; Go only ever provides the illusion of simultaneity through fast interleaving on a single core, regardless of core count.",
+            "True parallelism in Go requires manually pinning each goroutine to a specific CPU core through a dedicated API call."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Concurrency is about structuring a program as independently-progressing pieces; parallelism is about whether hardware actually executes more than one of them at the same physical instant. The `go` keyword guarantees the former -- it hands you concurrent structure -- but the runtime, guided by GOMAXPROCS and genuine scheduling decisions, determines how much of that structure is actually run in parallel; simply launching 8 goroutines on an 8-core machine doesn't force the scheduler to run all 8 simultaneously at every instant. Option A overstates the guarantee -- the number of cores available doesn't force that much simultaneous execution at all times. Option C is wrong in the opposite direction -- Go absolutely can and does run goroutines in true parallel when GOMAXPROCS > 1 and multiple goroutines are runnable. Option D is wrong -- there's no such manual core-pinning requirement in ordinary Go programming; the runtime handles this itself."
+        },
+        {
+          "id": "go-goroutines-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "What does this program most likely print?\n\n```go\nfunc main() {\n\tgo fmt.Println(\"background work\")\n\tfmt.Println(\"main done\")\n}\n```",
+          "options": [
+            "Both lines always print, in the order shown, because Go guarantees main finishes running its own remaining statements before any other queued goroutine gets a turn.",
+            "Just \"main done\" is by far the most likely single output, because main typically reaches its end -- and the whole process exits immediately when it does -- before the scheduler ever gives the background goroutine a chance to run, though no outcome here is strictly guaranteed either way.",
+            "The program deadlocks, since main is not allowed to return while another goroutine is still queued to run.",
+            "Only \"background work\" prints, because starting a goroutine with `go` pauses main until that goroutine finishes."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "When main returns, the entire program exits immediately, regardless of whether any other goroutines are still running or haven't started yet -- Go does not wait for background goroutines on its own. Since `go fmt.Println(...)` returns control to the next line instantly without waiting for the goroutine to actually execute, main typically reaches its own end and triggers process exit before the scheduler gets around to running the new goroutine at all, so \"main done\" prints and \"background work\" usually never does. Option A is wrong -- there's no such execution-order guarantee. Option C is wrong -- Go never blocks main's return on other goroutines finishing; that's precisely the behavior this concept warns about. Option D is wrong -- `go` never pauses the calling goroutine; it returns control immediately."
+        },
+        {
+          "id": "go-goroutines-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "On a Go version before 1.22, what does this print?\n\n```go\nvar wg sync.WaitGroup\nfor i := 0; i < 3; i++ {\n\twg.Add(1)\n\tgo func() {\n\t\tdefer wg.Done()\n\t\tfmt.Println(i)\n\t}()\n}\nwg.Wait()\n```",
+          "options": [
+            "Reliably 0, 1, 2, in that exact order, since each goroutine's closure captures the loop variable's value at the moment that goroutine was launched.",
+            "Most likely 3, 3, 3 (in some interleaving), because before Go 1.22 there was only one shared loop variable `i` reused across every iteration, so every goroutine's closure captured that same variable, which had typically already reached its final value of 3 by the time any goroutine actually got around to reading it.",
+            "A compile error, because a closure can never reference a variable declared in a for loop's init clause, in any version of Go.",
+            "Exactly 0, 1, 2, but merged into a single combined print statement, since all three goroutines share one underlying variable."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Before Go 1.22, a `for` loop had exactly one instance of its loop variable for the entire loop, not a fresh one per iteration -- so a closure created inside the loop body that references `i` captures that single shared variable, not a snapshot of its value at that moment. By the time any of the three goroutines actually runs, the loop has very likely already finished all three iterations, leaving `i` at 3, which is what every goroutine ends up printing. Option A describes Go 1.22+'s corrected behavior, not pre-1.22 behavior. Option C is wrong -- referencing a loop variable from a closure is completely legal Go, in every version; it's the semantics of what gets captured that changed. Option D is wrong -- there's no merging of prints; each goroutine calls Println independently, they just each observe the same final value."
+        },
+        {
           "id": "go-goroutines-assess-explain1",
           "type": "explanation",
           "prompt": "Explain what a goroutine leak is, why the garbage collector can't fix it, and what kind of code pattern typically causes one.",
@@ -237,6 +276,45 @@
           "explanation": "Go's select statement is explicitly specified to choose uniformly at random among whichever cases are ready at the moment it evaluates them, precisely so that developers can't accidentally write code that only works because case A happens to be listed before case B -- every case must be written as if it could be the one chosen, regardless of position. Option A is wrong -- this is a specified language behavior, not an incidental scheduling quirk. Option B is wrong and actually describes the opposite of what happens -- picking randomly among all ready cases requires checking all of them, not stopping early. Option D is wrong -- there's no special-casing based on the number of ready cases; the same random-choice rule applies uniformly regardless of how many cases happen to be ready."
         },
         {
+          "id": "go-channels-select-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Which of the following correctly describes close(ch) in Go?",
+          "options": [
+            "Sending on a channel after it has already been closed panics immediately, and closing an already-closed channel also panics -- close is not idempotent, and there's no built-in way to check whether a channel is already closed before attempting to close it.",
+            "Closing a channel automatically discards any values still sitting unread in its buffer, so a subsequent `range` over it receives nothing at all.",
+            "Either the sender or the receiver side may safely call close(ch) at any point, since which goroutine owns the channel has no bearing on who is allowed to close it.",
+            "Calling close(ch) a second time on the same channel is a harmless no-op, just like calling it once."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "close is a sharp, one-time operation: sending on a closed channel panics immediately, and calling close a second time on the same channel also panics -- there is no idempotent 'close if not already closed' built in, and checking beforehand via a receive would itself consume a value or race with other receivers. This is why the strong convention is a single, clear owner (the sender) responsible for closing exactly once. Option B is wrong -- values already sitting in a closed channel's buffer are still delivered; range continues draining them in order before it exits. Option C is wrong -- only the sending side should ever close a channel; a receiver closing it risks a panic on a subsequent send from the actual sender. Option D is wrong -- a second close() call panics, it does not silently no-op."
+        },
+        {
+          "id": "go-channels-select-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "In this code, what happens if neither ch1 nor ch2 has a value ready to receive at the exact moment the select statement runs?\n\n```go\nselect {\ncase v := <-ch1:\n\tfmt.Println(\"ch1:\", v)\ncase v := <-ch2:\n\tfmt.Println(\"ch2:\", v)\ndefault:\n\tfmt.Println(\"nothing ready\")\n}\n```",
+          "options": [
+            "select blocks until either ch1 or ch2 becomes ready, ignoring the default case, since default only runs after some implicit timeout elapses.",
+            "The default case runs immediately -- adding a default case makes the entire select non-blocking, firing right away whenever no other case is immediately ready, instead of waiting for one to become ready.",
+            "This is a compile error, since a default case cannot be combined with channel-receive cases in the same select statement.",
+            "select still picks randomly between ch1 and ch2 despite neither being ready, and blocks until whichever one it picked actually becomes ready."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Adding a default case is specifically what turns a select from blocking into non-blocking: if none of the other cases are ready the instant select evaluates them, default runs immediately instead of waiting for any of them to become ready. Option A inverts the actual behavior -- default has nothing to do with timeouts; it fires immediately, not after a delay. Option C is wrong -- combining default with receive/send cases in the same select is a completely standard, common pattern. Option D is wrong -- select only chooses randomly among cases that are actually ready; if none are, and a default exists, default is what runs, not a blocking random pick."
+        },
+        {
+          "id": "go-channels-select-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Three goroutines are all currently blocked on `<-done`, waiting for a completion signal. Which statement correctly describes how to release all three?",
+          "options": [
+            "Sending one value with `done <- struct{}{}` releases all three simultaneously, since a channel send is automatically broadcast to every goroutine currently waiting to receive.",
+            "Closing the channel with `close(done)` releases all three simultaneously, because a closed channel returns its zero value immediately and repeatedly to every current and future receiver -- whereas sending a single value would satisfy only one of the three waiting receivers, leaving the other two blocked.",
+            "Neither sending nor closing can ever release more than one waiting goroutine; each of the three would need its own dedicated channel to be released at all.",
+            "Sending three separate values, one at a time, is required to release all three, and closing the channel would have no effect on any goroutine currently blocked on a receive."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "A single sent value satisfies exactly one waiting receiver -- Go channels hand a sent value to only one of the waiting goroutines, not all of them. Closing a channel, by contrast, is a broadcast: every current and future receive on that channel immediately returns the zero value, forever, which is exactly why closing (rather than sending) is the idiomatic way to release every goroutine waiting on a shared signal at once. Option A describes a broadcast-on-send behavior Go channels simply don't have. Option C understates what closing actually accomplishes -- one close does release all three. Option D is wrong on both counts: three sends would indeed eventually satisfy three separate receivers one at a time, but closing very much does affect all currently-blocked receives, releasing them immediately."
+        },
+        {
           "id": "go-channels-select-assess-explain1",
           "type": "explanation",
           "prompt": "Explain the difference between a full-program deadlock and a goroutine leak in Go, and why Go's runtime can detect and crash on one but not the other.",
@@ -355,6 +433,45 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "The race detector instruments actual memory accesses during a real execution and reports races it genuinely observes -- but it cannot report a race whose triggering interleaving or code path simply didn't happen to occur during that specific run. A clean hour-long run is meaningful evidence that no race was triggered under that particular load and timing, not a proof that the code is race-free under all possible timings, inputs, and schedules. Option A is wrong -- the race detector works on any memory access, including those protected (or unprotected) by sync.Mutex, not just channel operations. Option C is wrong -- there's no such time-limited monitoring window; it runs for the duration of the instrumented program. Option D is wrong -- data race detection is precisely -race's core purpose; full deadlock detection is a separate, always-on runtime feature that doesn't require the -race flag at all."
+        },
+        {
+          "id": "go-sync-package-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A developer claims: 'A data race just means a goroutine might read a slightly stale value -- annoying, but basically harmless, similar to eventual consistency in a distributed system.' What's wrong with this claim, according to how the Go memory model actually treats a data race?",
+          "options": [
+            "Nothing is wrong with it -- that's an accurate description of what a data race causes in Go.",
+            "A data race is undefined behavior: the language specification makes no guarantee at all about what value a racing read observes, and for values larger than a single machine word, a race can produce a corrupted, torn value that no goroutine ever actually wrote -- not merely an old-but-otherwise-valid one.",
+            "Data races are actually impossible in Go, since the runtime automatically serializes every memory access across goroutines behind the scenes.",
+            "A data race only ever affects program performance, slowing execution down, but it can never affect the correctness of any value that gets read."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Go's memory model does not define what a racing read observes -- it is not guaranteed to be 'the old value' or 'the new value.' On real hardware, a race on anything larger than a machine word can produce a torn value assembled from bytes of two different writes, a value nobody ever actually wrote. This is a genuine correctness violation, not a harmless staleness trade-off, and the compiler is even permitted to apply optimizations that assume races don't happen, which can make racy code behave in ways that seem to defy the source's literal order. Option C is wrong -- Go does not automatically serialize unsynchronized accesses; that's precisely why races are possible and dangerous. Option D is wrong -- races are fundamentally a correctness problem, not merely a performance one."
+        },
+        {
+          "id": "go-sync-package-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A struct contains a sync.Mutex field. Which statement correctly describes how values of this struct should be handled once that mutex has been used?",
+          "options": [
+            "The struct should always be passed around and referenced via a pointer from that point on -- copying it duplicates the mutex's internal state, so the copy no longer protects the same critical section as the original, silently defeating the mutex's entire purpose.",
+            "It's always safe to copy such a struct freely, at any point, since Go automatically shares the underlying lock state across every copy of the same original value.",
+            "sync.Mutex is a reference type under the hood, similar to a slice or a map, so copying a struct that contains one never actually duplicates the lock.",
+            "go vet is guaranteed to catch every single case of a copied mutex, so this isn't something a developer needs to reason about manually."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "sync.Mutex (like most types in the sync package) must never be copied after first use. Copying duplicates its internal state, producing an independent lock that has nothing to do with the original -- goroutines locking the copy provide zero protection for whatever the original mutex was actually guarding. The practical rule is to pass such a struct by pointer once it's in use. Option B and C both wrongly assume some kind of automatic sharing or reference semantics that sync.Mutex simply does not have -- it's an ordinary struct value like any other, which is exactly why copying it is dangerous. Option D overstates go vet's coverage -- the material explicitly notes vet catches some, but not all, cases of this mistake, so it can't be relied on as a complete safety net."
+        },
+        {
+          "id": "go-sync-package-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Based on the rough guideline for choosing between a mutex and a channel, which scenario is the more natural fit for a sync.Mutex rather than a channel?",
+          "options": [
+            "A worker pool that hands off individual job items to several workers, then collects each worker's result back through another channel.",
+            "Multiple goroutines that each need to briefly read and update a shared in-memory cache map before moving on to their own separate work.",
+            "Signaling every currently-waiting goroutine at once that a long-running setup step has finished, so they can all proceed simultaneously.",
+            "One goroutine producing a stream of computed values that another goroutine consumes one at a time, in order."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The guideline favors a mutex when there's a piece of shared state that multiple goroutines need to directly read and mutate, with the natural unit of work being 'briefly touch this shared data structure and move on' -- exactly what a shared cache map being read and updated by multiple goroutines looks like. The other three scenarios are all shaped around the flow of values or signals between goroutines rather than a piece of state sitting still being poked at: handing off job items and collecting results (A) is a channel-shaped handoff, broadcasting a one-time completion signal to many waiters (C) is the closed-channel broadcast pattern, and a producer/consumer stream processed in order (D) is exactly what an ordinary channel pipe is for."
         },
         {
           "id": "go-sync-package-assess-explain1",

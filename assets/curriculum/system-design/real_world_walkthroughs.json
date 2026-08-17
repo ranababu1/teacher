@@ -121,6 +121,58 @@
           "type": "explanation",
           "prompt": "Walk through the end-to-end design of a URL shortener, explaining how ID generation, the read/write ratio, and caching strategy connect to and reinforce each other as a single coherent design, not three separate, unrelated decisions.",
           "modelAnswer": "The three decisions aren't independent -- each one is shaped by, and reinforces, the others, starting from the same core fact about this workload: redirects vastly outnumber creations, often by 100:1 or more, because a single short URL can be clicked far more times than it was ever created. That read/write skew is the first thing to establish, because it tells you where engineering effort actually pays off: optimizing the write path (ID generation) matters for correctness and avoiding contention, but optimizing the read path (redirect lookups) is where the actual capacity win lives, since reads are the overwhelming majority of total traffic. For ID generation, I'd lean toward a pre-generated pool of random keys rather than a single auto-incrementing counter: the counter approach is simple and collision-free, but it creates a single point of write contention that doesn't need to exist given how comparatively rare writes already are relative to reads, and it leaks creation order and volume through sequential, guessable codes. A pre-generated pool decouples the expensive part (guaranteeing uniqueness) from the request path entirely, generating batches of keys asynchronously ahead of time, so each actual creation request just pops a ready-made key with no inline coordination cost -- appropriate for a write path that, while not the bottleneck, should still stay simple and cheap. For the read path, given that the short_code-to-long_url mapping is essentially immutable once created and access is skewed toward a hot subset of currently-popular links, cache-aside with a long TTL is the natural fit: the application checks the cache first on every redirect, only falls back to the database on a genuine miss, and a long TTL (hours or more) introduces minimal staleness risk precisely because this specific data so rarely changes. The payoff compounds with the read/write skew already established -- because reads dominate the workload by two orders of magnitude, and the cache can plausibly absorb 95%+ of those reads, the effective load reaching the database drops to roughly the write volume plus a small trickle of cache misses, letting a comparatively modest database handle traffic that would otherwise require serious read-replica scaling. Finally, click-analytics logging is kept entirely off this hot path, recorded asynchronously so that a slow or failing analytics write can never degrade or break the actual redirect a user is waiting on -- reinforcing the same principle that shaped the caching decision: keep the path most requests take as fast and as failure-isolated as possible, and push everything non-essential to that specific response off onto a separate path with its own, more forgiving budget."
+        },
+        {
+          "id": "system-design-url-shortener-walkthrough-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Why does the concept recommend a pre-generated pool of random keys over a single auto-incrementing counter for generating short codes, even though writes are comparatively rare compared to reads in this system?",
+          "options": [
+            "Because auto-incrementing counters cannot be encoded in base62 under any circumstances.",
+            "Because a single global counter is still a shared, unscalable point of write contention regardless of how rare writes are relative to reads, and sequential codes are trivially enumerable, letting anyone scrape every issued short code just by counting -- a pre-generated pool avoids both problems by moving uniqueness-checking off the request path entirely.",
+            "Because pre-generated key pools are the only approach that supports custom aliases.",
+            "Because random keys are always shorter than base62-encoded counter values."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept's misconception addresses this directly: relative rarity of writes \"doesn't make a single global counter free of its own problems... it becomes a real contention point as write volume grows even if writes stay a small fraction of total traffic,\" and separately, \"sequential codes are trivially enumerable, letting anyone infer creation volume and order or scrape every issued short code just by counting upward.\" Option A is false -- the example explicitly shows a counter being base62-encoded successfully. Option C invents an unrelated claim about custom aliases never discussed. Option D makes an unsupported length comparison not addressed anywhere in the material."
+        },
+        {
+          "id": "system-design-url-shortener-walkthrough-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A product team debating 301 vs. 302 redirects for their URL shortener wants click analytics on every single visit to a short link, including repeat visits from the same browser. Per the concept's discussion of this tradeoff, which status code should they use, and what do they give up?",
+          "options": [
+            "301, because permanent redirects are always the technically correct choice for a URL shortener.",
+            "302, because it tells the browser to check with the server every time rather than caching the redirect locally, keeping every click visible to the server -- at the cost of never letting browsers cache the redirect away, which increases server load compared to 301.",
+            "Neither -- click analytics require a completely different HTTP status code that doesn't yet exist in the standard.",
+            "301, because it makes the server aware of every single click including repeat visits from the same browser."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept states this precisely: a 302 \"keeps every click visible to the server (valuable if click analytics matter to the product) at the cost of never letting browsers cache the redirect away,\" whereas a 301 \"means repeat visits to the same short link from the same browser never even reach the server after the first visit... the server loses visibility into every one of those subsequent clicks.\" Options A and D both incorrectly claim 301 preserves click visibility -- the concept states the opposite, that 301 causes the server to lose visibility into repeat clicks. Option C invents a nonexistent HTTP status code requirement."
+        },
+        {
+          "id": "system-design-url-shortener-walkthrough-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Per the concept's discussion of click-analytics logging, what specifically goes wrong if the analytics write happens synchronously, in the same request, before the redirect response is sent?",
+          "options": [
+            "Nothing goes wrong -- synchronous analytics writes are described as the recommended default for this system.",
+            "A slowdown or transient failure in the analytics write directly delays or breaks the redirect response, even though the user waiting for their redirect has no stake in whether the analytics row has been recorded yet.",
+            "The redirect would be sent to the wrong long_url as a direct result of the analytics write occurring first.",
+            "Synchronous analytics writes make the short_code lookup itself impossible to cache."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept states this directly: analytics recording \"must not be allowed to slow the redirect down or, worse, fail the redirect entirely if the analytics write has a transient problem,\" since \"nobody is waiting on the analytics write the way a user is waiting on the redirect itself.\" Option A contradicts the concept's explicit recommendation to decouple the two paths. Option C invents a data-correctness claim with no causal link described anywhere in the material. Option D fabricates an unrelated caching-impossibility claim not discussed."
+        },
+        {
+          "id": "system-design-url-shortener-walkthrough-assess-mcq5",
+          "type": "multipleChoice",
+          "prompt": "If a URL shortener's write volume or total row count genuinely outgrows a single machine, the concept recommends sharding by hash(short_code). Why does this specific shard key choice work well here, per the reasoning carried over from the database-scaling module?",
+          "options": [
+            "Because hashing short_code is the only shard key that any database technology supports.",
+            "Because hashing the lookup key itself distributes load evenly across shards and matches the dominant query pattern exactly, since every redirect read is already keyed by short_code.",
+            "Because hash(short_code) guarantees that no caching layer is ever needed once sharding is in place.",
+            "Because short_code values are numeric, and only numeric fields can be used as shard keys."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept states this directly: sharding by hash(short_code) \"directly reus[es] the shard-key reasoning from the database-scaling module: hashing the lookup key itself distributes load evenly and matches the dominant query pattern exactly, since every read is already keyed by short_code.\" Option A fabricates a database-technology restriction not discussed. Option C is false -- sharding and caching are separate, complementary concerns; the concept never claims one eliminates the need for the other. Option D is factually wrong -- short_code is described as an alphanumeric base62 string, not a numeric value, and the database-scaling module never restricts shard keys to numeric fields."
         }
       ]
     },
@@ -241,6 +293,58 @@
           "type": "explanation",
           "prompt": "Explain why designing a chat system is a genuinely different problem than designing a typical CRUD API, referencing the statelessness principle and the consistency-tradeoffs concept specifically, and describe how the design responds to each.",
           "modelAnswer": "A typical CRUD API, and even a read-heavy system like a URL shortener, fits the request/response model that the earlier modules in this subject were built around: a client sends a self-contained request, a stateless server handles it using only that request's contents plus whatever it can fetch from a shared store, and sends back a response -- which is exactly what lets a load balancer route freely across interchangeable instances and lets horizontal scaling work without correctness problems. A chat system breaks that model at its foundation, not as an edge case: a user has to receive messages the server initiates at arbitrary moments, which requires a long-lived, open, bidirectional connection between the client and one specific server for as long as that user is online. The moment that connection exists, it is unavoidable state pinned to one specific machine's memory -- the socket itself can't be relocated to a shared store the way a shopping cart's data could be, which means the statelessness principle can't simply be reapplied here the way it was for carts or sessions; it has to be worked around with a different mechanism, specifically a connection registry that tracks which server currently holds which user's socket, so that any server needing to deliver a message can find and forward to the right one. Consistency is the second place chat diverges from the earlier modules' defaults. A typical piece of advice from the consistency-tradeoffs concept is to match the guarantee to what a feature actually needs rather than reaching for the strongest option everywhere -- and chat is a clean example of that in action: within one conversation, both participants need a consistent, stable ordering of messages relative to each other, which requires some coordination (a per-conversation sequence number assigned at durable-write time), but there's no need whatsoever for a single, globally coordinated ordering across every conversation in the entire system, which would be extraordinarily expensive to provide and something users would never notice or benefit from anyway. So the chat design applies strong-enough ordering narrowly, per conversation, exactly where it's needed, while leaving everything else eventually consistent or entirely uncoordinated -- the same 'match, don't maximize' instinct from that concept, applied to a genuinely different traffic shape than the read-heavy, request/response systems the earlier modules mostly assumed."
+        },
+        {
+          "id": "system-design-chat-system-walkthrough-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Per the concept, why can't the 'externalize state to a shared store' fix used for shopping carts (moving cart data into Redis) be applied directly to a user's open WebSocket connection?",
+          "options": [
+            "Because WebSockets are not compatible with Redis under any circumstances.",
+            "Because the actual open TCP socket itself, not just data associated with it, is pinned to one specific machine's memory and cannot be moved into a shared store -- so the registry has to hold a pointer to which server owns the connection, rather than the connection itself.",
+            "Because shopping cart data and connection data are stored in different data formats that Redis cannot represent.",
+            "Because WebSocket connections are always encrypted, and Redis cannot store encrypted data."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept states this precisely: unlike a shopping cart's data, \"the actual open TCP socket itself, not just some associated data, is pinned to one specific machine's memory and can't be moved,\" so the fix is a connection registry that \"doesn't hold the state itself... it holds a pointer to which instance currently does.\" Option A fabricates an incompatibility between WebSockets and Redis that isn't the actual reason given. Option C invents a data-format restriction not discussed. Option D fabricates an encryption-related limitation not present anywhere in the material."
+        },
+        {
+          "id": "system-design-chat-system-walkthrough-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "In the store-and-forward pattern, why does the durable persist to the message store happen before the attempt at live delivery, rather than after?",
+          "options": [
+            "Because durable writes are always faster to execute than live-delivery attempts, so ordering them first improves latency.",
+            "Because durability is the actual guarantee the system provides -- if the persist succeeds first, a subsequent live-delivery failure (e.g., the recipient's connection server being down) cannot cause the message to be lost, only delay when the recipient sees it.",
+            "Because the recipient's connection server needs to read the message from the store before it is allowed to accept any live connection at all.",
+            "Because live delivery is only attempted for messages that fail to persist, as a fallback mechanism."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept's example states this directly: \"durability happens first and unconditionally, and live delivery is attempted only afterward, as a best-effort optimization layered on top of a guarantee that doesn't actually depend on it succeeding... If deliver_live fails... nothing is lost -- the message already exists in message_store.\" Option A invents an unsupported latency-comparison claim. Option C fabricates a connection-acceptance dependency not described anywhere. Option D inverts the actual relationship -- live delivery is attempted after persistence regardless of outcome, not only when persistence fails."
+        },
+        {
+          "id": "system-design-chat-system-walkthrough-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Per the concept's discussion of ordering, why is a per-conversation sequence number sufficient, with no need for a single global ordering across every conversation in the entire system?",
+          "options": [
+            "Because global ordering across all conversations is technically impossible to implement in any database.",
+            "Because users only need to see messages within one conversation in a consistent relative order; a system-wide ordering across unrelated conversations would require an expensive, tightly coordinated write path for a guarantee users would never notice or benefit from, echoing the 'match, don't maximize' principle from the consistency-tradeoffs concept.",
+            "Because chat systems are legally required to keep each conversation's data completely isolated from every other conversation.",
+            "Because per-conversation sequence numbers automatically produce a valid global ordering as a side effect, making a separate global mechanism redundant."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept states this directly: there's \"no need for a single global ordering across every conversation in the entire system -- that would demand exactly the kind of expensive, coordinated, strongly-consistent write path... that the consistency-tradeoffs concept warned against reaching for by default,\" since what's needed is ordering scoped to \"exactly what users would actually notice being wrong.\" Option A overstates the claim -- the concept never says global ordering is technically impossible, only that it's unnecessary and expensive. Option C invents a legal requirement not discussed anywhere. Option D is false -- per-conversation sequence numbers say nothing about relative order across different conversations; no such global ordering falls out as a side effect."
+        },
+        {
+          "id": "system-design-chat-system-walkthrough-assess-mcq5",
+          "type": "multipleChoice",
+          "prompt": "Per the concept's opening framing, what specifically makes a chat system break the stateless request/response assumption that earlier modules in this subject relied on?",
+          "options": [
+            "Chat systems use a different network protocol (WebSockets) that happens to be incompatible with load balancers.",
+            "A user needs to receive messages the server initiates at any moment, with no client request for that message to be a response to -- which requires a long-lived, open, bidirectional connection tied to one specific machine, reintroducing exactly the statefulness the earlier modules worked to design away from.",
+            "Chat messages are too large to fit in a typical HTTP request body, forcing a different transport.",
+            "Chat systems cannot use a database at all, unlike the request/response systems covered earlier."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept states this exactly: \"A user needs to receive messages the server initiates, at any moment, without having asked for them via a fresh request -- there's no request for an incoming message to be the response to. That requires a long-lived, open, bidirectional connection... The moment that connection exists, it is, definitionally, state tied to one specific machine.\" Option A misattributes the issue to load-balancer incompatibility, which the concept doesn't claim -- load balancers can still assign initial connections; the issue is what happens after. Option C invents a message-size limitation not discussed anywhere. Option D is directly contradicted by the concept's own store-and-forward design, which depends entirely on a durable database."
         }
       ]
     }

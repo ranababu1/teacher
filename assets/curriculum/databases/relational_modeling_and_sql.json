@@ -121,6 +121,45 @@
           "type": "explanation",
           "prompt": "A colleague says: 'normalization is just an academic exercise -- in the real world you denormalize for performance anyway, so why bother getting the normalized model right first?' Explain what's wrong with this framing, and describe when denormalizing is actually a reasonable engineering choice.",
           "modelAnswer": "This framing conflates two different problems that normalization and denormalization each solve. Normalization's primary purpose is correctness: it eliminates redundancy that would otherwise let the same fact be stored in multiple places and go silently out of sync, producing update, insertion, and deletion anomalies. Skipping normalization doesn't just cost you performance headroom you might reclaim later -- it costs you data integrity immediately, in the form of bugs where two rows disagree about a fact that should have one unambiguous answer, discoverable only when someone notices the inconsistency, often much later and often in production. Denormalization, when it's actually warranted, should be layered *on top of* a correct, normalized model -- as a deliberate, measured, and ideally reversible optimization aimed at a specific, observed bottleneck, such as a materialized view that caches an expensive join-and-aggregate query and is refreshed on a known schedule, or a read replica serving traffic away from the primary. It should not be a substitute for modeling the domain correctly in the first place, because doing that reintroduces exactly the anomalies normalization exists to prevent, and now every future piece of code that writes to the schema has to remember, by convention alone, to keep the duplicated data consistent -- with no constraint able to enforce that for it. The right sequence is: model correctly, measure, and only then denormalize the specific thing that measurement justifies."
+        },
+        {
+          "id": "databases-relational-modeling-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "An `orders` table declares `customer_id BIGINT NOT NULL REFERENCES customers(id) ON DELETE RESTRICT`. What happens when someone tries to DELETE a customer row that still has orders referencing it?",
+          "options": [
+            "The DELETE succeeds, and every order referencing that customer has its customer_id set to NULL automatically.",
+            "The DELETE succeeds, and every order referencing that customer is deleted along with it.",
+            "The DELETE is rejected with a foreign key violation error, forcing whoever issued it to decide explicitly what should happen to the referencing orders first.",
+            "The DELETE succeeds for the customer row only, leaving orders rows whose customer_id points at a row that no longer exists."
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "RESTRICT is exactly the ON DELETE policy that refuses the delete outright rather than doing anything to the referencing rows -- it forces a human or an explicit piece of code to decide first whether the orders should be reassigned, deleted, or nulled out, rather than the database silently choosing for them. Option A describes ON DELETE SET NULL, and Option B describes ON DELETE CASCADE -- both are real, valid policies in PostgreSQL, but neither is what RESTRICT does. Option D describes exactly the orphaned-reference state that a foreign key constraint exists to make structurally impossible; PostgreSQL will never leave the database in that state, which is the entire point of enforcing the constraint at delete time as well as at insert/update time."
+        },
+        {
+          "id": "databases-relational-modeling-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A table `order_items` has composite primary key `(order_id, product_id)` and also stores a `product_name` column copied from the products table. Which normal form does this violate?",
+          "options": [
+            "1NF, because product_name does not hold an atomic value.",
+            "2NF, because product_name depends only on product_id -- part of the composite key -- not on the whole key (order_id, product_id) together.",
+            "3NF, because product_name depends on a non-key column rather than on the primary key.",
+            "No normal form is violated -- product_name is a normal descriptive column and is fine to store here."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "2NF specifically applies to tables with a composite primary key, and it requires every non-key column to depend on the entire key, not just part of it. Here, product_name is a fact about the product alone -- it's the same for every order that includes that product -- so it depends only on product_id, not on order_id at all, which is precisely the kind of partial dependency 2NF forbids. Option A is wrong because product_name genuinely is a single atomic string; 1NF isn't the issue. Option C describes a transitive dependency between two non-key columns, which isn't what's happening here (product_name doesn't depend on some other non-key column of order_items -- it depends on only half of the primary key). Option D ignores that this exact redundancy is what causes an update anomaly: if a product's name changes, every order_items row referencing that product needs to be updated, or the data becomes self-contradictory."
+        },
+        {
+          "id": "databases-relational-modeling-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A team runs `CREATE MATERIALIZED VIEW monthly_sales AS SELECT ...` to speed up an expensive report. Months later, someone notices the report doesn't reflect orders placed in the last week. What's the most likely explanation?",
+          "options": [
+            "Materialized views automatically stay synchronized with their underlying tables, so this must be a bug in the original query.",
+            "The materialized view stores a physical snapshot of the query's result as of whenever it was last refreshed, and nobody has run REFRESH MATERIALIZED VIEW since before last week's orders were inserted.",
+            "PostgreSQL refreshes every materialized view automatically once every 24 hours, so the server must have been down for over a week.",
+            "Materialized views silently drop any rows inserted after their creation, so this is expected, permanent behavior that a refresh cannot fix."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "A materialized view's defining trade-off is exactly this: unlike a regular view (which re-runs its query live on every SELECT), a materialized view stores the query's result physically, like a table, so reading it is cheap -- but that stored result goes stale the moment the underlying tables change, and staying current requires someone or something to explicitly run REFRESH MATERIALIZED VIEW on a schedule matching the staleness the application can tolerate. Option A describes a regular view, not a materialized one. Option C invents an automatic refresh schedule that PostgreSQL does not provide by default -- refreshing has to be scheduled deliberately (a cron job, pg_cron, or application logic). Option D is wrong because a refresh does fix it; the view isn't broken, it's simply not being refreshed."
         }
       ]
     },
@@ -241,6 +280,45 @@
           "type": "explanation",
           "prompt": "Explain the logical order in which a SELECT query's clauses actually execute -- not the order you type them in -- and use it to explain why an aggregate like COUNT(*) can be used in HAVING but not in WHERE.",
           "modelAnswer": "Although you write a SELECT statement in the order SELECT, FROM, WHERE, GROUP BY, HAVING, ORDER BY, LIMIT, that is not the order in which the database actually evaluates it. Logically, execution proceeds roughly as: FROM and any JOINs first build the combined set of candidate rows; WHERE then filters those individual rows down, one at a time, with no knowledge of any grouping yet; GROUP BY then collapses the surviving rows into groups based on the specified columns; HAVING filters those already-formed groups, typically based on an aggregate computed over each one; SELECT then computes the actual output columns and expressions (which is why you generally can't reference a SELECT-list alias inside WHERE -- that alias doesn't exist as a value until the SELECT step, which runs after WHERE); and finally ORDER BY and LIMIT sort and truncate the finished result. This order explains the WHERE-versus-HAVING asymmetry directly: an aggregate function like COUNT(*) only has a meaningful value once rows have been grouped, which happens at the GROUP BY step -- and WHERE executes before that step even begins. Asking WHERE to filter on COUNT(*) is asking it to reference something that, at the point it runs, simply doesn't exist yet. HAVING, by contrast, executes after GROUP BY has formed groups and after aggregate functions have been computed per group, so it's specifically positioned at the one point in the pipeline where filtering on an aggregate result is possible at all."
+        },
+        {
+          "id": "databases-sql-querying-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Which rows does `WHERE status = 'active' OR status = 'pending' AND is_flagged = false` actually return?",
+          "options": [
+            "Rows where status is 'active' or 'pending', and additionally is_flagged is false in both cases.",
+            "Rows where status is 'active' regardless of is_flagged, or status is 'pending' and is_flagged is false.",
+            "A syntax error, because PostgreSQL refuses to evaluate AND and OR in the same WHERE clause without explicit parentheses.",
+            "Rows where all three conditions -- active, pending, and not flagged -- must simultaneously be true, which is impossible."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "AND binds tighter than OR, exactly like multiplication binds tighter than addition, so the AND clause groups first: the expression parses as `status = 'active' OR (status = 'pending' AND is_flagged = false)`. That means every 'active' row is included unconditionally -- is_flagged never even gets checked for them -- while 'pending' rows are only included if they're also unflagged. Option A describes what the query would mean if OR bound tighter, or if it were written with explicit parentheses around the OR; that's not PostgreSQL's actual precedence. Option C is wrong -- mixing AND and OR without parentheses is legal SQL, just easy to misread. Option D misreads the clause as requiring all three conditions at once, which isn't how OR works at all."
+        },
+        {
+          "id": "databases-sql-querying-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Why does `SELECT customer_id, order_date, COUNT(*) FROM orders GROUP BY customer_id` raise an error in PostgreSQL?",
+          "options": [
+            "COUNT(*) cannot be combined with GROUP BY in the same query.",
+            "order_date appears in the SELECT list but is neither wrapped in an aggregate function nor included in GROUP BY, so PostgreSQL has no principled way to choose a single order_date value to display for a customer with multiple orders on different dates.",
+            "GROUP BY requires every column in the table's schema to be listed, not just the ones actually being grouped on.",
+            "customer_id must itself be wrapped in an aggregate function, such as MIN(customer_id), before it can appear in GROUP BY."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "PostgreSQL enforces a strict rule: every column in the SELECT list that isn't inside an aggregate function must also appear in GROUP BY. order_date satisfies neither condition here, and for a customer with orders on several different dates, there is no single correct order_date value to show on that customer's one summary row -- so PostgreSQL refuses to guess and raises an error instead. Option A is false; COUNT(*) is exactly the kind of aggregate GROUP BY queries are built around. Option C invents a requirement that doesn't exist -- GROUP BY only cares about columns that actually appear in the SELECT list ungrouped and unaggregated. Option D is backwards: customer_id is fine exactly as written, because it IS the GROUP BY column; it's order_date that's the problem."
+        },
+        {
+          "id": "databases-sql-querying-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "In standard SQL, `SELECT price * quantity AS total FROM orders WHERE total > 100` fails, but referencing `total` in an ORDER BY clause on the same SELECT works fine. Why the difference?",
+          "options": [
+            "WHERE executes before SELECT computes its output expressions, so the alias `total` doesn't exist yet at that point; ORDER BY executes after SELECT, once `total` is a real, computed output column.",
+            "Aliases are only valid inside numeric contexts, and WHERE is considered a boolean context while ORDER BY is not.",
+            "This is a bug specific to PostgreSQL; the SQL standard requires both clauses to see the alias identically.",
+            "WHERE clauses are restricted to plain column references and cannot contain any computed expression, regardless of aliasing."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "The logical order of execution is FROM/JOIN, then WHERE, then GROUP BY, then HAVING, then SELECT, then ORDER BY. WHERE runs before SELECT has computed any of its output expressions, so at the point WHERE would need to evaluate `total > 100`, the alias `total` simply hasn't been computed into existence yet. ORDER BY, by contrast, runs after SELECT, once every output column -- aliased or not -- genuinely exists, which is why referencing `total` there works. Option B invents a distinction between 'numeric' and 'boolean' contexts that has nothing to do with the real cause. Option C is wrong -- this behavior follows directly from execution order, not a vendor bug. Option D is false; WHERE can absolutely filter on computed expressions, such as `WHERE price * quantity > 100` written out directly instead of through an alias."
         }
       ]
     },
@@ -361,6 +439,45 @@
           "type": "explanation",
           "prompt": "Explain why NOT IN can silently produce zero rows when its subquery includes a NULL, and why NOT EXISTS avoids this trap. Use three-valued logic in your answer.",
           "modelAnswer": "SQL's NOT IN against a subquery is logically equivalent to a chain of inequality comparisons -- `x <> v1 AND x <> v2 AND x <> v3 ...` -- for every value v the subquery produces, all combined with AND. SQL uses three-valued logic, where any comparison involving NULL evaluates not to TRUE or FALSE but to a third value, UNKNOWN, because NULL means the value being compared against is itself unknown, and no comparison against an unknown quantity can be confidently answered either way. If even one of the subquery's returned values is NULL, the corresponding comparison `x <> NULL` evaluates to UNKNOWN for every row being tested, no matter what x actually is. Under AND's truth table, TRUE AND UNKNOWN is UNKNOWN, not TRUE -- so as soon as one UNKNOWN comparison enters the chain, the entire ANDed expression collapses to UNKNOWN for every single row, regardless of how many of the other individual comparisons were confidently TRUE. WHERE only keeps rows where the final condition is TRUE, and it discards UNKNOWN exactly like FALSE, so the whole query returns zero rows -- silently, with no error, which is what makes this bug so easy to miss in practice. NOT EXISTS is immune to this because it isn't built from a chain of per-value equality comparisons at all -- it asks a fundamentally different, existential question: does at least one row in the subquery match this row, by whatever join condition you specify. A NULL row in the subquery simply never satisfies an equality-based match condition against any real value, so it's correctly excluded from consideration rather than corrupting the logical combination of every other comparison."
+        },
+        {
+          "id": "databases-constraints-and-null-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A `products` table declares `price NUMERIC(10,2) NOT NULL CHECK (price >= 0)`. A buggy application later issues `UPDATE products SET price = -10 WHERE id = 5`. What happens?",
+          "options": [
+            "The UPDATE succeeds silently, because CHECK constraints are only evaluated on INSERT, never on UPDATE.",
+            "The UPDATE is rejected with a constraint violation error, because CHECK is evaluated on every write that would leave a row violating it, including UPDATE.",
+            "The UPDATE succeeds, but PostgreSQL writes a warning to the server log that must be checked manually afterward.",
+            "PostgreSQL silently clamps the value to 0 instead of storing the out-of-range -10."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "A CHECK constraint is a rule the database enforces on every write that would produce a row failing it -- INSERT and UPDATE alike -- not just at row-creation time. Option A is a common but incorrect assumption; there's nothing INSERT-specific about how CHECK is enforced. Option C invents a silent-warning behavior PostgreSQL doesn't have -- a CHECK violation is a hard error that aborts the statement, not a logged advisory. Option D invents a clamping behavior that doesn't exist; PostgreSQL never silently rewrites a value to make it satisfy a constraint, it simply rejects the write outright and leaves the existing row untouched."
+        },
+        {
+          "id": "databases-constraints-and-null-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Table `people` has rows `(1, age=25), (2, age=NULL), (3, age=35)`. What does `SELECT SUM(age), COUNT(age) FROM people` return?",
+          "options": [
+            "SUM = 60, COUNT = 2 -- both SUM and COUNT(age) ignore the NULL row entirely.",
+            "SUM = 60, COUNT = 3 -- SUM ignores the NULL when totaling, but COUNT(age) counts every row regardless of NULLs.",
+            "SUM = NULL, COUNT = 3 -- the presence of any NULL makes the entire SUM undefined.",
+            "SUM = 60, COUNT = 3, because COUNT(column) always behaves identically to COUNT(*)."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "SUM(age) and COUNT(age) both skip rows where age is NULL when computing their result -- this is the general rule for every aggregate function except COUNT(*). SUM adds only the known ages (25 + 35 = 60), and COUNT(age) counts only the rows where age is NOT NULL, which is 2 (rows 1 and 3), not 3. Option B and D both incorrectly claim COUNT(age) counts all rows, which is the behavior of COUNT(*), not COUNT(column) -- that distinction is exactly what separates the two forms. Option C invents a 'NULL poisons the whole aggregate' behavior that doesn't apply here; that kind of poisoning is a three-valued-logic effect specific to chained boolean comparisons like NOT IN, not to how SUM handles NULL inputs."
+        },
+        {
+          "id": "databases-constraints-and-null-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "The `manager_id` column in `employees` has a NOT NULL constraint, guaranteeing `SELECT manager_id FROM employees` can never return a NULL value. Is `WHERE id NOT IN (SELECT manager_id FROM employees)` safe to use here, or should it still be rewritten as NOT EXISTS?",
+          "options": [
+            "It's unsafe regardless of the NOT NULL constraint, because NOT IN is deprecated in PostgreSQL and no longer guaranteed to execute correctly.",
+            "It's safe specifically because the NOT NULL constraint guarantees the subquery can never return a NULL -- the NOT IN/NULL trap only arises when the subquery's result set can itself contain a NULL value.",
+            "It's unsafe because NOT IN always performs a slow sequential scan, independent of any constraint on the underlying column.",
+            "It's safe only if the outer column, id, also carries a NOT NULL constraint."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The NOT IN/NULL trap specifically depends on the subquery's *result set* containing a NULL value -- once even one comparison in the ANDed chain evaluates to UNKNOWN, the whole chain collapses to UNKNOWN. A NOT NULL constraint on manager_id guarantees the subquery can never produce that poisoning NULL in the first place, so in this specific case NOT IN is genuinely safe and behaves exactly as intuitively expected. Option A is false -- NOT IN isn't deprecated; it's simply risky in the specific case where its subquery can contain NULL. Option C confuses a performance concern (real, but separate) with the correctness trap being asked about. Option D is irrelevant -- whether the outer id column can be NULL doesn't affect whether the subquery's result set can poison the chain; what matters is NULL-ness on the side being IN-ed against."
         }
       ]
     }

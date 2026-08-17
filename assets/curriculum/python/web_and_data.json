@@ -111,6 +111,58 @@
           "type": "explanation",
           "prompt": "A junior developer says: \"Our API isn't RESTful because we use POST for an endpoint that just triggers a report to be re-generated, instead of creating a new resource.\" Explain why this concern is largely misplaced, and what actually matters more in practice.",
           "modelAnswer": "REST is a descriptive architectural style, not a certified standard with an enforcement mechanism -- there's no official REST compliance checker, and the term has, in everyday practice, drifted to mean roughly \"an HTTP API organized around resource URLs using conventional verbs and status codes,\" rather than a strict checklist derived from the original academic dissertation that coined the term. Using POST for an action that isn't a textbook 'create a new resource' -- like triggering a report regeneration -- is common and reasonable: POST's conventional meaning covers any action that isn't naturally idempotent or doesn't map cleanly onto GET/PUT/PATCH/DELETE's more specific meanings, and 'trigger this side-effecting operation' fits that description fine. What actually matters more in practice is whether the API is predictable and easy for other developers to work with: does GET stay safe and idempotent so it can be cached and retried freely, do status codes accurately reflect success versus client versus server failure, is the URL structure sensible and discoverable. Worrying about whether every single endpoint maps perfectly onto strict CRUD-over-resources semantics is usually less valuable than making sure the conventions that matter for real usage -- safety of GET, meaningful status codes, predictable behavior -- are actually being followed."
+        },
+        {
+          "id": "python-http-rest-apis-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A client wants to update only a user's email address, leaving every other field (name, phone, address) untouched. Which HTTP method is most conventionally appropriate, and what's the risk of using the other one instead?",
+          "options": [
+            "PATCH, since it's meant for a partial update -- changing just the fields provided. Using PUT instead risks overwriting every other field with whatever the client didn't include, since PUT conventionally means 'replace this resource entirely'",
+            "PUT, since PUT is idempotent and PATCH is not, and idempotency is what matters here",
+            "POST, since only POST is capable of modifying an existing resource's fields",
+            "GET, since retrieving the current record and resending it automatically updates it too"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "PATCH's conventional meaning is exactly 'apply a partial update -- change just the fields provided, leave the rest alone,' which fits this scenario precisely. PUT's conventional meaning is 'replace the resource entirely with the given representation' -- if a client sent a PUT with only the email field (omitting name, phone, and address), a server following PUT's convention could reasonably interpret the missing fields as 'these should be cleared/reset,' silently wiping data the client never intended to touch. PATCH avoids that risk by design."
+        },
+        {
+          "id": "python-http-rest-apis-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "```python\nimport requests\n\nfor _ in range(3):\n    response = requests.put(\"https://api.example.com/users/42\", json={\"name\": \"Amy\"})\n```\nAssuming the server and network behave normally, how should the state of the resource at /users/42 after all three identical PUT calls compare to its state after just one?",
+          "options": [
+            "The same either way -- PUT is conventionally idempotent, so repeating an identical PUT should leave the resource in the same state as doing it once",
+            "The resource accumulates three stacked historical versions, since PUT never overwrites data, only appends to it",
+            "The third call fails with an error, since PUT conventionally refuses to be called more than once on the same resource",
+            "Three separate new user records are created, one per call, each with name \"Amy\""
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "PUT is conventionally expected to be idempotent: sending the same PUT request multiple times should produce the same end result as sending it once, since each call fully replaces the resource with the same given representation. This is precisely what distinguishes PUT from POST, where repeating an identical request against a 'create' endpoint would typically create multiple separate new resources rather than converging on one consistent state. Nothing about PUT's convention involves versioning, appending, or refusing repeat calls."
+        },
+        {
+          "id": "python-http-rest-apis-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A client requests a page at a URL that used to exist but has been permanently moved to a different URL. Which status code category should the server use, and what should it communicate to the client?",
+          "options": [
+            "3xx (redirection) -- specifically something like 301 Moved Permanently -- telling the client to look at a new URL instead of treating the old one as simply missing",
+            "4xx, since the client asked for something that no longer exists at that URL",
+            "2xx, since the server successfully determined where the resource used to be",
+            "5xx, since the server failed to serve the originally requested URL"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "The 3xx category exists specifically to communicate 'this resource has moved, look elsewhere' -- a genuinely different situation from 'this resource simply doesn't exist' (which would be 4xx, specifically 404) or 'the server encountered a problem' (5xx). A 301 response conventionally includes the new location, letting a well-behaved client automatically follow the redirect rather than having to guess or give up entirely. Treating a permanent move as a 4xx would lose the useful information about where the resource actually went."
+        },
+        {
+          "id": "python-http-rest-apis-assess-mcq5",
+          "type": "multipleChoice",
+          "prompt": "Which of the following is part of an HTTP response, but never part of an HTTP request?",
+          "options": [
+            "A status code",
+            "Headers",
+            "A body",
+            "A URL"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "A status code is specifically a response concept -- it's the three-digit summary of what happened when the server handled the request, and a request never carries one, since the request is what's asking, not what's answering. Headers and a body can appear in both a request (e.g. an Authorization header, a POST body) and a response (e.g. a Content-Type header, a JSON body), so those don't uniquely belong to either side. A URL is specific to a request (it identifies which resource the request concerns) -- a response doesn't include the URL that was requested, so it's not the right answer to 'part of a response,' but the question specifically asks what's response-only, which only the status code satisfies."
         }
       ]
     },
@@ -225,6 +277,58 @@
           "type": "explanation",
           "prompt": "Explain what a foreign key is, using a concrete two-table example, and explain why relational databases use references between tables instead of duplicating data across them.",
           "modelAnswer": "A foreign key is a column in one table that stores the primary key value of a row in another table, creating a link between the two. For example, an orders table might have a user_id column that's a foreign key referencing the id column of a users table -- each row in orders stores just a number (say, 1), which points back to a specific row in users (the user whose id is 1), rather than storing that user's full name and email directly on every order they've ever placed. This matters for a few concrete reasons: it avoids duplicating the same information many times over (a user with 50 orders would otherwise have their name and email repeated 50 times, once per order row), which wastes storage and, more importantly, creates a consistency problem -- if that user updates their email, every duplicated copy across 50 order rows would need to be updated too, and it's easy for some copies to be missed, leaving the data inconsistent. By storing just a reference (the foreign key) and looking up the full details from the single authoritative users row whenever needed, there's exactly one place where a user's name and email live, so updating it once keeps every linked order correctly associated with the current, accurate information."
+        },
+        {
+          "id": "python-databases-sql-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "```sql\nUPDATE products SET price = 0;\n```\nThis is run against a products table containing 500 rows, with no WHERE clause at all. What happens?",
+          "options": [
+            "Every single row in the products table has its price set to 0, since there's no WHERE clause to limit which rows are affected",
+            "Nothing happens, since UPDATE requires a WHERE clause in order to execute at all",
+            "Only the first row is updated, since UPDATE defaults to affecting a single row when no condition is given",
+            "It raises a syntax error, since SET must always be immediately followed by a WHERE clause"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "Without a WHERE clause, both UPDATE and DELETE apply to every single row in the table -- there's no implicit 'just the first row' or 'nothing' default, and no syntax requirement forcing a WHERE clause to be present. This statement sets every one of the 500 rows' price column to 0, which is exactly the kind of famous, genuinely destructive mistake that happens when someone forgets the WHERE clause, often while testing a query interactively against a real table."
+        },
+        {
+          "id": "python-databases-sql-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "```python\ncursor.execute(\"SELECT name FROM users WHERE id = ?\", (9999,))\nresult = cursor.fetchone()\nprint(result)\nprint(result is None)\n```\nAssuming no user with id 9999 exists, what gets printed?",
+          "options": [
+            "None then True",
+            "It raises an exception, since fetchone() requires at least one matching row to exist",
+            "() then False -- an empty tuple is returned instead of None",
+            "None then False -- result actually is None, but is None evaluates to False for database-returned null values"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "A SELECT that matches no rows is not an error condition -- it's a completely normal, expected outcome. cursor.fetchone() simply returns the Python value None when there's no matching row to return, rather than raising an exception or returning some special empty-tuple placeholder. Since result is genuinely the actual None object, result is None correctly evaluates to True -- there's no special case where a database-related None behaves differently from an ordinary None under is."
+        },
+        {
+          "id": "python-databases-sql-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Which statement correctly distinguishes a primary key from a foreign key?",
+          "options": [
+            "A primary key uniquely identifies each row within its own table; a foreign key is a column that holds a reference to a primary key value in a different table, establishing a relationship between the two",
+            "A primary key and a foreign key are simply two different names for the same concept -- both just mean 'a unique identifier for a row'",
+            "A foreign key must always be unique within its own table, exactly the same way a primary key is",
+            "A primary key can be duplicated across multiple rows in a table, while a foreign key can never be duplicated"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "A primary key's defining job is uniqueness within its own table -- no two rows share the same primary key value. A foreign key's job is entirely different: it's a column that stores a primary key value borrowed from another table, creating a link between the two, and it is commonly, and often intentionally, duplicated -- many orders can share the same user_id, for instance, since many orders can belong to the same one user. Options C and D both invert or conflate these two genuinely distinct roles."
+        },
+        {
+          "id": "python-databases-sql-assess-mcq5",
+          "type": "multipleChoice",
+          "prompt": "```python\nimport sqlite3\n\nconn = sqlite3.connect(\"shop.db\")\ncursor = conn.cursor()\ncursor.execute(\"INSERT INTO products (name, price) VALUES (?, ?)\", (\"Widget\", 9.99))\nconn.close()   # closed WITHOUT calling conn.commit() first\n\nconn2 = sqlite3.connect(\"shop.db\")\ncursor2 = conn2.cursor()\ncursor2.execute(\"SELECT * FROM products WHERE name = 'Widget'\")\nprint(cursor2.fetchall())\n```\nWhat most likely gets printed?",
+          "options": [
+            "[] -- since conn.commit() was never called before closing the first connection, the insert was likely never actually persisted to the database file",
+            "[(1, 'Widget', 9.99)] -- inserts are always immediately persisted to disk regardless of commit()",
+            "It raises an OperationalError, since closing a connection without committing first is not permitted",
+            "[] -- but for a different reason: a SELECT can never see data inserted through a different connection object, even with a proper commit()"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "conn.commit() is what actually persists changes made through a connection to the database file -- without it, those changes may simply never make it to disk, and closing the connection without committing first typically discards them (this doesn't raise any error; it's a silent, easy-to-miss mistake). Since the insert here was never committed, the second connection -- which reads from the actual database file -- most likely finds no such row, and the query returns an empty list. Option D is wrong: a properly committed change from one connection is visible to a different connection reading the same database file; the missing commit, not cross-connection visibility, is the actual issue here."
         }
       ]
     }

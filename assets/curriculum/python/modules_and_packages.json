@@ -116,6 +116,45 @@
           "type": "scenario",
           "prompt": "A module named shared_state.py defines a module-level variable: `active_users = []`. Two other files, file_a.py and file_b.py, both write `import shared_state` near the top, at different points in the program's execution. file_a.py runs first and does `shared_state.active_users.append(\"amy\")`. Later, file_b.py runs and reads `shared_state.active_users`. What does file_b.py actually see, and why, based on how Python's import system works?",
           "modelAnswer": "file_b.py sees ['amy'] -- the mutation made by file_a.py is visible. Even though shared_state is imported separately in two different files, Python's import caching (via sys.modules) means both import shared_state statements, no matter where or when they run, end up referring to the exact same module object in memory -- there is only ever one shared_state module for the whole running program, built once the first time it's imported, and reused (not rebuilt) by every subsequent import anywhere else. Since active_users is a mutable list living as an attribute of that one shared module object, and file_a.py's append() mutates that list in place (rather than reassigning shared_state.active_users to point at a brand new list), any other code that later accesses shared_state.active_users -- including file_b.py, importing the same cached module -- sees the same, already-mutated list, including amy's entry. This is exactly why modules can be used (deliberately, and carefully) as a lightweight way to share mutable state across different parts of a program -- and also why unexpected shared mutable module state can be a source of confusing bugs if the sharing isn't intentional."
+        },
+        {
+          "id": "python-modules-imports-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "```python\nfrom math import log\n\nlog = 10\nprint(log(2.718))\n```\nWhat happens?",
+          "options": [
+            "TypeError: 'int' object is not callable",
+            "Approximately 1.0, since log computes the natural logarithm of 2.718",
+            "10, because log is now just a variable holding that value",
+            "NameError: name 'log' is not defined"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "`from math import log` binds the name `log` in the current namespace to the `math` module's log function. But `log = 10` immediately rebinds that same name to the integer `10` -- there's nothing protecting a `from`-imported name from being overwritten by an ordinary assignment, since both live in exactly the same namespace. By the time `log(2.718)` runs, `log` no longer refers to the function at all; it's `10`, and trying to call an int like a function raises `TypeError: 'int' object is not callable`. This is exactly the collision risk `from module import name` carries that a plain `import module` (accessed as `module.log`) would not."
+        },
+        {
+          "id": "python-modules-imports-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A developer creates a file named `random.py` in the same directory as their main script, intending it to hold their own unrelated helper functions. Their main script does `import random` and then calls `random.randint(1, 10)`, expecting the standard library's function. What actually happens?",
+          "options": [
+            "It likely fails (e.g. AttributeError), because import random finds the developer's own random.py first -- the current directory is searched before the standard library -- so the real randint almost certainly isn't defined there",
+            "Python always prefers the standard library module over any same-named file in the current directory, so it works exactly as intended",
+            "Python raises ImportError immediately, refusing to import any module that shares a name with a standard library module",
+            "Python merges the developer's random.py and the standard library's random module into one combined namespace automatically"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "sys.path is searched in order, and the directory containing the running script is typically searched before the standard-library locations. Because the developer's own random.py sits in that earlier-searched directory, `import random` resolves to their file, not the real standard-library module -- entirely shadowing it. Unless their own random.py happens to define a function named randint with matching behavior (unlikely, since it wasn't intended as a random-number module at all), calling random.randint(1, 10) fails, typically with an AttributeError, in a way that looks unrelated to the actual cause: an accidental naming collision with a standard-library module."
+        },
+        {
+          "id": "python-modules-imports-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A file named `report.py` contains only this at its top level:\n```python\nprint(__name__)\n```\nWhat gets printed if you run `python report.py` directly from the terminal, versus if another file does `import report`?",
+          "options": [
+            "'__main__' when run directly; 'report' when imported",
+            "'report' when run directly; '__main__' when imported",
+            "'__main__' in both cases",
+            "'report' in both cases"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "Python sets a module's `__name__` differently depending on how that file started running. When a file is executed directly (`python report.py`), Python sets `__name__` to the special string `\"__main__\"` for that run. When the same file is instead loaded via `import report` from somewhere else, Python sets `__name__` to the module's own name, `\"report\"`, instead. This is exactly the mechanism the `if __name__ == \"__main__\":` guard relies on to distinguish 'I'm being run as a script' from 'I'm being imported for my definitions.'"
         }
       ]
     },
@@ -224,6 +263,45 @@
           "type": "explanation",
           "prompt": "Explain why a team commits requirements.txt to version control instead of just telling new developers which packages to pip install by hand, and describe one real problem that can arise if a raw pip freeze output is committed without any review.",
           "modelAnswer": "requirements.txt exists to make a project's dependencies reproducible: instead of relying on a teammate remembering (or being told, and remembering correctly) a list of packages and versions to install by hand -- which inevitably drifts out of date, gets forgotten, or is applied inconsistently across different machines -- the file itself is the single source of truth, and anyone can recreate an equivalent set of dependencies with one command, pip install -r requirements.txt. This also means the exact dependency set used in development, testing, and production can be kept consistent and tracked in version control alongside the code that depends on it. One concrete problem with committing a raw, unreviewed pip freeze output: pip freeze lists EVERY package currently installed, including transitive dependencies that some direct dependency pulls in internally (a package like numpy that you never explicitly installed yourself, but that pandas depends on) -- so the resulting requirements.txt can end up far larger and more tightly pinned than necessary, making it harder to read, harder to know which pins are actually required versus incidental, and harder to safely upgrade one direct dependency later without having to untangle which of the many pinned transitive versions still need to change alongside it."
+        },
+        {
+          "id": "python-packages-pip-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A directory named `helpers` contains `math_utils.py` but no `__init__.py`. A script in the parent directory tries `from helpers import math_utils`. Following the convention covered in this lesson, what's the most reliable fix if this import doesn't behave as expected?",
+          "options": [
+            "Add an (even empty) __init__.py file inside helpers/ -- the conventional, always-reliable way to mark a directory as an importable package",
+            "Rename math_utils.py itself to __init__.py",
+            "Move math_utils.py out of helpers/ and into the parent directory, abandoning the package structure entirely",
+            "Add a comment like # package at the top of math_utils.py"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "The conventional, reliable signal that a directory should be treated as an importable package is the presence of an `__init__.py` file inside it -- historically required, and still the clear, predictable convention even though modern Python supports narrower 'namespace package' exceptions. Renaming the module itself to `__init__.py` (option B) would destroy the module's own identity and its `math_utils` name entirely. Abandoning the package structure (option C) sidesteps the actual question rather than fixing the package. A plain comment (option D) has no effect on Python's import machinery at all."
+        },
+        {
+          "id": "python-packages-pip-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A requirements.txt file contains the line `pandas>=2.0`. Which of these installed versions would satisfy that constraint?",
+          "options": [
+            "2.3.1",
+            "1.9.0",
+            "Only exactly 2.0, and no other version",
+            "Any version at all, since >= is ignored by pip"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "`>=2.0` means 'version 2.0 or any newer version' -- 2.3.1 is newer than 2.0, so it satisfies the constraint. 1.9.0 is older than 2.0, so it does not. Option C is wrong because >= explicitly allows versions strictly greater than 2.0 as well, not just exactly 2.0 -- that would require ==2.0 instead. Option D is wrong: pip fully respects version-comparison operators in requirements.txt; that's the entire point of writing one."
+        },
+        {
+          "id": "python-packages-pip-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Why is 'typosquatting' considered a real, documented risk with pip and PyPI, rather than a purely theoretical concern?",
+          "options": [
+            "PyPI performs essentially no vetting of published packages, and package names form a flat global namespace, so someone can publish a malicious package under a name one character off from a popular one, hoping for a mistyped install command",
+            "pip automatically installs whichever package is most popular for a given search term, regardless of the exact name typed",
+            "PyPI requires all package names to be extremely short, which makes typos statistically inevitable",
+            "pip does not support version pinning at all, making it impossible to know what was actually installed"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "PyPI's open, essentially unvetted publishing model means a package existing and installing cleanly is no guarantee it's legitimate or safe -- and because package names are a flat, global namespace, an attacker can register a name that's just one character or one common misspelling away from a popular package, banking on someone mistyping `pip install` and installing the malicious lookalike instead. pip doesn't auto-correct or guess at intended package names (option B), PyPI imposes no such short-name requirement (option C), and pip does support version pinning (option D) -- none of those describe the actual mechanism behind typosquatting."
         }
       ]
     },
@@ -333,6 +411,45 @@
           "type": "scenario",
           "prompt": "Two projects on the same laptop need different, incompatible versions of the same package: Project A requires requests==2.10.0, Project B requires requests>=2.28. Explain how virtual environments solve this, and specifically what would go wrong if the developer instead just used the single global Python installation for both projects.",
           "modelAnswer": "Without virtual environments, both projects would share one single global Python installation and therefore one single global site-packages directory, which can only ever hold ONE version of requests installed at a time. Installing requests==2.10.0 for Project A would leave Project B without the newer version it needs, and later installing requests>=2.28 for Project B would overwrite the 2.10.0 install Project A depends on -- there is no way to satisfy both requirements simultaneously from a single shared installation; switching between the two projects would require constantly reinstalling a different version of requests, and running both projects' code at the same time (or forgetting to reinstall) would silently use the wrong version for at least one of them. Virtual environments solve this by giving each project (Project A and Project B) its own separate, private site-packages directory, created once via python -m venv, and activated whenever working on that specific project. Project A's virtual environment can have requests==2.10.0 installed inside it, and Project B's completely separate virtual environment can have requests>=2.28 installed inside its own, independent site-packages -- neither environment is aware of or affected by what's installed in the other, so both projects' exact version requirements can be satisfied permanently and simultaneously, with no reinstalling required when switching between them."
+        },
+        {
+          "id": "python-virtual-environments-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A developer activates project_A's virtual environment in one terminal and runs `pip install requests`. In a completely separate terminal, project_B's own (different) virtual environment is active, and project_B never had requests installed. Running `pip list` in that second terminal -- does 'requests' show up?",
+          "options": [
+            "No -- each virtual environment has its own independent site-packages, and pip list reports only the packages installed in whichever environment is currently active in that terminal",
+            "Yes -- pip list always reports every package installed anywhere on the machine, across every environment",
+            "Only if project_B's virtual environment was created after project_A's",
+            "Yes, but only the very first time pip list is run after the install"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "pip list reports what's installed in whichever Python environment pip is currently pointed at -- and that's determined entirely by which environment is active in that specific terminal session, not by what's been installed anywhere else on the machine. project_A's and project_B's virtual environments each have their own separate, independent site-packages directory; installing requests into project_A's does not add it to project_B's in any way. So the second terminal's pip list, scoped to project_B's own environment, simply doesn't show a package that was never installed there."
+        },
+        {
+          "id": "python-virtual-environments-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "```\n(.venv) $ deactivate\n$ pip install requests\n```\nWhere does `requests` get installed by that second command?",
+          "options": [
+            "Into the global/system Python installation, since deactivate restores the shell's PATH to what it was before activation",
+            "Into the now-inactive .venv, since pip remembers the last environment it was pointed at",
+            "Nowhere -- pip refuses to run at all without an active virtual environment",
+            "Into both the global installation and .venv at the same time"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "deactivate reverses exactly what activate did to the shell's PATH, restoring it to whatever it pointed at beforehand -- typically the global/system Python. Once deactivated, pip has no memory of the environment that was previously active; it simply resolves to whatever's currently on PATH, which after deactivation is the global installation. So the pip install that runs after deactivate goes to the global site-packages, not back into .venv, and pip runs completely normally outside any virtual environment -- there's no restriction requiring one to be active."
+        },
+        {
+          "id": "python-virtual-environments-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A developer skips creating a virtual environment entirely and instead just runs `pip install -r requirements.txt` directly against the global Python installation, for every project they work on. What problem does this fail to solve?",
+          "options": [
+            "It reintroduces the exact cross-project version-conflict problem virtual environments exist to prevent, since every project's dependencies still land in one single, shared global site-packages",
+            "Nothing -- as long as requirements.txt is used, the setup is already just as isolated as a virtual environment would provide",
+            "pip install -r raises an error whenever no virtual environment is active",
+            "It prevents requirements.txt from recording accurate version numbers"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "requirements.txt only records *what* to install -- it says nothing about *where*. Running pip install -r requirements.txt with no virtual environment active still installs everything into the one shared global site-packages, exactly like any other pip install without an active venv. If a second project later needs an incompatible version of something the first project also depends on, the same version-conflict problem virtual environments were designed to prevent reappears, entirely unaffected by the fact that a requirements.txt file was used. requirements.txt (what to install) and virtual environments (where, in isolation, to install it) solve two different, complementary halves of the reproducibility problem -- using one doesn't substitute for the other."
         }
       ]
     }

@@ -121,6 +121,45 @@
           "type": "explanation",
           "prompt": "A junior engineer asks: \"Why don't we just rewrite our whole public API in gRPC? Wouldn't that make everything faster and more reliable?\" Explain what's right and wrong about this idea, and what the actual decision should hinge on.",
           "modelAnswer": "What's right: gRPC genuinely would make certain things faster and more reliable in specific, technical senses. Protobuf's binary encoding is smaller on the wire and cheaper to serialize and parse than JSON, HTTP/2 multiplexing avoids some of the connection overhead REST calls can accumulate, and a compiled .proto schema catches type mismatches and certain kinds of breaking changes at build time rather than letting them surface as runtime errors for callers who trusted an informal, undocumented-in-practice contract. For a fleet of internal services all owned by the same engineering org, calling each other at high volume, that combination of wins is exactly why gRPC is a strong default choice. What's wrong is applying that reasoning to a public API without asking who actually calls it. A public API's callers are, by definition, outside the team's control -- third-party developers, often with limited tooling, sometimes calling directly from a browser, sometimes just wanting to poke the API with curl to understand it before writing any real integration code. gRPC structurally cannot be called directly from a browser without an extra translation layer, requires every caller to run a codegen step against your .proto files before writing a single line of integration code, and produces a binary payload that can't be read or debugged without specialized tooling -- all of which raises the bar for adoption in exactly the population a public API is trying to make things easy for. Rewriting the public API in gRPC would very likely make the internal implementation faster while making the API itself harder to adopt and debug for the actual audience it serves, which is a net loss even though every individual technical claim about gRPC's speed and type-safety is true. The actual decision should hinge on the caller population and traffic shape for that specific API -- public, tooling-constrained, browser-reachable audiences point toward REST (possibly with an internal gRPC layer behind an API gateway that translates), while internal, high-volume, tooling-capable audiences point toward gRPC -- not on a single global answer applied to every API a company runs."
+        },
+        {
+          "id": "system-design-rest-vs-grpc-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A backend developer silently renames a JSON field in a REST API response from `total` to `totalAmount`, without bumping any version number. Per the concept's schema-drift example, what is the most likely consequence, and why does gRPC's approach reduce this specific risk?",
+          "options": [
+            "Nothing changes for existing callers, since JSON field renames are automatically handled by all HTTP clients.",
+            "Existing callers reading response[\"total\"] get a runtime error (a missing/undefined field) whenever that code path next executes, discovered only at runtime -- whereas a breaking change to a .proto field requires editing a shared, reviewable schema file that both client and server code are generated from, giving a natural point to catch and block it before it ships.",
+            "gRPC would have the exact same silent-renaming risk, since both protocols use text-based field names.",
+            "REST prevents this specific issue automatically through built-in field versioning that ships with the HTTP specification."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept's schema-drift example states this directly: a renamed REST field means \"every existing caller reading response['total'] now gets a KeyError / undefined at runtime, discovered whenever that code path next executes,\" whereas the same change in a .proto file \"requires touching the shared .proto file, which is the natural place to require review and a compatibility check before it ships.\" Option A is false and contradicts the entire example. Option C is wrong -- gRPC's compiled schema is exactly what the concept says catches this class of change before production, unlike REST's informal convention. Option D fabricates a built-in HTTP versioning mechanism that doesn't exist."
+        },
+        {
+          "id": "system-design-rest-vs-grpc-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A feature needs the server to keep pushing live order-status updates to a client as they happen, without the client needing to guess a polling interval. Per the concept's discussion of streaming, why does this favor gRPC over plain REST?",
+          "options": [
+            "REST cannot be used over HTTP/2 under any circumstances, so it structurally cannot support any form of real-time updates.",
+            "gRPC's `stream` keyword makes server-to-client push a first-class part of the contract, letting the server write multiple responses over one open call as they happen; REST has no equivalent primitive and can only simulate this with polling, forcing a tradeoff between wasted requests and staleness.",
+            "REST is exclusively for reading data and gRPC is exclusively for writing data, so any 'live update' feature must use gRPC.",
+            "gRPC eliminates the need for the client to open any network connection at all."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept states this directly: gRPC's stream keyword makes \"server-to-client push a first-class part of the contract... with no polling interval to guess at,\" while REST's polling alternative \"forces an explicit tradeoff between wasted requests (poll too often) and staleness (poll too rarely).\" Option A is false -- the concept never claims REST cannot run over HTTP/2 at all. Option C invents an arbitrary read/write restriction not present anywhere in the material. Option D is nonsensical -- gRPC calls still require an open network connection; it just keeps one connection open for multiple pushed responses."
+        },
+        {
+          "id": "system-design-rest-vs-grpc-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Per the concept's closing 'common mistake' section, what specifically goes wrong when a team picks gRPC for a public-facing API purely because benchmarks show it's faster?",
+          "options": [
+            "Nothing goes wrong -- benchmark performance is described as the only factor that should ever matter when choosing a protocol.",
+            "A meaningful fraction of prospective integrators can't or won't adopt it -- some can't call it directly from a browser without extra infrastructure, and some don't want a protobuf toolchain in their build for an integration they expected to be a simple HTTP request.",
+            "gRPC services are described as being unable to run on cloud infrastructure at all, making public deployment impossible.",
+            "The API automatically becomes less secure because gRPC does not support authentication of any kind."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept states this exact consequence: choosing gRPC for a public API \"because it's faster\" leads to discovering \"that a meaningful fraction of prospective integrators simply can't or won't adopt it -- some can't call it directly from a browser... some don't want a protobuf toolchain in their build for an integration they expected to be a five-minute curl command.\" Option A contradicts the concept's central argument that caller population, not benchmark speed, should drive the decision. Option C fabricates a cloud-deployment restriction not discussed anywhere. Option D invents a false security claim -- gRPC supports authentication mechanisms; the concept never suggests otherwise."
         }
       ]
     },
@@ -241,6 +280,45 @@
           "type": "explanation",
           "prompt": "Explain to a team about to split their monolith into microservices why 'one service per table' and 'one service per verb' are both commonly-reached-for but usually wrong ways to draw the boundaries, and what a better approach looks like.",
           "modelAnswer": "Both heuristics are attractive because they feel objective and mechanical -- you can look at a schema or a list of API operations and draw lines without having to make a judgment call about the business domain. That's exactly their weakness: they optimize for something easy to measure (an existing table, an existing verb) rather than for how the system's data and logic are actually used together in practice. 'One service per table' mirrors the database schema, but almost every real feature needs data from more than one table -- an order confirmation needs the customer's name and address alongside order details, a product listing needs inventory alongside pricing -- so this heuristic guarantees that common, everyday operations have to reach across a service boundary, turning what would be a cheap SQL join into slow, fragile cross-service calls, and in some cases making one service's basic read path depend on another service's availability for data that has nothing to do with its own core responsibility. 'One service per verb' mirrors the list of operations rather than the data, splitting 'create an order,' 'cancel an order,' and 'ship an order' into separate services -- but a single logical business action like cancelling an order typically needs to check status, adjust inventory, and possibly issue a refund, all of which now require synchronous coordination across several separate services for what should have felt like one atomic action to both the code and the business. A better approach draws boundaries around cohesive business capabilities -- a piece of the domain that changes for its own reasons, that one team can own end-to-end, and that owns its own data so nothing else reaches directly into its storage. Concretely, that means starting from a well-modularized monolith with clear internal boundaries that already track business capabilities, and only extracting a module into its own deployed service once there's a specific, demonstrated reason -- a genuine scaling need, a team that needs independent deployment cadence, or a distinct technology requirement -- rather than deciding all the boundaries upfront based on the schema or the API surface before anyone has lived with the system long enough to know where its real seams actually are."
+        },
+        {
+          "id": "system-design-service-boundaries-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A billing service and a support-ticketing service each have their own internal notion of a 'customer,' with different fields and different invariants for each. Per the concept's discussion of bounded contexts, is this a sign of duplicated, sloppy modeling that should be unified into one shared customer definition?",
+          "options": [
+            "Yes -- there should always be exactly one canonical definition of any business term shared across every service in the system.",
+            "No -- this is an example of a bounded context: a boundary drawn around a part of the domain where terms mean one specific thing internally, and a neighboring service using a similar-sounding term differently is expected and fine, not a modeling mistake.",
+            "Yes, but only because billing and support-ticketing are both customer-facing features and should therefore share a database table.",
+            "No, but only because billing services are legally required to maintain a separate customer definition from support systems."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept states this explicitly: \"a customer inside the billing service might carry different fields and invariants than a customer inside the support-ticketing service, and that's fine -- they're different bounded contexts, not the same concept duplicated sloppily.\" Option A contradicts this directly by insisting on one canonical definition everywhere. Option C invents a database-sharing requirement not discussed anywhere, and actually reintroduces the shared-table problem the concept warns against elsewhere. Option D fabricates a legal requirement that isn't part of the bounded-context concept at all."
+        },
+        {
+          "id": "system-design-service-boundaries-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Per the concept, what specifically makes a 'distributed monolith' worse than either a well-factored monolith or a well-factored set of microservices?",
+          "options": [
+            "It has fewer total lines of code than either alternative, making it harder to find bugs.",
+            "It carries the full operational overhead of a distributed system (network calls, independent deployments to coordinate, separate logging to correlate, retries and timeouts) while still keeping the monolith's actual coupling problem, since the pieces can't really change or deploy independently -- paying distribution's complexity tax without collecting its benefits.",
+            "It always runs on more expensive cloud infrastructure than either alternative.",
+            "It is only a problem when the number of services exceeds fifty."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept states this precisely: a distributed monolith \"has all the operational overhead of microservices... while still having the monolith's actual coupling problem, because the pieces can't really change or deploy independently... you pay the complexity tax of distribution without collecting the benefit... it's supposed to buy.\" Option A invents an unrelated code-volume claim. Option C fabricates a cost claim not discussed in the concept. Option D invents an arbitrary service-count threshold that appears nowhere in the material -- the concept's examples involve as few as two or three services."
+        },
+        {
+          "id": "system-design-service-boundaries-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Per the concept's recommended incremental process, when should a module actually be extracted out of a well-modularized monolith into its own separately deployed service?",
+          "options": [
+            "As soon as the monolith is created, so that the system is 'microservices-native' from day one.",
+            "Only once there's a concrete, demonstrated reason -- a genuine scaling need for just that piece, a team that needs to deploy independently, or a distinct technology requirement -- rather than splitting upfront based on guesses about where the domain seams are.",
+            "Whenever the monolith's total codebase exceeds an arbitrary line-of-code threshold.",
+            "Never -- the concept argues that services should always remain part of a single monolith regardless of team or scaling needs."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept states this directly: modules should be split out \"only once there's a concrete, demonstrated reason: a genuine scaling need for just that piece, a team that needs to deploy independently of everyone else, or a technology requirement... Splitting too early, before the real domain boundaries are well understood from lived experience with the monolith, tends to reproduce exactly the wrong-boundary symptoms.\" Option A contradicts the concept's explicit recommendation to start with a monolith rather than split immediately. Option C invents an arbitrary line-count threshold never mentioned in the material. Option D overstates the concept's position -- it explicitly allows for extraction once a real, demonstrated reason exists; it never argues services should never be split at all."
         }
       ]
     },
@@ -361,6 +439,45 @@
           "type": "explanation",
           "prompt": "A colleague asks: \"Our API gateway is just a routing layer -- why does it need its own load balancer and multiple replicas like a real backend service?\" Explain why the gateway needs exactly the same high-availability treatment as any other service, referencing the earlier scaling and load-balancing concepts.",
           "modelAnswer": "The mistake in the question is treating 'just a routing layer' as if that makes the gateway less critical, when it actually makes it more critical: every single request from every client, headed to any of your backend services, has to pass through the gateway first, which means the gateway's availability is a hard ceiling on the availability of literally everything behind it. This is precisely the single-point-of-failure argument from the vertical-vs-horizontal-scaling concept, applied to a piece of infrastructure rather than a backend service: a single gateway instance, however well it performs while healthy, is still exactly one machine that can crash, need a restart for a deploy, or hit a resource limit -- and when it does, all twelve of your perfectly healthy backend services become completely unreachable from outside, because there's no other path in. Being 'just routing' doesn't exempt a component from being a single point of failure; if anything, sitting on the only path into the entire system makes its failure blast radius larger than almost any individual backend service's failure would be. The fix is exactly the one described in the load-balancing and statelessness concept: run multiple gateway instances behind a load balancer, and make sure each gateway instance is stateless -- meaning anything it needs to track across requests, like per-API-key rate-limit counters, lives in a shared external store rather than in one instance's local memory -- so that the load balancer can freely route any request to any healthy gateway instance, and losing one instance degrades total gateway capacity by roughly one over the number of instances rather than taking down access to the whole system. In short: the gateway isn't exempt from the availability requirements that apply to any other service in the architecture -- it actually has a stronger case for them, precisely because everything else depends on it being reachable."
+        },
+        {
+          "id": "system-design-api-gateways-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A team wants automatic retries, mutual TLS, and fine-grained canary routing for calls between their own internal services, none of which ever touch an external client directly. Per the concept's distinction between a gateway and a service mesh, which tool is the better fit, and why?",
+          "options": [
+            "An API gateway, since gateways and service meshes are two names for the exact same tool applied to different traffic.",
+            "A service mesh, since it handles east-west traffic -- service-to-service calls entirely inside the system -- providing exactly these capabilities, whereas the gateway's job is north-south traffic entering the system from outside.",
+            "Neither -- these capabilities can only be achieved by routing all internal traffic back out through the edge API gateway.",
+            "An API gateway, since only gateways can perform mutual TLS between two internal services."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept draws this distinction explicitly: a service mesh \"handles east-west traffic: service-to-service calls happening entirely inside the system, providing things like automatic retries, mutual TLS between internal services, and fine-grained internal traffic routing (canary releases, circuit breaking)\" while \"the gateway handles north-south traffic: requests entering the system from outside.\" Option A directly contradicts the concept's explicit distinction between the two tools. Option C describes exactly the mistake the concept warns against -- routing internal traffic back out through the edge gateway \"adds unnecessary latency and turns an internal implementation detail into edge-gateway-configuration churn.\" Option D fabricates a technical restriction; nothing in the concept ties mutual TLS capability exclusively to gateways."
+        },
+        {
+          "id": "system-design-api-gateways-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A team centralizes authentication and rate limiting entirely at the API gateway and removes all security checks from their backend services, reasoning the gateway already handles it. Per the concept's misconception about this, what risk does this leave open?",
+          "options": [
+            "No risk at all -- the concept states that backend services never need any security logic once a gateway is in place.",
+            "If the gateway is ever misconfigured, bypassed (a backend reachable directly due to a network misconfiguration), or has a bug in its enforcement logic, backend services with zero security checks of their own have no fallback protection at all -- defense in depth still matters.",
+            "The only risk is a minor performance slowdown, since the gateway would simply run the same checks twice.",
+            "This is only a risk for services using gRPC, not for services using REST."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept's misconception addresses this directly: relying on the gateway as the sole line of defense \"creates a single point of security failure\" if it's \"ever misconfigured, bypassed... or has a bug in its enforcement logic,\" and backend services should \"generally still validate that a request carries the identity/authorization context the gateway is supposed to have already attached,\" rather than blindly trusting every request. Option A contradicts the concept's explicit warning against this exact assumption. Option C trivializes a real security gap into a performance concern, which isn't the risk the concept describes. Option D invents a protocol-specific restriction not present anywhere in the material."
+        },
+        {
+          "id": "system-design-api-gateways-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Per the concept's 'Without a Gateway vs. With One' example, what specifically goes wrong when a mobile app calls three backend services directly, each implementing its own authentication check, instead of going through a gateway?",
+          "options": [
+            "Nothing goes wrong functionally -- it is described as a purely stylistic difference with no real consequence.",
+            "There are now three separate auth implementations that all must be correct and kept consistent as requirements change, three services independently exposed to the internet, and the app must track three different hostnames/ports -- multiplying a cross-cutting concern by the number of backends instead of centralizing it.",
+            "The mobile app becomes physically incapable of making more than one request per session without a gateway present.",
+            "Each backend service becomes automatically stateful as a result of implementing its own authentication."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The concept's example states this precisely: without a gateway, there are \"3 separate auth implementations that must all be correct and consistent,\" \"3 services, each independently exposed to the internet,\" and the app \"needs to know 3 different hostnames/ports and keep them all in sync\" -- multiplying, rather than centralizing, a cross-cutting concern. Option A dismisses a real, named cost the concept treats as significant (a missed auth update becomes 'a real security gap that's easy to introduce silently'). Option C invents a fabricated technical limitation about request counts. Option D is a non sequitur -- implementing authentication has no described relationship to a service's statelessness."
         }
       ]
     }

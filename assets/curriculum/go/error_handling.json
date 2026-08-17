@@ -118,6 +118,45 @@
           "explanation": "Assigning an error to the blank identifier `_` is completely legal and compiles without any complaint -- `_` is specifically exempt from Go's unused-variable check, precisely to allow deliberately discarding a value you don't need. If riskyCall failed, value simply holds whatever it returned alongside that discarded error, ordinarily the zero value for its type, and the program proceeds to use that value with zero indication anything went wrong. Option A is wrong -- there's no special compiler enforcement tied to discarding errors specifically. Option B is wrong -- panicking requires an explicit panic() call or a runtime fault; silently discarding an error does neither. Option D describes behavior Go has no mechanism for at all."
         },
         {
+          "id": "go-error-interface-basics-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Which of these error-construction calls follows Go's idiomatic convention for error message text?",
+          "options": [
+            "errors.New(\"Invalid input.\")",
+            "errors.New(\"invalid input\")",
+            "errors.New(\"INVALID INPUT!\")",
+            "errors.New(\"Invalid Input\")"
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Go convention holds that error strings should be lowercase and should not end with punctuation. This isn't cosmetic: errors are routinely concatenated and wrapped by callers as they travel up through layers (\"loading config: opening file: permission denied\"), and a capitalized word or trailing period in the middle of that chain reads as visibly wrong. Options A, C, and D all violate this convention -- A has a capital letter and a trailing period, C is fully capitalized, and D capitalizes both words -- only option B, all-lowercase with no trailing punctuation, follows the idiom correctly."
+        },
+        {
+          "id": "go-error-interface-basics-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "According to the design rationale behind Go's error-as-value approach, what does a function signature like `func Parse(s string) (Result, error)` communicate that a signature without the error return would not?",
+          "options": [
+            "That Parse is guaranteed to run slower than an equivalent function without an error return, due to the overhead of constructing error values.",
+            "That Parse might fail, and the caller is expected to receive and inspect that failure explicitly -- visibly, in the type signature itself -- rather than relying on hidden control flow that could jump out of the function unexpectedly.",
+            "That Parse will automatically retry internally on failure before ever returning control to its caller.",
+            "That Result will always come back as its zero value whenever Parse is called, regardless of success or failure."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Putting error in the return signature makes the possibility of failure part of the function's own visible contract -- any caller can see, just from the type signature, that this call can fail and that they'll receive a value to inspect if it does, with no separate documentation-reading required to discover which calls might abort control flow the way you'd need to with exceptions. Option A invents a performance claim the material never makes. Option C is wrong -- Go's error convention says nothing about automatic retries; the caller decides what to do with a returned error. Option D is wrong -- Result is only guaranteed to be the zero value when err is non-nil; on success it holds the genuine, meaningful result."
+        },
+        {
+          "id": "go-error-interface-basics-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Package store defines `var ErrNotFound = errors.New(\"item not found\")`, returned directly (unwrapped) whenever a lookup misses. A caller writes `if err.Error() == \"item not found\" { ... }` instead of `if err == store.ErrNotFound`. What's the problem with this approach, even though it currently produces the same result?",
+          "options": [
+            "It doesn't compile -- comparing the result of Error() to a string literal isn't legal Go syntax.",
+            "It's fragile: it silently breaks (matching nothing, or matching the wrong thing) if the message text is ever reworded, or if some unrelated error happens to produce that exact same string -- whereas comparing against the sentinel value itself never depends on the wording at all.",
+            "It's actually more robust than comparing against the sentinel directly, since string comparison continues to work correctly even after the error has been wrapped by an intermediate layer, unlike a direct == check.",
+            "This pattern is necessary because Go's == operator can never be used to compare two error interface values, under any circumstances."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Comparing err.Error() to a hardcoded string ties correctness to the exact wording of the message rather than to the error's actual identity -- rewording the message (even fixing a typo) or a coincidental match from some completely unrelated error would silently change this check's outcome with no compiler warning. Comparing err == store.ErrNotFound instead works because both sides are the literal same value created once at package initialization, and that identity never depends on the text at all. Option A is wrong -- this string comparison compiles and runs fine. Option C is wrong -- wrapping actually breaks a naive string-prefix match just as much as it breaks == (the wrapped message gains a prefix), so string comparison is not more wrap-resistant. Option D is wrong -- direct == comparison against an unwrapped sentinel is exactly the idiomatic, working pattern shown earlier in this concept."
+        },
+        {
           "id": "go-error-interface-basics-assess-explain1",
           "type": "explanation",
           "prompt": "Explain why Go represents failure as an ordinary returned value rather than using exceptions, and what trade-off this creates for someone writing Go code every day.",
@@ -239,6 +278,45 @@
           "explanation": "Both verbs produce the exact same formatted message text -- the difference is entirely about whether a real, walkable relationship to the original error is preserved. %w gives the returned error a genuine Unwrap() method pointing back at err; %v simply renders err's text into the new message and keeps no reference to it as a value. This means errors.Is and errors.As, which work by calling Unwrap() repeatedly, will never find the original error through a %v-created wrapper, even though its message is right there in the text. Option A and D are wrong -- %v with an error argument is completely valid and doesn't panic, it's simply the ordinary formatting verb applied to whatever String()/Error() the value produces. Option B is wrong -- both verbs include the wrapped error's text in the resulting message identically."
         },
         {
+          "id": "go-error-wrapping-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A chain is built by three layers, each wrapping with %w: an outer error wraps a middle error, which wraps the original root error. What does calling Unwrap() directly on the outermost error return?",
+          "options": [
+            "The middle error -- the very next error down the chain -- not the root error directly; reaching the root requires calling Unwrap() again on that result.",
+            "The original root error directly, skipping over the middle layer entirely, because Unwrap() always returns the deepest error in the chain in one call.",
+            "Nothing -- Unwrap() is only meant to be called internally by errors.Is and errors.As; ordinary code is not permitted to call it directly.",
+            "The outer error's own formatted message as a plain string, rather than another error value."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "Each layer's Unwrap() returns exactly one link down the chain -- the error it directly wraps -- not the ultimate root cause in one jump. Reaching the root from the outermost error requires calling Unwrap() on the outer error to get the middle error, then Unwrap() again on that to reach the root; this is exactly the repeated-Unwrap()-calling that errors.Is and errors.As perform internally so callers don't have to walk it by hand. Option B describes a 'jump straight to the bottom' behavior Unwrap() does not have. Option C is wrong -- Unwrap() is an ordinary exported-by-convention method; any code can call it directly, though errors.Is/errors.As are usually more convenient. Option D is wrong -- Unwrap() returns an error value, not a string."
+        },
+        {
+          "id": "go-error-wrapping-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Which of the following correctly shows how to call errors.As to extract a custom error type named *ValidationError from a wrapped chain?",
+          "options": [
+            "var target ValidationError; errors.As(err, target) -- declare the target by value and pass it directly, without taking its address.",
+            "var target *ValidationError; errors.As(err, &target) -- declare a nil pointer to the target type, and pass its address so errors.As can assign the matching error into it.",
+            "errors.As(err, ValidationError{}) -- pass a freshly-constructed zero-value instance of the type directly as the second argument.",
+            "errors.As only works when the target type was created with errors.New, not with a custom struct definition."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "errors.As needs to write the matching error it finds into your variable, which requires a pointer to that variable -- hence declaring `var target *ValidationError` (starting nil) and passing `&target`, its address, as the second argument. errors.As then walks the chain looking for an error whose concrete type matches *ValidationError, and assigns it into target when found, giving full access to any extra fields it carries. Option A is wrong because passing the variable directly, without &, gives errors.As no way to write a result back into it. Option C is wrong -- errors.As needs an addressable variable to assign into, not a value passed inline. Option D is wrong -- errors.As is specifically valuable for custom struct types carrying extra data; sentinel values created with errors.New are exactly what errors.Is (not errors.As) is meant for."
+        },
+        {
+          "id": "go-error-wrapping-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Package db defines an unexported sentinel, `var errConnLost = errors.New(\"connection lost\")`, and wraps it with %w whenever it's returned. Can code in a different package reliably detect this specific failure using errors.Is?",
+          "options": [
+            "Yes -- errors.Is can find any error anywhere in a chain regardless of whether it's exported, since wrapping makes every error in the chain accessible from any package that receives it.",
+            "No -- an unexported sentinel can still be wrapped and returned across package boundaries, but no code outside package db can write errors.Is(err, errConnLost) at all, because outside code has no way to even refer to errConnLost by name.",
+            "Yes, but only by first converting err to a string with err.Error() and checking for the substring \"connection lost\".",
+            "No -- unexported error values cannot be wrapped with %w in the first place, so returning errConnLost this way would fail to compile."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Wrapping and exporting are entirely separate concerns: errConnLost can be wrapped and returned freely regardless of its capitalization, but a caller outside package db has no identifier at all to pass as errors.Is's second argument, since errConnLost is invisible outside its defining package -- the failure mode here is a compile error on the caller's own code (undefined: db.errConnLost), not a runtime failure of errors.Is itself. Option A wrongly assumes wrapping grants naming visibility across packages, which it doesn't. Option C describes a workaround the material explicitly warns against -- errors.Is never falls back to string matching, and relying on message text is fragile. Option D is wrong -- there's no such restriction; %w wraps any error value, exported or not."
+        },
+        {
           "id": "go-error-wrapping-assess-explain1",
           "type": "explanation",
           "prompt": "Explain how errors.Is and errors.As work in terms of the Unwrap() method, and why a codebase that wants sentinel errors or custom error types to remain detectable needs to be consistent about using %w rather than %v when adding context.",
@@ -358,6 +436,45 @@
           ],
           "correctOptionIndex": 2,
           "explanation": "A panic that is never recovered anywhere along its unwind path terminates the entire process the instant it reaches the top of whichever goroutine it occurred in -- this is true whether that goroutine is main or one spawned with go, and it takes every other goroutine down with it, not just the panicking one. Option A is wrong -- there's no such 'just stops that goroutine' behavior; an unrecovered panic is fatal to the whole program. Option B is wrong -- Go has no automatic goroutine-restart mechanism; a crashed process stays crashed until something external (an orchestrator, a supervisor) restarts it. Option D is wrong -- recover() is never called implicitly by the runtime; if you want a panic caught, you must write an explicit defer/recover yourself somewhere in that goroutine's call chain."
+        },
+        {
+          "id": "go-panic-recover-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Does recover() successfully stop the panic in this code?\n\n```go\nfunc attemptRecover() {\n\trecover()\n}\n\nfunc risky() {\n\tdefer func() {\n\t\tattemptRecover()\n\t}()\n\tpanic(\"boom\")\n}\n```",
+          "options": [
+            "Yes -- attemptRecover is eventually reached while the panic is unwinding and it does call recover(), so the panic is stopped regardless of how many function calls sit in between.",
+            "No -- recover() only has an effect when called directly inside the body of the function that was itself deferred; here the deferred closure calls attemptRecover(), and it's attemptRecover's own body -- not the deferred closure's own body -- that calls recover(), so it has no effect and the panic keeps unwinding.",
+            "Yes, because any function reachable from a deferred call, no matter how many layers deep, counts as part of the deferred function for recover() purposes.",
+            "It depends on whether attemptRecover itself was declared using the word defer somewhere inside its own body."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "recover() only has an effect when called directly by a function that was itself deferred, while a panic is actively unwinding through that exact point -- called anywhere else, including inside a helper function that a deferred function goes on to call, it simply returns nil and does nothing. Here, `defer func() { attemptRecover() }()` defers the anonymous closure, not attemptRecover -- the closure's own body never calls recover() directly, it only calls a function that does, one level removed. That's exactly the case the material calls out as not counting, so the panic continues unwinding past risky entirely. Option A and C both describe a 'reachable through any number of calls' rule that recover() does not follow. Option D is a red herring -- whether attemptRecover itself uses defer internally has no bearing on this specific problem."
+        },
+        {
+          "id": "go-panic-recover-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Based on the rule of thumb this concept describes for choosing between panic and returning an error, which of these is the best candidate for an idiomatic panic rather than an error return?",
+          "options": [
+            "A configuration file that a command-line tool tries to open, which turns out not to exist on disk.",
+            "A function receiving a network request payload that's missing a required field.",
+            "A slice index computed internally by a function's own logic that turns out to be out of range for that slice -- a state the function's own author never intended to be reachable.",
+            "A database query that fails because the network connection to the database is temporarily slow or unreachable."
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "The idiomatic line is to panic for situations that indicate a bug or a genuinely unrecoverable state that the calling code could not reasonably have anticipated, and return an error for anything a caller might reasonably want to detect and handle. An internally-computed out-of-range index reveals a bug in the function's own logic -- exactly the kind of thing the Go runtime itself panics on (out-of-range slice access, nil pointer dereference) because it signals broken program state, not an ordinary outside-world condition. The other three options -- a missing config file, a malformed request payload, a slow or unreachable network connection -- are all routine, expected failure modes that well-written calling code should anticipate and handle via a returned error, exactly like os.Open returning an error rather than panicking when a file is missing."
+        },
+        {
+          "id": "go-panic-recover-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "What happens when this code runs?\n\n```go\na := 10.0\nb := 0.0\nfmt.Println(a / b)\n```",
+          "options": [
+            "It panics with \"runtime error: integer divide by zero\", identical to what 10 / 0 with int operands would produce.",
+            "It prints +Inf, with no panic at all -- float division by zero produces a special floating-point value rather than triggering a runtime panic, unlike integer division by zero.",
+            "It fails to compile, since dividing by a literal 0.0 is caught and rejected at compile time regardless of operand type.",
+            "It prints 0, since Go treats any division by zero, integer or floating-point, as producing the zero value of the result type."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Only integer division by zero triggers a runtime panic in Go; floating-point division by zero is well-defined by the IEEE 754 standard Go's float64 follows, producing +Inf (or NaN for 0.0/0.0) rather than aborting execution. This is a real, sharp distinction worth having memorized, since the two look superficially identical at the source level (both are just `a / b`) but behave completely differently depending on whether the operands are integers or floats. Option A wrongly imports the integer panic behavior onto floats. Option C is wrong -- this compiles and runs fine; the division is a normal runtime operation, not a compile-time-detectable error. Option D is wrong -- the result is +Inf, a special non-zero floating-point value, not the numeric zero value."
         },
         {
           "id": "go-panic-recover-assess-explain1",

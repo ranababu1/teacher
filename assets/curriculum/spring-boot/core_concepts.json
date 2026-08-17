@@ -112,6 +112,45 @@
           "explanation": "Constructor injection's real advantages are structural: a `final` field guarantees the dependency is set exactly once, a missing dependency causes an immediate, obvious startup failure rather than a later NullPointerException, and a constructor can be called directly with `new` in tests with no Spring container involved. Option A is false -- there's no meaningful performance difference between the two at the scale that matters. Option C is false -- field injection is fully supported and common in real code, just less recommended. Option D is false -- Spring supports field and setter injection just as validly on @Component classes; constructor injection is a best practice, not an enforced requirement."
         },
         {
+          "id": "spring-boot-ioc-and-di-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A class has exactly one constructor, and that constructor takes a single interface-typed parameter. No annotation at all is written on the constructor. What happens when Spring builds this bean?",
+          "options": [
+            "Spring throws an exception at startup because @Autowired is mandatory on every constructor used for injection.",
+            "Spring implicitly uses that single constructor for dependency injection -- since Spring 4.3, @Autowired is not required when a class defines exactly one constructor.",
+            "Spring ignores the constructor entirely and falls back to field injection for any fields it can find.",
+            "Spring constructs the bean with a no-argument constructor and leaves the parameter permanently unset."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "As of Spring 4.3, a class with exactly one constructor does not need an explicit @Autowired at all -- Spring implicitly uses that single constructor to build the bean, which is why modern constructor-injected Spring Boot code so often has no injection annotation visible at all. @Autowired only becomes necessary when a class defines two or more constructors and Spring needs to be told explicitly which one to use. Option A describes the older, stricter requirement that no longer applies to single-constructor classes. Options C and D describe behaviors Spring does not exhibit -- it neither silently switches injection styles nor leaves a declared constructor parameter unfulfilled."
+        },
+        {
+          "id": "spring-boot-ioc-and-di-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "ReportService uses field injection (`@Autowired private ReportRepository repository;`). A developer writes `new ReportService()` directly inside a plain JUnit test, with no Spring container started at all, and then calls a method that uses `repository`. What actually happens?",
+          "options": [
+            "The code fails to compile, because a field annotated @Autowired must be initialized inline.",
+            "The object is constructed successfully, but `repository` stays null, and a NullPointerException only occurs later, when a method that dereferences it is actually called.",
+            "Spring intercepts the `new` call at runtime and injects a real ReportRepository anyway, since @Autowired works independently of any container.",
+            "The test throws NoSuchBeanDefinitionException the moment `new ReportService()` executes."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Field injection only works because Spring's container reflectively populates the field after constructing the bean itself -- there is nothing that makes @Autowired fields self-initializing when a plain `new` is used outside a container. `new ReportService()` succeeds as an ordinary constructor call, leaving `repository` at its default value of null, and the failure only surfaces later, at the exact line that tries to use `repository`, as a NullPointerException disconnected from the real root cause. Option A is wrong -- @Autowired imposes no compile-time initialization requirement. Option C describes behavior no plain Java `new` call can trigger without a container. Option D describes an exception that only occurs when a real Spring container can't resolve a bean, which is irrelevant here since no container is involved at all."
+        },
+        {
+          "id": "spring-boot-ioc-and-di-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Which statement most accurately describes what actually happens, mechanically, when Spring performs dependency injection?",
+          "options": [
+            "Spring uses bytecode manipulation to write values directly into memory, bypassing constructors and setters entirely.",
+            "Spring calls the same constructors (or setters) your own code would call by hand; the container looks up an already-built bean in its registry and passes it as the argument, typically reached through reflection.",
+            "Spring generates a new subclass of every bean at compile time whose constructors are overridden to accept injected values.",
+            "Dependency injection is possible only because the JVM has built-in, native support for interpreting the @Autowired annotation."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "There is no magic step where objects appear without a constructor running: Spring's container maintains a registry of already-constructed beans, and when it builds a new bean, it finds the right existing instance for each dependency and passes it into an ordinary constructor or setter call -- the only difference from doing this by hand is that Spring decides the argument and makes the call via reflection instead of you typing it in source code. Option A and C describe invasive bytecode-generation techniques Spring's core DI mechanism does not use for ordinary bean wiring. Option D is false -- @Autowired is a plain annotation with no special JVM-level support; Spring's own reflection-based container logic is what interprets it."
+        },
+        {
           "id": "spring-boot-ioc-and-di-assess-explain1",
           "type": "explanation",
           "prompt": "Explain Inversion of Control and Dependency Injection to a developer who has only ever written `new SomeClass()` to wire up an object's dependencies by hand. Be sure to explain why this approach makes testing easier.",
@@ -233,6 +272,45 @@
           "explanation": "@Service, @Repository, and @Controller are all meta-annotated with @Component, so for plain scanning and registration they behave the same -- but @Repository specifically triggers PersistenceExceptionTranslationPostProcessor's exception-translation behavior, and other tooling or AOP pointcuts may be written to target a specific stereotype rather than the generic @Component. Option A is wrong because there IS a real relationship (meta-annotation) and a real behavioral difference for @Repository. Option C is wrong -- @Component classes are scanned by default under the standard component-scan rules. Option D is wrong -- there is no startup failure from using @Component instead of @Repository, just a loss of the extra behavior/semantics."
         },
         {
+          "id": "spring-boot-application-context-and-beans-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A @Service-annotated class named PricingEngine lives in the package com.example.pricing. The application's @SpringBootApplication-annotated main class lives in com.example.app. No explicit @ComponentScan is declared anywhere. What happens when the application starts?",
+          "options": [
+            "PricingEngine is found and registered normally, because component scanning covers the entire classpath by default, regardless of package.",
+            "PricingEngine is never discovered as a bean, because default component scanning is rooted at the main class's package (com.example.app) and its sub-packages, and com.example.pricing is a sibling package, not a sub-package.",
+            "The application fails to compile, since PricingEngine sits outside the package the main class is declared in.",
+            "Spring automatically widens the scan to include any package containing a @Service-annotated class it can find via reflection."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "@SpringBootApplication bundles @ComponentScan with no explicit basePackages, which defaults to the package of the annotated class itself -- here, com.example.app -- plus everything beneath it. com.example.pricing is a sibling of com.example.app, not a sub-package, so it is entirely outside the default scan's reach; PricingEngine is annotated correctly but simply never seen. There is no compile error (option C) and no automatic widening of the scan (option D) -- the failure, if PricingEngine is ever needed, only shows up later as a NoSuchBeanDefinitionException when something tries to inject it."
+        },
+        {
+          "id": "spring-boot-application-context-and-beans-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A @Component-annotated class holds a mutable int field that one of its methods increments, and no @Scope annotation appears anywhere on the class. Under concurrent HTTP traffic, increments are occasionally lost. What is the root cause?",
+          "options": [
+            "Beans without an explicit @Scope annotation are inherently thread-unsafe, and Spring should have refused to start the application.",
+            "The class defaults to singleton scope, so every request is routed through the exact same instance and the exact same mutable field, creating a classic race condition under concurrent writes.",
+            "Component scanning silently created two separate instances of the bean, one per handling thread, and their internal states have drifted apart.",
+            "The field would become thread-safe automatically if it were declared `private`, since the JVM synchronizes private fields by default."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "With no @Scope declared, Spring applies its default: singleton, meaning exactly one instance of this bean exists for the entire ApplicationContext, and every concurrent request sharing that context shares that exact same instance and its exact same mutable field. Two threads incrementing concurrently can both read the same value before either writes back the result, silently losing an increment -- a textbook race condition, not a Spring bug. Option A is false -- singleton is a perfectly valid, common default; the danger only appears once mutable per-request state is added on top of it. Option C is false -- singleton scope means exactly one instance, not one per thread. Option D is false -- `private` visibility has nothing to do with thread-safety or synchronization."
+        },
+        {
+          "id": "spring-boot-application-context-and-beans-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "Which of the following is the most accurate definition of what makes an object a Spring 'bean' rather than just an ordinary Java object?",
+          "options": [
+            "Any object that implements a special Spring-provided marker interface such as Bean or BeanDefinition.",
+            "Any object annotated @Component somewhere in its class hierarchy, regardless of how or by whom it was actually constructed.",
+            "Any object whose creation, dependency wiring, and lifecycle are managed by the Spring container, rather than being constructed directly by your own code with `new`.",
+            "Any object that is stored as a static field somewhere in the application so it can be reached from anywhere."
+          ],
+          "correctOptionIndex": 2,
+          "explanation": "A bean is defined entirely by who is in control of it: an object the Spring container constructs, tracks in its registry, and hands out to other beans that ask for it is a bean; an object you construct yourself with `new Foo()` in the middle of some method, even if its class happens to carry a @Component annotation, is just a plain object at that moment, because the container never built or registered THAT particular instance. Option A is false -- there is no marker interface required to become a bean. Option B is close but wrong in a subtle, important way: annotating a class doesn't retroactively make every instance of it a bean -- only instances the container itself constructs count. Option D describes a completely unrelated Java idiom with no connection to Spring's container."
+        },
+        {
           "id": "spring-boot-application-context-and-beans-assess-explain1",
           "type": "explanation",
           "prompt": "Explain, step by step, what happens from JVM startup to a fully-wired @Service bean being ready to use, in an application that relies entirely on component scanning with no manual bean configuration.",
@@ -352,6 +430,45 @@
           ],
           "correctOptionIndex": 1,
           "explanation": "@ConditionalOnMissingBean(SomeType.class) means 'only register this bean if no bean of SomeType already exists in the context' -- it's the exact mechanism that lets you override any autoconfigured default cleanly, by defining your own bean of that type anywhere in your configuration; Boot's default then backs off with no conflict. Option A describes the opposite of what the annotation does -- missing a bean of that type is precisely the condition under which the annotated bean DOES get registered, not a startup failure. Option C confuses it with @ConditionalOnClass, which checks classpath presence, not bean presence. Option D is wrong -- when the condition is satisfied, the annotated bean is registered unconditionally as the fallback, with no warning logic involved."
+        },
+        {
+          "id": "spring-boot-autoconfiguration-and-starters-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "WebMvcAutoConfiguration is guarded by @ConditionalOnClass(DispatcherServlet.class). A project currently depends only on the bare spring-boot-starter, with no web starter added at all. What is true about this autoconfiguration class at startup?",
+          "options": [
+            "It still runs and registers a DispatcherServlet bean regardless, since @ConditionalOnClass only affects log output, not whether the class actually activates.",
+            "It contributes no beans at all, because DispatcherServlet is not present on the classpath, so its @ConditionalOnClass condition evaluates to false.",
+            "It throws a ClassNotFoundException that crashes application startup entirely.",
+            "It falls back to constructing a DispatcherServlet via reflection even though the class is absent from the classpath."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "@ConditionalOnClass inspects whether a specific class is genuinely present on the compiled classpath, and DispatcherServlet only becomes available once a web-oriented starter (like spring-boot-starter-web) transitively brings it in. Without that starter, the condition is false, and WebMvcAutoConfiguration -- like any autoconfiguration class whose @ConditionalOnClass check fails -- simply contributes no beans, silently and without error. Option A misstates what the annotation controls -- it gates activation, not merely logging. Option C is wrong because a missing class never causes a ClassNotFoundException here; the whole point of the conditional check is to avoid ever trying to reference a class that isn't there. Option D describes something Spring Boot's conditional autoconfiguration mechanism does not do -- there's no reflective fallback for absent classes."
+        },
+        {
+          "id": "spring-boot-autoconfiguration-and-starters-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A developer sets `server.port=9090` in application.properties and restarts the application, without touching any Java source at all. Mechanically, what causes the embedded server to actually listen on port 9090 afterward?",
+          "options": [
+            "Spring Boot recompiles the relevant autoconfiguration classes at startup using the values found in the new properties file.",
+            "The embedded-server autoconfiguration reads the port from a @ConfigurationProperties class (ServerProperties) that is automatically bound from the Environment, which includes application.properties as one of its sources.",
+            "The properties file is parsed directly by the embedded Tomcat server itself, entirely bypassing Spring's own configuration machinery.",
+            "Setting a property in application.properties causes Spring to regenerate and reload the spring-boot-autoconfigure jar at startup."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Autoconfiguration classes deliberately avoid hardcoding values like a port number; instead, the embedded-server autoconfiguration builds its server factory bean using a ServerProperties object, whose fields are bound automatically from Spring Boot's unified Environment abstraction -- which merges application.properties, environment variables, command-line arguments, and more into one coherent view. Changing server.port in application.properties changes what that bound ServerProperties object reports, which changes what value the same, unmodified autoconfiguration code passes when constructing the server. Options A, C, and D each invent a mechanism (recompilation, direct file parsing by Tomcat, jar regeneration) that isn't how Spring Boot's configuration-properties binding actually works."
+        },
+        {
+          "id": "spring-boot-autoconfiguration-and-starters-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "A developer writes a class with a @Bean-producing method meant to override Spring Boot's default ObjectMapper, but forgets to annotate the class itself with @Configuration (or any stereotype annotation). What is the actual, observable result at runtime?",
+          "options": [
+            "Spring throws a startup exception because a @Bean method was found on a class with no recognized stereotype annotation.",
+            "The class is never picked up by component scanning, so its @Bean method never executes, no custom ObjectMapper bean is ever registered, and JacksonAutoConfiguration's own @ConditionalOnMissingBean default activates instead -- silently discarding the intended customization.",
+            "Spring automatically treats any class containing a @Bean method as if it had been annotated @Configuration.",
+            "The custom ObjectMapper is registered correctly regardless, because @Bean methods are discovered independently of the enclosing class's own annotations."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "A @Bean method is only ever invoked as a factory method if the class it lives on is itself a Spring-managed bean -- typically via @Configuration, discovered through component scanning. Without any stereotype annotation, the class is just an ordinary, un-scanned Java class sitting inertly in a package; its @Bean method is never called by anything. Because no custom ObjectMapper bean is ever actually registered, JacksonAutoConfiguration's own default, guarded by @ConditionalOnMissingBean(ObjectMapper.class), finds its condition satisfied and registers the standard default instead, with none of the intended customization -- and no error is ever raised anywhere in this process, which is exactly what makes the bug easy to miss. Options A, C, and D all describe protective or automatic behaviors Spring does not actually provide here."
         },
         {
           "id": "spring-boot-autoconfiguration-and-starters-assess-explain1",

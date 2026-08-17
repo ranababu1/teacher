@@ -111,6 +111,58 @@
           "type": "explanation",
           "prompt": "Explain to another developer why `b = a` for two lists means modifying one can affect the other, and how you'd avoid that if you actually wanted two independent lists.",
           "modelAnswer": "In Python, a variable is a name bound to an object, not a box holding a value. `b = a` doesn't copy the list `a` refers to -- it just makes `b` a second name pointing at that exact same list object. At that point there's only one list in memory with two labels on it. So if you mutate the list through one name -- `b.append(x)`, `a.sort()`, `a[0] = 'x'` -- you're mutating the single shared object, and looking at it through the other name shows the same change, because both names were always pointing at the same thing. This is different from *reassigning* a name (`a = []`), which only points that one name at a new object and leaves the other name's target untouched. If you actually want two independent lists that happen to start out equal, you have to create a real copy explicitly: `b = a.copy()`, `b = list(a)`, or `b = a[:]` all make a new list object with the same initial contents, so future mutations to one don't affect the other. If the list contains other mutable objects (e.g. a list of lists) and you need those nested objects independent too, a shallow copy isn't enough -- you'd need `copy.deepcopy(a)`."
+        },
+        {
+          "id": "python-variables-objects-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "```python\ndef clear_list(items):\n    items = []\n\ndata = [1, 2, 3]\nclear_list(data)\nprint(data)\n```\nWhat gets printed?",
+          "options": [
+            "[1, 2, 3]",
+            "[]",
+            "NameError, because items doesn't exist outside the function",
+            "[1, 2, 3] the first time this runs, then [] on every subsequent call"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "Inside `clear_list`, `items = []` rebinds the *local* name `items` to point at a brand-new empty list -- it does not mutate the list object that `data` refers to, and it does not call any method like `.clear()` that would. Once the function returns, that local rebinding is simply discarded; `data` still points at its original, untouched list. To actually empty the caller's list in place, the function would need to mutate the shared object, e.g. `items.clear()` or `items[:] = []`."
+        },
+        {
+          "id": "python-variables-objects-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "```python\na = [1, 2, 3]\nb = a.copy()\na.append(4)\nprint(a, b)\n```\nWhat gets printed?",
+          "options": [
+            "[1, 2, 3, 4] [1, 2, 3]",
+            "[1, 2, 3, 4] [1, 2, 3, 4]",
+            "[1, 2, 3] [1, 2, 3]",
+            "AttributeError: 'list' object has no attribute 'copy'"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "`a.copy()` explicitly creates a brand-new list object containing a shallow copy of `a`'s elements at that moment, and binds `b` to that new, independent object -- unlike plain assignment (`b = a`), which would make `b` an alias for the same object. Because `b` is a genuinely separate list, appending `4` to `a` afterward only changes `a`; `b` still holds the snapshot it had when it was copied, `[1, 2, 3]`."
+        },
+        {
+          "id": "python-variables-objects-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "```python\nrow = [0, 0, 0]\ngrid = [row, row, row]\ngrid[0][0] = 1\nprint(grid)\n```\nWhat gets printed?",
+          "options": [
+            "[[1, 0, 0], [1, 0, 0], [1, 0, 0]]",
+            "[[1, 0, 0], [0, 0, 0], [0, 0, 0]]",
+            "[[0, 0, 0], [0, 0, 0], [0, 0, 0]]",
+            "TypeError: can't assign to a nested list element"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "`grid = [row, row, row]` doesn't create three separate rows -- it puts three references to the *same* `row` object into the outer list, exactly like aliasing with `b = a`. `grid[0]`, `grid[1]`, and `grid[2]` are three names for one shared list. So `grid[0][0] = 1` mutates that one shared object, and the change is visible through every alias to it -- all three positions in `grid` show the updated row, because there was only ever one row object to begin with. This is a very common real-world bug when building a grid with `[row] * 3` or `[row for _ in range(3)]` using the same `row` reference repeatedly, instead of creating a genuinely new list for each row."
+        },
+        {
+          "id": "python-variables-objects-assess-mcq5",
+          "type": "multipleChoice",
+          "prompt": "Following the identity-vs-equality guidance in this lesson, which is the recommended way to check whether an optional parameter `param=None` was left at its default value?",
+          "options": [
+            "if param == None:",
+            "if param is None:",
+            "if not param:",
+            "if param is not None and param == None:"
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "`None` is a singleton -- there is only ever one `None` object -- so identity (`is`) is the right and idiomatic check, not equality. `param == None` usually works too (since `NoneType.__eq__` handles it), but it's non-idiomatic and, for custom classes that override `__eq__` in unusual ways, could behave unexpectedly; `is None` always correctly checks identity regardless. `if not param:` is a different, broader check -- it's also True for `0`, `\"\"`, and `[]`, which would incorrectly treat a legitimate falsy value as if the parameter were missing. The last option is self-contradictory and would always be False."
         }
       ]
     },
@@ -225,6 +277,58 @@
           "type": "explanation",
           "prompt": "Explain why Python is often described as 'dynamically typed but strongly typed' to a developer who is used to thinking those two ideas are the same thing.",
           "modelAnswer": "Dynamic vs static typing is about *when* type checking happens. Python is dynamically typed: a variable name has no fixed type declared ahead of time, and types are only checked as the program actually runs -- `x = 5` and then later `x = \"hello\"` is completely legal, because `x` is just a name that can be rebound to any object. Strong vs weak typing is a separate axis: it's about whether the language performs implicit conversions between unrelated types to make an operation 'work' anyway. Python is strongly typed -- it refuses to silently convert, say, a string into a number just because you used `+` on them. `\"2\" + 2` raises a `TypeError` rather than guessing you meant `\"22\"` or `4`. So the two properties are independent: a language could in principle be statically-and-weakly typed, or dynamically-and-strongly typed like Python actually is. The practical benefit of Python's strong typing is that mismatched types fail loudly and immediately with a clear error, rather than silently producing a plausible-looking but wrong value that surfaces as a confusing bug much later."
+        },
+        {
+          "id": "python-data-types-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "```python\nprint(True + True)\nprint(isinstance(True, int))\nprint(type(True) == int)\n```\nWhat are the three outputs, in order?",
+          "options": [
+            "2 / True / False",
+            "2 / False / True",
+            "TypeError / True / False",
+            "2 / True / True"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "`bool` is a subclass of `int`, and `True`/`False` behave as `1`/`0` in arithmetic, so `True + True` evaluates to `2`. `isinstance(True, int)` is `True` because `isinstance` considers subclass instances to genuinely 'be' the parent type. But `type(True)` returns exactly `bool`, not `int` -- `type()` reports the precise class -- so `type(True) == int` compares `bool == int`, which is `False`. This is exactly why `isinstance()` is generally preferred over comparing `type()` directly: it correctly accounts for subclass relationships that `type() ==` misses."
+        },
+        {
+          "id": "python-data-types-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "```python\ntry:\n    x = int(\"3.5\")\nexcept ValueError:\n    x = \"failed as int\"\n\ny = float(\"3.5\")\nprint(x, y)\n```\nWhat gets printed?",
+          "options": [
+            "failed as int 3.5",
+            "3 3.5",
+            "3.5 3.5",
+            "failed as int failed as float"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "`\"3.5\"` is a well-formed string, but it isn't a valid *integer* literal, so `int(\"3.5\")` raises `ValueError` (not `TypeError` -- the type of the conversion target is fine, the content just doesn't parse as an int), which is caught and `x` is set to `\"failed as int\"`. `float(\"3.5\")`, on the other hand, succeeds without issue since `\"3.5\"` is a perfectly valid float literal, giving `y = 3.5`. Note `int()` does not truncate a numeral-looking string like this -- it either parses cleanly as an integer or raises an error; it never partially succeeds by dropping the decimal part."
+        },
+        {
+          "id": "python-data-types-assess-mcq4",
+          "type": "multipleChoice",
+          "prompt": "```python\nvalues = [\"False\", -1, 0.0, [], \"0\", None]\ncount = sum(1 for v in values if v)\nprint(count)\n```\nWhat gets printed?",
+          "options": [
+            "3",
+            "2",
+            "4",
+            "6"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "Truthiness doesn't follow what a value 'looks like' -- it follows a specific, fixed set of falsy values: `False`, `None`, `0`, `0.0`, and empty containers. Here, `\"False\"` is a non-empty string -- truthy, despite its text -- and `-1` is truthy because only the integer `0` is falsy, not negative numbers. `\"0\"` is likewise a non-empty string, so it's also truthy. `0.0`, `[]`, and `None` are all falsy by the standard rules. That leaves exactly three truthy values -- `\"False\"`, `-1`, and `\"0\"` -- so `count` is 3."
+        },
+        {
+          "id": "python-data-types-assess-mcq5",
+          "type": "multipleChoice",
+          "prompt": "```python\na = 1 + 2.5\nb = int(a)\nc = str(b) + \"!\"\nprint(a, type(a).__name__, c)\n```\nWhat gets printed?",
+          "options": [
+            "3.5 float 3!",
+            "3.5 int 3!",
+            "3 float 3!",
+            "3.5 float 3.5!"
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "`1 + 2.5` implicitly widens the int to a float before adding, since Python allows implicit conversion between related numeric types -- so `a` is the float `3.5`, and `type(a).__name__` is `'float'`. `int(a)` is an explicit conversion that truncates the fractional part, giving the int `3`. `str(b)` explicitly converts that int back to the string `\"3\"`, and concatenating with `\"!\"` (str + str is always legal) gives `\"3!\"`. Every step past the first uses explicit conversion -- Python never implicitly turns a float into an int or a number into a string on its own."
         }
       ]
     }
