@@ -1,0 +1,730 @@
+{
+  "learningPathId": "statistics",
+  "moduleId": "hypothesis_testing",
+  "title": "Hypothesis Testing Framework",
+  "order": 7,
+  "concepts": [
+    {
+      "id": "statistics-null-and-alternative-hypotheses",
+      "title": "Null and Alternative Hypotheses",
+      "description": "Every hypothesis test pits a precise, skeptical default claim (H0) against the substantive claim you actually care about (H1), and the entire logic of the test is asymmetric: you can gather evidence strong enough to reject H0, but you can never gather evidence that proves H0 true.",
+      "moduleId": "hypothesis_testing",
+      "topicId": "hypothesis_testing",
+      "difficulty": "beginner",
+      "estimatedMinutes": 30,
+      "prerequisites": [],
+      "learningObjectives": [
+        "State a null hypothesis H0 and an alternative hypothesis H1 for a given question, in terms of a population parameter.",
+        "Explain why a hypothesis test can only ever reject or fail to reject H0, and never 'accept' H0 as proven true.",
+        "Distinguish a one-sided (directional) alternative from a two-sided (non-directional) alternative, and choose correctly between them for a given question.",
+        "Explain why the choice between a one-sided and two-sided test must be made before looking at the sample data, not after.",
+        "Formulate H0 and H1 for a concrete machine learning scenario, such as comparing a new model's average latency to an old model's."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "H0: The Precise, Skeptical Default",
+            "body": "Every hypothesis test begins with two competing statements about some unknown property of the world -- almost always a **population parameter**, a fixed but unknown true number like a population mean, a true proportion, or a true difference between two group means. The **null hypothesis**, written H0, is the precise, skeptical default claim: nothing interesting is happening, there's no effect, no difference, no change from the status quo. Critically, H0 has to be stated as an exact equality -- `mu = mu0`, or `mu_new = mu_old`, or `p = 0.5` -- not a vague 'about the same,' because a hypothesis test needs to compute an exact, known probability distribution for its test statistic under H0, and that's only mathematically possible when H0 pins the parameter down to a single specific value. A null hypothesis like 'the new model's latency is roughly similar to the old model's' cannot be tested directly, because 'roughly similar' has no fixed number to build a sampling distribution around; 'the new model's mean latency equals the old model's mean latency exactly' can.\n\nThis might feel backwards at first -- why build your entire test around the boring claim you don't actually believe, rather than the interesting one you're hoping to support? The answer is that statistical testing borrows the logic of proof by contradiction. You provisionally assume the skeptical, no-effect claim is true, then ask a very specific question: if H0 really were true, how surprising would it be to see data like the sample you actually collected? If the answer is 'extremely surprising,' that's evidence against H0 -- not because you set out to prove your favorite hypothesis, but because the skeptical baseline model struggles to explain what you observed. This is also why H0 usually places the burden of proof on the data: the null represents 'nothing has changed, no update needed,' and it takes sufficiently strong evidence to move away from that resting position, not the other way around.\n\n```python\n# H0, stated precisely as an equality about a population parameter:\n# mu_new = the TRUE (population) mean latency of the new model, in ms\n# mu_old = the TRUE (population) mean latency of the old model, in ms\n\nH0 = \"mu_new == mu_old\"   # no true difference in average latency\n```\n\nNotice this is a claim about the true, underlying population means -- quantities you can never observe directly -- not a claim about the particular sample averages you happened to measure this one time. Sample averages will almost always differ from each other by some small amount purely due to random sampling noise, even when the true underlying means are identical; the machinery built across this module exists specifically to distinguish 'the sample averages differ because the true means differ' from 'the sample averages differ purely by chance, and the true means are actually equal.'"
+          },
+          {
+            "heading": "H1, and Choosing One-Sided vs Two-Sided",
+            "body": "The **alternative hypothesis**, H1, is the substantive claim -- the one you're actually trying to find evidence for, and the one you'll treat as more consistent with your data if H0 gets rejected. Relative to the parameter space, H0 and H1 have to be mutually exclusive and jointly exhaustive: together they need to cover every value the true parameter could possibly take, with no overlap. Given H0: mu_new = mu_old, there are three natural ways to write H1, and choosing the right one is a genuinely important, question-driven decision, not a formality.\n\nA **two-sided** (non-directional) alternative, H1: mu_new != mu_old, says only that some difference exists, without committing to a direction. This is the right choice whenever a change in EITHER direction would be meaningful and worth flagging. A **one-sided** (directional) alternative, H1: mu_new < mu_old (or the mirror-image mu_new > mu_old), commits in advance to a specific direction, and is appropriate only when a difference in the other direction is either impossible or simply not something you care about detecting.\n\n```python\n# Same H0 in all three cases: H0: mu_new == mu_old\nalternatives = {\n    \"two_sided\": \"mu_new != mu_old\",          # any difference, either direction\n    \"one_sided_less\": \"mu_new < mu_old\",       # ONLY care if new model is faster\n    \"one_sided_greater\": \"mu_new > mu_old\",    # ONLY care if new model is slower\n}\n```\n\nTake the latency comparison seriously as a worked example, because the 'right' choice genuinely depends on the business question, not on the data. If you only care about whether the new model is faster -- perhaps you've already decided you'll ship it regardless, unless it's actually slower -- a one-sided test, H1: mu_new < mu_old, is defensible. But in most real deployment decisions, a change in EITHER direction matters: slower latency is an obvious regression, but latency that's surprisingly, suspiciously faster can also be a red flag -- it might mean the new model is silently skipping computation, returning a cached or default response, or failing open somewhere upstream. In that far more common situation, the two-sided alternative, H1: mu_new != mu_old, is the honest, correct choice, because you genuinely want to be alerted to a difference in either direction.\n\nThe one rule that can't be bent: this decision -- one-sided or two-sided, and if one-sided, which direction -- has to be made and locked in before looking at the sample data, based purely on which differences you actually care about detecting. Deciding it afterwards, by checking which direction the sample happened to point and then quietly choosing the one-sided test that matches, is a subtle but serious violation of the testing logic, demonstrated directly, with a simulation, later in this concept."
+          },
+          {
+            "heading": "Why You Can Only Reject or Fail to Reject H0 -- Never 'Accept' It",
+            "body": "Every hypothesis test ends in exactly one of two verdicts, and the wording is deliberate: you either **reject H0** (the data was surprising enough, under the assumption H0 is true, to abandon that assumption) or you **fail to reject H0** (the data wasn't surprising enough to abandon it). Notice what's missing: there is no verdict called 'accept H0' or 'H0 is proven true.' This asymmetry is not a pedantic language quirk -- it reflects something real and important about the logic of the test.\n\nFailing to reject H0 only tells you that your data is *consistent with* H0 being true; it does not tell you H0 *is* true. There's a world of difference between those two claims, and the gap between them is filled by an idea covered fully in a later concept in this module: **statistical power**. A test can fail to reject H0 for two very different reasons that look identical from the outside: either H0 really is true (no real difference exists), or a real difference exists but your sample was too small, too noisy, or otherwise underpowered to reliably detect it. Absence of evidence is not evidence of absence -- and a hypothesis test, by construction, has no way to tell these two scenarios apart on its own. This is precisely why 'fail to reject H0' is the honest verdict, and 'accept H0' would be a dishonest overstatement of what the test actually established.\n\nThis distinction has immediate, practical consequences for how you write up ML experiment results. 'We found no statistically significant difference between model A and model B' is a defensible, correctly-hedged sentence. 'We proved model A and model B perform identically' is not -- it claims something the test structurally cannot deliver, no matter how large the p-value came out. The correct, careful phrasing keeps the door open to the possibility that a real difference exists but your experiment simply didn't have enough data, or enough variance control, to find it -- exactly the situation a power analysis, covered later in this module, is built to prevent or at least quantify in advance."
+          },
+          {
+            "heading": "Formulating a Full Hypothesis Statement for an ML Comparison",
+            "body": "Putting the pieces together, a complete hypothesis statement for a real ML engineering question needs four things nailed down before a single data point is collected: the population parameter of interest, the exact value H0 claims for it, whether H1 is one-sided or two-sided, and (if one-sided) which direction. For the running latency example, a properly complete statement looks like this:\n\n```python\nhypothesis = {\n    \"parameter\": \"difference in true mean request latency, new model minus old model (ms)\",\n    \"H0\": \"mu_new - mu_old == 0\",\n    \"H1\": \"mu_new - mu_old != 0\",\n    \"sidedness\": \"two-sided\",\n    \"significance_level_alpha\": 0.05,   # chosen ahead of time -- next concept\n    \"rationale\": (\n        \"Either a latency regression (mu_new > mu_old) or a suspicious, \"\n        \"unexplained speedup (mu_new < mu_old) is worth flagging before rollout.\"\n    ),\n}\n\nfor key, value in hypothesis.items():\n    print(f\"{key}: {value}\")\n```\n\nThis exact framing -- comparing a parameter of a new thing against a parameter of an old thing, via a difference pinned to zero under H0 -- is the backbone of A/B testing generally, and it applies just as directly to comparing two model variants' accuracy, two hyperparameter configurations' validation loss, or two ranking algorithms' click-through rate, as it does to latency. The parameter changes (mean latency, mean accuracy, a proportion, a rate), and the specific numbers change, but the shape of the question -- an exact equality under H0, a deliberately chosen sidedness for H1, decided in advance -- stays essentially identical across every hypothesis test you'll run as an ML engineer. The next concept in this module picks up exactly where this one leaves off: given a properly stated H0 and H1 like this, how do you actually use sample data to decide between them?"
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Stating H0 and H1 for a Latency Comparison",
+          "language": "python",
+          "code": "# Comparing average request latency: a NEW model vs the current OLD model.\n# mu_old / mu_new are the TRUE (population) mean latencies, in milliseconds --\n# not the specific sample averages we'll eventually measure.\n\nhypothesis_spec = {\n    \"H0\": \"mu_new == mu_old\",       # no true difference in average latency\n    \"H1\": \"mu_new != mu_old\",       # SOME difference -- direction unspecified\n    \"test_type\": \"two-sided\",\n    \"rationale\": (\n        \"Latency going up is a regression; latency going down unexpectedly \"\n        \"can signal a bug (e.g. skipped work), so either direction matters.\"\n    ),\n}\n\nfor key, value in hypothesis_spec.items():\n    print(f\"{key}: {value}\")",
+          "explanation": "Writing the hypothesis spec out explicitly, as data rather than as an idea kept only in your head, forces every ambiguity to surface before a single measurement is taken: what exactly is the parameter (mu_new minus mu_old, in milliseconds), what exact value does H0 claim for it (zero), and is H1 one-sided or two-sided (explicitly two-sided here, with a stated reason). The 'rationale' field is doing real work, not just documenting a choice after the fact -- writing down *why* two-sided was chosen, before seeing any data, is what makes it verifiable later that the decision wasn't quietly reverse-engineered from whichever direction the sample happened to lean."
+        },
+        {
+          "title": "One-Sided vs Two-Sided: The Same Data, a Different Question",
+          "language": "python",
+          "code": "import numpy as np\nfrom scipy import stats\n\nold_latencies = np.array([118, 122, 115, 130, 121, 119, 125, 117, 123, 120])\nnew_latencies = np.array([110, 108, 115, 112, 109, 111, 107, 114, 110, 113])\n\n# The SAME two samples, THREE different questions -- three different p-values\n_, p_two_sided = stats.ttest_ind(new_latencies, old_latencies, equal_var=False)\n_, p_less = stats.ttest_ind(new_latencies, old_latencies, alternative=\"less\", equal_var=False)\n_, p_greater = stats.ttest_ind(new_latencies, old_latencies, alternative=\"greater\", equal_var=False)\n\nprint(f\"two-sided (H1: mu_new != mu_old): p = {p_two_sided:.2e}\")\nprint(f\"one-sided (H1: mu_new <  mu_old): p = {p_less:.2e}\")\nprint(f\"one-sided (H1: mu_new >  mu_old): p = {p_greater:.2e}\")\n# two-sided: p = 1.44e-05\n# less:      p = 7.22e-06\n# greater:   p = 1.00e+00",
+          "explanation": "The raw data never changes across these three calls -- only the stated alternative hypothesis does -- and yet the resulting p-values range from a vanishingly small 7.22e-06 all the way up to essentially 1.00. The 'less' alternative (testing specifically whether the new model is faster) gets exactly half the two-sided p-value, because the two-sided test spreads its attention across both tails while 'less' concentrates entirely on the one tail where the data actually landed. The 'greater' alternative comes back with a p-value near 1.0 precisely because the data points overwhelmingly in the opposite direction from what 'greater' asks about. This is exactly why sidedness cannot be chosen by seeing which framing produces the smallest, most flattering p-value after the fact -- the honest question ('do I care about either direction, or specifically one?') has to be settled first, independent of what the data turns out to show."
+        },
+        {
+          "title": "Why Sidedness Must Be Locked In Before Seeing the Data",
+          "language": "python",
+          "code": "import numpy as np\nfrom scipy import stats\n\nrng = np.random.default_rng(42)\n\nn_simulations = 20000\nfalse_positives_two_sided = 0\nfalse_positives_peeked_one_sided = 0\nalpha = 0.05\n\nfor _ in range(n_simulations):\n    old_lat = rng.normal(loc=120.0, scale=15.0, size=30)\n    new_lat = rng.normal(loc=120.0, scale=15.0, size=30)   # H0 truly holds: identical means\n\n    # Honest: sidedness decided BEFORE looking at this sample\n    _, p_honest = stats.ttest_ind(new_lat, old_lat)\n    if p_honest < alpha:\n        false_positives_two_sided += 1\n\n    # Dishonest: peek at which direction the sample leans, THEN pick that one-sided test\n    if new_lat.mean() - old_lat.mean() < 0:\n        _, p_peeked = stats.ttest_ind(new_lat, old_lat, alternative=\"less\")\n    else:\n        _, p_peeked = stats.ttest_ind(new_lat, old_lat, alternative=\"greater\")\n    if p_peeked < alpha:\n        false_positives_peeked_one_sided += 1\n\nprint(false_positives_two_sided / n_simulations)          # 0.0479 -- matches alpha\nprint(false_positives_peeked_one_sided / n_simulations)   # 0.0956 -- roughly DOUBLE alpha",
+          "explanation": "In every single one of these 20,000 simulated trials, H0 is deliberately, verifiably true by construction -- both samples are drawn from an identical distribution -- so any 'significant' result is by definition a false positive. The honest, two-sided procedure, with sidedness fixed before ever touching the data, produces false positives at almost exactly the intended rate of 5%. The 'peek first, then pick the matching one-sided test' procedure produces false positives at roughly 10% -- about double the nominal alpha -- even though each individual one-sided test, viewed in isolation, still uses alpha=0.05. The mechanism is symmetry itself: whichever direction the noise happens to push the sample, the peeking procedure always tests in that exact direction, effectively unioning together the upper-tail rejection region and the lower-tail rejection region of a standard two-sided test at level 2*alpha, rather than genuinely committing to one side in advance."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "Failing to reject H0 (for example, getting p = 0.62) proves H0 is true -- the two models genuinely have identical average latency.",
+          "clarification": "A hypothesis test can only tell you the data is consistent with H0; it cannot prove H0 is true. Failing to reject H0 can happen for two very different reasons that look identical from the outside: there really is no true difference, or a real difference exists but the sample was too small or too noisy to detect it reliably. The correct, honest conclusion is 'we found no statistically significant difference' -- which explicitly leaves open the possibility of a real but undetected effect -- never 'we proved there's no difference.'"
+        },
+        {
+          "description": "You can look at which direction your sample data happens to point, and then choose a one-sided test in that direction to get a more 'sensitive' result.",
+          "clarification": "This inflates the true Type I error rate well above the intended alpha, even though each individual one-sided test still nominally uses alpha=0.05. A simulation in this concept shows the honest, sidedness-locked-in-advance procedure produces false positives at about 4.8% (matching alpha), while the 'peek, then pick the matching direction' procedure produces false positives at about 9.6% -- roughly double -- because it effectively unions both tails of rejection together while claiming the narrower one-sided guarantee. Sidedness must be chosen from the actual question being asked, before the data is examined, not from whichever direction the sample happened to lean."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "statistics-null-and-alternative-hypotheses-ex1",
+          "type": "predictOutput",
+          "prompt": "What does this print, and what's dangerous about the wording of the result?",
+          "code": "def evaluate_latency_test(p_value, alpha=0.05):\n    if p_value < alpha:\n        return \"H0 is rejected: the models have different average latency.\"\n    else:\n        return \"H0 is accepted: the models have the same average latency.\"\n\nprint(evaluate_latency_test(p_value=0.62))",
+          "hints": [
+            "Compare p_value=0.62 against alpha=0.05 -- which branch of the if/else actually runs?",
+            "The word 'accepted' is doing something the underlying statistics can never actually support -- what would 'proving' H0 true actually require that a single test can't provide?",
+            "Think about the two very different reasons a test can fail to reject H0 -- does p=0.62 tell you which one you're in?"
+          ],
+          "expectedAnswer": "It prints 'H0 is accepted: the models have the same average latency.' This is dangerous because failing to reject H0 (p=0.62 > 0.05) never proves H0 true -- it only means the data isn't surprising under H0. The honest conclusion is 'we failed to reject H0 / found no significant difference,' not that the models have been shown to be identical; the test can't rule out a real difference that this particular sample was simply too small or too noisy to detect.",
+          "solutionExplanation": "Since 0.62 is not less than alpha=0.05, the else branch runs, printing the 'accepted' message. The bug isn't in the arithmetic -- it's in the language. 'Accepted' claims a certainty the test cannot deliver: failing to reject H0 is consistent both with H0 being genuinely true and with H0 being false but the test lacking the power to catch it, and nothing in a single p-value distinguishes those two cases. The function should instead return wording like 'failed to reject H0 -- no statistically significant difference found,' which correctly leaves the door open to an undetected real effect rather than asserting the two models have been proven identical."
+        },
+        {
+          "id": "statistics-null-and-alternative-hypotheses-ex2",
+          "type": "debugging",
+          "prompt": "This function is meant to test whether a new model is faster than an old one, but a reviewer flagged it as statistically invalid before it reached production. Find the bug and fix it.",
+          "code": "import numpy as np\nfrom scipy import stats\n\ndef test_latency_improvement(old_latencies, new_latencies):\n    diff = np.mean(new_latencies) - np.mean(old_latencies)\n    # Pick whichever direction the observed data happens to point,\n    # then test specifically in that direction for extra sensitivity\n    if diff < 0:\n        alternative = \"less\"\n    else:\n        alternative = \"greater\"\n    _, p_value = stats.ttest_ind(new_latencies, old_latencies, alternative=alternative)\n    return p_value",
+          "hints": [
+            "Where does 'alternative' get decided -- before or after the sample data (old_latencies, new_latencies) has already been looked at?",
+            "This concept's third example simulates exactly this pattern -- what did it find about the resulting false-positive rate compared to the nominal alpha?",
+            "The fix isn't a different formula -- it's committing to a sidedness decision (or staying two-sided) based on the actual question, independent of this specific sample's outcome."
+          ],
+          "solutionCode": "import numpy as np\nfrom scipy import stats\n\ndef test_latency_improvement(old_latencies, new_latencies):\n    # Sidedness decided from the QUESTION, before ever computing diff:\n    # we care about a change in EITHER direction (slower is bad,\n    # unexpectedly faster may signal a bug), so this stays two-sided.\n    _, p_value = stats.ttest_ind(new_latencies, old_latencies)\n    return p_value",
+          "solutionExplanation": "The original code computes `diff` from the actual sample first, and only then chooses which one-sided alternative to test -- always picking the direction that matches whatever the sample happened to show. As this concept's simulation demonstrates, that pattern produces a real Type I error rate roughly double the nominal alpha (about 9.6% instead of 5%), because it effectively combines both tails of a two-sided rejection region while claiming the narrower guarantee of a one-sided test. The fix is to decide sidedness from the actual business question -- here, that a change in either direction is worth flagging -- and lock that choice in before touching `old_latencies` or `new_latencies` at all, which for this scenario means simply running the standard two-sided test."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "statistics-null-and-alternative-hypotheses-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "A team runs a hypothesis test comparing new vs. old model latency and gets p = 0.38, well above their alpha = 0.05 threshold. Which conclusion correctly reflects what the test has actually established?",
+          "options": [
+            "We have proven the new and old models have exactly the same true average latency.",
+            "We fail to reject H0 -- the data isn't surprising enough, under H0, to abandon it, but this does not prove H0 is true.",
+            "We accept H0 as confirmed, since p > alpha.",
+            "The test is inconclusive and must be discarded entirely, since nothing at all can be said."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Failing to reject H0 is a real, meaningful conclusion -- but it only establishes that the data is consistent with H0, not that H0 has been proven. Option A and option C both claim a certainty ('proven,' 'confirmed') the test cannot deliver, since a large p-value could equally reflect a genuinely true H0 or an underpowered test that missed a real effect. Option D overstates the opposite way -- 'fail to reject H0' IS a specific, usable conclusion, not nothing at all; it just has to be worded honestly rather than discarded."
+        },
+        {
+          "id": "statistics-null-and-alternative-hypotheses-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "An engineer wants to test whether a new caching layer changes average response time, and considers both a slowdown and an unexpected speedup equally important to catch. Which hypothesis pair is correctly formulated?",
+          "options": [
+            "H0: mu_new = mu_old,  H1: mu_new < mu_old",
+            "H0: mu_new = mu_old,  H1: mu_new != mu_old",
+            "H0: mu_new != mu_old,  H1: mu_new = mu_old",
+            "H0: mu_new < mu_old,  H1: mu_new > mu_old"
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Since both directions of change matter here, H1 must be two-sided (mu_new != mu_old), with H0 stated as the precise equality mu_new = mu_old. Option A is one-sided and would miss a genuine slowdown entirely. Option C reverses the roles: H0 must be the exact, skeptical equality claim with a fully known null distribution, not a vague 'some difference' statement, and H1 must be the substantive claim, not the default. Option D leaves out the case mu_new = mu_old entirely, so the two hypotheses aren't jointly exhaustive of the parameter space and H0 isn't stated as the required equality."
+        },
+        {
+          "id": "statistics-null-and-alternative-hypotheses-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "Why must the choice between a one-sided and two-sided alternative hypothesis be made before observing the sample data, rather than after?",
+          "options": [
+            "Because scipy.stats functions technically require the alternative argument to be set before any data is loaded into memory.",
+            "Because choosing the direction that matches whichever way the sample happened to lean, after the fact, effectively widens the true rejection region beyond what the stated alpha implies, inflating the real Type I error rate above its nominal value.",
+            "Because one-sided tests are always more powerful than two-sided tests, so choosing one-sided after the fact makes the analysis strictly more accurate.",
+            "Because a two-sided test cannot be computed on the same dataset once a one-sided test has already been run on it."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This concept's simulation shows exactly this mechanism: picking the one-sided direction that matches the observed sample, after the fact, produces a real false-positive rate of roughly double the nominal alpha, because it effectively combines both tails of a two-sided rejection region while claiming a one-sided test's narrower guarantee. Option A invents a fabricated technical constraint. Option C's power claim is true only for a one-sided test committed to in advance against a real effect in that direction -- it does not make picking the direction after seeing the data valid or 'more accurate.' Option D is simply false; nothing prevents computing a two-sided test on the same data."
+        },
+        {
+          "id": "statistics-null-and-alternative-hypotheses-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain to a new team member why a hypothesis test can only ever end in 'reject H0' or 'fail to reject H0,' never 'accept H0,' and why this distinction matters when writing up the result of comparing two ML models' performance.",
+          "modelAnswer": "A hypothesis test is built around a kind of proof by contradiction: you provisionally assume the skeptical null hypothesis H0 is true, then ask how surprising your actual sample data would be under that assumption. If the data is surprising enough, you have grounds to reject H0 -- the assumption struggled to explain what you saw. If the data isn't especially surprising, all you can honestly say is that it's consistent with H0 being true, which is not the same as proving H0 true. There are two very different reasons a test might fail to reject H0: either there really is no true difference, or there is a real difference but your sample was too small, too noisy, or otherwise underpowered to reliably detect it. From the outside, both look identical -- a p-value above alpha -- and the test has no built-in way to distinguish which situation you're actually in. That's exactly why 'accept H0' isn't a valid verdict: it would claim more certainty than the test can actually deliver.\n\nThis matters enormously when reporting an ML model comparison. Writing 'we found no statistically significant difference between model A and model B' correctly leaves open the possibility that a real difference exists but the experiment lacked the power to catch it. Writing 'we proved the two models perform identically' overstates the finding and can lead a team to wrongly treat a genuinely better model as equivalent to a worse one, simply because the test that ran happened to be underpowered."
+        }
+      ]
+    },
+    {
+      "id": "statistics-test-statistics-and-rejection-regions",
+      "title": "Test Statistics and Rejection Regions",
+      "description": "A test statistic condenses an entire sample into a single number whose probability distribution is fully known whenever H0 is true, and a hypothesis test's mechanical procedure is nothing more than checking whether that number lands inside a rejection region sized by a pre-chosen significance level alpha.",
+      "moduleId": "hypothesis_testing",
+      "topicId": "hypothesis_testing",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 35,
+      "prerequisites": [
+        "statistics-null-and-alternative-hypotheses"
+      ],
+      "learningObjectives": [
+        "Define a test statistic as a function of sample data whose sampling distribution under H0 is fully known, and explain why that property is what makes a statistic usable for testing at all.",
+        "Explain how a pre-chosen significance level alpha carves a rejection region out of a test statistic's null distribution.",
+        "Execute the full mechanical hypothesis-testing procedure -- state hypotheses, fix alpha, find the critical value(s), compute the observed statistic, decide -- for a two-sample comparison.",
+        "Compute a two-sample t-statistic from raw data and locate it relative to the rejection region defined by a chosen alpha.",
+        "Explain why the specific test statistic used (e.g. a t-statistic vs. a chi-square statistic) depends on the kind of data and what's known or unknown about the population."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "What Actually Makes a Number a 'Test Statistic'",
+            "body": "A **test statistic** is a single number computed from your sample data, chosen specifically because its probability distribution, calculated under the assumption that H0 is true, is fully known -- either exactly or as a very good large-sample approximation. This 'known distribution under H0' property is not a nice-to-have; it's the entire reason a test statistic is useful at all. Without it, there would be no way to say how surprising an observed value actually is, because 'surprising' only means something relative to a specific, computable distribution of values you'd expect to see if nothing interesting were happening.\n\nFor comparing two independent sample means -- the latency scenario carried over from the previous concept -- the natural test statistic is a **t-statistic**:\n\n```python\n# t = (difference in sample means) / (estimated standard error of that difference)\nt_statistic = (mean_new - mean_old) / standard_error\n```\n\nThe numerator captures the signal you actually care about -- how far apart the two sample means landed. The denominator, the **standard error**, rescales that difference by how much noise you'd expect from sampling alone, given the sample sizes and the variability within each group. Dividing by the standard error turns an arbitrary, unit-dependent difference (5 milliseconds? 5 dollars? 5 percentage points?) into a unitless number whose distribution, under H0, follows a known shape -- specifically, a **t-distribution** with a particular number of **degrees of freedom**, a parameter that governs how heavy the distribution's tails are and depends on the sample sizes involved.\n\nWhy a t-distribution rather than the more familiar standard normal (z) distribution? Because computing the standard error requires an estimate of the population variance, and when that variance has to be *estimated from the sample itself* (as it almost always does in practice, rather than being some known, external constant), the extra uncertainty introduced by that estimation step makes the true sampling distribution of the statistic slightly heavier-tailed than a standard normal -- exactly what the t-distribution captures, and exactly why using a plain z critical value in this situation, a mistake explored directly in this concept's exercises, silently understates how extreme a result really needs to be."
+          },
+          {
+            "heading": "Alpha and the Rejection Region",
+            "body": "The **significance level**, alpha, is a probability threshold chosen before collecting any data -- almost always 0.05 in practice, though 0.01 or 0.10 show up depending on context -- representing how much Type I error risk (covered in full in the next concept) you're willing to tolerate. Once alpha is fixed, it carves the test statistic's known null distribution into two regions: a small, extreme-tailed **rejection region**, sized so that a statistic computed from genuinely H0-true data would land there with probability exactly alpha, and a much larger non-rejection region covering everything else.\n\nFor a two-sided alternative (H1: mu_new != mu_old), 'extreme' means far from zero in *either* direction, so the rejection region splits into two tails, each getting alpha/2 of the probability, bounded by **critical values** at plus and minus t(1 - alpha/2, df). For a one-sided alternative, the entire alpha concentrates into a single tail, giving one critical value at t(alpha, df) or t(1 - alpha, df) depending on direction. This is exactly why sidedness, locked in during the previous concept, has to be decided before this step: it directly determines the *shape* of the rejection region -- one tail versus two -- not just which side of it you'll compare against.\n\n```python\nfrom scipy import stats\n\nalpha = 0.05\ndf = 18\n\ntwo_sided_critical = stats.t.ppf(1 - alpha / 2, df)   # split alpha across BOTH tails\none_sided_critical = stats.t.ppf(1 - alpha, df)        # all of alpha in ONE tail\n\nprint(two_sided_critical, one_sided_critical)\n# 2.10 1.73 -- NOT interchangeable\n```\n\nNotice the two critical values are meaningfully different numbers -- the one-sided critical value is smaller, because it doesn't need to reserve any probability in the opposite tail. Using the wrong one for the test you're actually running -- comparing a two-sided decision (checking the absolute value of the statistic) against a one-sided critical value, or vice versa -- silently changes your real Type I error rate away from the alpha you intended, without any error message or warning to tell you it happened."
+          },
+          {
+            "heading": "The Mechanical Procedure, Start to Finish",
+            "body": "Stripped down to its mechanics, every classical hypothesis test -- regardless of which specific statistic it uses -- follows the same five steps, and it's worth having this sequence memorized cold, because every subsequent concept in this module is really just filling in the details of one of these steps:\n\n1. **State H0 and H1** precisely, including sidedness, before looking at the data (previous concept).\n2. **Choose alpha** and identify the appropriate test statistic and its distribution under H0.\n3. **Compute the critical value(s)** that carve out the rejection region, using alpha and the null distribution.\n4. **Compute the observed test statistic** from the actual sample data you collected.\n5. **Compare and decide**: if the observed statistic falls inside the rejection region, reject H0; otherwise, fail to reject H0.\n\nRunning this full sequence on real numbers makes it concrete. Suppose you've measured ten requests each against the old and new model:\n\n```python\nimport numpy as np\nfrom scipy import stats\n\nold_latencies = np.array([118, 122, 115, 130, 121, 119, 125, 117, 123, 120])\nnew_latencies = np.array([110, 108, 115, 112, 109, 111, 107, 114, 110, 113])\n\nn1, n2 = len(old_latencies), len(new_latencies)\nmean1, mean2 = old_latencies.mean(), new_latencies.mean()\nvar1, var2 = old_latencies.var(ddof=1), new_latencies.var(ddof=1)\n\n# Step 4: the observed test statistic (Welch's t, which doesn't assume equal variances)\nse = np.sqrt(var1 / n1 + var2 / n2)\nt_statistic = (mean1 - mean2) / se\n\n# Welch-Satterthwaite degrees of freedom\ndf = (var1 / n1 + var2 / n2) ** 2 / (\n    (var1 / n1) ** 2 / (n1 - 1) + (var2 / n2) ** 2 / (n2 - 1)\n)\n\n# Step 3: the critical value, for a two-sided test at alpha = 0.05\nalpha = 0.05\ncritical_value = stats.t.ppf(1 - alpha / 2, df)\n\nprint(f\"t_statistic = {t_statistic:.3f}, df = {df:.1f}, critical_value = {critical_value:.3f}\")\nprint(\"Reject H0\" if abs(t_statistic) > critical_value else \"Fail to reject H0\")\n# t_statistic = 6.333, df = 14.8, critical_value = 2.134 -> Reject H0\n```\n\nThe observed statistic, 6.333, is dramatically larger in absolute value than the critical value of 2.134 -- it lands deep inside the rejection region -- so the procedure rejects H0 and concludes the two models' true mean latencies differ. Note what this procedure never needed at any point: a p-value. Comparing a statistic against a critical value is a complete, self-contained decision rule on its own; the equivalence between this rejection-region approach and the p-value approach most people actually report is the entire subject of a later concept in this module."
+          },
+          {
+            "heading": "Why the Test Statistic Has to Match the Data",
+            "body": "Not every comparison uses a t-statistic -- the test statistic has to be matched to the *kind* of data and question at hand, because the whole point is having a statistic whose null distribution is actually known for that situation. Comparing two means with unknown, estimated variances calls for a t-statistic; comparing an observed categorical frequency distribution against an expected one calls for a **chi-square statistic**, whose null distribution is a chi-square distribution with degrees of freedom set by the number of categories; comparing more than two group means simultaneously calls for an **F-statistic**. Picking the wrong family of test statistic for the data you actually have -- treating counts of categories as if they were a continuous, normally-distributed measurement, for instance -- breaks the 'known null distribution' property the whole procedure depends on, even if you can technically still compute *some* number from the data.\n\nThis generalizes directly to a genuinely common ML monitoring task: checking whether the distribution of a model's predicted classes has drifted away from a historical baseline. Because the data here is categorical counts, not a continuous measurement, the right test statistic is chi-square, not a t-statistic, even though the underlying five-step procedure -- state hypotheses, fix alpha, find the critical value, compute the observed statistic, decide -- is identical in shape to the latency example above. The mechanics of the test never change; only the specific statistic and its null distribution do, driven entirely by what kind of data you're actually looking at."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "The Full Mechanical Procedure, By Hand",
+          "language": "python",
+          "code": "import numpy as np\nfrom scipy import stats\n\nold_latencies = np.array([118, 122, 115, 130, 121, 119, 125, 117, 123, 120])\nnew_latencies = np.array([110, 108, 115, 112, 109, 111, 107, 114, 110, 113])\n\nn1, n2 = len(old_latencies), len(new_latencies)\nmean1, mean2 = old_latencies.mean(), new_latencies.mean()\nvar1, var2 = old_latencies.var(ddof=1), new_latencies.var(ddof=1)\n\nse = np.sqrt(var1 / n1 + var2 / n2)\nt_statistic = (mean1 - mean2) / se\n\ndf = (var1 / n1 + var2 / n2) ** 2 / (\n    (var1 / n1) ** 2 / (n1 - 1) + (var2 / n2) ** 2 / (n2 - 1)\n)\n\nalpha = 0.05\ncritical_value = stats.t.ppf(1 - alpha / 2, df)\n\nprint(f\"t_statistic = {t_statistic:.3f}, df = {df:.1f}, critical_value = {critical_value:.3f}\")\nprint(\"Reject H0\" if abs(t_statistic) > critical_value else \"Fail to reject H0\")",
+          "explanation": "Every one of the five mechanical steps is present and separable in this code: the critical value is computed purely from alpha and df (steps 2-3), entirely independent of what the actual sample data says; the t_statistic is computed purely from the two samples (step 4), entirely independent of alpha; only the final comparison (step 5) brings the two halves together. Keeping these separate is exactly what makes the procedure principled rather than circular -- the boundary for 'surprising enough' is fixed first, using only the null model and your tolerance for error, before the actual evidence is allowed to have any say in where that boundary sits."
+        },
+        {
+          "title": "Confirming the Decision Against scipy's Built-In Test",
+          "language": "python",
+          "code": "import numpy as np\nfrom scipy import stats\n\nold_latencies = np.array([118, 122, 115, 130, 121, 119, 125, 117, 123, 120])\nnew_latencies = np.array([110, 108, 115, 112, 109, 111, 107, 114, 110, 113])\n\nalpha = 0.05\n\n# The rejection-region approach in Example 1 said: Reject H0 (t=6.333 > 2.134)\nt_stat_lib, p_value = stats.ttest_ind(old_latencies, new_latencies, equal_var=False)\nprint(f\"t_stat = {t_stat_lib:.3f}, p_value = {p_value:.2e}\")\nprint(\"Reject H0\" if p_value < alpha else \"Fail to reject H0\")\n# t_stat = 6.333, p_value = 1.44e-05 -> Reject H0",
+          "explanation": "scipy.stats.ttest_ind computes the exact same t-statistic under the hood as the hand-rolled formula in Example 1 -- 6.333, matching to three decimal places -- and comparing its reported p-value against alpha produces the identical decision, Reject H0, as comparing the raw statistic against the critical value did. This is not a coincidence specific to this dataset: the p-value approach and the rejection-region approach are mathematically guaranteed to agree, for any dataset and any alpha, which is proven directly in a later concept in this module."
+        },
+        {
+          "title": "A Different Statistic for a Different Kind of Data: Chi-Square for Class-Distribution Drift",
+          "language": "python",
+          "code": "from scipy import stats\n\n# Historical (expected) split of predicted classes from the OLD model,\n# vs. the observed split of predicted classes from the NEW model,\n# both measured over the same n = 1000 production requests today.\nexpected_counts = [400, 350, 250]\nobserved_counts = [430, 300, 270]\n\nchi2_statistic, p_value = stats.chisquare(f_obs=observed_counts, f_exp=expected_counts)\n\nalpha = 0.05\ndf = len(expected_counts) - 1   # 3 categories -> 2 degrees of freedom\ncritical_value = stats.chi2.ppf(1 - alpha, df)\n\nprint(f\"chi2 = {chi2_statistic:.2f}, critical_value = {critical_value:.2f}, p = {p_value:.4f}\")\nprint(\"Reject H0 (distribution has shifted)\" if chi2_statistic > critical_value else \"Fail to reject H0\")\n# chi2 = 10.99, critical_value = 5.99, p = 0.0041 -> Reject H0 (distribution has shifted)",
+          "explanation": "H0 here is 'the new model's predicted-class proportions match the historical baseline exactly'; the chi-square statistic measures the total squared, variance-scaled deviation between observed and expected counts across all three categories at once. Unlike the two-sided t-test, a chi-square rejection region only has a single, upper tail -- the statistic is a sum of squared terms, so it's always non-negative, and 'extreme' can only ever mean 'unusually large,' never 'unusually negative.' The five-step procedure is otherwise identical to the latency example: fix alpha, find the critical value from the appropriate null distribution (chi-square with 2 degrees of freedom here, not a t-distribution), compute the observed statistic, and compare. The result flags real drift in the model's output distribution -- exactly the kind of automated check a production ML monitoring system runs continuously."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "A bigger test statistic (in absolute value) always means a bigger, more practically important effect.",
+          "clarification": "A test statistic's magnitude conflates true effect size with sample size, because the standard error in its denominator shrinks as sample size grows. A tiny, practically meaningless latency difference of, say, 0.1 milliseconds can produce a huge t-statistic if measured across millions of requests, simply because the denominator becomes tiny -- not because the effect became bigger. Statistical significance (a statistic far into the rejection region) is a different question from practical significance (whether the actual estimated difference is large enough to matter); always look at the real, estimated effect size alongside the test statistic, never the statistic in isolation, which is especially important in ML given how large datasets routinely are."
+        },
+        {
+          "description": "Any critical value you can look up or compute is valid to compare against any test statistic, as long as you got a number from somewhere.",
+          "clarification": "A critical value is only valid for the exact null distribution used to derive it -- matched degrees of freedom, matched sidedness (one-tailed vs. two-tailed), and matched distribution family (t vs. z vs. chi-square). Mixing a two-sided decision rule (checking the absolute value of the statistic) against a one-sided critical value, or comparing a z critical value against a t-distributed statistic computed from a small sample, silently changes the real Type I error rate away from the alpha you think you're using, without producing any error -- exactly the bug explored in this concept's exercises."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "statistics-test-statistics-and-rejection-regions-ex1",
+          "type": "predictOutput",
+          "prompt": "What does this print, and what's dangerous about the result?",
+          "code": "import numpy as np\nfrom scipy import stats\n\nsample_a = np.array([12.1, 11.8, 12.4, 12.0, 11.9, 12.3, 12.2])\nsample_b = np.array([11.69, 11.82, 11.91, 12.15, 12.2, 11.66, 11.78])\n\nt_stat, _ = stats.ttest_ind(sample_a, sample_b, equal_var=True)\ndf = len(sample_a) + len(sample_b) - 2\n\nalpha = 0.05\ncritical_value = stats.t.ppf(1 - alpha, df)   # <-- meant to run a two-sided test\n\nif abs(t_stat) > critical_value:\n    print(\"Reject H0\")\nelse:\n    print(\"Fail to reject H0\")",
+          "hints": [
+            "The decision rule uses abs(t_stat), comparing the statistic's magnitude regardless of sign -- what kind of test (one-sided or two-sided) does that structurally imply?",
+            "Check the formula used for critical_value: is `1 - alpha` the correct quantile for a two-sided test, or for a one-sided one?",
+            "Compute both stats.t.ppf(1 - alpha, df) and stats.t.ppf(1 - alpha/2, df) for df=12 -- they're meaningfully different numbers (about 1.78 vs. 2.18)."
+          ],
+          "expectedAnswer": "It prints 'Reject H0' (t_stat is about 1.85, which exceeds the one-tailed critical value of about 1.78 used in the code). This is dangerous because abs(t_stat) is a two-sided decision rule, but critical_value was computed with 1 - alpha (the one-tailed quantile, ~1.78) rather than the correct 1 - alpha/2 (the two-tailed quantile, ~2.18). Using the smaller, one-tailed critical value in a two-sided comparison means the true Type I error rate of this procedure is roughly double the intended 5% -- and with the correct two-tailed critical value, this exact data would give 'Fail to reject H0' instead.",
+          "solutionExplanation": "df = 7 + 7 - 2 = 12. stats.t.ppf(1 - 0.05, 12) is about 1.78 (one-tailed), while the correct two-tailed critical value, stats.t.ppf(1 - 0.05/2, 12), is about 2.18. The observed t_stat here is about 1.85 -- large enough to clear the (wrong) one-tailed threshold of 1.78, but not large enough to clear the correct two-tailed threshold of 2.18. Because the code compares abs(t_stat), signaling a two-sided test, it must use the two-tailed critical value; using the one-tailed value instead silently makes the rejection region too wide for the stated alpha, roughly doubling the actual false-positive rate the code produces relative to what 'alpha = 0.05' was supposed to guarantee."
+        },
+        {
+          "id": "statistics-test-statistics-and-rejection-regions-ex2",
+          "type": "debugging",
+          "prompt": "This code tests whether two small samples have different means, but a reviewer pointed out the critical value doesn't actually match the test statistic being used. Find the bug and fix it.",
+          "code": "import numpy as np\nfrom scipy import stats\n\nsample_a = np.array([101, 98, 105, 99, 102])\nsample_b = np.array([96, 93, 99, 101, 96])\n\nt_stat, _ = stats.ttest_ind(sample_a, sample_b, equal_var=True)\n\nalpha = 0.05\ncritical_value = 1.96   # standard critical value for a 95% test\n\nif abs(t_stat) > critical_value:\n    print(\"Reject H0\")\nelse:\n    print(\"Fail to reject H0\")",
+          "hints": [
+            "1.96 is the critical value for a standard NORMAL (z) distribution at alpha=0.05 two-sided -- is t_stat actually z-distributed here?",
+            "With only 5 observations per group, the variance is estimated from very little data -- what distribution family accounts for that extra uncertainty, and what shape does its critical value have for small degrees of freedom?",
+            "Compute df = n1 + n2 - 2 and look up stats.t.ppf(1 - alpha/2, df) instead of hardcoding 1.96 -- for small df, that number is noticeably larger than 1.96."
+          ],
+          "solutionCode": "import numpy as np\nfrom scipy import stats\n\nsample_a = np.array([101, 98, 105, 99, 102])\nsample_b = np.array([96, 93, 99, 101, 96])\n\nt_stat, _ = stats.ttest_ind(sample_a, sample_b, equal_var=True)\n\nalpha = 0.05\ndf = len(sample_a) + len(sample_b) - 2\ncritical_value = stats.t.ppf(1 - alpha / 2, df)   # correct: t-distribution, matched df\n\nif abs(t_stat) > critical_value:\n    print(\"Reject H0\")\nelse:\n    print(\"Fail to reject H0\")",
+          "solutionExplanation": "t_stat here is about 2.17. The hardcoded 1.96 is the critical value for a standard normal distribution, which is only the right reference when the population variance is known exactly (or the sample is very large) -- neither is true with n1=n2=5 and an estimated variance. The correctly matched critical value, from a t-distribution with df=8, is about 2.31 -- noticeably larger than 1.96 because the t-distribution has heavier tails to account for the extra uncertainty of estimating variance from a small sample. Using 1.96 here would say 'Reject H0' (2.17 > 1.96), while the correctly matched t critical value says 'Fail to reject H0' (2.17 < 2.31) -- the mismatch between statistic and critical value silently flips the actual conclusion."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "statistics-test-statistics-and-rejection-regions-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "What property must a number have before it can be used as a 'test statistic' in a hypothesis test?",
+          "options": [
+            "It must always be a positive number.",
+            "Its probability distribution, computed under the assumption that H0 is true, must be fully known -- exactly or as a good approximation.",
+            "It must be computed from at least 30 data points.",
+            "It must always equal exactly zero whenever H0 is true."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The defining property of a test statistic is a known null distribution -- without it, there's no way to say how surprising an observed value is, since 'surprising' is only meaningful relative to a specific, computable distribution. Option A is false; t-statistics and z-statistics are routinely negative. Option C fabricates an arbitrary sample-size rule that isn't the defining property (it loosely relates to when normal approximations kick in, but that's not what makes something a valid test statistic). Option D confuses 'the null distribution is centered near zero for many common statistics' with 'the value itself must be exactly zero,' which is not required and would make the statistic useless for detecting anything."
+        },
+        {
+          "id": "statistics-test-statistics-and-rejection-regions-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A two-sided test at alpha=0.05 should use the critical value t(0.975, df), splitting alpha into two tails of 0.025 each. If the smaller one-sided critical value t(0.95, df) is used instead, in a decision rule that still compares abs(statistic) to it, what happens to the real Type I error rate?",
+          "options": [
+            "It stays exactly 0.05, since alpha itself was never changed anywhere in the code.",
+            "It roughly doubles to about 0.10, because the rejection region now effectively covers more of the null distribution's tails than a genuine 5% two-sided test allows.",
+            "It drops to about 0.025, since only one tail's critical value was used.",
+            "It becomes undefined, because t-distributions don't support one-sided critical values."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Using the smaller, one-tailed critical value while still checking abs(statistic) -- effectively testing both tails against a boundary meant for only one -- widens the true rejection region beyond what a genuine 5% two-sided test allows, roughly doubling the actual Type I error rate to about 10%. Option A ignores that changing which critical value is used changes the actual rejection region even if the alpha variable in the code is untouched. Option C reverses the direction of the effect. Option D is false -- one-sided critical values for the t-distribution are standard and well defined (e.g. via stats.t.ppf(1 - alpha, df))."
+        },
+        {
+          "id": "statistics-test-statistics-and-rejection-regions-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A production monitoring job checks whether the categorical distribution of a new model's predicted classes has drifted from a historical baseline, using observed and expected counts across several categories. Which test statistic family is appropriate here, and why?",
+          "options": [
+            "A t-statistic, because any comparison between two datasets should default to a t-test.",
+            "A chi-square statistic, because the data is categorical counts rather than a continuous measurement, and chi-square's null distribution is specifically derived for comparing observed vs. expected category counts.",
+            "A z-statistic, because the sample size involved is likely to be large.",
+            "No test statistic is appropriate here, since drift detection isn't a hypothesis-testing problem."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The data here is a set of category counts, not a continuous measurement with an estimated mean and variance, so a chi-square statistic -- whose null distribution is built specifically for comparing observed against expected counts across categories -- is the matching choice, not a t-statistic. Option A wrongly treats the t-test as a universal default regardless of data type. Option C's reasoning about sample size doesn't address the actual mismatch (categorical counts vs. a continuous-measurement statistic). Option D is incorrect; drift detection framed this way is a standard, well-posed hypothesis test."
+        },
+        {
+          "id": "statistics-test-statistics-and-rejection-regions-assess-explain1",
+          "type": "explanation",
+          "prompt": "Explain why a statistically significant result (a test statistic far into the rejection region, or equivalently a tiny p-value) does not automatically mean a practically important difference was found, using the latency comparison as your example.",
+          "modelAnswer": "A test statistic like a t-statistic is a ratio: the observed difference between sample means, divided by the estimated standard error of that difference. The standard error shrinks as sample size grows, which means the exact same, tiny, practically unimportant true difference can produce an enormous test statistic -- and a correspondingly tiny p-value -- simply by collecting enough data, with no change in how big or important the underlying effect actually is. If a company measures request latency across ten million requests, a true average difference of 0.05 milliseconds between two model versions, an amount no user would ever notice, can easily land far inside the rejection region and be declared 'statistically significant,' purely because the enormous sample size makes the standard error minuscule.\n\nStatistical significance answers a narrow, specific question: is the observed difference larger than we'd expect from sampling noise alone, given this much data? It says nothing directly about whether the difference is large enough to matter in practice -- worth the engineering cost of shipping a change, worth a user-facing latency budget, worth reporting to stakeholders as a real improvement. The responsible move is always to report the actual estimated effect size (the real difference in milliseconds, accuracy points, or conversion rate) alongside the test statistic and p-value, and to make the practical-importance judgment separately, using domain knowledge about what size of difference actually matters -- never inferring practical importance directly from how extreme the test statistic happened to be."
+        }
+      ]
+    },
+    {
+      "id": "statistics-type-i-and-type-ii-errors-and-power",
+      "title": "Type I and Type II Errors and Statistical Power",
+      "description": "Every hypothesis test can fail in exactly two distinct ways -- a false positive (Type I error, rate alpha) or a false negative (Type II error, rate beta) -- and statistical power, 1 minus beta, is the test's ability to correctly detect a real effect, with alpha and beta locked in a direct tradeoff for any fixed amount of data.",
+      "moduleId": "hypothesis_testing",
+      "topicId": "hypothesis_testing",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 40,
+      "prerequisites": [
+        "statistics-null-and-alternative-hypotheses",
+        "statistics-test-statistics-and-rejection-regions"
+      ],
+      "learningObjectives": [
+        "Define Type I error and Type II error precisely, in terms of the true (unknown) state of H0 and the test's decision.",
+        "Define statistical power as 1 - beta, and state what it means as a probability statement about a specific true effect size.",
+        "Identify and explain the mechanism behind each of the three main levers that increase power: larger sample size, larger true effect size, and higher alpha.",
+        "Explain the inherent tradeoff between alpha and beta for a fixed sample size, and why only collecting more data can reduce both simultaneously.",
+        "Frame the alpha/beta tradeoff as a business decision about false-positive vs. false-negative costs in a model deployment context.",
+        "Estimate statistical power for a simple two-sample comparison via Monte Carlo simulation."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "The Four Outcomes of Any Test",
+            "body": "Every hypothesis test decision -- reject H0 or fail to reject H0 -- is being made against a true, unknown, fixed state of the world: either H0 is actually true, or H1 is actually true (some real effect genuinely exists). Crossing the test's decision against that unknown truth produces exactly four possible outcomes, and only two of them are errors:\n\n- **H0 true, test fails to reject H0**: a correct decision (a true negative).\n- **H0 true, test rejects H0**: a **Type I error** -- a **false positive**. You've declared a real effect exists when it doesn't. The probability of this happening, assuming H0 is really true, is exactly **alpha**, the significance level chosen before the test was ever run.\n- **H0 false, test fails to reject H0**: a **Type II error** -- a **false negative**. A real effect genuinely exists, but the test missed it. The probability of this happening is called **beta**.\n- **H0 false, test rejects H0**: a correct decision (a true positive) -- and the probability of this happening is called **power**, defined as 1 - beta.\n\nFramed around the running ML example, comparing a new model's latency against an old model's: a Type I error means concluding the new model's latency genuinely differs (often specifically that it's *better*, since that's usually the hoped-for direction) when really there's no true difference at all -- you'd ship a change, or invest further engineering effort, chasing an improvement that was just sampling noise. A Type II error means the new model is genuinely, truly better (or worse), but the test failed to detect it -- you'd stick with the old model despite a real, missed opportunity, or fail to catch a real regression before it ships. Both are real costs, and which one is worse depends entirely on the specific deployment context, a point this concept returns to directly."
+          },
+          {
+            "heading": "Power, and the Three Things That Increase It",
+            "body": "**Power** is the probability a test correctly rejects H0 when H1 is actually true for some specific, real effect size -- it's always a statement conditioned on a particular true difference existing, not an unconditional property of the test alone. A test might have 90% power to detect a 10ms latency difference but only 20% power to detect a 1ms difference, using the exact same sample size and alpha; power depends on how big the real effect actually is, not just on the test's design.\n\nThree things increase power, and it's worth understanding the mechanism behind each rather than memorizing them as a list:\n\n1. **Larger sample size (n)**: more data shrinks the standard error of the sample mean (or mean difference), which tightens the sampling distribution of the test statistic around its true value under H1. A tighter distribution under H1 overlaps less with the null distribution's non-rejection region, so a real effect is more likely to produce a test statistic that clears the rejection region's threshold.\n2. **Larger true effect size**: a bigger real difference between the two things being compared pushes the sampling distribution of the test statistic under H1 further away from the null distribution's center, directly reducing the overlap between the two distributions, independent of anything about sample size.\n3. **Higher alpha**: a larger alpha widens the rejection region (moving the critical value closer to the center of the null distribution), which mechanically makes it easier for any test statistic -- including one arising from a genuine H1 effect -- to land inside it. This is the one lever that increases power as a direct side effect of also increasing the Type I error rate; it isn't really a free way to gain power at all, since alpha is exactly the tradeoff explored in the next section.\n\nPower can be estimated directly by simulation whenever an analytical formula isn't handy, which is often the most intuitive way to actually see it:\n\n```python\nimport numpy as np\nfrom scipy import stats\n\nrng = np.random.default_rng(0)\n\ndef estimate_power(n_per_group, true_diff, sigma, alpha, n_simulations=5000):\n    successes = 0\n    for _ in range(n_simulations):\n        group_a = rng.normal(0.0, sigma, size=n_per_group)\n        group_b = rng.normal(true_diff, sigma, size=n_per_group)   # H1 truly holds\n        _, p_value = stats.ttest_ind(group_b, group_a)\n        if p_value < alpha:\n            successes += 1\n    return successes / n_simulations\n\nsigma, true_diff, alpha = 15.0, 5.0, 0.05\nfor n in [20, 50, 100, 300]:\n    print(f\"n={n}: power={estimate_power(n, true_diff, sigma, alpha):.3f}\")\n# n=20:  power=0.175\n# n=50:  power=0.366\n# n=100: power=0.658\n# n=300: power=0.985\n```\n\nThe recipe underneath `estimate_power` is worth internalizing on its own: repeatedly simulate data under a *specific, assumed-true* H1 (here, a real 5ms difference), run the exact test procedure you'd actually use, and measure how often it correctly rejects H0. This is precisely how power analyses get done in practice whenever the underlying math is too complicated to solve in closed form -- which, for anything beyond a simple two-sample comparison, is most of the time."
+          },
+          {
+            "heading": "The Alpha/Beta Tradeoff, and Why Only More Data Escapes It",
+            "body": "For a fixed sample size and a fixed true effect size, alpha and beta are locked in a direct tradeoff, and the mechanism is entirely visible in the rejection-region picture from the previous concept. Shrinking alpha -- demanding stronger evidence before rejecting H0, to cut down on false positives -- means shrinking the rejection region, moving its boundary further out into the tails. But that same boundary is also the line a genuinely real effect's test statistic has to cross to be detected at all; move it further out, and a real effect that used to reliably cross it, given this exact amount of data, now more often falls short. Beta necessarily rises as alpha falls, holding everything else fixed -- there is no way around this using the significance threshold alone.\n\n```python\nsigma, true_diff = 15.0, 5.0\nfor a in [0.01, 0.05, 0.10, 0.20]:\n    print(f\"alpha={a}: power={estimate_power(50, true_diff, sigma, a):.3f}\")\n# alpha=0.01: power=0.171\n# alpha=0.05: power=0.369\n# alpha=0.10: power=0.507\n# alpha=0.20: power=0.651\n```\n\nNotice power climbs steadily as alpha is relaxed, at n=50 fixed -- which is exactly the alpha/beta tradeoff made numerically visible: more Type I error risk buys less Type II error risk, at a fixed sample size, and nothing here is free. The only lever that escapes this tradeoff entirely is **n**: collecting more data tightens the sampling distributions of the test statistic under *both* H0 and H1 simultaneously, shrinking their overlap without needing to move the rejection-region boundary at all -- which is exactly why the earlier sample-size sweep showed power rising toward 1.0 while alpha stayed fixed at 0.05 the whole time. If a team wants both a stringent alpha and high power against a modest true effect, more data -- not a laxer threshold -- is the only real answer."
+          },
+          {
+            "heading": "Alpha and Beta as a Deployment Decision, Not Just a Statistics Setting",
+            "body": "In ML practice, the alpha/beta tradeoff is really a business decision wearing statistical notation, and different deployment contexts justify genuinely different choices of alpha. Consider a safety-critical system -- a medical triage model, a fraud-detection gate, a self-driving perception module -- where shipping a 'new model is better' conclusion that turns out to be a false positive (Type I error) could mean deploying something actually no better, or subtly worse, in a context where that's expensive or dangerous to reverse. That context justifies a low alpha (0.01 or even lower), accepting more Type II error risk -- more genuinely-better models sitting unshipped a bit longer while more evidence accumulates -- as the acceptable price for guarding hard against false positives.\n\nContrast that with a low-stakes, fast-iterating product experiment -- a button color, a ranking tweak, a notification copy change -- where a wrong 'ship it' decision is cheap to detect and reverse after the fact, and the real cost of a Type II error (missing a real, if modest, improvement, and iterating slower as a result) can dominate. That context can reasonably justify a higher alpha (0.10, sometimes higher still), tolerating more false positives in exchange for faster detection of real wins, precisely because the downside of an occasional false positive is cheap and quickly correctable.\n\nThere's no universally 'correct' alpha -- 0.05 is a widely used convention, not a law of nature -- and treating it as one, regardless of what a Type I versus Type II error actually costs in a specific deployment, is a missed opportunity to make the statistical threshold match the real business tradeoff it's supposed to encode. The right question is never 'what's the standard alpha,' but 'given what a false positive costs us here versus what a false negative costs us here, what threshold reflects that balance -- and do we have enough data to hit reasonable power at that threshold?'"
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Confirming the Type I Error Rate Empirically",
+          "language": "python",
+          "code": "import numpy as np\nfrom scipy import stats\n\nrng = np.random.default_rng(2)\n\ndef empirical_type1_rate(n_per_group, sigma, alpha, n_simulations=5000):\n    false_positives = 0\n    for _ in range(n_simulations):\n        group_a = rng.normal(0.0, sigma, size=n_per_group)\n        group_b = rng.normal(0.0, sigma, size=n_per_group)   # H0 truly holds: no real difference\n        _, p_value = stats.ttest_ind(group_b, group_a)\n        if p_value < alpha:\n            false_positives += 1\n    return false_positives / n_simulations\n\nprint(empirical_type1_rate(n_per_group=50, sigma=15.0, alpha=0.05))\n# 0.0492 -- matches alpha, as it should when H0 is genuinely true every time",
+          "explanation": "This is the empirical mirror image of a power simulation: instead of simulating under H1 and measuring how often the test correctly rejects, this simulates under H0 (both groups drawn from the identical distribution) and measures how often the test incorrectly rejects. Across 5000 simulated trials, the false-positive rate lands at 0.0492 -- almost exactly the nominal alpha of 0.05, exactly as the definition of alpha promises. This recipe -- simulate under a known-true assumption, run the real test procedure, measure the error rate -- is a genuinely useful sanity check any time you're not fully confident a test's assumptions hold for your actual data."
+        },
+        {
+          "title": "Power Rising With Sample Size, Holding Everything Else Fixed",
+          "language": "python",
+          "code": "import numpy as np\nfrom scipy import stats\n\nrng = np.random.default_rng(0)\n\ndef estimate_power(n_per_group, true_diff, sigma, alpha, n_simulations=5000):\n    successes = 0\n    for _ in range(n_simulations):\n        group_a = rng.normal(0.0, sigma, size=n_per_group)\n        group_b = rng.normal(true_diff, sigma, size=n_per_group)\n        _, p_value = stats.ttest_ind(group_b, group_a)\n        if p_value < alpha:\n            successes += 1\n    return successes / n_simulations\n\nfor n in [20, 50, 100, 300]:\n    power = estimate_power(n, true_diff=5.0, sigma=15.0, alpha=0.05)\n    print(f\"n={n:>3}: power={power:.3f}, beta={1 - power:.3f}\")\n# n= 20: power=0.175, beta=0.825\n# n= 50: power=0.366, beta=0.634\n# n=100: power=0.658, beta=0.342\n# n=300: power=0.985, beta=0.015",
+          "explanation": "With the true effect size (5ms) and alpha (0.05) both held completely fixed, beta falls from 0.825 all the way down to 0.015 purely by collecting more data -- at n=20, the test misses this real 5ms difference more often than not; at n=300, it catches it almost every time. This is the concrete, numerical answer to 'how much data do I need': it depends entirely on how small a true effect you need to reliably detect, and a power simulation like this one is exactly how that question gets answered before running a real experiment, rather than discovered painfully after an underpowered one comes back inconclusive."
+        },
+        {
+          "title": "Quantifying the Alpha/Beta Tradeoff Directly",
+          "language": "python",
+          "code": "import numpy as np\nfrom scipy import stats\n\nrng = np.random.default_rng(0)\n\ndef estimate_power(n_per_group, true_diff, sigma, alpha, n_simulations=5000):\n    successes = 0\n    for _ in range(n_simulations):\n        group_a = rng.normal(0.0, sigma, size=n_per_group)\n        group_b = rng.normal(true_diff, sigma, size=n_per_group)\n        _, p_value = stats.ttest_ind(group_b, group_a)\n        if p_value < alpha:\n            successes += 1\n    return successes / n_simulations\n\nfor a in [0.01, 0.05, 0.10, 0.20]:\n    power = estimate_power(50, true_diff=5.0, sigma=15.0, alpha=a)\n    print(f\"alpha={a:>4}: power={power:.3f}, beta={1 - power:.3f}\")\n# alpha=0.01: power=0.171, beta=0.829\n# alpha=0.05: power=0.369, beta=0.631\n# alpha=0.10: power=0.507, beta=0.493\n# alpha=0.20: power=0.651, beta=0.349",
+          "explanation": "With sample size (n=50) and true effect size (5ms) both held completely fixed this time, loosening alpha from 0.01 to 0.20 drives power up from 0.171 to 0.651 -- but that gain in power (fewer missed real effects) comes paired with a twenty-fold increase in the tolerated false-positive rate, from 1% to 20%. Nothing about this trade is free: every unit of beta bought back this way costs a unit of alpha, for a fixed n. Escaping the trade without accepting more false positives requires the other lever entirely -- more data -- which is exactly what the previous example held fixed while this one varied."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "Type I and Type II errors are basically the same kind of mistake with different names -- the real goal is just minimizing 'error' in general.",
+          "clarification": "They are mistakes about entirely different states of the world -- falsely detecting an effect that isn't there (Type I) versus missing an effect that is there (Type II) -- governed by different probabilities (alpha and beta) that trade off against each other rather than moving together, and carrying different, context-dependent real-world costs. Treating them as interchangeable erases the entire point of deliberately choosing alpha based on which mistake is more costly in a given deployment -- a safety-critical system and a fast-iterating experiment reasonably choose very different alphas precisely because the two error types are not equivalent for them."
+        },
+        {
+          "description": "Since power depends on sample size, just collecting a 'reasonably large' sample guarantees adequate power, no matter what effect size you're testing for.",
+          "clarification": "Power is not a fixed thing achieved by 'enough' data in the abstract -- it's a joint function of sample size, the true (unknown, in advance) effect size, the noise level, and alpha. A sample size that gives strong power to detect a large effect can give weak power to detect a small one, using the exact same n -- as shown directly in this concept, n=50 gives only 37% power to detect a 5ms difference at alpha=0.05, which most people would not call 'adequate.' A deliberate power analysis, run before collecting data, using the smallest effect size actually worth detecting, is the only reliable way to know whether a planned sample size is genuinely adequate."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "statistics-type-i-and-type-ii-errors-and-power-ex1",
+          "type": "predictOutput",
+          "prompt": "What does this print? A real 5ms latency improvement is built directly into the simulated data -- is the printed conclusion an honest description of that?",
+          "code": "import numpy as np\nfrom scipy import stats\n\nrng = np.random.default_rng(1)\n\ngroup_old = rng.normal(120.0, 15.0, size=8)\ngroup_new = rng.normal(115.0, 15.0, size=8)   # TRUE 5ms improvement, built in\n\nt_stat, p_value = stats.ttest_ind(group_new, group_old)\nprint(f\"p_value = {p_value:.3f}\")\nif p_value < 0.05:\n    print(\"The new model is significantly faster.\")\nelse:\n    print(\"No evidence the new model is faster -- it's no better than the old one.\")",
+          "hints": [
+            "The simulation literally draws group_new from a distribution with a true mean 5 less than group_old's -- so a real effect genuinely exists here by construction.",
+            "With only 8 observations per group and noise (sigma=15) much larger than the true 5ms effect, what does the earlier power simulation in this concept suggest about the chance of detecting it?",
+            "'No evidence of an effect' (failing to reject H0) and 'no effect exists' are different claims -- which one does the printed else-branch text actually assert?"
+          ],
+          "expectedAnswer": "It prints 'p_value = 0.154' followed by 'No evidence the new model is faster -- it's no better than the old one.' This conclusion is misleading: a true 5ms improvement was built into the simulation, but n=8 per group is small relative to the noise (sigma=15), so this is a Type II error -- a real effect that the test simply lacked the power to detect -- not proof the new model is 'no better.' The wording overstates what a single non-significant result can establish.",
+          "solutionExplanation": "The computed two-sided p-value for this particular random draw is 0.154, which is greater than 0.05, so the else branch runs. But the data-generating process explicitly built in a true 5ms difference (loc=115.0 vs. loc=120.0) -- so H0 is actually false here, and failing to reject it is a genuine Type II error, not evidence of no true effect. With n=8 and sigma=15 against a 5ms true difference, this concept's own power simulations (using larger n, like 20 or 50) show even much larger samples only reach modest power against this exact effect size -- at n=8, power is lower still. The 'it's no better than the old one' phrasing asserts something a single underpowered non-significant result cannot honestly establish."
+        },
+        {
+          "id": "statistics-type-i-and-type-ii-errors-and-power-ex2",
+          "type": "debugging",
+          "prompt": "A teammate says this change will help the team 'catch more genuine model improvements.' Explain what's actually wrong with it and fix it.",
+          "code": "def decide_rollout(p_value):\n    # Bumped alpha up to catch more genuine improvements before they slip through\n    alpha = 0.5\n    return \"ship new model\" if p_value < alpha else \"keep old model\"\n\nprint(decide_rollout(p_value=0.42))",
+          "hints": [
+            "Raising alpha does genuinely increase power (fewer missed real effects) -- but what else, unavoidably, rises right alongside it?",
+            "At alpha=0.5, what fraction of the time would this procedure say 'ship it' purely by chance, even if the new model were truly no better at all?",
+            "If power against a real, meaningful effect size is too low at a sane alpha (like 0.05), the correct fix is a different lever entirely -- which one, covered earlier in this concept, escapes the alpha/beta tradeoff instead of just trading within it?"
+          ],
+          "solutionCode": "def decide_rollout(p_value, alpha=0.05):\n    return \"ship new model\" if p_value < alpha else \"keep old model\"\n\n# If power against a meaningful effect size is too low at alpha=0.05,\n# the fix is to collect more data (increase n), not to raise alpha.\nprint(decide_rollout(p_value=0.42))   # -> \"keep old model\"",
+          "solutionExplanation": "Setting alpha=0.5 does increase power -- more genuinely-better models will clear this loose a bar -- but it does so by making the test's actual Type I error rate 50%, meaning roughly half of all 'ship the new model' verdicts would happen purely by chance even when there's truly no improvement at all. That's not a fixed test with better sensitivity; it's barely a test at all. The responsible fix is to keep alpha at a level that reflects the real cost of a false positive for this deployment (commonly 0.05, sometimes lower for higher-stakes decisions) and, if power against a real, meaningful effect size is genuinely too low at that alpha, increase the sample size instead -- the one lever that raises power without also inflating the false-positive rate."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "statistics-type-i-and-type-ii-errors-and-power-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "In a hypothesis test comparing a new model's latency to an old model's, which scenario describes a Type II error?",
+          "options": [
+            "The test rejects H0 even though the two models truly have identical average latency.",
+            "The test fails to reject H0, even though the new model truly does have a different average latency.",
+            "The test correctly fails to reject H0 because the two models truly have identical average latency.",
+            "The test correctly rejects H0 because the new model truly does have a different average latency."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "A Type II error is a false negative: H1 is actually true (a real difference exists) but the test fails to reject H0 anyway. Option A describes a Type I error (a false positive), the opposite mistake. Options C and D both describe correct decisions, not errors -- C is a true negative, D is a true positive (power)."
+        },
+        {
+          "id": "statistics-type-i-and-type-ii-errors-and-power-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Holding the true effect size and alpha both fixed, which change increases a test's statistical power?",
+          "options": [
+            "Increasing the sample size in each group.",
+            "Increasing the standard deviation (noise) of the underlying measurements.",
+            "Decreasing the sample size in each group.",
+            "Switching to a stricter (smaller) alpha, with nothing else changed."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "More data tightens the sampling distribution of the test statistic under H1, reducing its overlap with the null distribution and increasing the chance a real effect is detected -- exactly what this concept's simulation showed, with power climbing from 0.175 at n=20 to 0.985 at n=300. Option B is wrong because more noise widens the sampling distribution and reduces power. Option C is the reverse of the correct lever. Option D is wrong because a smaller alpha shrinks the rejection region, which reduces power (as this concept's alpha sweep shows directly), not increases it."
+        },
+        {
+          "id": "statistics-type-i-and-type-ii-errors-and-power-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A team lowers their significance threshold from alpha=0.05 to alpha=0.01 for model-comparison tests, keeping sample size and the true effect fixed, specifically to reduce false positives. What happens to beta (the Type II error rate) as a direct result, all else equal?",
+          "options": [
+            "Beta decreases as well, since a stricter test is better along every dimension.",
+            "Beta increases, because shrinking the rejection region makes it harder for a real, fixed-size effect to be detected with the same amount of data.",
+            "Beta is unaffected, since it depends only on sample size, not on alpha.",
+            "Beta becomes exactly equal to the new alpha value, 0.01."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This is the alpha/beta tradeoff in action: for a fixed sample size and true effect, a smaller alpha shrinks the rejection region, which necessarily makes a real effect's test statistic less likely to clear the (now farther-out) threshold, raising beta. Option A ignores that this tradeoff exists at all. Option C is false -- this concept's alpha sweep, with n fixed, shows power (and therefore beta) changing substantially as alpha changes. Option D invents a numerical coincidence with no basis; alpha and beta are related by the tradeoff but are not generally equal to each other."
+        },
+        {
+          "id": "statistics-type-i-and-type-ii-errors-and-power-assess-explain1",
+          "type": "explanation",
+          "prompt": "A safety-critical model deployment pipeline and a fast-iterating product experimentation team choose very different values of alpha for their hypothesis tests. Explain, in terms of the real costs of Type I vs. Type II errors, why that difference makes sense, rather than both teams simply using the conventional alpha=0.05.",
+          "modelAnswer": "Alpha and beta aren't abstract statistical settings -- they encode how costly a false positive (Type I error) is relative to a false negative (Type II error) in a specific real decision, and that cost ratio genuinely differs across contexts. In a safety-critical pipeline, wrongly concluding a new model is better and deploying it (a Type I error) can mean shipping something no safer, or actively worse, in a setting where mistakes are expensive, slow to detect, or hard to reverse. That team reasonably chooses a very low alpha (0.01 or smaller), accepting more Type II error risk -- a genuinely better model sitting unshipped a little longer while more evidence accumulates -- because the cost of a false 'ship it' verdict there is severe, and a delayed rollout of a real improvement is comparatively cheap.\n\nA fast-iterating product team evaluating a button color or ranking tweak faces the opposite cost balance: a wrong 'ship it' call is cheap to detect through ongoing monitoring and trivial to revert, while a Type II error -- missing a real, if modest, improvement -- directly slows the team's overall rate of real improvement. That team can reasonably tolerate a higher alpha (0.10 or more), buying higher power against modest true effects in exchange for accepting more false positives, because false positives are cheap there and false negatives are the more expensive mistake.\n\nNeither team is being statistically sloppy by deviating from 0.05 -- 0.05 is a convention, not a law -- they're each setting the threshold where it actually reflects what a wrong decision costs them."
+        }
+      ]
+    },
+    {
+      "id": "statistics-p-values-and-critical-value-thresholds",
+      "title": "p-Values and Critical Value Thresholds",
+      "description": "A p-value is the probability, computed under the assumption that H0 is true, of seeing a test statistic at least as extreme as the one actually observed -- not the probability H0 is true, and not the probability of a false positive -- and it is mathematically just another way of asking whether the observed statistic falls inside the rejection region.",
+      "moduleId": "hypothesis_testing",
+      "topicId": "hypothesis_testing",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 35,
+      "prerequisites": [
+        "statistics-test-statistics-and-rejection-regions",
+        "statistics-type-i-and-type-ii-errors-and-power"
+      ],
+      "learningObjectives": [
+        "State the precise definition of a p-value as a conditional probability computed under the assumption that H0 is true.",
+        "Explain, with a concrete reason, why a p-value is NOT the probability that H0 is true, and NOT the probability of a Type I error for this specific result.",
+        "Demonstrate the mathematical equivalence between 'p < alpha' and 'the test statistic falls inside the rejection region defined by alpha.'",
+        "Compute a one-sided and two-sided p-value from a test statistic and its null distribution using scipy.stats.",
+        "Identify common real-world sentences that misstate what a p-value means, and correct them."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "The Precise Definition, Clause by Clause",
+            "body": "A **p-value** is the probability, computed under the assumption that H0 is true, of observing a test statistic at least as extreme as the one actually observed in your sample. Every clause in that sentence is load-bearing, and skipping any one of them is exactly how the definition gets misquoted.\n\n'Computed under the assumption that H0 is true' means the p-value is a **conditional probability** -- conditioned on a specific model of the world (the null), not on your actual data being correct, not on any belief about which hypothesis is really true. It answers the question 'if H0 really held, how often would data like this arise from sampling noise alone?', not the reversed question 'given this data, how likely is it that H0 holds?' -- a distinction covered in full in the next section, and one of the most consequential mix-ups in applied statistics.\n\n'At least as extreme' depends entirely on sidedness. For a two-sided test, 'extreme' means far from the null value in *either* direction, so the p-value adds up both tails; for a one-sided test, it means far in one specific direction only, so the p-value comes from a single tail.\n\n```python\nfrom scipy import stats\n\nt_statistic = 2.87\ndf = 18\n\n# Two-sided p-value: probability of a statistic at least this extreme,\n# in EITHER direction, assuming H0 is true\np_two_sided = 2 * stats.t.sf(abs(t_statistic), df)\n\n# One-sided p-value: probability of a statistic this large or larger,\n# in ONE specific direction (H1: the true value is greater than H0's)\np_one_sided = stats.t.sf(t_statistic, df)\n\nprint(f\"two-sided: {p_two_sided:.4f}\")   # 0.0102\nprint(f\"one-sided: {p_one_sided:.4f}\")   # 0.0051 -- exactly half\n```\n\n`stats.t.sf` (the survival function, 1 - cdf) is used here rather than `1 - stats.t.cdf(...)` purely for numerical precision -- for very extreme statistics, `cdf` can round all the way to 1.0 in floating point, silently zeroing out a p-value that should be a tiny but nonzero number, while `sf` computes the tail probability directly and keeps that precision. A smaller p-value always means the observed data would be rarer under H0 -- more surprising, in the specific technical sense this whole framework is built around -- and therefore stronger evidence against H0, exactly mirroring 'further into the rejection region' from the test-statistic framing of the previous concepts."
+          },
+          {
+            "heading": "What a p-Value Is Absolutely Not",
+            "body": "The single most consequential statistical misconception in applied work, without a close second, is treating a p-value as the probability that H0 is true (or, equivalently, as one minus the probability that the observed effect is 'real'). It is neither of those things, and the reason is a specific, nameable logical error: confusing a conditional probability with its reverse.\n\nA p-value is P(data this extreme | H0 true). What people often want, and mistakenly believe a p-value gives them, is P(H0 true | data this extreme). These are, in general, completely different numbers, and conflating them is the exact same error as confusing 'the probability a test comes back positive, given that someone truly has a rare disease' with 'the probability someone truly has a rare disease, given that their test came back positive' -- the second one depends heavily on how rare the disease is in the first place (its base rate), information a p-value never has any access to, because a p-value's calculation never involves a prior probability that H0 is true at all. Computing P(H0 true | data) honestly requires Bayes' theorem and an actual prior probability for H0 -- a fundamentally different, Bayesian calculation that classical, frequentist hypothesis testing (the entire framework this module covers) simply does not perform.\n\nA p-value is also **not** the probability that this specific test result is a Type I error. Alpha is a long-run property of the *testing procedure*, describing what fraction of the time a procedure like this one would produce a false positive *if it were run over and over on genuinely H0-true data* -- it is not a statement about the one dataset actually in front of you, which either does or does not represent a real effect, full stop, even though you can never know for certain which. And, echoing the previous concept's misconception, a p-value is **not** a measure of effect size or practical importance -- a minuscule, practically meaningless true difference can produce a vanishingly small p-value given enough data, exactly as a huge test statistic can, since a p-value is a direct, monotonic transform of the test statistic."
+          },
+          {
+            "heading": "p < alpha Is the Same Decision as 'Statistic in the Rejection Region'",
+            "body": "The p-value approach and the rejection-region approach from earlier in this module are not two competing methods that might occasionally disagree -- they are the exact same underlying comparison, expressed in two different but mathematically equivalent vocabularies. A p-value is a strictly decreasing function of how extreme the observed test statistic is (given a fixed null distribution and fixed sidedness): the more extreme the statistic, the smaller the p-value. That single fact is enough to guarantee p < alpha holds *exactly* when the test statistic falls inside the rejection region defined by that same alpha -- neither statement can be true without the other.\n\n```python\nimport numpy as np\nfrom scipy import stats\n\nrng = np.random.default_rng(3)\nmismatches = 0\nn_checks = 1500\n\nfor alpha in [0.10, 0.05, 0.01]:\n    for _ in range(500):\n        a = rng.normal(0, 1, size=15)\n        b = rng.normal(0.3, 1, size=15)\n        t_stat, p_value = stats.ttest_ind(b, a)\n        dfree = len(a) + len(b) - 2\n        critical_value = stats.t.ppf(1 - alpha / 2, dfree)\n\n        decision_by_p = p_value < alpha\n        decision_by_statistic = abs(t_stat) > critical_value\n        if decision_by_p != decision_by_statistic:\n            mismatches += 1\n\nprint(mismatches, \"mismatches out of\", n_checks)   # 0 mismatches out of 1500\n```\n\nZero mismatches across 1500 independently generated datasets and three different alpha values is not a coincidental result of this particular simulation -- it's a mathematical certainty, and the code is really just a demonstration, not a test of something that could have come out otherwise. In practice, nearly everyone reports and reasons about p-values rather than raw critical values, because a p-value carries strictly more information: it tells you not just whether you'd reject at your chosen alpha, but the exact boundary alpha at which the decision would flip, letting a reader apply their own significance threshold to the same reported number."
+          },
+          {
+            "heading": "Where p-Values Go Wrong in ML Practice",
+            "body": "In applied ML work, p-value misuse tends to follow a predictable pattern: a comparison between model A and model B produces p = 0.03, and that single number gets treated as a final, settled verdict -- 'model B is better, case closed' -- with no accompanying effect size, no confidence interval, no mention of how much data went into that estimate, and no acknowledgment that a p-value alone says nothing about how large or reliable the apparent improvement actually is. A responsible report always pairs a p-value with the actual estimated difference (in accuracy points, latency milliseconds, conversion rate, whatever the metric is) and, ideally, a confidence interval around that estimate -- the p-value answers 'is this probably not just noise,' the effect size and interval answer 'how big, and how precisely do we know that.'\n\nAn even more consequential failure mode shows up specifically when many comparisons get made against the same validation set over the course of an iterative ML project -- trying twenty hyperparameter configurations, or a dozen feature-engineering variants, and checking each one's p-value against the baseline. Even if every individual test is computed correctly, running many of them and reporting only the smallest p-value you found (or treating any config that happened to clear p < 0.05 as a confirmed win) reintroduces exactly the kind of chance-driven false positive this whole framework was built to guard against -- just spread across many tests instead of one. That specific failure mode, and the corrections built to guard against it, is the entire subject of the next and final concept in this module."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "Computing a p-Value Two Equivalent Ways",
+          "language": "python",
+          "code": "from scipy import stats\n\nt_statistic = 2.87\ndf = 18\n\np_via_cdf = 2 * (1 - stats.t.cdf(abs(t_statistic), df))\np_via_sf = 2 * stats.t.sf(abs(t_statistic), df)\n\nprint(f\"{p_via_cdf:.4f}\")   # 0.0102\nprint(f\"{p_via_sf:.4f}\")    # 0.0102 -- same answer, more numerically stable",
+          "explanation": "Both formulas compute the identical two-sided p-value, 0.0102, because `stats.t.sf(x, df)` is defined to equal `1 - stats.t.cdf(x, df)` exactly, just computed with a numerically more stable method for the far right tail. For a moderate statistic like 2.87 the two approaches agree to four decimal places, as shown here; the practical reason to prefer `sf` shows up specifically for very extreme statistics, where `1 - cdf(...)` can lose all its precision to floating-point rounding (cdf rounding to exactly 1.0) while `sf` keeps computing the true, tiny tail probability directly."
+        },
+        {
+          "title": "The p-Value Decision Matches the Rejection-Region Decision, on Real Data",
+          "language": "python",
+          "code": "import numpy as np\nfrom scipy import stats\n\nold_latencies = np.array([118, 122, 115, 130, 121, 119, 125, 117, 123, 120])\nnew_latencies = np.array([110, 108, 115, 112, 109, 111, 107, 114, 110, 113])\n\nalpha = 0.05\nt_stat, p_value = stats.ttest_ind(old_latencies, new_latencies, equal_var=False)\n\nvar1, var2 = old_latencies.var(ddof=1), new_latencies.var(ddof=1)\nn1, n2 = len(old_latencies), len(new_latencies)\ndf = (var1 / n1 + var2 / n2) ** 2 / (\n    (var1 / n1) ** 2 / (n1 - 1) + (var2 / n2) ** 2 / (n2 - 1)\n)\ncritical_value = stats.t.ppf(1 - alpha / 2, df)\n\nprint(f\"t_stat={t_stat:.3f}, critical_value={critical_value:.3f}, p_value={p_value:.2e}\")\nprint(\"via p-value:          \", \"Reject H0\" if p_value < alpha else \"Fail to reject H0\")\nprint(\"via rejection region: \", \"Reject H0\" if abs(t_stat) > critical_value else \"Fail to reject H0\")\n# t_stat=6.333, critical_value=2.134, p_value=1.44e-05\n# both approaches: Reject H0",
+          "explanation": "This is the same latency dataset used in the previous concept's worked example, now checked both ways side by side. t_stat=6.333 clears the critical value of 2.134, and independently, p_value=1.44e-05 clears below alpha=0.05 -- both routes land on 'Reject H0' for the exact same underlying reason, because they are, mechanically, the same comparison. Reporting the p-value (1.44e-05) rather than just 'Reject H0' additionally tells a reader this result would still reject at a much stricter alpha, like 0.001 -- information the raw reject/fail-to-reject verdict alone doesn't carry."
+        },
+        {
+          "title": "A p-Value Misinterpretation Checklist",
+          "language": "python",
+          "code": "p_value = 0.03   # result of comparing model B against model A\n\nstatements = [\n    (\"There is a 3% chance H0 (no real difference) is actually true.\", False),\n    (\"If model A and model B truly performed identically, data producing \"\n     \"a difference at least this large would occur about 3% of the time \"\n     \"from sampling noise alone.\", True),\n    (\"There is a 97% chance model B is genuinely better than model A.\", False),\n    (\"This result has a 3% chance of being a Type I error.\", False),\n    (\"The observed data would be fairly unusual under the assumption \"\n     \"that there's no real difference between the models.\", True),\n]\n\nfor statement, is_correct in statements:\n    verdict = \"CORRECT\" if is_correct else \"WRONG (common misreading)\"\n    print(f\"[{verdict}] {statement}\")",
+          "explanation": "Running through a checklist like this against every p-value you're about to report is a cheap, mechanical habit that catches the vast majority of real-world misinterpretations before they reach a slide deck or a paper. The two CORRECT statements both keep the conditioning direction straight -- 'if H0 were true, this data would be unusual' -- while every WRONG statement quietly flips that direction into a claim about the probability of H0 itself, or of a Type I error specifically on this result, neither of which a p-value computes."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "A p-value of 0.03 means there's a 3% chance the null hypothesis is true (or equivalently, a 97% chance the observed effect is real).",
+          "clarification": "A p-value is P(data this extreme | H0 true), not P(H0 true | data) -- confusing the two is the same logical error as confusing a disease test's known accuracy with the actual chance someone has the disease given a positive result, which also depends on how common the disease is beforehand. Getting from a p-value to an actual probability that H0 is true requires Bayes' theorem and a prior probability for H0, a fundamentally different, Bayesian calculation that a classical p-value never performs."
+        },
+        {
+          "description": "A p-value tells you the probability that this specific significant result is a false positive (a Type I error).",
+          "clarification": "Alpha is a long-run property of the testing procedure -- what fraction of the time a procedure like this one would produce a false positive if it were run repeatedly on genuinely H0-true data -- not a probability attached to this one dataset. This specific dataset either does or does not reflect a real effect, and no single p-value can tell you which, or attach a probability to which, on its own."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "statistics-p-values-and-critical-value-thresholds-ex1",
+          "type": "predictOutput",
+          "prompt": "What does this print, and what's wrong with treating the p-value this way?",
+          "code": "def interpret(p_value):\n    probability_h0_true = p_value\n    return f\"There is a {probability_h0_true:.1%} chance the two models truly have the same average latency.\"\n\nprint(interpret(p_value=0.03))",
+          "hints": [
+            "The code assigns p_value directly to a variable named probability_h0_true -- is a p-value actually the probability that H0 is true?",
+            "Recall the precise definition: P(data this extreme | H0 true). Is that the same number as P(H0 true | data)?",
+            "Think of the disease-testing analogy from this concept -- does a test's known accuracy on sick patients directly tell you the chance a positive-testing patient is actually sick?"
+          ],
+          "expectedAnswer": "It prints 'There is a 3.0% chance the two models truly have the same average latency.' This is wrong because it treats the p-value as P(H0 true), which is not what a p-value measures. A p-value is P(data this extreme | H0 true) -- a probability computed assuming H0 is already true -- not P(H0 true | data). Computing the latter would require a prior probability for H0 and Bayes' theorem, which this code never uses.",
+          "solutionExplanation": "The function simply relabels p_value as probability_h0_true and formats it as a percentage, producing a fluent-sounding but incorrect sentence. p=0.03 genuinely means: if the two models truly had identical average latency, data producing a gap this large or larger would occur about 3% of the time from sampling noise alone. It says nothing directly about the probability that the models truly have the same latency -- that would be P(H0 true | data), the reverse conditional, which is a fundamentally different quantity that a frequentist p-value calculation never computes and cannot be recovered from a p-value alone without an assumed prior probability for H0."
+        },
+        {
+          "id": "statistics-p-values-and-critical-value-thresholds-ex2",
+          "type": "debugging",
+          "prompt": "This function is supposed to compute a two-sided p-value from a t-statistic, but it's returning the wrong number and, in this specific case, the wrong conclusion. Find the bug and fix it.",
+          "code": "from scipy import stats\n\ndef two_sided_p_value(t_statistic, df):\n    # Intended to compute a two-sided p-value\n    return stats.t.sf(abs(t_statistic), df)\n\np = two_sided_p_value(t_statistic=1.9, df=18)\nprint(f\"{p:.4f}\")\nprint(\"Reject H0\" if p < 0.05 else \"Fail to reject H0\")",
+          "hints": [
+            "stats.t.sf(x, df) returns the probability in ONE tail only -- is that the full two-sided p-value, or just half of it?",
+            "Recall the earlier example in this concept: the two-sided p-value was computed as `2 * stats.t.sf(...)`, not `stats.t.sf(...)` alone.",
+            "Compute both the one-tailed value and its double for t=1.9, df=18 -- do they fall on the same side of the 0.05 threshold?"
+          ],
+          "solutionCode": "from scipy import stats\n\ndef two_sided_p_value(t_statistic, df):\n    return 2 * stats.t.sf(abs(t_statistic), df)\n\np = two_sided_p_value(t_statistic=1.9, df=18)\nprint(f\"{p:.4f}\")   # 0.0736\nprint(\"Reject H0\" if p < 0.05 else \"Fail to reject H0\")   # Fail to reject H0",
+          "solutionExplanation": "`stats.t.sf(abs(t_statistic), df)` returns only the probability in the single upper tail beyond abs(t_statistic) -- exactly half of the true two-sided p-value, which must add the symmetric lower tail too, hence the missing `2 *`. For t=1.9 and df=18, the one-tailed value is about 0.0368 (which happens to be just under 0.05), while the correct two-sided value is about 0.0736 (just over 0.05) -- the missing factor of 2 actually flips the printed conclusion from 'Reject H0' to the correct 'Fail to reject H0,' even though the underlying data and test statistic never changed. This is exactly the kind of silent, no-error-thrown bug that's dangerous precisely because the code runs fine and returns a plausible-looking number."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "statistics-p-values-and-critical-value-thresholds-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "Which of these is the precise definition of a p-value for an observed test statistic?",
+          "options": [
+            "The probability that H0 is true, given the observed data.",
+            "The probability, assuming H0 is true, of observing a test statistic at least as extreme as the one actually observed.",
+            "The probability of making a Type I error on this specific test result.",
+            "The probability that the alternative hypothesis H1 is false."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "This is the precise, conditional definition: a probability computed under the assumption that H0 holds, describing how likely data this extreme (or more) would be from sampling noise alone. Option A reverses the conditioning -- it describes P(H0 true | data), a different, generally unequal quantity that requires Bayesian reasoning to compute. Option C confuses a per-result probability with alpha, a long-run property of the testing procedure. Option D is effectively a restatement of option A's error, just phrased in terms of H1 instead of H0."
+        },
+        {
+          "id": "statistics-p-values-and-critical-value-thresholds-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "A model comparison yields p = 0.02. Which statement correctly describes what that number means?",
+          "options": [
+            "If model A and model B truly had identical performance, a difference at least this large would arise from sampling noise alone only about 2% of the time.",
+            "There is a 2% chance the two models actually perform identically.",
+            "There is a 98% chance model B is genuinely better than model A.",
+            "2% of all hypothesis tests like this one turn out to be wrong."
+          ],
+          "correctOptionIndex": 0,
+          "explanation": "This correctly keeps the conditioning direction intact: the 2% is the probability of the data, assuming H0 is true -- not a probability attached to H0 or H1 themselves. Options B and C both invert the conditional into a statement about how likely the hypotheses are, which a p-value does not and cannot establish on its own without a prior. Option D vaguely gestures at a Type I error rate but misstates it as a property of 'tests like this one turning out wrong' rather than the specific, conditional long-run false-positive rate that alpha (not directly the p-value) actually describes."
+        },
+        {
+          "id": "statistics-p-values-and-critical-value-thresholds-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "For a fixed alpha, how does the p-value comparison ('is p < alpha?') relate to the rejection-region comparison ('does the test statistic fall inside the region defined by alpha?')?",
+          "options": [
+            "They can disagree, because they use fundamentally different mathematical criteria.",
+            "p < alpha holds exactly when the test statistic falls inside the rejection region defined by that same alpha -- they are the same decision, expressed two different ways.",
+            "Rejection regions are a fallback only usable when a p-value cannot be computed.",
+            "p-values only apply to two-sided tests, and rejection regions only apply to one-sided tests."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Because a p-value is a strictly decreasing function of how extreme the observed test statistic is, p < alpha and 'statistic inside the rejection region defined by alpha' are logically equivalent statements about the same underlying comparison -- a fact demonstrated directly in this concept across 1500 simulated datasets with zero mismatches. Option A contradicts this mathematical equivalence. Option C and option D both invent artificial restrictions; both approaches apply equally to one-sided and two-sided tests, and neither is a fallback for the other."
+        },
+        {
+          "id": "statistics-p-values-and-critical-value-thresholds-assess-explain1",
+          "type": "explanation",
+          "prompt": "A colleague says: 'We got p = 0.04 comparing our new ranking model to the old one, so there's a 96% chance the new model is actually better.' Explain precisely what's wrong with this statement, and state what p = 0.04 actually tells you.",
+          "modelAnswer": "The statement confuses two different conditional probabilities that only look similar in casual English. A p-value of 0.04 is P(observing a difference at least this large | the new and old models truly perform identically) -- a probability computed entirely under the assumption that H0 is true, describing how surprising this data would be if there really were no difference. The colleague's claim, 'a 96% chance the new model is actually better,' is really asserting something close to P(H1 true | this data) -- the reverse conditional, and a fundamentally different quantity. Frequentist p-values never compute this reversed probability at all; doing so honestly requires Bayes' theorem and a prior probability that the new model is better before seeing any data, information a p-value calculation simply never uses. This is the same logical error as concluding, from a diagnostic test's known accuracy on people who have a disease, what fraction of positive-testing people 'actually have it' -- that answer depends heavily on how common the disease is to begin with, exactly the kind of prior information missing here.\n\nWhat p = 0.04 genuinely tells you: if the new and old ranking models truly performed identically, data producing a gap this large or larger would arise from ordinary sampling noise only about 4% of the time. That's meaningful evidence against 'no real difference,' but it says nothing directly about how probable it is that H0 is true, nothing about how large or practically important the real improvement is, and nothing about the probability this specific result is a false positive -- alpha describes the test procedure's long-run error rate, not this one dataset's odds of being wrong."
+        }
+      ]
+    },
+    {
+      "id": "statistics-multiple-testing-corrections",
+      "title": "Multiple Testing Corrections: Bonferroni and Benjamini-Hochberg FDR",
+      "description": "Running many hypothesis tests against the same data inflates the overall chance of at least one false positive far above any single test's alpha, and Bonferroni (controlling the family-wise error rate) and Benjamini-Hochberg (controlling the false discovery rate) are two different, principled corrections, each suited to different ML experimentation scenarios.",
+      "moduleId": "hypothesis_testing",
+      "topicId": "hypothesis_testing",
+      "difficulty": "advanced",
+      "estimatedMinutes": 45,
+      "prerequisites": [
+        "statistics-type-i-and-type-ii-errors-and-power",
+        "statistics-p-values-and-critical-value-thresholds"
+      ],
+      "learningObjectives": [
+        "Explain the multiple comparisons problem: why running m independent tests, each at level alpha, inflates the probability of at least one false positive well above alpha.",
+        "Derive and compute the family-wise error rate (FWER) for m independent tests as 1 - (1 - alpha)^m, and show how quickly it grows with m.",
+        "Apply the Bonferroni correction (testing each hypothesis at alpha/m) and explain both why it controls FWER and why it becomes conservative as m grows.",
+        "Apply the Benjamini-Hochberg procedure to control the false discovery rate (FDR), and explain how FDR differs conceptually from FWER.",
+        "Connect the multiple-testing problem explicitly to comparing many ML model or hyperparameter variants against a single validation set, and identify why this risk is easy to miss in iterative experimentation."
+      ],
+      "explanation": {
+        "sections": [
+          {
+            "heading": "The Multiple Comparisons Problem",
+            "body": "Every hypothesis test run at significance level alpha carries, by construction, an alpha probability of a false positive if H0 happens to be true for that particular test. That's a manageable, well-understood risk for a single, pre-planned test. It stops being manageable the moment you run many tests and ask whether *any* of them came back significant, because the probability that *at least one* false positive shows up across m independent tests, each individually at level alpha, assuming H0 is true for all of them, is:\n\n```python\nalpha = 0.05\nfor m in [1, 5, 20, 100]:\n    fwer = 1 - (1 - alpha) ** m\n    print(f\"m={m}: {fwer:.4f}\")\n# m=1:   0.0500\n# m=5:   0.2262\n# m=20:  0.6415\n# m=100: 0.9941\n```\n\nWith just 20 independent tests, each individually using the seemingly cautious alpha=0.05, there's already about a 64% chance at least one comes back 'significant' by pure chance, even if nothing real is going on anywhere. At 100 tests, it's over 99% -- essentially guaranteed. This is the **multiple comparisons problem**, and it is directly, uncomfortably relevant to a routine ML workflow: evaluating 20 different hyperparameter configurations against a shared validation set, checking each one's improvement over a baseline with a naive per-test alpha=0.05 threshold, and picking whichever one 'won.' Even if none of the 20 configurations is genuinely any better than the baseline, there's roughly a 64% chance at least one of them clears the naive significance bar purely from validation-set noise -- and the natural instinct to report and ship whichever config happened to look best is exactly how that noise gets mistaken for a real result. This is the technical mechanism behind the informally-named **'garden of forking paths'** problem: the danger isn't any single test being computed wrong, it's that trying many paths and reporting only the one that looked good silently reintroduces the exact false-positive risk each individual alpha was supposed to keep small."
+          },
+          {
+            "heading": "Controlling the Family-Wise Error Rate: Bonferroni",
+            "body": "The **family-wise error rate (FWER)** is exactly the quantity from the previous section: the probability of at least one false positive anywhere across the whole family of m tests. The **Bonferroni correction** controls FWER with a strikingly simple rule: instead of rejecting each hypothesis at the original alpha, reject hypothesis i only if p_i < alpha / m.\n\n```python\nimport numpy as np\n\np_values = np.array([0.001, 0.004, 0.009, 0.025, 0.030, 0.045,\n                      0.070, 0.090, 0.150, 0.200, 0.280, 0.350, 0.450, 0.600, 0.800])\nm = len(p_values)\nalpha = 0.05\n\nnaive_reject = p_values < alpha\nbonferroni_alpha = alpha / m\nbonferroni_reject = p_values < bonferroni_alpha\n\nprint(f\"naive (uncorrected) rejects: {naive_reject.sum()}\")    # 6\nprint(f\"Bonferroni-corrected alpha: {bonferroni_alpha:.5f}\")   # 0.00333\nprint(f\"Bonferroni rejects: {bonferroni_reject.sum()}\")         # 1\n```\n\nWhy does dividing by m guarantee FWER stays at or below alpha? By the union bound: the probability that *at least one* of m tests is a false positive is at most the *sum* of each individual test's false-positive probability. If every test is individually held to alpha/m, that sum is at most m * (alpha/m) = alpha, regardless of whether the tests are independent or correlated with each other in some complicated way -- which is a genuine virtue of Bonferroni: it needs no assumption about how the tests relate to each other to give this guarantee.\n\nThat same simplicity is also Bonferroni's weakness. As m grows, alpha/m shrinks fast -- with 100 tests and alpha=0.05, each individual test needs p < 0.0005 to survive correction, an extremely strict bar. This is the alpha/beta tradeoff from two concepts ago playing out again, just now spread across an entire family of tests at once: driving FWER down hard, by construction, drives beta up for every individual test in the family, meaning real, genuine effects increasingly fail to survive correction as m grows large. Bonferroni is the right tool when a single false positive anywhere in the family would be seriously costly and there's no cheap way to double-check a 'winner' afterward -- but it pays for that safety with a real, sometimes severe, loss of power."
+          },
+          {
+            "heading": "Controlling the False Discovery Rate: Benjamini-Hochberg",
+            "body": "The **false discovery rate (FDR)** asks a deliberately different, less conservative question than FWER. Rather than bounding the probability of *any* false positive anywhere in the family, FDR bounds the *expected proportion* of false positives *among the tests you actually flagged as significant* -- roughly, E[false positives / total rejections]. Controlling FDR at level alpha means you're willing to tolerate some false positives, as long as they make up a controlled, small fraction of whatever set of 'discoveries' you end up reporting -- a genuinely more permissive, and often more appropriate, standard whenever you plan to treat your flagged results as a shortlist for further investigation rather than a final, individually-guaranteed verdict.\n\nThe **Benjamini-Hochberg (BH) procedure** achieves this with a clean algorithm: sort the m p-values ascending, p_(1) <= p_(2) <= ... <= p_(m), find the *largest* rank k such that p_(k) <= (k/m) * alpha, and reject every hypothesis at rank 1 through k.\n\n```python\nimport numpy as np\n\ndef benjamini_hochberg(p_values, alpha):\n    m = len(p_values)\n    order = np.argsort(p_values)\n    sorted_p = p_values[order]\n    thresholds = (np.arange(1, m + 1) / m) * alpha\n    below = sorted_p <= thresholds\n    k = 0 if not np.any(below) else np.max(np.where(below)[0]) + 1\n    reject_sorted = np.zeros(m, dtype=bool)\n    reject_sorted[:k] = True\n    reject = np.zeros(m, dtype=bool)\n    reject[order] = reject_sorted\n    return reject, k\n\nreject, k = benjamini_hochberg(p_values, alpha=0.05)\nprint(f\"BH rejects: {reject.sum()}\")   # 3 -- more than Bonferroni's 1, fewer than the naive 6\n```\n\nOn this same p-value list, BH rejects 3 hypotheses -- strictly more than Bonferroni's single rejection, but strictly fewer than the naive, uncorrected 6. The reason BH can afford to reject more than Bonferroni while still controlling a meaningful error rate is exactly the definitional difference between FWER and FDR: BH isn't promising zero-tolerance for any false positive anywhere in the family, it's promising that, on average, at most a controlled fraction of whatever you end up calling 'significant' will turn out to be false positives -- a substantively weaker, more forgiving guarantee, in exchange for meaningfully more power to catch real effects mixed in among many tested hypotheses."
+          },
+          {
+            "heading": "Applying This to Comparing Many Model or Hyperparameter Variants",
+            "body": "Translate the p-value list directly into an ML scenario: fifteen hyperparameter configurations, each compared against a baseline model on the same validation set, each producing a p-value for 'is this configuration's validation metric genuinely different from the baseline's.' The naive approach -- flag anything with p < 0.05 -- calls 6 of the 15 configurations significant improvements. Bonferroni, correctly accounting for the fact that 15 comparisons were actually made, calls only 1 significant. Benjamini-Hochberg, controlling a different and more permissive error notion, calls 3 significant. None of these three numbers is 'the' right answer in some absolute sense -- which one to use depends on what happens next.\n\nIf a 'significant' configuration is going straight to production with no further validation, Bonferroni's conservatism is the responsible choice: a false positive there is expensive, and FWER's zero-tolerance-per-family guarantee directly protects against that cost. If, instead, the flagged configurations are a shortlist headed for a further, independent confirmatory check -- a fresh holdout set, a longer-running A/B test, a human review -- Benjamini-Hochberg's more permissive FDR standard is often the better fit: it's explicitly built for exactly this 'flag candidates for follow-up' use case, tolerating a controlled fraction of false leads in the shortlist rather than demanding certainty about every single one up front.\n\nThe deeper fix, underneath either correction, is architectural rather than purely statistical: whenever it's feasible, decide the comparison plan (which configurations, which metric, which correction) *before* looking at results, and reserve a genuinely fresh, never-yet-touched holdout set for a final confirmatory test on whichever configuration 'won' during exploration. Correction procedures repair the accounting after the fact; a pre-registered plan and an untouched final holdout set prevent the problem from being created in the first place -- and in an iterative ML research process where a validation set gets revisited dozens of times across weeks of experimentation, that untouched final check is often what actually stands between a real result and an expensive-to-discover illusion."
+          }
+        ]
+      },
+      "examples": [
+        {
+          "title": "How Fast the Family-Wise Error Rate Grows",
+          "language": "python",
+          "code": "import numpy as np\n\nalpha = 0.05\nfor m in [1, 5, 20, 100]:\n    print(f\"m={m}: FWER = {1 - (1 - alpha) ** m:.4f}\")\n\n# Confirm by simulation: draw m p-values from Uniform(0,1) -- exactly what\n# a correctly-computed p-value looks like whenever H0 is genuinely true --\n# and check how often at least one clears the naive alpha threshold.\nrng = np.random.default_rng(5)\nm, n_trials = 20, 20000\nat_least_one = sum(\n    np.any(rng.uniform(0, 1, size=m) < alpha) for _ in range(n_trials)\n)\nprint(f\"simulated FWER for m=20: {at_least_one / n_trials:.4f}\")\n# analytic: 0.6415, simulated: ~0.637 -- matches",
+          "explanation": "A p-value, when H0 is genuinely true, is uniformly distributed between 0 and 1 -- which is exactly why comparing it to alpha gives a false-positive rate of precisely alpha for a single test, and exactly the property this simulation exploits to check the FWER formula empirically: drawing m independent Uniform(0,1) values is mathematically identical to drawing m p-values from m independent, genuinely-null tests. The simulated rate, about 0.637, lands close to the analytic 0.6415, confirming the formula isn't just an abstract derivation -- it's exactly what happens in practice when 20 independent, individually-innocent-looking tests are all run against truly null data."
+        },
+        {
+          "title": "Bonferroni: Simple, Safe, and Conservative",
+          "language": "python",
+          "code": "import numpy as np\n\n# p-values from comparing 15 hyperparameter configurations against a baseline\np_values = np.array([0.001, 0.004, 0.009, 0.025, 0.030, 0.045,\n                      0.070, 0.090, 0.150, 0.200, 0.280, 0.350, 0.450, 0.600, 0.800])\nm = len(p_values)\nalpha = 0.05\n\nnaive_reject = p_values < alpha\nbonferroni_alpha = alpha / m\nbonferroni_reject = p_values < bonferroni_alpha\n\nprint(f\"naive rejects (p < 0.05):        {naive_reject.sum()}\")           # 6\nprint(f\"Bonferroni-corrected threshold:  {bonferroni_alpha:.5f}\")          # 0.00333\nprint(f\"Bonferroni rejects:              {bonferroni_reject.sum()}\")       # 1",
+          "explanation": "Only the very first configuration, with p=0.001, survives the Bonferroni-corrected threshold of 0.00333 -- the other five configurations that looked 'significant' under the naive alpha=0.05 threshold (p=0.004 through p=0.045) all fail to survive once the test correctly accounts for the fact that 15 comparisons were actually run. This is Bonferroni's FWER guarantee in action: it would rather risk missing several genuinely-better configurations than risk calling even one truly-no-better configuration a winner, across the whole family of 15 tests."
+        },
+        {
+          "title": "Benjamini-Hochberg: More Power, a Different Guarantee",
+          "language": "python",
+          "code": "import numpy as np\n\ndef benjamini_hochberg(p_values, alpha):\n    m = len(p_values)\n    order = np.argsort(p_values)\n    sorted_p = p_values[order]\n    thresholds = (np.arange(1, m + 1) / m) * alpha\n    below = sorted_p <= thresholds\n    k = 0 if not np.any(below) else np.max(np.where(below)[0]) + 1\n    reject_sorted = np.zeros(m, dtype=bool)\n    reject_sorted[:k] = True\n    reject = np.zeros(m, dtype=bool)\n    reject[order] = reject_sorted\n    return reject, k, sorted_p, thresholds\n\np_values = np.array([0.001, 0.004, 0.009, 0.025, 0.030, 0.045,\n                      0.070, 0.090, 0.150, 0.200, 0.280, 0.350, 0.450, 0.600, 0.800])\n\nreject, k, sorted_p, thresholds = benjamini_hochberg(p_values, alpha=0.05)\n\nfor rank in range(len(p_values)):\n    flag = \"reject\" if rank < k else \"  -- \"\n    print(f\"rank {rank + 1:2d}: p={sorted_p[rank]:.3f}  BH threshold={thresholds[rank]:.5f}  {flag}\")\n\nprint()\nprint(f\"total BH rejections: {reject.sum()} (Bonferroni gave 1, naive p<0.05 gave 6)\")\n# BH rejects ranks 1-3 (p = 0.001, 0.004, 0.009) -- 3 total",
+          "explanation": "The first three sorted p-values (0.001, 0.004, 0.009) each fall below their own rank-scaled BH threshold (0.00333, 0.00667, 0.01), while rank 4's p-value (0.025) exceeds its threshold (0.01333) and every rank after that fails too -- so BH settles on k=3. Notice rank 2's p-value, 0.004, is actually larger than Bonferroni's flat threshold of 0.00333 and would be rejected by Bonferroni too only by coincidence in other datasets, but here it clears BH's more generous, rank-scaled threshold of 0.00667 -- this is exactly the extra power BH buys by controlling a different, more permissive error notion than FWER."
+        }
+      ],
+      "misconceptions": [
+        {
+          "description": "As long as each individual test correctly uses alpha=0.05, the overall set of conclusions from running many such tests is also protected at the 5% error level.",
+          "clarification": "Alpha=0.05 protects only a single, individually-run test against a false positive. Running many such tests and looking for any significant result inflates the probability of at least one false positive well above 5% -- to about 23% for 5 tests, 64% for 20 tests, and over 99% for 100 tests, all while H0 might be true everywhere and nothing real is actually happening. Protecting the whole family of conclusions requires an explicit correction, such as Bonferroni or Benjamini-Hochberg, applied on top of the individual per-test alpha."
+        },
+        {
+          "description": "Bonferroni and Benjamini-Hochberg are just two implementations of the same correction, so it doesn't matter much which one you use.",
+          "clarification": "They control fundamentally different quantities: Bonferroni bounds the probability of even a single false positive anywhere in the family (FWER), while Benjamini-Hochberg bounds the expected proportion of false positives among whatever gets flagged as significant (FDR) -- a substantively weaker, more permissive guarantee. On identical data, Benjamini-Hochberg routinely flags more hypotheses as significant than Bonferroni does, precisely because it's answering a more forgiving question; which one is appropriate depends on whether a single false positive anywhere would be seriously costly (favoring Bonferroni) or whether the flagged results are a shortlist headed for further confirmatory checking anyway (favoring Benjamini-Hochberg)."
+        }
+      ],
+      "exercises": [
+        {
+          "id": "statistics-multiple-testing-corrections-ex1",
+          "type": "predictOutput",
+          "prompt": "A team is about to compare 10 hyperparameter configurations against a baseline, each with its own hypothesis test at alpha=0.05, assuming (for this calculation) that none of the 10 configurations is actually any better than the baseline. What does this print, and what does that number represent?",
+          "code": "alpha = 0.05\nm = 10   # 10 hyperparameter configurations, each compared to baseline\n\nfwer = 1 - (1 - alpha) ** m\nprint(round(fwer, 4))",
+          "hints": [
+            "This is the formula for the family-wise error rate across m independent tests, each individually run at level alpha.",
+            "Plug in alpha=0.05 and m=10 directly: 1 - (0.95)^10.",
+            "Interpret the result as a probability: if none of the 10 configurations is genuinely better, what's the chance at least one still 'wins' by pure chance?"
+          ],
+          "expectedAnswer": "It prints 0.4013. This is the family-wise error rate: even if none of the 10 hyperparameter configurations is genuinely any better than the baseline, there's about a 40% chance that at least one of the 10 individual tests, each run at the seemingly cautious alpha=0.05, comes back 'significant' purely from validation-set noise.",
+          "solutionExplanation": "1 - (1 - 0.05)^10 = 1 - 0.95^10 = 1 - 0.5987... = 0.4013. Each of the 10 tests individually has only a 5% false-positive chance, which feels safe in isolation -- but the chance that at least one out of 10 independent tests produces a false positive climbs to about 40%, simply because there are 10 separate opportunities for chance to produce a misleadingly good-looking result. This is exactly why picking 'the best of 10 configurations' and reporting its raw, uncorrected p-value against alpha=0.05 dramatically understates the real risk that the 'winner' is actually noise."
+        },
+        {
+          "id": "statistics-multiple-testing-corrections-ex2",
+          "type": "debugging",
+          "prompt": "This function is supposed to apply a Bonferroni correction across all the hypothesis tests that were actually run, but a reviewer noticed it under-corrects in a way that lets at least one result through that shouldn't survive. Find the bug and fix it.",
+          "code": "def bonferroni_reject(p_values, alpha=0.05):\n    significant = [p for p in p_values if p < alpha]\n    correction_factor = len(significant)     # number of tests that already looked significant\n    corrected_alpha = alpha / correction_factor\n    return [p < corrected_alpha for p in p_values]\n\np_values = [0.001, 0.004, 0.007, 0.025, 0.030, 0.045, 0.6, 0.7, 0.8]\nprint(bonferroni_reject(p_values))",
+          "hints": [
+            "The Bonferroni correction divides alpha by the TOTAL number of tests actually conducted, m -- what does `correction_factor` here actually count instead?",
+            "Using only the count of already-significant results as the divisor is circular: it uses the outcome of the very comparison you're trying to correct as an input to the correction itself.",
+            "Fix correction_factor to be len(p_values) -- the full number of hypotheses tested, whether or not they individually looked significant beforehand."
+          ],
+          "solutionCode": "def bonferroni_reject(p_values, alpha=0.05):\n    correction_factor = len(p_values)   # ALL tests actually conducted, not just the 'winners'\n    corrected_alpha = alpha / correction_factor\n    return [p < corrected_alpha for p in p_values]\n\np_values = [0.001, 0.004, 0.007, 0.025, 0.030, 0.045, 0.6, 0.7, 0.8]\nprint(bonferroni_reject(p_values))",
+          "solutionExplanation": "The buggy version counts only the 6 p-values that already cleared the uncorrected alpha=0.05 (0.001, 0.004, 0.007, 0.025, 0.030, 0.045) and divides alpha by that count (6), giving a corrected threshold of 0.05/6 = 0.00833 -- which incorrectly lets p=0.007 through as 'significant.' The correct Bonferroni correction divides alpha by m, the total number of hypotheses actually tested (9 here, including the 3 that were never close to significant), giving a stricter threshold of 0.05/9 = 0.00556, under which p=0.007 correctly fails to survive. The bug is a subtle circularity: using the number of hypotheses that already looked significant as the correction factor means the correction gets weaker precisely when more false positives are present to correct for, defeating the entire purpose of the correction."
+        }
+      ],
+      "assessments": [
+        {
+          "id": "statistics-multiple-testing-corrections-assess-mcq1",
+          "type": "multipleChoice",
+          "prompt": "A researcher runs 20 independent hypothesis tests, each at alpha=0.05, and reports that a 64% chance existed of at least one false positive turning up even if H0 were true everywhere. What is this 64% figure called, and how is it computed?",
+          "options": [
+            "The false discovery rate (FDR), computed as alpha times the number of tests.",
+            "The family-wise error rate (FWER), computed as 1 - (1 - alpha)^m for m independent tests.",
+            "The statistical power of the combined set of 20 tests.",
+            "The Bonferroni-corrected significance level for the family of 20 tests."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "1 - (1 - 0.05)^20 is approximately 0.6415, matching the family-wise error rate: the probability that at least one false positive appears anywhere across all 20 tests, assuming H0 holds for every one of them. Option A misnames the quantity and misstates its formula -- FDR is a different quantity entirely, and 'alpha times the number of tests' isn't even a valid probability once it exceeds 1. Option C confuses this false-positive-rate calculation with power, which is about correctly detecting real effects, not the chance of a spurious one. Option D describes the corrected alpha/m threshold used to control FWER, not the FWER value itself."
+        },
+        {
+          "id": "statistics-multiple-testing-corrections-assess-mcq2",
+          "type": "multipleChoice",
+          "prompt": "Why does the Bonferroni correction guarantee that the family-wise error rate stays at or below alpha, regardless of how the individual tests relate to each other?",
+          "options": [
+            "Because it requires all m tests to be statistically independent, which mathematically forces FWER down to alpha.",
+            "Because, by the union bound, the probability of at least one false positive across m tests is at most the sum of each test's individual false-positive probability, and holding each test to alpha/m keeps that sum at or below alpha.",
+            "Because dividing by m always makes each individual test's p-value exactly equal to zero.",
+            "Because it re-runs each test m additional times and only rejects if all m repetitions agree."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "The union bound is precisely why Bonferroni works without needing any assumption about independence or correlation between the tests: summing each test's at-most-alpha/m false-positive probability across m tests gives a total of at most alpha, an upper bound that holds no matter how the tests are related. Option A inverts the actual advantage of Bonferroni -- it specifically does NOT require independence. Option C is a fabricated, nonsensical mechanism. Option D describes a completely different procedure (repeated replication), not what Bonferroni does."
+        },
+        {
+          "id": "statistics-multiple-testing-corrections-assess-mcq3",
+          "type": "multipleChoice",
+          "prompt": "A team is screening 50 hyperparameter configurations and plans to send any 'significant' ones to a separate, independent confirmatory test on a fresh holdout set before shipping anything. Which multiple-testing correction is the better fit for this initial screening step, and why?",
+          "options": [
+            "Bonferroni, because family-wise error rate control should always be used regardless of context.",
+            "Benjamini-Hochberg, because it controls the false discovery rate -- a more permissive guarantee appropriate for a shortlist that will undergo further independent confirmation, and it will flag more real candidates than Bonferroni's stricter FWER control would.",
+            "Neither correction is necessary, since the follow-up confirmatory test will catch any mistakes anyway.",
+            "Naive, uncorrected alpha=0.05 per test, because the follow-up step makes the multiple comparisons problem irrelevant."
+          ],
+          "correctOptionIndex": 1,
+          "explanation": "Benjamini-Hochberg's FDR control is explicitly suited to exactly this 'flag a shortlist for further review' use case -- tolerating a controlled fraction of false leads among the flagged candidates in exchange for catching more real effects than Bonferroni's stricter, zero-tolerance-per-family standard would. Option A is wrong because Bonferroni's conservatism is best reserved for cases where a false positive is directly costly with no cheap follow-up check, which isn't this scenario. Option C and D both wrongly assume the follow-up step eliminates the need for any correction at the screening stage -- without some correction, the screening step itself would be swamped with chance-driven false leads, wasting the downstream confirmatory testing capacity on noise."
+        },
+        {
+          "id": "statistics-multiple-testing-corrections-assess-explain1",
+          "type": "explanation",
+          "prompt": "An ML engineer trains 30 different model variants overnight, checks each one's validation accuracy against the current production model using a separate hypothesis test per variant, and reports the single variant with the smallest p-value as 'the significant winner, p=0.01.' Explain what's wrong with this reporting practice and how it should be corrected.",
+          "modelAnswer": "Running 30 separate hypothesis tests and reporting only the smallest resulting p-value silently reintroduces the multiple comparisons problem, even though each individual test, taken alone, looks perfectly valid at alpha=0.05. If none of the 30 variants were actually any better than the production model, the probability that at least one of the 30 individual tests would still produce a 'significant' result purely from validation-set noise is substantial -- with m=30 and alpha=0.05, the family-wise error rate is already well over 75%, meaning a spurious 'winner' is more likely than not even when nothing real is happening. Reporting the single smallest p-value out of 30 as if it were the only test ever run -- rather than the survivor of an implicit 30-way search -- overstates the evidence for that variant dramatically; the p=0.01 headline figure never accounted for the other 29 chances the procedure had to produce a false positive.\n\nThe fix is to apply an explicit multiple-testing correction across all 30 comparisons actually made, not just report the smallest raw p-value. If shipping the winning variant directly, with no further validation, Bonferroni (comparing each p-value to alpha/30) is the conservative, appropriate choice, since a false positive there is directly costly. If the plan is to shortlist a few promising variants for a further, independent confirmatory test on fresh, never-touched data, Benjamini-Hochberg's false discovery rate control is usually the better fit, tolerating a controlled fraction of false leads in a shortlist that will be checked again anyway. Either way, the correction has to account for all 30 tests that were actually run, not merely the one that happened to look best."
+        }
+      ]
+    }
+  ]
+}

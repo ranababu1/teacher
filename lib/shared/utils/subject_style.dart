@@ -48,5 +48,6 @@ IconData subjectIcon(String iconName) => switch (iconName) {
   'systemdesign' => Icons.architecture_outlined,
   'aws' => Icons.cloud_outlined,
   'devops' => Icons.autorenew,
+  'statistics' => Icons.query_stats_outlined,
   _ => Icons.menu_book_outlined,
 };
