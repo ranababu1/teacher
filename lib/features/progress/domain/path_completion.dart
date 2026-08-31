@@ -1,4 +1,5 @@
 import '../../curriculum/domain/models/concept.dart';
+import '../../curriculum/domain/models/curriculum_module.dart';
 import '../../curriculum/domain/models/learning_path.dart';
 import 'models/student_progress.dart';
 
@@ -22,3 +23,15 @@ bool isPathCompleted(
   LearningPath path,
   Map<String, StudentProgress> progressByConceptId,
 ) => firstIncompleteConcept(path, progressByConceptId) == null;
+
+/// Whether every concept in [module] ("topic") is complete. A module with
+/// no concepts is never considered complete.
+bool isModuleCompleted(
+  CurriculumModule module,
+  Map<String, StudentProgress> progressByConceptId,
+) {
+  if (module.concepts.isEmpty) return false;
+  return module.concepts.every(
+    (c) => progressByConceptId[c.id]?.isCompleted ?? false,
+  );
+}

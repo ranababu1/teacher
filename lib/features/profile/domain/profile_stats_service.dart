@@ -29,6 +29,8 @@ class ProfileStatsService {
     required List<StudentProgress> allProgress,
     required List<Attempt> allAttempts,
     DateTime? now,
+    int passedModuleTestCount = 0,
+    int appOpenDays = 0,
   }) {
     final progressByConceptId = {for (final p in allProgress) p.conceptId: p};
     final coursesCompleted = paths
@@ -61,6 +63,8 @@ class ProfileStatsService {
       attempts: allAttempts,
       allProgress: allProgress,
       paths: paths,
+      passedModuleTestCount: passedModuleTestCount,
+      appOpenDays: appOpenDays,
     );
 
     final badges = _badgeEvaluator.evaluate(

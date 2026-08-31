@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../features/flashcards/presentation/providers/flashcard_providers.dart';
+import '../features/profile/presentation/providers/profile_providers.dart';
 import '../features/settings/domain/settings_models.dart';
 import '../features/settings/presentation/providers/settings_providers.dart';
 import 'router.dart';
@@ -19,6 +20,8 @@ class TeacherApp extends ConsumerWidget {
     // card schedule once at startup, then again whenever a
     // flashcard-relevant setting changes.
     ref.watch(flashcardStartupProvider);
+    // Awards the once-per-day "opened the app" XP bonus.
+    ref.watch(appOpenXpAwardProvider);
     ref.listen<AsyncValue<AppSettings>>(settingsControllerProvider, (
       previous,
       next,

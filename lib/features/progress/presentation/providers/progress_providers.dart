@@ -102,6 +102,13 @@ final passedModuleIdsProvider = FutureProvider.family<Set<String>, String>((
       .getPassedModuleIds(learningPathId);
 });
 
+/// Total count of passed module tests ("quizzes") across every learning
+/// path — feeds the Profile screen's XP total.
+final allPassedModuleTestCountProvider = FutureProvider<int>((ref) {
+  ref.watch(dataRevisionProvider);
+  return ref.watch(moduleTestProgressRepositoryProvider).getPassedModuleCount();
+});
+
 /// The entry point UI should call once a learner passes a module's topic
 /// test — wraps the plain repository write with telling dependent read
 /// providers to refetch, the same shape as [LearningPathStarter].

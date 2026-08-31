@@ -8,10 +8,10 @@ enum ExperienceLevel {
   advancedDeveloper;
 
   static ExperienceLevel forXp(int xp) {
-    if (xp >= 15000) return ExperienceLevel.advancedDeveloper;
-    if (xp >= 6000) return ExperienceLevel.intermediateDeveloper;
-    if (xp >= 2000) return ExperienceLevel.juniorDeveloper;
-    if (xp >= 500) return ExperienceLevel.beginnerDeveloper;
+    if (xp >= 60000) return ExperienceLevel.advancedDeveloper;
+    if (xp >= 24000) return ExperienceLevel.intermediateDeveloper;
+    if (xp >= 8000) return ExperienceLevel.juniorDeveloper;
+    if (xp >= 2000) return ExperienceLevel.beginnerDeveloper;
     return ExperienceLevel.newDeveloper;
   }
 

@@ -95,7 +95,7 @@ void main() {
       allProgress: const [],
       paths: const [],
     );
-    expect(xp, 10 + 15);
+    expect(xp, 20 + 25);
   });
 
   test('an incorrect exercise attempt awards only base XP', () {
@@ -112,7 +112,7 @@ void main() {
       allProgress: const [],
       paths: const [],
     );
-    expect(xp, 10);
+    expect(xp, 20);
   });
 
   test('a correct assessment attempt awards base + quality bonus XP', () {
@@ -129,7 +129,7 @@ void main() {
       allProgress: const [],
       paths: const [],
     );
-    expect(xp, 20 + 30);
+    expect(xp, 40 + 50);
   });
 
   test('repeated attempts on the same item award XP only once', () {
@@ -156,7 +156,7 @@ void main() {
       paths: const [],
     );
     // Only the first (chronologically) attempt counts — the incorrect one.
-    expect(xp, 10);
+    expect(xp, 20);
   });
 
   test('a different item on the same concept still awards its own XP', () {
@@ -180,24 +180,31 @@ void main() {
       allProgress: const [],
       paths: const [],
     );
-    expect(xp, (10 + 15) * 2);
+    expect(xp, (20 + 25) * 2);
   });
 
-  test('a completed concept adds a flat bonus', () {
+  test('a completed concept ("lesson") adds a flat bonus', () {
     final xp = calculator.calculate(
       attempts: const [],
       allProgress: [_progress('c1', 'python', completed: true)],
       paths: const [],
     );
-    expect(xp, 100);
+    expect(xp, 250);
   });
 
-  test('a completed course adds a flat bonus on top of its concepts', () {
+  test('a completed module ("topic") adds a bonus once every concept in it is done', () {
     final c1 = _concept('c1');
     final c2 = _concept('c2');
     final path = _path('python', [c1, c2]);
 
-    final xp = calculator.calculate(
+    final partial = calculator.calculate(
+      attempts: const [],
+      allProgress: [_progress('c1', 'python', completed: true)],
+      paths: [path],
+    );
+    expect(partial, 250); // only the concept bonus — module isn't done yet
+
+    final full = calculator.calculate(
       attempts: const [],
       allProgress: [
         _progress('c1', 'python', completed: true),
@@ -205,26 +212,48 @@ void main() {
       ],
       paths: [path],
     );
-    expect(xp, 100 * 2 + 500);
+    // Both concepts done also completes the module AND the course (this
+    // path has exactly one module), so all three tiers stack.
+    expect(full, 250 * 2 + 400 + 2000);
+  });
+
+  test('passed module tests ("quizzes") each award a flat bonus', () {
+    final xp = calculator.calculate(
+      attempts: const [],
+      allProgress: const [],
+      paths: const [],
+      passedModuleTestCount: 3,
+    );
+    expect(xp, 600 * 3);
+  });
+
+  test('app-open days each award a flat bonus', () {
+    final xp = calculator.calculate(
+      attempts: const [],
+      allProgress: const [],
+      paths: const [],
+      appOpenDays: 4,
+    );
+    expect(xp, 25 * 4);
   });
 
   group('ExperienceLevel.forXp', () {
     test('boundaries map to the right tier', () {
       expect(ExperienceLevel.forXp(0), ExperienceLevel.newDeveloper);
-      expect(ExperienceLevel.forXp(499), ExperienceLevel.newDeveloper);
-      expect(ExperienceLevel.forXp(500), ExperienceLevel.beginnerDeveloper);
-      expect(ExperienceLevel.forXp(1999), ExperienceLevel.beginnerDeveloper);
-      expect(ExperienceLevel.forXp(2000), ExperienceLevel.juniorDeveloper);
-      expect(ExperienceLevel.forXp(5999), ExperienceLevel.juniorDeveloper);
+      expect(ExperienceLevel.forXp(1999), ExperienceLevel.newDeveloper);
+      expect(ExperienceLevel.forXp(2000), ExperienceLevel.beginnerDeveloper);
+      expect(ExperienceLevel.forXp(7999), ExperienceLevel.beginnerDeveloper);
+      expect(ExperienceLevel.forXp(8000), ExperienceLevel.juniorDeveloper);
+      expect(ExperienceLevel.forXp(23999), ExperienceLevel.juniorDeveloper);
       expect(
-        ExperienceLevel.forXp(6000),
+        ExperienceLevel.forXp(24000),
         ExperienceLevel.intermediateDeveloper,
       );
       expect(
-        ExperienceLevel.forXp(14999),
+        ExperienceLevel.forXp(59999),
         ExperienceLevel.intermediateDeveloper,
       );
-      expect(ExperienceLevel.forXp(15000), ExperienceLevel.advancedDeveloper);
+      expect(ExperienceLevel.forXp(60000), ExperienceLevel.advancedDeveloper);
     });
   });
 }

@@ -32,6 +32,12 @@ class ModuleTestProgressRepositoryImpl
   }
 
   @override
+  Future<int> getPassedModuleCount() async {
+    final rows = await _db.select(_db.moduleTestProgressTable).get();
+    return rows.length;
+  }
+
+  @override
   Future<void> markModulePassed({
     required String learningPathId,
     required String moduleId,
