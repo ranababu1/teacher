@@ -93,8 +93,6 @@ class _ContinueLearningCard extends ConsumerWidget {
       ContinueLearningConcept(concept: final concept) => _HeroGradientCard(
         eyebrow: 'Continue Learning',
         title: concept.title,
-        subtitle: concept.description,
-        ctaLabel: 'Continue',
         onTap: () => context.go(
           Routes.lesson(concept.learningPathId, concept.moduleId, concept.id),
         ),
@@ -113,8 +111,6 @@ class _EmptyContinueCard extends StatelessWidget {
     return _HeroGradientCard(
       eyebrow: "Let's start",
       title: 'Learning.',
-      subtitle: 'Pick a learning path to get started.',
-      ctaLabel: 'Browse Learning Paths',
       onTap: () => context.go(Routes.learn),
     );
   }
@@ -130,8 +126,6 @@ class _PathCompletedCard extends StatelessWidget {
     return _HeroGradientCard(
       eyebrow: 'Course Complete',
       title: "You've completed $pathTitle! 🎉",
-      subtitle: 'Great work. Ready for another course?',
-      ctaLabel: 'Browse Learning Paths',
       onTap: () => context.go(Routes.learn),
     );
   }
@@ -142,21 +136,18 @@ class _PathCompletedCard extends StatelessWidget {
 /// gradient wash — an earlier version used [AppGradients.primary] as the
 /// whole card background with white text, which the user found "very
 /// unreadable" once actually used) with the brand gradient applied
-/// selectively: to the last word of [title] (via [_GradientTailHeadline])
-/// and to the CTA button, matching the reference mockups' own treatment.
+/// selectively to the last word of [title] (via [_GradientTailHeadline]).
+/// Pared down to just the eyebrow, title, and visual — the whole card is
+/// one tap target via [onTap], with no separate subtitle or CTA button.
 class _HeroGradientCard extends StatelessWidget {
   const _HeroGradientCard({
     required this.eyebrow,
     required this.title,
-    required this.subtitle,
-    required this.ctaLabel,
     required this.onTap,
   });
 
   final String eyebrow;
   final String title;
-  final String subtitle;
-  final String ctaLabel;
   final VoidCallback onTap;
 
   @override
@@ -200,17 +191,6 @@ class _HeroGradientCard extends StatelessWidget {
                         color: colorScheme.onSurface,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      subtitle,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    _HeroCtaButton(label: ctaLabel, onPressed: onTap),
                   ],
                 ),
               ),
@@ -292,51 +272,6 @@ class _GradientTailHeadline extends StatelessWidget {
           ),
         if (trailing != null) Text(' $trailing', style: style),
       ],
-    );
-  }
-}
-
-/// The hero card's CTA — a gradient-filled button (the one place per
-/// hero the brand gradient still appears at full strength), matching the
-/// reference mockups' "Browse Learning Paths →" treatment.
-class _HeroCtaButton extends StatelessWidget {
-  const _HeroCtaButton({required this.label, required this.onPressed});
-
-  final String label;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onPressed,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
-          decoration: BoxDecoration(
-            gradient: AppGradients.primary(colorScheme),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                label,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 18,
-                ),
-              ),
-              const SizedBox(width: 6),
-              const Icon(Icons.arrow_forward, color: Colors.white, size: 18),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
