@@ -31,6 +31,7 @@ class ProfileStatsService {
     DateTime? now,
     int passedModuleTestCount = 0,
     int appOpenDays = 0,
+    List<int> passedModuleScores = const [],
   }) {
     final progressByConceptId = {for (final p in allProgress) p.conceptId: p};
     final coursesCompleted = paths
@@ -67,11 +68,15 @@ class ProfileStatsService {
       appOpenDays: appOpenDays,
     );
 
+    final experienceLevel = ExperienceLevel.forXp(totalXp);
     final badges = _badgeEvaluator.evaluate(
       coursesCompleted: coursesCompleted,
       longestStreak: longestStreak,
       codingChallengesAttempted: codingChallengesAttempted,
       lessonsCompleted: lessonsCompleted,
+      experienceLevel: experienceLevel,
+      quizzesPassed: passedModuleScores.length,
+      perfectQuizzes: passedModuleScores.where((s) => s == 100).length,
     );
 
     return LearnerStats(
@@ -81,7 +86,7 @@ class ProfileStatsService {
       codingChallengesAttempted: codingChallengesAttempted,
       currentStreak: currentStreak,
       totalXp: totalXp,
-      experienceLevel: ExperienceLevel.forXp(totalXp),
+      experienceLevel: experienceLevel,
       badges: badges,
     );
   }

@@ -93,18 +93,27 @@ final appOpenXpAwardProvider = FutureProvider<void>((ref) async {
 });
 
 final learnerStatsProvider = FutureProvider<LearnerStats>((ref) async {
-  final paths = await ref.watch(learningPathsProvider.future);
-  final allProgress = await ref.watch(allStudentProgressProvider.future);
-  final allAttempts = await ref.watch(allAttemptsProvider.future);
-  final passedModuleTestCount = await ref.watch(
-    allPassedModuleTestCountProvider.future,
-  );
-  final appOpenDays = await ref.watch(appOpenDayCountProvider.future);
+  // Start every independent read before awaiting any of them, so they
+  // run concurrently instead of one after another.
+  final pathsFuture = ref.watch(learningPathsProvider.future);
+  final progressFuture = ref.watch(allStudentProgressProvider.future);
+  final attemptsFuture = ref.watch(allAttemptsProvider.future);
+  final passedCountFuture = ref.watch(allPassedModuleTestCountProvider.future);
+  final appOpenFuture = ref.watch(appOpenDayCountProvider.future);
+  final scoresFuture = ref.watch(allPassedModuleScoresProvider.future);
+
+  final paths = await pathsFuture;
+  final allProgress = await progressFuture;
+  final allAttempts = await attemptsFuture;
+  final passedModuleTestCount = await passedCountFuture;
+  final appOpenDays = await appOpenFuture;
+  final passedModuleScores = await scoresFuture;
   return ProfileStatsService().compute(
     paths: paths,
     allProgress: allProgress,
     allAttempts: allAttempts,
     passedModuleTestCount: passedModuleTestCount,
     appOpenDays: appOpenDays,
+    passedModuleScores: passedModuleScores,
   );
 });

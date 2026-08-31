@@ -38,6 +38,27 @@ class ModuleTestProgressRepositoryImpl
   }
 
   @override
+  Future<List<int>> getPassedModuleScores() async {
+    final rows =
+        await (_db.select(_db.moduleTestProgressTable)
+              ..where((t) => t.isGrandfathered.equals(false)))
+            .get();
+    return rows.map((r) => r.scorePercent).toList();
+  }
+
+  @override
+  Future<List<int>> getPassedModuleScoresForPath(String learningPathId) async {
+    final rows =
+        await (_db.select(_db.moduleTestProgressTable)..where(
+              (t) =>
+                  t.learningPathId.equals(learningPathId) &
+                  t.isGrandfathered.equals(false),
+            ))
+            .get();
+    return rows.map((r) => r.scorePercent).toList();
+  }
+
+  @override
   Future<void> markModulePassed({
     required String learningPathId,
     required String moduleId,

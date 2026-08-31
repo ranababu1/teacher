@@ -10,6 +10,7 @@ import '../../data/student_progress_repository_impl.dart';
 import '../../domain/concept_mastery_repository.dart';
 import '../../domain/learning_path_progress_repository.dart';
 import '../../domain/models/concept_mastery.dart';
+import '../../domain/models/course_status.dart';
 import '../../domain/models/mastery_status.dart';
 import '../../domain/models/path_progress_summary.dart';
 import '../../domain/models/student_progress.dart';
@@ -108,6 +109,34 @@ final allPassedModuleTestCountProvider = FutureProvider<int>((ref) {
   ref.watch(dataRevisionProvider);
   return ref.watch(moduleTestProgressRepositoryProvider).getPassedModuleCount();
 });
+
+/// Scores for every genuinely-passed module test — feeds quiz-related
+/// badges (quiz count, perfect-score count).
+final allPassedModuleScoresProvider = FutureProvider<List<int>>((ref) {
+  ref.watch(dataRevisionProvider);
+  return ref
+      .watch(moduleTestProgressRepositoryProvider)
+      .getPassedModuleScores();
+});
+
+/// A started course's performance tier for the Profile screen's "My
+/// Skills" list — see [CourseStatus]. Skips the quiz-score query
+/// entirely while the course isn't complete yet, since it isn't needed.
+final courseStatusProvider =
+    FutureProvider.family<CourseStatus, ({String pathId, double overallPercent})>((
+      ref,
+      args,
+    ) async {
+      if (args.overallPercent < 1.0) return CourseStatus.inProgress;
+      ref.watch(dataRevisionProvider);
+      final scores = await ref
+          .watch(moduleTestProgressRepositoryProvider)
+          .getPassedModuleScoresForPath(args.pathId);
+      return CourseStatus.fromCompletion(
+        overallPercent: args.overallPercent,
+        passedModuleScores: scores,
+      );
+    });
 
 /// The entry point UI should call once a learner passes a module's topic
 /// test — wraps the plain repository write with telling dependent read

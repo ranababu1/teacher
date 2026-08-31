@@ -13,6 +13,7 @@ class LabeledProgressBar extends StatelessWidget {
     required this.progress,
     this.trailing,
     this.color,
+    this.labelBadge,
   });
 
   final String label;
@@ -26,6 +27,10 @@ class LabeledProgressBar extends StatelessWidget {
   /// than the shared brand gradient. Omit to keep the existing look.
   final Color? color;
 
+  /// A small badge shown immediately after [label] (e.g. a course's
+  /// "In Progress"/"Passed"/"Expert" status) — omit for the plain label.
+  final Widget? labelBadge;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -37,7 +42,24 @@ class LabeledProgressBar extends StatelessWidget {
       children: [
         Row(
           children: [
-            Expanded(child: Text(label, style: theme.textTheme.bodyMedium)),
+            Expanded(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
+                      label,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
+                  if (labelBadge != null) ...[
+                    const SizedBox(width: 8),
+                    labelBadge!,
+                  ],
+                ],
+              ),
+            ),
             Text(
               percentLabel,
               style: theme.textTheme.bodyMedium?.copyWith(
