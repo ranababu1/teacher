@@ -49,6 +49,7 @@ class AppSettings {
     required this.flashcardFixedTimes,
     required this.debugMode,
     required this.aiRequestLogging,
+    required this.crashReportsEnabled,
     required this.aiProviderKind,
     required this.selectedModelByProvider,
     required this.customModelsByProvider,
@@ -67,6 +68,12 @@ class AppSettings {
   final List<String> flashcardFixedTimes;
   final bool debugMode;
   final bool aiRequestLogging;
+
+  /// Whether anonymous crash reports (stack traces only, no user data) are
+  /// sent to Firebase Crashlytics. On by default; the native SDK persists
+  /// the effective state across restarts — this field mirrors it for the
+  /// Settings UI.
+  final bool crashReportsEnabled;
   final AiProviderKind aiProviderKind;
 
   /// The model selected for each provider, if the learner has picked one
@@ -88,6 +95,7 @@ class AppSettings {
     flashcardFixedTimes: ['09:00', '13:00', '17:00', '20:00'],
     debugMode: false,
     aiRequestLogging: false,
+    crashReportsEnabled: true,
     aiProviderKind: AiProviderKind.gemini,
     selectedModelByProvider: {},
     customModelsByProvider: {},
@@ -104,6 +112,7 @@ class AppSettings {
     List<String>? flashcardFixedTimes,
     bool? debugMode,
     bool? aiRequestLogging,
+    bool? crashReportsEnabled,
     AiProviderKind? aiProviderKind,
     Map<AiProviderKind, String>? selectedModelByProvider,
     Map<AiProviderKind, List<String>>? customModelsByProvider,
@@ -121,6 +130,7 @@ class AppSettings {
       flashcardFixedTimes: flashcardFixedTimes ?? this.flashcardFixedTimes,
       debugMode: debugMode ?? this.debugMode,
       aiRequestLogging: aiRequestLogging ?? this.aiRequestLogging,
+      crashReportsEnabled: crashReportsEnabled ?? this.crashReportsEnabled,
       aiProviderKind: aiProviderKind ?? this.aiProviderKind,
       selectedModelByProvider:
           selectedModelByProvider ?? this.selectedModelByProvider,

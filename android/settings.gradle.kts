@@ -21,6 +21,10 @@ plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
     id("com.android.application") version "9.1.0" apply false
     id("org.jetbrains.kotlin.android") version "2.4.0" apply false
+    // Firebase: this exact pair is what firebase_core 4.14.0 (pubspec.yaml)
+    // pins via `flutterfire configure` — bump them together.
+    id("com.google.gms.google-services") version "4.4.4" apply false
+    id("com.google.firebase.crashlytics") version "3.0.7" apply false
 }
 
 include(":app")

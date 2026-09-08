@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/config/app_config.dart';
@@ -145,7 +146,13 @@ final teachingContextBuilderProvider = Provider<TeachingContextBuilder>((
 
 /// Whether AI request logging is enabled — watched by every AI Teacher use
 /// case provider (here and in `grading_providers.dart`).
+///
+/// Hard-off in release builds no matter what the persisted setting says:
+/// request metadata is dev-machine-only. (The release logger gate in
+/// `AppLogger` silences the output anyway — this keeps the details from
+/// even being assembled.)
 final aiRequestLoggingEnabledProvider = Provider<bool>((ref) {
+  if (kReleaseMode) return false;
   return ref.watch(settingsControllerProvider).valueOrNull?.aiRequestLogging ??
       false;
 });

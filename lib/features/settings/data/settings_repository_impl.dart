@@ -20,6 +20,7 @@ class SettingsRepositoryImpl implements SettingsRepository {
   static const _keyFlashcardFixedTimes = 'flashcard_fixed_times';
   static const _keyDebugMode = 'debug_mode';
   static const _keyAiRequestLogging = 'ai_request_logging';
+  static const _keyCrashReportsEnabled = 'crash_reports_enabled';
   static const _keyAiProviderKind = 'ai_provider_kind';
 
   static String _keySelectedModel(AiProviderKind provider) =>
@@ -63,6 +64,7 @@ class SettingsRepositoryImpl implements SettingsRepository {
     final flashcardFixedTimesRaw = await _read(_keyFlashcardFixedTimes);
     final debugRaw = await _read(_keyDebugMode);
     final aiLoggingRaw = await _read(_keyAiRequestLogging);
+    final crashReportsRaw = await _read(_keyCrashReportsEnabled);
     final aiProviderKindRaw = await _read(_keyAiProviderKind);
 
     final selectedModelByProvider = <AiProviderKind, String>{};
@@ -115,6 +117,9 @@ class SettingsRepositoryImpl implements SettingsRepository {
       aiRequestLogging: aiLoggingRaw == null
           ? defaults.aiRequestLogging
           : aiLoggingRaw == 'true',
+      crashReportsEnabled: crashReportsRaw == null
+          ? defaults.crashReportsEnabled
+          : crashReportsRaw == 'true',
       aiProviderKind: AiProviderKind.values.firstWhere(
         (k) => k.name == aiProviderKindRaw,
         orElse: () => defaults.aiProviderKind,
@@ -163,6 +168,10 @@ class SettingsRepositoryImpl implements SettingsRepository {
   @override
   Future<void> setAiRequestLogging(bool enabled) =>
       _write(_keyAiRequestLogging, enabled.toString());
+
+  @override
+  Future<void> setCrashReportsEnabled(bool enabled) =>
+      _write(_keyCrashReportsEnabled, enabled.toString());
 
   @override
   Future<void> setAiProviderKind(AiProviderKind kind) =>

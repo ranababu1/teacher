@@ -1,11 +1,30 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+    // Firebase: consumes android/app/google-services.json (project
+    // "teacher-max") and uploads Dart symbols for obfuscated builds.
+    id("com.google.gms.google-services")
+    id("com.google.firebase.crashlytics")
+}
+
+// Release signing, standard Flutter key.properties style. The file is
+// local-only (see .gitignore); CI materializes it from GitHub Secrets
+// (see .github/workflows/release.yml). When it's absent — plain dev
+// machines — release builds fall back to the debug keystore so they keep
+// building anywhere.
+val keystorePropertiesFile = rootProject.file("key.properties")
+val keystoreProperties = Properties()
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
 }
 
 android {
-    namespace = "com.example.teacher"
+    // Reverse-DNS of teacher.imrn.dev. The Play Store treats the application
+    // id as permanent once the app is published — never change it.
+    namespace = "dev.imrn.teacher"
     // Pinned instead of flutter.compileSdkVersion: that resolves to API 37,
     // whose SDK platform is only published as "android-37.0" on this
     // machine (a naming mismatch with newer Android point-releases), not
@@ -22,10 +41,7 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.teacher"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        applicationId = "dev.imrn.teacher"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         // Uses the version code from pubspec.yaml. When using split APKs, 1000 * ABI_VERSION
@@ -36,11 +52,26 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            if (keystorePropertiesFile.exists()) {
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+                storeFile = file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Real upload keystore when key.properties is present; the debug
+            // keystore otherwise (local builds, CI smoke checks).
+            signingConfig = if (keystorePropertiesFile.exists()) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }

@@ -1,6 +1,10 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../../../../core/services/crash_reporting_service.dart';
 import '../../../../shared/widgets/async_value_view.dart';
 import '../../../../shared/widgets/glass_app_bar.dart';
 import '../../../../shared/widgets/gradient_card.dart';
@@ -222,30 +226,58 @@ class SettingsScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 16),
               _SectionCard(
-                title: 'Developer',
+                title: 'Privacy & Crash Reports',
                 children: [
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('Debug mode'),
-                    value: settings.debugMode,
-                    onChanged: (value) => ref
-                        .read(settingsControllerProvider.notifier)
-                        .setDebugMode(value),
-                  ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('AI request logging'),
+                    title: const Text('Share crash reports'),
                     subtitle: const Text(
-                      'Logs request metadata only — never prompts or keys.',
+                      'If the app crashes, an anonymous stack trace is sent '
+                      'to Firebase Crashlytics so bugs can be fixed faster. '
+                      'No analytics, no ads, no accounts — and this can be '
+                      'turned off at any time.',
                     ),
-                    value: settings.aiRequestLogging,
+                    value: settings.crashReportsEnabled,
                     onChanged: (value) => ref
                         .read(settingsControllerProvider.notifier)
-                        .setAiRequestLogging(value),
+                        .setCrashReportsEnabled(value),
                   ),
-                  if (settings.debugMode) const _SendTestFlashcardButton(),
+                  const _PrivacyPolicyTile(),
+                  // Debug builds only; tree-shaken out of release/profile.
+                  if (kDebugMode) const _CrashTestTile(),
                 ],
               ),
+              // Developer tooling never ships: hidden (and tree-shaken) in
+              // release builds. AI request logging is additionally hard-off
+              // in release at the provider level.
+              if (kDebugMode) ...[
+                const SizedBox(height: 16),
+                _SectionCard(
+                  title: 'Developer',
+                  children: [
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Debug mode'),
+                      value: settings.debugMode,
+                      onChanged: (value) => ref
+                          .read(settingsControllerProvider.notifier)
+                          .setDebugMode(value),
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('AI request logging'),
+                      subtitle: const Text(
+                        'Logs request metadata only — never prompts or keys.',
+                      ),
+                      value: settings.aiRequestLogging,
+                      onChanged: (value) => ref
+                          .read(settingsControllerProvider.notifier)
+                          .setAiRequestLogging(value),
+                    ),
+                    if (settings.debugMode) const _SendTestFlashcardButton(),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
@@ -293,6 +325,87 @@ class _SectionCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Opens the privacy policy in the system browser; falls back to copying
+/// the URL to the clipboard when no browser is available.
+class _PrivacyPolicyTile extends StatelessWidget {
+  const _PrivacyPolicyTile();
+
+  static const _url = 'https://teacher.imrn.dev/privacy';
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      title: const Text('Privacy policy'),
+      subtitle: const Text('What the app collects (almost nothing) and why.'),
+      trailing: const Icon(Icons.open_in_new, size: 18),
+      onTap: () async {
+        final messenger = ScaffoldMessenger.of(context);
+        final opened = await launchUrl(
+          Uri.parse(_url),
+          mode: LaunchMode.externalApplication,
+        );
+        if (!opened) {
+          await Clipboard.setData(const ClipboardData(text: _url));
+          messenger.showSnackBar(
+            const SnackBar(
+              content: Text(
+                'No browser found — the privacy policy URL was copied to '
+                'the clipboard instead.',
+              ),
+            ),
+          );
+        }
+      },
+    );
+  }
+}
+
+/// Debug builds only (gated by [kDebugMode] where used, so it never ships
+/// in release/profile): deliberately crashes the app to verify the whole
+/// Crashlytics pipeline end to end.
+class _CrashTestTile extends StatelessWidget {
+  const _CrashTestTile();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      title: const Text('Trigger a test crash'),
+      subtitle: const Text(
+        'Debug builds only. Crashes the app immediately — the report shows '
+        'up in Firebase (teacher-max → Crashlytics) within ~15 minutes.',
+      ),
+      trailing: const Icon(Icons.bug_report_outlined, size: 18),
+      onTap: () async {
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Crash the app?'),
+            content: const Text(
+              'The app will close right away. Reopen it afterwards — '
+              'Crashlytics sends the report on the next launch.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Crash now'),
+              ),
+            ],
+          ),
+        );
+        if (confirmed ?? false) {
+          CrashReportingService.crash();
+        }
+      },
     );
   }
 }

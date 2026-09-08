@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/database/database_provider.dart';
+import '../../../../core/services/crash_reporting_service.dart';
 import '../../data/settings_repository_impl.dart';
 import '../../domain/settings_models.dart';
 import '../../domain/settings_repository.dart';
@@ -70,6 +71,17 @@ class SettingsController extends AsyncNotifier<AppSettings> {
   Future<void> setAiRequestLogging(bool enabled) async {
     await ref.read(settingsRepositoryProvider).setAiRequestLogging(enabled);
     _update((s) => s.copyWith(aiRequestLogging: enabled));
+  }
+
+  /// Persists crash-report consent and applies it to the Crashlytics SDK
+  /// right away (the SDK itself also persists the flag, so restarts keep
+  /// the same state without any startup re-sync).
+  Future<void> setCrashReportsEnabled(bool enabled) async {
+    await ref
+        .read(settingsRepositoryProvider)
+        .setCrashReportsEnabled(enabled);
+    await CrashReportingService.setCollectionEnabled(enabled);
+    _update((s) => s.copyWith(crashReportsEnabled: enabled));
   }
 
   Future<void> setAiProviderKind(AiProviderKind kind) async {
