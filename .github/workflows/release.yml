@@ -1,13 +1,20 @@
 name: Release
 
 # Builds and publishes a signed release when a version tag is pushed:
-#   git tag v0.16.0 && git push origin v0.16.0
+#   git tag v0.17.0 && git push origin v0.17.0
+# Tag names containing a hyphen (v0.17.0-rc1, v0.17.0-beta1) publish as
+# pre-releases, so pipeline rehearsals never take the "Latest" badge.
 #
-# Produces:
-#   - universal obfuscated release APK -> attached to the GitHub Release
-#   - signed .aab                      -> workflow artifact (for Play Store)
-#   - Dart symbol files                -> workflow artifact (kept so a
-#                                        Crashlytics upload can be redone)
+# Attaches four APKs to the GitHub Release. rNN is the versionCode from
+# pubspec.yaml (0.17.0+21 -> r21), matching the hand-published releases
+# up to v0.15.0:
+#   teacher-arm64-v8a-rNN.apk    most modern phones (2018+)
+#   teacher-armeabi-v7a-rNN.apk  older 32-bit phones
+#   teacher-x86_64-rNN.apk       emulators / x86 devices
+#   teacher-rNN.apk              universal APK (any device; largest)
+# Also archives workflow artifacts (90 days):
+#   - signed .aab                 for the Play Store
+#   - Dart symbol files           kept so a Crashlytics upload can be redone
 #
 # Requires four repository secrets (Settings -> Secrets and variables ->
 # Actions); the build fails fast if any are missing:
@@ -62,10 +69,32 @@ jobs:
           storeFile=upload-keystore.jks
           EOF
 
-      - name: Build obfuscated release APK and app bundle
+      - name: Build obfuscated release APKs and app bundle
         run: |
           flutter build apk --release --obfuscate --split-debug-info=build/symbols
+          flutter build apk --release --obfuscate --split-debug-info=build/symbols --split-per-abi
           flutter build appbundle --release --obfuscate --split-debug-info=build/symbols
+
+      - name: Stage the APKs under their public file names
+        run: |
+          # rNN = versionCode from pubspec.yaml (0.17.0+21 -> r21), matching
+          # the naming of the hand-published releases up to v0.15.0.
+          R="r$(sed -nE 's/^version: [0-9]+\.[0-9]+\.[0-9]+\+([0-9]+).*$/\1/p' pubspec.yaml)"
+          test -n "${R#r}" || { echo 'could not read versionCode from pubspec.yaml' >&2; exit 1; }
+          mkdir -p release-assets
+          cp build/app/outputs/flutter-apk/app-release.apk             "release-assets/teacher-${R}.apk"
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk   "release-assets/teacher-arm64-v8a-${R}.apk"
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk "release-assets/teacher-armeabi-v7a-${R}.apk"
+          cp build/app/outputs/flutter-apk/app-x86_64-release.apk      "release-assets/teacher-x86_64-${R}.apk"
+          cat > release-assets/download-guide.md <<EOF
+          ### Which file should I download?
+
+          - \`teacher-arm64-v8a-${R}.apk\` — most modern phones (2018+)
+          - \`teacher-armeabi-v7a-${R}.apk\` — older 32-bit phones
+          - \`teacher-x86_64-${R}.apk\` — emulators / x86 devices
+          - \`teacher-${R}.apk\` — universal APK (any device; largest)
+          EOF
+          ls -l release-assets
 
       - name: Archive Dart symbol files
         uses: actions/upload-artifact@v4
@@ -81,8 +110,31 @@ jobs:
           path: build/app/outputs/bundle/release/app-release.aab
           retention-days: 90
 
-      - name: Create GitHub Release with the APK attached
+      - name: Create GitHub Release with the APKs attached
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
-          files: build/app/outputs/flutter-apk/app-release.apk
+          # Hyphenated tags (v0.17.0-rc1, v0.17.0-beta1) publish as
+          # pre-releases; plain version tags publish as stable.
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: release-assets/*.apk
+          # Auto-generated notes first, then the download guide.
+          body_path: release-assets/download-guide.md
+          append_body: true
+
+      - name: Label each APK asset with the devices it fits
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${GITHUB_REF_NAME}" \
+            --jq '.assets[] | [.id, .name] | @tsv' |
+          while IFS=$'\t' read -r id name; do
+            case "$name" in
+              *arm64-v8a*)   label='most modern phones (2018+)' ;;
+              *armeabi-v7a*) label='older 32-bit phones' ;;
+              *x86_64*)      label='emulators / x86 devices' ;;
+              *)             label='universal APK (any device)' ;;
+            esac
+            echo "labeling $name: $label"
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/releases/assets/${id}" -f label="$label"
+          done
