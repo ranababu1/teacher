@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-10-13 (release: v0.16.1 - crash fixes: safe Firebase startup, flash-card recovery)
+
+### Fixed
+- **Firebase startup can no longer crash the app**
+  (lib/core/services/crash_reporting_service.dart, lib/main.dart):
+  `Firebase.initializeApp()` is now wrapped in try/catch. On failure
+  (broken google-services config, Play services missing, plugin error)
+  the error is logged as a warning, `isAvailable` stays false, and the
+  app starts normally without crash reporting. All other Crashlytics
+  calls were already guarded by `_initialized`. Test seams
+  (`initializeFirebase`, `isSupportedPlatform`) are `@visibleForTesting`.
+  Tests: test/crash_reporting_service_test.dart.
+
 ## 2026-09-09 (release assets: per-ABI APKs restored; v0.16.0 retrofitted)
 
 ### Changed

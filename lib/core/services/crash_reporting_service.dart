@@ -2,6 +2,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 
+import 'app_logger.dart';
+
 /// Single funnel for everything crash-reporting so the rest of the app
 /// never needs to know whether Crashlytics is available on the current
 /// platform or even initialized (Android-only for now).
@@ -24,18 +26,38 @@ class CrashReportingService {
   /// Firebase reads its configuration from android/app/google-services.json
   /// (project "teacher-max") via the google-services Gradle plugin, so no
   /// Dart-side options are needed.
-  static Future<void> initialize() async {
-    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+  ///
+  /// Never throws: if Firebase fails to start (missing or broken
+  /// google-services config, Play services unavailable, a plugin error),
+  /// the failure is logged and the app simply runs without crash
+  /// reporting. [initializeFirebase] and [isSupportedPlatform] exist only
+  /// so tests can simulate those cases.
+  static Future<void> initialize({
+    @visibleForTesting Future<void> Function()? initializeFirebase,
+    @visibleForTesting bool? isSupportedPlatform,
+  }) async {
+    final supported =
+        isSupportedPlatform ??
+        (!kIsWeb && defaultTargetPlatform == TargetPlatform.android);
+    if (!supported) return;
 
-    await Firebase.initializeApp();
+    try {
+      await (initializeFirebase ?? _initializeFirebase)();
+    } catch (e, stack) {
+      _initialized = false;
+      AppLogger.warning(
+        'Firebase failed to initialize; running without crash reporting: '
+        '$e\n$stack',
+      );
+      return;
+    }
     _initialized = true;
 
     // Framework errors are recorded as fatal (the Flutter framework
     // failed); asynchronous errors that escape past the platform
     // dispatcher are recorded as non-fatal, because returning true below
     // keeps the app running.
-    FlutterError.onError =
-        FirebaseCrashlytics.instance.recordFlutterFatalError;
+    FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
     PlatformDispatcher.instance.onError = (error, stack) {
       FirebaseCrashlytics.instance.recordFlutterError(
         FlutterErrorDetails(exception: error, stack: stack),
@@ -44,14 +66,20 @@ class CrashReportingService {
     };
   }
 
+  static Future<void> _initializeFirebase() async {
+    await Firebase.initializeApp();
+  }
+
+  /// Resets state between tests.
+  @visibleForTesting
+  static void resetForTesting() => _initialized = false;
+
   /// Enables/disables Crashlytics collection. The native SDK persists the
   /// flag itself, so the choice survives restarts; the Settings screen also
   /// mirrors it in the app database for the UI.
   static Future<void> setCollectionEnabled(bool enabled) async {
     if (!_initialized) return;
-    await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(
-      enabled,
-    );
+    await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(enabled);
   }
 
   /// Deliberately crashes the app — used only by the debug-build crash test
