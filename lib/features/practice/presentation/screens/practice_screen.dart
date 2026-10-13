@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/routes.dart';
 import '../../../../shared/widgets/async_value_view.dart';
@@ -13,6 +12,7 @@ import '../../../progress/domain/models/mastery_status.dart';
 import '../../../progress/presentation/providers/progress_providers.dart';
 import '../../../progress/presentation/widgets/mastery_status_icon.dart';
 import '../providers/practice_providers.dart';
+import '../../../../app/navigation.dart';
 
 class PracticeScreen extends ConsumerWidget {
   const PracticeScreen({super.key});
@@ -60,7 +60,7 @@ class PracticeScreen extends ConsumerWidget {
                       if (startedIds.isEmpty) ...[
                         const SizedBox(height: 16),
                         FilledButton(
-                          onPressed: () => context.go(Routes.learn),
+                          onPressed: () => context.switchToTab(Routes.learn),
                           child: const Text('Browse Learning Paths'),
                         ),
                       ],
@@ -117,8 +117,7 @@ class PracticeScreen extends ConsumerWidget {
                   GradientCard(
                     margin: const EdgeInsets.only(bottom: 8),
                     child: ListTile(
-                      onTap: () =>
-                          context.push(Routes.practiceSession(concept.id)),
+                      onTap: () => context.openPracticeSession(concept.id),
                       leading: MasteryStatusIcon(
                         status:
                             masteryByConceptId[concept.id]?.status ??

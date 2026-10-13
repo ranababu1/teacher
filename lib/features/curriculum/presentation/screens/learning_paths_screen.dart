@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
-import '../../../../core/constants/routes.dart';
 import '../../../../shared/utils/subject_style.dart';
 import '../../../../shared/widgets/async_value_view.dart';
 import '../../../../shared/widgets/difficulty_chip.dart';
@@ -15,6 +13,7 @@ import '../../../progress/domain/models/path_progress_summary.dart';
 import '../../../progress/presentation/providers/progress_providers.dart';
 import '../../domain/models/learning_path.dart';
 import '../curriculum_providers.dart';
+import '../../../../app/navigation.dart';
 
 class LearningPathsScreen extends ConsumerWidget {
   const LearningPathsScreen({super.key});
@@ -30,8 +29,7 @@ class LearningPathsScreen extends ConsumerWidget {
         child: AsyncValueView(
           value: pathsValue,
           onRetry: () => ref.invalidate(learningPathsProvider),
-          skeleton: () =>
-              const SkeletonCardList(itemCount: 6, itemHeight: 222),
+          skeleton: () => const SkeletonCardList(itemCount: 6, itemHeight: 222),
           data: (paths) {
             final summaries = summariesValue.valueOrNull;
             return GridView.builder(
@@ -86,7 +84,7 @@ class _LearningPathCard extends StatelessWidget {
       child: GradientCard(
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: () => context.go(Routes.learningPath(path.id)),
+          onTap: () => context.openLearningPath(path.id),
           child: Padding(
             padding: const EdgeInsets.all(14),
             child: Column(

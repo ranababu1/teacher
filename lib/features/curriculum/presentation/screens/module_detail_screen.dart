@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
-import '../../../../core/constants/routes.dart';
 import '../../../../shared/widgets/async_value_view.dart';
 import '../../../../shared/widgets/difficulty_chip.dart';
 import '../../../../shared/widgets/glass_app_bar.dart';
@@ -14,6 +12,7 @@ import '../../../progress/presentation/widgets/mastery_status_icon.dart';
 import '../curriculum_providers.dart';
 import '../widgets/course_locked_state.dart';
 import '../widgets/topic_locked_state.dart';
+import '../../../../app/navigation.dart';
 
 class ModuleDetailScreen extends ConsumerWidget {
   const ModuleDetailScreen({
@@ -82,9 +81,8 @@ class ModuleDetailScreen extends ConsumerWidget {
                 for (final concept in module.concepts) ...[
                   GradientCard(
                     child: ListTile(
-                      onTap: () => context.go(
-                        Routes.lesson(pathId, moduleId, concept.id),
-                      ),
+                      onTap: () =>
+                          context.openLesson(pathId, moduleId, concept.id),
                       leading: MasteryStatusIcon(
                         status:
                             masteryByConceptId[concept.id]?.status ??
@@ -151,19 +149,19 @@ class _TopicTestCta extends StatelessWidget {
     if (isPassed) {
       return GradientCard(
         child: ListTile(
-          leading: Icon(Icons.check_circle_outline, color: theme.colorScheme.primary),
+          leading: Icon(
+            Icons.check_circle_outline,
+            color: theme.colorScheme.primary,
+          ),
           title: const Text('Topic test passed'),
           trailing: nextModuleId == null
               ? null
               : FilledButton(
-                  // push, not go: this module and the next one are
-                  // siblings (same route depth) — go() would rebuild the
-                  // whole branch stack from this URI and discard the
-                  // current module page, so swiping back would skip
-                  // straight past it to the path detail screen instead
-                  // of landing back here.
+                  // Replace, so finished topics do not pile up in the
+                  // back stack: back from the next topic returns to the
+                  // learning path.
                   onPressed: () =>
-                      context.push(Routes.module(pathId, nextModuleId!)),
+                      context.replaceWithNextTopic(pathId, nextModuleId!),
                   child: const Text('Continue'),
                 ),
         ),
@@ -174,11 +172,9 @@ class _TopicTestCta extends StatelessWidget {
       child: ListTile(
         leading: Icon(Icons.quiz_outlined, color: theme.colorScheme.primary),
         title: const Text('Topic test'),
-        subtitle: const Text(
-          'Pass this to unlock the next topic.',
-        ),
+        subtitle: const Text('Pass this to unlock the next topic.'),
         trailing: FilledButton(
-          onPressed: () => context.go(Routes.moduleTest(pathId, moduleId)),
+          onPressed: () => context.openTopicTest(pathId, moduleId),
           child: const Text('Take Topic Test'),
         ),
       ),

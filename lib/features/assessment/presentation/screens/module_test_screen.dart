@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/routes.dart';
 import '../../../../core/errors/app_exception.dart';
@@ -18,6 +17,7 @@ import '../../../curriculum/presentation/curriculum_providers.dart';
 import '../../../progress/domain/models/module_test_result.dart';
 import '../../../progress/domain/module_unlock.dart';
 import '../../../progress/presentation/providers/progress_providers.dart';
+import '../../../../app/navigation.dart';
 
 /// A gating test covering an entire module ("topic"), always built from
 /// the module's own curated static assessments (curriculum content, not
@@ -155,8 +155,7 @@ class _ModuleTestScreenState extends ConsumerState<ModuleTestScreen> {
       body: SafeArea(
         child: AsyncValueView(
           value: pathValue,
-          onRetry: () =>
-              ref.invalidate(learningPathProvider(widget.pathId)),
+          onRetry: () => ref.invalidate(learningPathProvider(widget.pathId)),
           data: (path) {
             final module = path?.findModule(widget.moduleId);
             if (path == null || module == null) {
@@ -183,7 +182,11 @@ class _ModuleTestScreenState extends ConsumerState<ModuleTestScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.quiz_outlined, size: 40, color: theme.colorScheme.primary),
+            Icon(
+              Icons.quiz_outlined,
+              size: 40,
+              color: theme.colorScheme.primary,
+            ),
             const SizedBox(height: 16),
             Text(
               module.title,
@@ -273,7 +276,8 @@ class _ModuleTestScreenState extends ConsumerState<ModuleTestScreen> {
                   )
                 else ...[
                   _FeedbackRow(
-                    isCorrect: _selectedOptionIndex == question.correctOptionIndex,
+                    isCorrect:
+                        _selectedOptionIndex == question.correctOptionIndex,
                     explanation: question.explanation,
                   ),
                   const SizedBox(height: 12),
@@ -343,7 +347,9 @@ class _ModuleTestScreenState extends ConsumerState<ModuleTestScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              result.isPassed ? Icons.check_circle_outline : Icons.cancel_outlined,
+              result.isPassed
+                  ? Icons.check_circle_outline
+                  : Icons.cancel_outlined,
               size: 48,
               color: result.isPassed
                   ? theme.colorScheme.primary
@@ -384,8 +390,11 @@ class _ModuleTestScreenState extends ConsumerState<ModuleTestScreen> {
                 alignment: WrapAlignment.center,
                 children: [
                   OutlinedButton(
-                    onPressed: () => context.go(
-                      Routes.module(widget.pathId, widget.moduleId),
+                    onPressed: () => context.goBack(
+                      fallbackLocation: Routes.module(
+                        widget.pathId,
+                        widget.moduleId,
+                      ),
                     ),
                     child: const Text('Back to Topic'),
                   ),
@@ -405,18 +414,21 @@ class _ModuleTestScreenState extends ConsumerState<ModuleTestScreen> {
               Column(
                 children: [
                   FilledButton(
-                    // The next module is a sibling of this test's module,
-                    // not a descendant — push() so this result screen
-                    // stays underneath instead of go() rebuilding the
-                    // whole stack and discarding it (see the matching
-                    // comment on module_detail_screen.dart's "Continue").
-                    // The "back to course" fallback (no next module) IS
-                    // an ancestor of here, so go() there is correct as-is.
+                    // Next topic: close the test and replace the finished
+                    // topic, so back returns to the learning path. Last
+                    // topic: just close the test and return to the topic.
                     onPressed: () => next != null
-                        ? context.push(Routes.module(widget.pathId, next.id))
-                        : context.go(Routes.learningPath(widget.pathId)),
+                        ? context.continueFromTestToNextTopic(
+                            widget.pathId,
+                            next.id,
+                          )
+                        : context.goBack(
+                            fallbackLocation: Routes.learningPath(
+                              widget.pathId,
+                            ),
+                          ),
                     child: Text(
-                      next != null ? 'Continue to Next Topic' : 'Back to Course',
+                      next != null ? 'Continue to Next Topic' : 'Back to Topic',
                     ),
                   ),
                   if (canOfferPractice) ...[
@@ -440,8 +452,11 @@ class _ModuleTestScreenState extends ConsumerState<ModuleTestScreen> {
                 alignment: WrapAlignment.center,
                 children: [
                   OutlinedButton(
-                    onPressed: () => context.go(
-                      Routes.module(widget.pathId, widget.moduleId),
+                    onPressed: () => context.goBack(
+                      fallbackLocation: Routes.module(
+                        widget.pathId,
+                        widget.moduleId,
+                      ),
                     ),
                     child: const Text('Back to Topic'),
                   ),
@@ -467,7 +482,9 @@ class _FeedbackRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final color = isCorrect ? theme.colorScheme.primary : theme.colorScheme.error;
+    final color = isCorrect
+        ? theme.colorScheme.primary
+        : theme.colorScheme.error;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(

@@ -21,6 +21,7 @@ import '../features/review/presentation/screens/review_screen.dart';
 import '../features/review/presentation/screens/review_session_screen.dart';
 import '../features/settings/presentation/screens/settings_screen.dart';
 import 'app_shell.dart';
+import 'navigation.dart';
 
 /// Lets code outside the widget tree (a tapped notification callback) push
 /// a route without needing a [BuildContext] of its own.
@@ -55,138 +56,200 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
       return null;
     },
-    routes: [
-      GoRoute(
-        path: Routes.onboarding,
-        builder: (context, state) => const OnboardingScreen(),
-      ),
-      GoRoute(
-        path: Routes.flashCard,
-        // `extra` is not guaranteed: it is lost on process restore and is
-        // absent for deep links, so never cast it blindly.
-        builder: (context, state) {
-          final card = FlashCard.tryParse(state.extra);
-          return card == null
-              ? const FlashCardUnavailableScreen()
-              : FlashCardScreen(card: card);
-        },
-      ),
-      StatefulShellRoute.indexedStack(
-        builder: (context, state, navigationShell) =>
-            AppShell(navigationShell: navigationShell),
-        branches: [
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: Routes.dashboard,
-                builder: (context, state) => const DashboardScreen(),
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: Routes.learn,
-                builder: (context, state) => const LearningPathsScreen(),
-                routes: [
-                  GoRoute(
-                    path: ':pathId',
-                    builder: (context, state) => LearningPathDetailScreen(
-                      pathId: state.pathParameters['pathId']!,
-                    ),
-                    routes: [
-                      GoRoute(
-                        path: ':moduleId',
-                        builder: (context, state) => ModuleDetailScreen(
-                          pathId: state.pathParameters['pathId']!,
-                          moduleId: state.pathParameters['moduleId']!,
-                        ),
-                        routes: [
-                          // Static routes must be declared before the
-                          // sibling `:conceptId` wildcard — go_router tries
-                          // sibling routes in declaration order, so a
-                          // dynamic param declared first would otherwise
-                          // swallow this literal segment (e.g. matching
-                          // '.../test' as conceptId == 'test').
-                          GoRoute(
-                            path: 'test',
-                            builder: (context, state) => ModuleTestScreen(
-                              pathId: state.pathParameters['pathId']!,
-                              moduleId: state.pathParameters['moduleId']!,
-                            ),
-                          ),
-                          GoRoute(
-                            path: ':conceptId',
-                            builder: (context, state) => LessonScreen(
-                              pathId: state.pathParameters['pathId']!,
-                              moduleId: state.pathParameters['moduleId']!,
-                              conceptId: state.pathParameters['conceptId']!,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: Routes.practice,
-                builder: (context, state) => const PracticeScreen(),
-                routes: [
-                  GoRoute(
-                    path: ':conceptId',
-                    builder: (context, state) => PracticeSessionScreen(
-                      conceptId: state.pathParameters['conceptId']!,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: Routes.review,
-                builder: (context, state) => const ReviewScreen(),
-                routes: [
-                  GoRoute(
-                    path: ':conceptId',
-                    builder: (context, state) => ReviewSessionScreen(
-                      conceptId: state.pathParameters['conceptId']!,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: Routes.progress,
-                builder: (context, state) => const ProgressScreen(),
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: Routes.profile,
-                builder: (context, state) => const ProfileScreen(),
-                routes: [
-                  GoRoute(
-                    path: 'settings',
-                    builder: (context, state) => const SettingsScreen(),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ],
-      ),
-    ],
+    routes: buildAppRoutes(),
   );
 });
+
+/// Builds the screen for a route. Tests swap these for lightweight stand-ins
+/// so the real route tree and navigation rules can be exercised without a
+/// database.
+typedef ScreenBuilder = Widget Function(GoRouterState state);
+
+class AppScreens {
+  const AppScreens({
+    this.onboarding = _onboarding,
+    this.flashCard = _flashCard,
+    this.settings = _settings,
+    this.practice = _practice,
+    this.practiceSession = _practiceSession,
+    this.review = _review,
+    this.reviewSession = _reviewSession,
+    this.learningPath = _learningPath,
+    this.topic = _topic,
+    this.topicTest = _topicTest,
+    this.lesson = _lesson,
+    this.dashboard = _dashboard,
+    this.learn = _learn,
+    this.progress = _progress,
+    this.profile = _profile,
+    this.shell = _shell,
+  });
+
+  final ScreenBuilder onboarding;
+  final ScreenBuilder flashCard;
+  final ScreenBuilder settings;
+  final ScreenBuilder practice;
+  final ScreenBuilder practiceSession;
+  final ScreenBuilder review;
+  final ScreenBuilder reviewSession;
+  final ScreenBuilder learningPath;
+  final ScreenBuilder topic;
+  final ScreenBuilder topicTest;
+  final ScreenBuilder lesson;
+  final ScreenBuilder dashboard;
+  final ScreenBuilder learn;
+  final ScreenBuilder progress;
+  final ScreenBuilder profile;
+  final Widget Function(StatefulNavigationShell shell) shell;
+
+  static Widget _onboarding(GoRouterState s) => const OnboardingScreen();
+  static Widget _flashCard(GoRouterState s) {
+    // `extra` is not guaranteed: it is lost on process restore and is
+    // absent for deep links, so never cast it blindly.
+    final card = FlashCard.tryParse(s.extra);
+    return card == null
+        ? const FlashCardUnavailableScreen()
+        : FlashCardScreen(card: card);
+  }
+
+  static Widget _settings(GoRouterState s) => const SettingsScreen();
+  static Widget _practice(GoRouterState s) => const PracticeScreen();
+  static Widget _practiceSession(GoRouterState s) =>
+      PracticeSessionScreen(conceptId: s.pathParameters['conceptId']!);
+  static Widget _review(GoRouterState s) => const ReviewScreen();
+  static Widget _reviewSession(GoRouterState s) =>
+      ReviewSessionScreen(conceptId: s.pathParameters['conceptId']!);
+  static Widget _learningPath(GoRouterState s) =>
+      LearningPathDetailScreen(pathId: s.pathParameters['pathId']!);
+  static Widget _topic(GoRouterState s) => ModuleDetailScreen(
+    pathId: s.pathParameters['pathId']!,
+    moduleId: s.pathParameters['moduleId']!,
+  );
+  static Widget _topicTest(GoRouterState s) => ModuleTestScreen(
+    pathId: s.pathParameters['pathId']!,
+    moduleId: s.pathParameters['moduleId']!,
+  );
+  static Widget _lesson(GoRouterState s) => LessonScreen(
+    pathId: s.pathParameters['pathId']!,
+    moduleId: s.pathParameters['moduleId']!,
+    conceptId: s.pathParameters['conceptId']!,
+  );
+  static Widget _dashboard(GoRouterState s) => const DashboardScreen();
+  static Widget _learn(GoRouterState s) => const LearningPathsScreen();
+  static Widget _progress(GoRouterState s) => const ProgressScreen();
+  static Widget _profile(GoRouterState s) => const ProfileScreen();
+  static Widget _shell(StatefulNavigationShell shell) =>
+      AppShell(navigationShell: shell);
+}
+
+/// The route tree.
+///
+/// Only the four tab roots live inside the shell. Every other screen is a
+/// top-level route on the root navigator, so `push` stacks it over whatever
+/// the learner was looking at (any tab, or another pushed screen) and back
+/// returns exactly there. URLs are unchanged, so deep links keep working;
+/// a deep link opened cold builds the URL's parent pages underneath, and
+/// [_BackFallback] sends back from the bottom-most one to [Routes.dashboard]
+/// instead of exiting the app.
+List<RouteBase> buildAppRoutes({AppScreens screens = const AppScreens()}) {
+  Widget page(ScreenBuilder b, GoRouterState s) => _BackFallback(child: b(s));
+
+  return [
+    GoRoute(
+      path: Routes.onboarding,
+      builder: (context, state) => screens.onboarding(state),
+    ),
+    GoRoute(
+      path: Routes.flashCard,
+      builder: (context, state) => screens.flashCard(state),
+    ),
+    GoRoute(
+      path: Routes.settings,
+      builder: (context, state) => page(screens.settings, state),
+    ),
+    GoRoute(
+      path: Routes.legacyProfileSettings,
+      redirect: (context, state) => Routes.settings,
+    ),
+    GoRoute(
+      path: Routes.practice,
+      builder: (context, state) => page(screens.practice, state),
+      routes: [
+        GoRoute(
+          path: ':conceptId',
+          builder: (context, state) => page(screens.practiceSession, state),
+        ),
+      ],
+    ),
+    GoRoute(
+      path: Routes.review,
+      builder: (context, state) => page(screens.review, state),
+      routes: [
+        GoRoute(
+          path: ':conceptId',
+          builder: (context, state) => page(screens.reviewSession, state),
+        ),
+      ],
+    ),
+    GoRoute(
+      path: '${Routes.learn}/:pathId',
+      builder: (context, state) => page(screens.learningPath, state),
+      routes: [
+        GoRoute(
+          path: ':moduleId',
+          builder: (context, state) => page(screens.topic, state),
+          routes: [
+            // Static 'test' must come before the `:conceptId` wildcard:
+            // go_router tries siblings in declaration order.
+            GoRoute(
+              path: 'test',
+              builder: (context, state) => page(screens.topicTest, state),
+            ),
+            GoRoute(
+              path: ':conceptId',
+              builder: (context, state) => page(screens.lesson, state),
+            ),
+          ],
+        ),
+      ],
+    ),
+    StatefulShellRoute.indexedStack(
+      builder: (context, state, navigationShell) =>
+          screens.shell(navigationShell),
+      branches: [
+        for (final (path, builder) in [
+          (Routes.dashboard, screens.dashboard),
+          (Routes.learn, screens.learn),
+          (Routes.progress, screens.progress),
+          (Routes.profile, screens.profile),
+        ])
+          StatefulShellBranch(
+            routes: [
+              GoRoute(path: path, builder: (context, state) => builder(state)),
+            ],
+          ),
+      ],
+    ),
+  ];
+}
+
+/// Makes system back on the bottom-most pushed screen (only possible after
+/// a cold-start deep link) go to the Dashboard instead of closing the app.
+/// When there is a screen underneath it does nothing: normal pop.
+class _BackFallback extends StatelessWidget {
+  const _BackFallback({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final canPop = GoRouter.of(context).canPop();
+    return PopScope(
+      canPop: canPop,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) context.goBack();
+      },
+      child: child,
+    );
+  }
+}

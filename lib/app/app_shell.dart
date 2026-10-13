@@ -20,10 +20,9 @@ class AppShell extends StatelessWidget {
   /// Order matches the router's StatefulShellBranch order exactly — indices
   /// here ARE branch indices. [showOnPhone] is derived from this single
   /// list (not a hand-maintained parallel one) so the phone bottom bar's
-  /// subset can never drift out of sync with it. Practice and Review stay
-  /// reachable on phones via Dashboard cards instead of a persistent tab —
-  /// six always-labeled destinations overflow/cramp on phone widths; see
-  /// instructions.md sections 7 and 41.
+  /// subset can never drift out of sync with it. Practice and Review are not
+  /// tabs: Dashboard pushes them as full screens with a back arrow, so back
+  /// returns to Dashboard (see lib/app/navigation.dart).
   static const _destinations = [
     (
       icon: Icons.space_dashboard_outlined,
@@ -36,18 +35,6 @@ class AppShell extends StatelessWidget {
       selectedIcon: Icons.school,
       label: 'Learn',
       showOnPhone: true,
-    ),
-    (
-      icon: Icons.edit_note_outlined,
-      selectedIcon: Icons.edit_note,
-      label: 'Practice',
-      showOnPhone: false,
-    ),
-    (
-      icon: Icons.replay_circle_filled_outlined,
-      selectedIcon: Icons.replay_circle_filled,
-      label: 'Review',
-      showOnPhone: false,
     ),
     (
       icon: Icons.insights_outlined,
@@ -138,7 +125,8 @@ class AppShell extends StatelessWidget {
     }
 
     final phoneEntries = [
-      for (final e in _destinations.indexed) if (e.$2.showOnPhone) e,
+      for (final e in _destinations.indexed)
+        if (e.$2.showOnPhone) e,
     ];
     final branchIndices = [for (final e in phoneEntries) e.$1];
     final phoneSelected = branchIndices.indexOf(navigationShell.currentIndex);
@@ -187,7 +175,9 @@ class AppShell extends StatelessWidget {
                       final selected = states.contains(WidgetState.selected);
                       return TextStyle(
                         fontSize: 16,
-                        fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                        fontWeight: selected
+                            ? FontWeight.w600
+                            : FontWeight.w500,
                         color: selected
                             ? colorScheme.primary
                             : colorScheme.onSurfaceVariant,

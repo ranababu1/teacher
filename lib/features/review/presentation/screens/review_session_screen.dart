@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../../shared/widgets/async_value_view.dart';
 import '../../../../shared/widgets/glass_app_bar.dart';
@@ -8,6 +7,8 @@ import '../../../assessment/domain/models/practice_item.dart';
 import '../../../assessment/presentation/widgets/exercise_player.dart';
 import '../../../curriculum/domain/models/learning_path.dart';
 import '../../../curriculum/presentation/curriculum_providers.dart';
+import '../../../../app/navigation.dart';
+import '../../../../core/constants/routes.dart';
 
 /// A short, focused review flow for one concept: recall question -> answer
 /// -> feedback -> confidence rating. See instructions.md section 35.
@@ -70,7 +71,8 @@ class ReviewSessionScreen extends ConsumerWidget {
                 const SizedBox(height: 16),
                 Center(
                   child: OutlinedButton(
-                    onPressed: () => context.pop(),
+                    onPressed: () =>
+                        context.goBack(fallbackLocation: Routes.review),
                     child: const Text('Done'),
                   ),
                 ),

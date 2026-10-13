@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../../app/theme.dart';
-import '../../../../core/constants/routes.dart';
 import '../../../../shared/utils/subject_style.dart';
 import '../../../../shared/widgets/async_value_view.dart';
 import '../../../../shared/widgets/glass_app_bar.dart';
@@ -19,6 +17,7 @@ import '../../domain/models/badge.dart' as profile_badge;
 import '../../domain/models/learner_profile.dart';
 import '../../domain/models/learner_stats.dart';
 import '../providers/profile_providers.dart';
+import '../../../../app/navigation.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -33,7 +32,7 @@ class ProfileScreen extends ConsumerWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.settings_outlined),
-            onPressed: () => context.push(Routes.profileSettings),
+            onPressed: () => context.openSettings(),
           ),
         ],
       ),
@@ -56,7 +55,8 @@ class _ProfileBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final stats = ref.watch(learnerStatsProvider).valueOrNull ?? LearnerStats.empty;
+    final stats =
+        ref.watch(learnerStatsProvider).valueOrNull ?? LearnerStats.empty;
     final allStarted =
         ref.watch(startedPathProgressSummariesProvider).valueOrNull ??
         const <PathProgressSummary>[];
@@ -165,9 +165,8 @@ class _StatBadge extends StatelessWidget {
         const SizedBox(width: 6),
         Text(
           label,
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+          style: Theme.of(context).textTheme.titleMedium
+              ?.copyWith(fontWeight: FontWeight.w600),
         ),
       ],
     );
@@ -187,14 +186,8 @@ class _LearningProgressCard extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            _StatRow(
-              label: 'Courses completed',
-              value: stats.coursesCompleted,
-            ),
-            _StatRow(
-              label: 'Lessons completed',
-              value: stats.lessonsCompleted,
-            ),
+            _StatRow(label: 'Courses completed', value: stats.coursesCompleted),
+            _StatRow(label: 'Lessons completed', value: stats.lessonsCompleted),
             _StatRow(
               label: 'Practice questions',
               value: stats.practiceQuestionsAttempted,
@@ -481,14 +474,14 @@ class _SettingsLinksCard extends StatelessWidget {
             leading: const Icon(Icons.notifications_outlined),
             title: const Text('Notifications'),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () => context.push(Routes.profileSettings),
+            onTap: () => context.openSettings(),
           ),
           const Divider(height: 1),
           ListTile(
             leading: const Icon(Icons.dark_mode_outlined),
             title: const Text('Appearance'),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () => context.push(Routes.profileSettings),
+            onTap: () => context.openSettings(),
           ),
         ],
       ),

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
-import '../../../../core/constants/routes.dart';
+import '../../../../app/navigation.dart';
 
 /// Shown in place of a module's content when its topic test gate hasn't
 /// been passed yet — reached via a deep link or stale back-stack entry,
@@ -39,8 +38,7 @@ class TopicLockedState extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             OutlinedButton(
-              onPressed: () =>
-                  context.go(Routes.module(pathId, previousModuleId)),
+              onPressed: () => context.openTopic(pathId, previousModuleId),
               child: const Text('Go to previous topic'),
             ),
           ],

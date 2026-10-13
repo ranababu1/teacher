@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
-import '../../../../core/constants/routes.dart';
 import '../../../../shared/widgets/async_value_view.dart';
 import '../../../../shared/widgets/glass_app_bar.dart';
 import '../../../../shared/widgets/gradient_card.dart';
 import '../../../../shared/widgets/skeleton_loader.dart';
 import '../providers/review_providers.dart';
+import '../../../../app/navigation.dart';
 
 class ReviewScreen extends ConsumerWidget {
   const ReviewScreen({super.key});
@@ -52,9 +51,7 @@ class ReviewScreen extends ConsumerWidget {
                       title: Text(concept.title),
                       subtitle: Text(concept.description),
                       trailing: FilledButton(
-                        onPressed: () => context.push(
-                          Routes.reviewSession(concept.id),
-                        ),
+                        onPressed: () => context.openReviewSession(concept.id),
                         child: const Text('Review'),
                       ),
                     ),

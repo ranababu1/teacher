@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/routes.dart';
+import '../../../../app/navigation.dart';
 
 /// Shown in place of a lesson/module's content when its learning path
 /// hasn't been Started yet — reached via a deep link or stale back-stack
@@ -34,7 +34,8 @@ class CourseLockedState extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             OutlinedButton(
-              onPressed: () => context.go(Routes.learningPath(pathId)),
+              onPressed: () =>
+                  context.goBack(fallbackLocation: Routes.learningPath(pathId)),
               child: const Text('Go to course'),
             ),
           ],

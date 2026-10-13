@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/routes.dart';
 import '../../../../shared/widgets/async_value_view.dart';
@@ -18,6 +17,7 @@ import '../../../curriculum/domain/models/learning_path.dart';
 import '../../../curriculum/presentation/curriculum_providers.dart';
 import '../../../curriculum/presentation/widgets/course_locked_state.dart';
 import '../../../progress/presentation/providers/progress_providers.dart';
+import '../../../../app/navigation.dart';
 
 class LessonScreen extends ConsumerStatefulWidget {
   const LessonScreen({
@@ -131,11 +131,14 @@ class _LessonScreenState extends ConsumerState<LessonScreen> {
                 const SizedBox(height: 12),
                 Center(
                   child: OutlinedButton.icon(
-                    onPressed: () => context.go(
-                      Routes.module(widget.pathId, widget.moduleId),
+                    onPressed: () => context.goBack(
+                      fallbackLocation: Routes.module(
+                        widget.pathId,
+                        widget.moduleId,
+                      ),
                     ),
                     icon: const Icon(Icons.arrow_back),
-                    label: const Text('Back to topic'),
+                    label: const Text('Back'),
                   ),
                 ),
               ],
@@ -251,9 +254,8 @@ class _PrerequisitesSection extends ConsumerWidget {
                 (p) => ActionChip(
                   label: Text(p.title),
                   avatar: const Icon(Icons.link, size: 16),
-                  onPressed: () => context.go(
-                    Routes.lesson(p.learningPathId, p.moduleId, p.id),
-                  ),
+                  onPressed: () =>
+                      context.openLesson(p.learningPathId, p.moduleId, p.id),
                 ),
               )
               .toList(),
@@ -395,9 +397,7 @@ class _MisconceptionsSection extends ConsumerWidget {
             margin: const EdgeInsets.only(bottom: 10),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: theme.colorScheme.tertiaryContainer.withValues(
-                alpha: 0.3,
-              ),
+              color: theme.colorScheme.tertiaryContainer.withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(

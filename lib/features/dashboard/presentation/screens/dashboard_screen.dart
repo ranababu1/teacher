@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../../app/theme.dart';
 import '../../../../core/constants/routes.dart';
@@ -17,6 +16,7 @@ import '../../../progress/presentation/providers/progress_providers.dart';
 import '../../../review/presentation/providers/review_providers.dart';
 import '../../domain/models/continue_learning_state.dart';
 import '../providers/dashboard_providers.dart';
+import '../../../../app/navigation.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -93,8 +93,10 @@ class _ContinueLearningCard extends ConsumerWidget {
       ContinueLearningConcept(concept: final concept) => _HeroGradientCard(
         eyebrow: 'Continue Learning',
         title: concept.title,
-        onTap: () => context.go(
-          Routes.lesson(concept.learningPathId, concept.moduleId, concept.id),
+        onTap: () => context.openLesson(
+          concept.learningPathId,
+          concept.moduleId,
+          concept.id,
         ),
       ),
       ContinueLearningPathCompleted(pathTitle: final title) =>
@@ -111,7 +113,7 @@ class _EmptyContinueCard extends StatelessWidget {
     return _HeroGradientCard(
       eyebrow: "Let's start",
       title: 'Learning.',
-      onTap: () => context.go(Routes.learn),
+      onTap: () => context.switchToTab(Routes.learn),
     );
   }
 }
@@ -126,7 +128,7 @@ class _PathCompletedCard extends StatelessWidget {
     return _HeroGradientCard(
       eyebrow: 'Course Complete',
       title: "You've completed $pathTitle! 🎉",
-      onTap: () => context.go(Routes.learn),
+      onTap: () => context.switchToTab(Routes.learn),
     );
   }
 }
@@ -265,9 +267,8 @@ class _GradientTailHeadline extends StatelessWidget {
         if (tail.isNotEmpty)
           ShaderMask(
             blendMode: BlendMode.srcIn,
-            shaderCallback: (bounds) => AppGradients.primary(
-              colorScheme,
-            ).createShader(Rect.fromLTWH(0, 0, bounds.width, bounds.height)),
+            shaderCallback: (bounds) => AppGradients.primary(colorScheme)
+                .createShader(Rect.fromLTWH(0, 0, bounds.width, bounds.height)),
             child: Text(tail, style: style),
           ),
         if (trailing != null) Text(' $trailing', style: style),
@@ -297,7 +298,7 @@ class _CurriculumSnapshotCard extends ConsumerWidget {
 
     return GradientCard(
       child: InkWell(
-        onTap: () => context.go(Routes.learn),
+        onTap: () => context.switchToTab(Routes.learn),
         borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -426,8 +427,7 @@ class _StatRow extends ConsumerWidget {
           label: summaries.first.title,
           sparklineValue: summaries.first.overallPercent,
           sparklineSeed: 0,
-          onTap: () =>
-              context.go(Routes.learningPath(summaries.first.learningPathId)),
+          onTap: () => context.openLearningPath(summaries.first.learningPathId),
         ),
       _StatTile(
         icon: Icons.checklist_outlined,
@@ -436,7 +436,7 @@ class _StatRow extends ConsumerWidget {
         label: practiceCount == 1 ? 'concept ready' : 'concepts ready',
         sparklineValue: (practiceCount / 10).clamp(0.0, 1.0),
         sparklineSeed: 1,
-        onTap: () => context.go(Routes.practice),
+        onTap: () => context.openPractice(),
       ),
       _StatTile(
         icon: Icons.local_fire_department_outlined,
@@ -567,7 +567,7 @@ class _JourneySection extends ConsumerWidget {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             TextButton(
-              onPressed: () => context.go(Routes.progress),
+              onPressed: () => context.switchToTab(Routes.progress),
               child: const Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -617,7 +617,7 @@ class _JourneyCard extends StatelessWidget {
 
     return GradientCard(
       child: InkWell(
-        onTap: () => context.go(Routes.learningPath(summary.learningPathId)),
+        onTap: () => context.openLearningPath(summary.learningPathId),
         borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -653,9 +653,7 @@ class _JourneyCard extends StatelessWidget {
                               child: Container(
                                 height: 2,
                                 color: i < filledDots - 1
-                                    ? colorScheme.primary.withValues(
-                                        alpha: 0.5,
-                                      )
+                                    ? colorScheme.primary.withValues(alpha: 0.5)
                                     : colorScheme.outlineVariant.withValues(
                                         alpha: 0.5,
                                       ),
@@ -701,7 +699,7 @@ class _ReviewQueueCard extends ConsumerWidget {
     return GradientCard(
       elevation: AppElevation.flat,
       child: ListTile(
-        onTap: () => context.go(Routes.review),
+        onTap: () => context.openReview(),
         leading: const Icon(Icons.replay_circle_filled_outlined),
         title: Text('$count concept${count == 1 ? '' : 's'} due for review'),
         trailing: const Icon(Icons.chevron_right),
@@ -739,12 +737,10 @@ class _RecommendedNextStepCard extends ConsumerWidget {
       return const SizedBox.shrink();
     }
 
-    void goToRecommendation() => context.go(
-      Routes.lesson(
-        recommendation.concept.learningPathId,
-        recommendation.concept.moduleId,
-        recommendation.concept.id,
-      ),
+    void goToRecommendation() => context.openLesson(
+      recommendation.concept.learningPathId,
+      recommendation.concept.moduleId,
+      recommendation.concept.id,
     );
 
     return GradientCard(
@@ -778,9 +774,8 @@ class _RecommendedNextStepCard extends ConsumerWidget {
                     const SizedBox(height: 6),
                     Text(
                       recommendation.reason,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.white70,
-                      ),
+                      style: Theme.of(context).textTheme.bodyMedium
+                          ?.copyWith(color: Colors.white70),
                     ),
                     const SizedBox(height: 12),
                     Align(

@@ -1,5 +1,51 @@
 # Changelog
 
+## 2026-10-14 (release: v0.17.0 - linear navigation: back always returns to the previous screen)
+
+### Changed
+- **Back always returns to the previous screen** (1 > 2 > 3, back
+  3 > 2 > 1). Root cause: most moves used `context.go`, which rebuilds the
+  stack from the URL hierarchy instead of from what the learner visited,
+  mixed with a few `push` calls, so back skipped, looped through finished
+  pages, or jumped tabs.
+- **New lib/app/navigation.dart** (`AppNavigation` extension) holds the
+  rules in one place; screens call `openLesson`, `openTopic`,
+  `openTopicTest`, `openLearningPath`, `openPractice(Session)`,
+  `openReview(Session)`, `openSettings`, `goBack`, `replaceWithNextTopic`,
+  `continueFromTestToNextTopic`, `switchToTab` instead of raw go/push.
+  Drill-downs, shortcuts and detours push; Back/Done buttons pop (same as
+  system back); `go` remains only for onboarding finish, the flash-card
+  fallback, tab switches and cold-start fallbacks.
+- **Route tree (lib/app/router.dart)**: the shell now has only the four
+  visible tabs (Dashboard, Learn, Progress, Profile; the wide-screen rail
+  matches). Path, topic, test, lesson, Practice, Review, their sessions
+  and Settings are top-level routes on the root navigator, so a push from
+  any tab stacks on top and back returns there. URLs are unchanged except
+  Settings, now `/settings`; the old `/profile/settings` redirects. A cold
+  deep link builds its parent pages; back from the bottom-most one goes
+  to Dashboard instead of exiting. Route builders are injectable
+  (`AppScreens`, `buildAppRoutes`) for tests.
+- **Completion**: a passed test's "Continue to Next Topic" closes the test
+  and replaces the finished topic, so back goes to the learning path; the
+  topic page's "Continue" also replaces. Failed test / last topic /
+  practice round "Back to Topic" pops. Lesson "Back to topic" is now
+  "Back" (pops to wherever the lesson was opened from). Practice session
+  gained a "Done" button (pops); Review session "Done" pops.
+- **Detours**: "Go to Settings" from the AI panel and the practice session
+  push Settings on top; back returns to the lesson or practice. Practice
+  and Review opened from Dashboard are full screens with a back arrow.
+  Prerequisite chips and the locked-topic button push.
+
+### Verification
+- test/navigation_back_order_test.dart (11 tests, real route tree with
+  stand-in screens, Android system back via handlePopRoute): dashboard >
+  continue lesson > back; learn > path > topic > lesson > back x3;
+  lesson > settings > back; prerequisite chip; test fail and pass exits;
+  topic Continue; practice done/back; profile > settings; legacy settings
+  URL; cold-start deep link back chain.
+- Flutter 3.47.0: `flutter analyze --no-fatal-infos` no errors or
+  warnings; `flutter test` 177 passing.
+
 ## 2026-10-13 (release: v0.16.1 - crash fixes: safe Firebase startup, flash-card recovery)
 
 ### Fixed

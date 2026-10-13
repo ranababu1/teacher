@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
-import '../../../../core/constants/routes.dart';
 import '../../../../shared/widgets/async_value_view.dart';
 import '../../../../shared/widgets/difficulty_chip.dart';
 import '../../../../shared/widgets/fade_slide_in.dart';
@@ -16,6 +14,7 @@ import '../../../progress/presentation/widgets/mastery_status_icon.dart';
 import '../../domain/models/curriculum_module.dart';
 import '../../domain/models/learning_path.dart';
 import '../curriculum_providers.dart';
+import '../../../../app/navigation.dart';
 
 class LearningPathDetailScreen extends ConsumerWidget {
   const LearningPathDetailScreen({super.key, required this.pathId});
@@ -100,9 +99,9 @@ class LearningPathDetailScreen extends ConsumerWidget {
                           'Start this course to unlock its lessons.',
                           style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurfaceVariant,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
                               ),
                         ),
                       ],
@@ -210,7 +209,7 @@ class _ModuleCard extends StatelessWidget {
               );
               return;
             }
-            context.go(Routes.module(path.id, module.id));
+            context.openTopic(path.id, module.id);
           },
           child: Padding(
             padding: const EdgeInsets.all(16),

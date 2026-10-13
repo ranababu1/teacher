@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/routes.dart';
 import '../../../../core/errors/app_exception.dart';
@@ -15,6 +14,7 @@ import '../../../curriculum/domain/models/learning_path.dart';
 import '../../../curriculum/presentation/curriculum_providers.dart';
 import '../../../settings/domain/settings_models.dart';
 import '../../../settings/presentation/providers/settings_providers.dart';
+import '../../../../app/navigation.dart';
 
 /// A focused, exercises-only view for repeat practice on a concept a
 /// learner has already been taught — no lesson prose, just "Try It" again,
@@ -32,8 +32,7 @@ class PracticeSessionScreen extends ConsumerStatefulWidget {
       _PracticeSessionScreenState();
 }
 
-class _PracticeSessionScreenState
-    extends ConsumerState<PracticeSessionScreen> {
+class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
   final List<Exercise> _generatedExercises = [];
   bool _generating = false;
   String? _generateError;
@@ -157,6 +156,14 @@ class _PracticeSessionScreenState
                     ),
                   ),
                 ],
+                const SizedBox(height: 16),
+                Center(
+                  child: FilledButton(
+                    onPressed: () =>
+                        context.goBack(fallbackLocation: Routes.practice),
+                    child: const Text('Done'),
+                  ),
+                ),
               ],
             );
           },
@@ -173,7 +180,11 @@ class _AiGeneratedLabel extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(Icons.auto_awesome_outlined, size: 14, color: theme.colorScheme.tertiary),
+        Icon(
+          Icons.auto_awesome_outlined,
+          size: 14,
+          color: theme.colorScheme.tertiary,
+        ),
         const SizedBox(width: 4),
         Text(
           'AI-generated',
@@ -218,7 +229,7 @@ class _NotConfiguredHint extends StatelessWidget {
             ),
           ),
           TextButton(
-            onPressed: () => context.go(Routes.profileSettings),
+            onPressed: () => context.openSettings(),
             child: const Text('Settings'),
           ),
         ],

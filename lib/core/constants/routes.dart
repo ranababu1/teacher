@@ -11,7 +11,12 @@ class Routes {
   static const flashCard = '/flash-card';
   static const onboarding = '/onboarding';
 
-  static String get profileSettings => '$profile/settings';
+  /// Settings is a full-screen page pushed over whatever is open, so back
+  /// always returns to the screen that opened it.
+  static const settings = '/settings';
+
+  /// Pre-0.17 location of Settings; kept as a redirect so old links work.
+  static String get legacyProfileSettings => '$profile/settings';
 
   static String learningPath(String pathId) => '/learn/$pathId';
   static String module(String pathId, String moduleId) =>

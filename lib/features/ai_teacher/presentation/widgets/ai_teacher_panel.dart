@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
-import '../../../../core/constants/routes.dart';
 import '../../../../shared/widgets/fade_slide_in.dart';
 import '../../../../shared/widgets/markdown_text.dart';
 import '../../../settings/domain/settings_models.dart';
@@ -10,6 +8,7 @@ import '../../../settings/presentation/providers/settings_providers.dart';
 import '../../domain/models/conversation_message.dart';
 import '../providers/ai_teacher_providers.dart';
 import '../providers/api_key_providers.dart';
+import '../../../../app/navigation.dart';
 
 /// "Ask the AI Teacher" — lets the learner ask free-form questions about
 /// the concept they're currently viewing and get a context-aware answer.
@@ -53,7 +52,11 @@ class _AiTeacherPanelState extends ConsumerState<AiTeacherPanel> {
   Widget build(BuildContext context) {
     if (!ref.watch(isAiConfiguredProvider)) {
       final providerLabel =
-          ref.watch(settingsControllerProvider).valueOrNull?.aiProviderKind.displayName ??
+          ref
+              .watch(settingsControllerProvider)
+              .valueOrNull
+              ?.aiProviderKind
+              .displayName ??
           AiProviderKind.gemini.displayName;
       return _NotConfiguredCard(providerLabel: providerLabel);
     }
@@ -355,7 +358,7 @@ class _NotConfiguredCard extends StatelessWidget {
           Align(
             alignment: Alignment.centerRight,
             child: FilledButton.tonalIcon(
-              onPressed: () => context.go(Routes.profileSettings),
+              onPressed: () => context.openSettings(),
               icon: const Icon(Icons.settings_outlined, size: 18),
               label: const Text('Go to Settings'),
             ),
