@@ -29,6 +29,20 @@
   instead of silently dropping the tap. Malformed payloads are logged
   and ignored. Tests: test/flash_card_route_test.dart.
 
+### Changed
+- **Release publishes only two APKs** (.github/workflows/release.yml):
+  `teacher-arm64-v8a-rNN.apk` (most modern phones (2018+)) and the
+  universal `teacher-rNN.apk` (universal APK (any device)). The
+  armeabi-v7a and x86_64 assets are dropped; the split build now uses
+  `--target-platform android-arm64`, and the download guide and asset
+  labels match. Signing from repo secrets, .aab and symbol artifacts are
+  unchanged.
+- Version bumped to 0.16.1+21 (r21).
+
+### Verification
+- Flutter 3.47.0: `flutter pub get`, `flutter analyze --no-fatal-infos`
+  (no errors or warnings), `flutter test` (all 166 tests pass).
+
 ## 2026-09-09 (release assets: per-ABI APKs restored; v0.16.0 retrofitted)
 
 ### Changed
