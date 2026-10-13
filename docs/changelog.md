@@ -12,6 +12,22 @@
   calls were already guarded by `_initialized`. Test seams
   (`initializeFirebase`, `isSupportedPlatform`) are `@visibleForTesting`.
   Tests: test/crash_reporting_service_test.dart.
+- **Flash-card screen no longer crashes without its card data**
+  (lib/app/router.dart, lib/features/flashcards/...): the route used
+  `state.extra as FlashCard`, which throws when `extra` is lost (process
+  restore, deep link). New `FlashCard.tryParse` accepts a card, its JSON
+  map, or a JSON string and returns null otherwise; the route then shows
+  a friendly `FlashCardUnavailableScreen` ("This flash card is no longer
+  available" + "Back to Teacher"). Closing either screen pops if
+  possible, else goes to the dashboard (no dead end when the card is the
+  first route).
+- **Notification taps that launch the app from a terminated state now
+  open the card**: `initialize()` reads
+  `getNotificationAppLaunchDetails()` (that tap never fires
+  `onDidReceiveNotificationResponse`), and `openCardFromPayload` waits
+  frame by frame (up to 120 frames) for the root navigator to mount
+  instead of silently dropping the tap. Malformed payloads are logged
+  and ignored. Tests: test/flash_card_route_test.dart.
 
 ## 2026-09-09 (release assets: per-ABI APKs restored; v0.16.0 retrofitted)
 

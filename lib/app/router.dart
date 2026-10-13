@@ -62,8 +62,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: Routes.flashCard,
-        builder: (context, state) =>
-            FlashCardScreen(card: state.extra as FlashCard),
+        // `extra` is not guaranteed: it is lost on process restore and is
+        // absent for deep links, so never cast it blindly.
+        builder: (context, state) {
+          final card = FlashCard.tryParse(state.extra);
+          return card == null
+              ? const FlashCardUnavailableScreen()
+              : FlashCardScreen(card: card);
+        },
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) =>

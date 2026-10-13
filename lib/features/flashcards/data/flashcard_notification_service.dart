@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:go_router/go_router.dart';
@@ -64,6 +65,18 @@ class FlashcardNotificationService {
     );
 
     _initialized = true;
+
+    // A tap on a notification while the app was terminated launches the
+    // app but does NOT fire onDidReceiveNotificationResponse, so pick that
+    // tap up here and open the card once the router is ready.
+    try {
+      final launch = await _plugin.getNotificationAppLaunchDetails();
+      if (launch?.didNotificationLaunchApp ?? false) {
+        openCardFromPayload(launch!.notificationResponse?.payload);
+      }
+    } catch (e) {
+      AppLogger.warning('Could not read notification launch details: $e');
+    }
   }
 
   /// Requests the Android 13+ runtime notification permission. Returns
@@ -145,9 +158,8 @@ class FlashcardNotificationService {
   /// tap-to-open flow can be verified without waiting for a real
   /// scheduled time.
   Future<void> sendTestNotification(FlashCard card) async {
-    final scheduledDate = tz.TZDateTime.now(
-      tz.local,
-    ).add(const Duration(seconds: 5));
+    final scheduledDate = tz.TZDateTime.now(tz.local)
+        .add(const Duration(seconds: 5));
 
     await _plugin.zonedSchedule(
       id: -1,
@@ -168,20 +180,36 @@ class FlashcardNotificationService {
     );
   }
 
-  void _onNotificationTapped(NotificationResponse response) {
-    final payload = response.payload;
-    if (payload == null) return;
+  void _onNotificationTapped(NotificationResponse response) =>
+      openCardFromPayload(response.payload);
 
-    try {
-      final card = FlashCard.fromJson(
-        jsonDecode(payload) as Map<String, dynamic>,
-      );
-      final context = rootNavigatorKey.currentContext;
-      if (context != null) {
-        GoRouter.of(context).push(Routes.flashCard, extra: card);
-      }
-    } catch (e) {
-      AppLogger.warning('Could not open tapped flashcard notification: $e');
+  /// How many frames to wait for the navigator to mount before giving up
+  /// on a cold-start notification tap.
+  static const _maxNavigatorWaitFrames = 120;
+
+  /// Opens the flash card described by a notification [payload]. Malformed
+  /// payloads are logged and ignored. When the navigator is not mounted
+  /// yet (cold start), retries on the next frames until it is.
+  @visibleForTesting
+  void openCardFromPayload(String? payload, {int attempt = 0}) {
+    if (payload == null) return;
+    final card = FlashCard.tryParse(payload);
+    if (card == null) {
+      AppLogger.warning('Ignoring malformed flashcard notification payload');
+      return;
     }
+    final context = rootNavigatorKey.currentContext;
+    if (context != null) {
+      GoRouter.of(context).push(Routes.flashCard, extra: card);
+      return;
+    }
+    if (attempt >= _maxNavigatorWaitFrames) {
+      AppLogger.warning('Navigator never became ready for flashcard tap');
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => openCardFromPayload(payload, attempt: attempt + 1),
+    );
+    WidgetsBinding.instance.scheduleFrame();
   }
 }
