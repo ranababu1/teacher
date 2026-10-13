@@ -45,6 +45,7 @@
   URL; cold-start deep link back chain.
 - Flutter 3.47.0: `flutter analyze --no-fatal-infos` no errors or
   warnings; `flutter test` 177 passing.
+- Version bumped to 0.17.0+22 (r22).
 
 ## 2026-10-13 (release: v0.16.1 - crash fixes: safe Firebase startup, flash-card recovery)
 
