@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-10-14 (release: v0.17.1 - new app icon)
+
+### Changed
+- **New app icon**: a glossy pink/violet open book on a soft lavender
+  gradient, from the artwork the user supplied (kept at
+  assets/icon/source/teacher_icon_reference.png).
+- **New icon pipeline**: `python3 tool/make_icon.py` (numpy, pillow,
+  scipy) builds the three 1024x1024 sources: app_icon_background.png
+  (full-bleed vertical gradient fitted to the reference, #FFFFFD to
+  #DBDEED), app_icon_foreground.png (transparent; book cut out with a
+  colour-distance mask, closed/hole-filled, edge anti-aliased at 4x;
+  LANCZOS upscale on premultiplied alpha; 49% of the layer width so its
+  diagonal fits the 66dp adaptive safe circle) and app_icon_full.png
+  (composite, square corners). `dart run flutter_launcher_icons`
+  regenerated all Android mipmaps/adaptive layers and iOS AppIcon sizes.
+- Removed the old books-stack generator test/_generate_icon.dart and its
+  test/icon outputs; pubspec comment points to the new script. No in-app
+  or splash usage of the icon besides the launcher icon (the
+  flash-card notification uses @mipmap/ic_launcher, so it updates too).
+- Version bumped to 0.17.1+23 (r23).
+
 ## 2026-10-14 (release: v0.17.0 - linear navigation: back always returns to the previous screen)
 
 ### Changed
