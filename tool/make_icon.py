@@ -44,8 +44,10 @@ def resize_rgba(img,size):
     al2=np.clip(ch[3],0,255)/255
     rgb=np.clip(np.stack(ch[:3],-1)/np.maximum(al2,1e-4)[...,None],0,255)
     return Image.fromarray(np.dstack([rgb,al2*255]).astype(np.uint8),'RGBA')
-# Book diagonal must fit the 66dp safe circle (61% of the 108dp layer).
-w=int(1024*0.50); h=round(crop.height*w/crop.width)
+# Book fills ~80% of the layer width: One UI renders the whole layer
+# under its squircle, so a safe-circle-sized book looked tiny there (see
+# changelog 0.17.2). Pure circle masks trim the corners slightly.
+w=int(1024*0.80); h=round(crop.height*w/crop.width)
 book=resize_rgba(crop,(w,h))
 fg=Image.new('RGBA',(1024,1024),(0,0,0,0)); fg.paste(book,((1024-w)//2,(1024-h)//2),book)
 fg.save('assets/icon/app_icon_foreground.png')

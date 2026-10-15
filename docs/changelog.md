@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-10-15 (release: v0.17.2 - bigger app icon)
+
+### Changed
+- **Book is much bigger in the app icon** (tool/make_icon.py): about 79%
+  of the foreground width (was 49%), in both app_icon_foreground.png and
+  app_icon_full.png (legacy Android and iOS). Feedback from a Galaxy
+  home screen: One UI showed the book at about half the icon width next
+  to Steam, so the icon looked padded and small. One UI's squircle is
+  now filled; pure circle masks trim the book's corners slightly
+  (accepted). Note: launchers that crop adaptive icons to the 72dp
+  viewport (e.g. Pixel) may also clip the book's left and right edges.
+- Regenerated all Android and iOS launcher icons with
+  `dart run flutter_launcher_icons`.
+- Version bumped to 0.17.2+24 (r24).
+
 ## 2026-10-14 (release: v0.17.1 - new app icon)
 
 ### Changed
