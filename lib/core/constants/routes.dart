@@ -10,6 +10,8 @@ class Routes {
   static const profile = '/profile';
   static const flashCard = '/flash-card';
   static const onboarding = '/onboarding';
+  static const interviewPrep = '/interview';
+  static String interviewSession(String pathId) => '/interview/$pathId';
 
   /// Settings is a full-screen page pushed over whatever is open, so back
   /// always returns to the screen that opened it.

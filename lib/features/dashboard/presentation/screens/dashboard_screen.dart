@@ -31,6 +31,7 @@ class DashboardScreen extends ConsumerWidget {
       _RecommendedNextStepCard(),
       _CurriculumSnapshotCard(),
       _ReviewQueueCard(),
+      _InterviewPrepCard(),
       _WhyTeacherSection(),
       _RecentActivitySection(),
     ];
@@ -682,6 +683,24 @@ class _JourneyCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _InterviewPrepCard extends StatelessWidget {
+  const _InterviewPrepCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return GradientCard(
+      elevation: AppElevation.flat,
+      child: ListTile(
+        onTap: () => context.openInterviewPrep(),
+        leading: const Icon(Icons.record_voice_over_outlined),
+        title: const Text('Interview prep'),
+        subtitle: const Text('Mock interview questions with model answers'),
+        trailing: const Icon(Icons.chevron_right),
       ),
     );
   }

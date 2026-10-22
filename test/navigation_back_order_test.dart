@@ -23,6 +23,7 @@ Widget _screen(String name, [Map<String, void Function(BuildContext)>? acts]) {
 
 final _screens = AppScreens(
   dashboard: (_) => _screen('dashboard', {
+    'interview': (c) => c.openInterviewPrep(),
     'continue': (c) => c.openLesson('py', 'm1', 'c1'),
     'practice': (c) => c.openPractice(),
   }),
@@ -51,6 +52,9 @@ final _screens = AppScreens(
   practiceSession: (_) =>
       _screen('practice-session', {'done': (c) => c.goBack()}),
   settings: (_) => _screen('settings'),
+  interviewPrep: (_) =>
+      _screen('interview', {'session': (c) => c.openInterviewSession('py')}),
+  interviewSession: (s) => _screen('interview:${s.pathParameters['pathId']}'),
   skillCheck: (s) => _screen('skill-check:${s.pathParameters['pathId']}'),
   shell: (shell) => Scaffold(body: shell),
 );
@@ -185,6 +189,17 @@ void main() {
   testWidgets('skill-check URL is not swallowed by the topic route', (t) async {
     await _pump(t, initial: Routes.skillCheck('py'));
     _on('skill-check:py');
+  });
+
+  testWidgets('dashboard > interview > session, back x2', (t) async {
+    await _pump(t);
+    await _tap(t, 'interview');
+    await _tap(t, 'session');
+    _on('interview:py');
+    await _back(t);
+    _on('interview');
+    await _back(t);
+    _on('dashboard');
   });
 
   testWidgets('old /profile/settings link still opens settings', (t) async {

@@ -1,5 +1,32 @@
 # Changelog
 
+## 2026-10-22 (release: v0.19.0 - interview prep: mock interviews with model answers)
+
+### Added
+- **Interview prep** (Phase 5 "interview preparation", section 48): a new
+  screen, opened from a Dashboard card or the Practice screen's app-bar
+  button, lists every course with interview questions. They come from the
+  bundled explanation and scenario assessments that have a model answer
+  (offline, no AI). This covers system design too, through the
+  System Design course.
+- **Mock interview session**: five questions per session, at most two
+  real-world scenarios, the rest from different topics. For each
+  question: optional answer notes (not saved), "Reveal Model Answer",
+  then a self-rating (Nailed it / Partly / Missed it). The summary shows
+  a score (2/1/0 points per question) and a "Worth revisiting" list that
+  opens the related lesson; "New Session" draws a fresh set, "Done"
+  goes back.
+- Code: lib/features/interview (InterviewService, InterviewSummary,
+  providers); routes `/interview` and `/interview/:pathId`; helpers
+  `openInterviewPrep`, `openInterviewSession`. Nothing is persisted.
+
+### Verification
+- test/interview_test.dart (question bank filtering, session mix and
+  size, scoring and revisit list, widget flow, empty state) and a
+  navigation test for dashboard > interview > session > back x2.
+  `flutter analyze --no-fatal-infos` no errors or warnings;
+  `flutter test` 195 passing.
+
 ## 2026-10-22 (release: v0.18.0 - skill check: find where to start in a course)
 
 ### Added

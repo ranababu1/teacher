@@ -10,6 +10,8 @@ import '../features/curriculum/presentation/screens/module_detail_screen.dart';
 import '../features/dashboard/presentation/screens/dashboard_screen.dart';
 import '../features/flashcards/domain/models/flash_card.dart';
 import '../features/flashcards/presentation/screens/flash_card_screen.dart';
+import '../features/interview/presentation/screens/interview_prep_screen.dart';
+import '../features/interview/presentation/screens/interview_session_screen.dart';
 import '../features/learning/presentation/screens/lesson_screen.dart';
 import '../features/practice/presentation/screens/practice_screen.dart';
 import '../features/practice/presentation/screens/practice_session_screen.dart';
@@ -80,6 +82,8 @@ class AppScreens {
     this.topicTest = _topicTest,
     this.lesson = _lesson,
     this.skillCheck = _skillCheck,
+    this.interviewPrep = _interviewPrep,
+    this.interviewSession = _interviewSession,
     this.dashboard = _dashboard,
     this.learn = _learn,
     this.progress = _progress,
@@ -99,6 +103,8 @@ class AppScreens {
   final ScreenBuilder topicTest;
   final ScreenBuilder lesson;
   final ScreenBuilder skillCheck;
+  final ScreenBuilder interviewPrep;
+  final ScreenBuilder interviewSession;
   final ScreenBuilder dashboard;
   final ScreenBuilder learn;
   final ScreenBuilder progress;
@@ -139,6 +145,9 @@ class AppScreens {
   );
   static Widget _skillCheck(GoRouterState s) =>
       SkillCheckScreen(pathId: s.pathParameters['pathId']!);
+  static Widget _interviewPrep(GoRouterState s) => const InterviewPrepScreen();
+  static Widget _interviewSession(GoRouterState s) =>
+      InterviewSessionScreen(pathId: s.pathParameters['pathId']!);
   static Widget _dashboard(GoRouterState s) => const DashboardScreen();
   static Widget _learn(GoRouterState s) => const LearningPathsScreen();
   static Widget _progress(GoRouterState s) => const ProgressScreen();
@@ -183,6 +192,16 @@ List<RouteBase> buildAppRoutes({AppScreens screens = const AppScreens()}) {
         GoRoute(
           path: ':conceptId',
           builder: (context, state) => page(screens.practiceSession, state),
+        ),
+      ],
+    ),
+    GoRoute(
+      path: Routes.interviewPrep,
+      builder: (context, state) => page(screens.interviewPrep, state),
+      routes: [
+        GoRoute(
+          path: ':pathId',
+          builder: (context, state) => page(screens.interviewSession, state),
         ),
       ],
     ),

@@ -24,7 +24,16 @@ class PracticeScreen extends ConsumerWidget {
     final startedIdsValue = ref.watch(startedLearningPathIdsProvider);
 
     return Scaffold(
-      appBar: GlassAppBar(title: const Text('Practice')),
+      appBar: GlassAppBar(
+        title: const Text('Practice'),
+        actions: [
+          IconButton(
+            tooltip: 'Interview prep',
+            icon: const Icon(Icons.record_voice_over_outlined),
+            onPressed: () => context.openInterviewPrep(),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: AsyncValueView(
           value: pathsValue,
