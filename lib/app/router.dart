@@ -7,6 +7,8 @@ import '../features/analytics/presentation/screens/analytics_screen.dart';
 import '../features/assessment/presentation/screens/module_test_screen.dart';
 import '../features/challenges/presentation/screens/challenge_lab_screen.dart';
 import '../features/challenges/presentation/screens/challenge_set_screen.dart';
+import '../features/coding_challenges/presentation/screens/coding_challenge_list_screen.dart';
+import '../features/coding_challenges/presentation/screens/coding_challenge_screen.dart';
 import '../features/projects/presentation/screens/project_detail_screen.dart';
 import '../features/projects/presentation/screens/projects_screen.dart';
 import '../features/study_plan/presentation/screens/study_plan_screen.dart';
@@ -97,6 +99,8 @@ class AppScreens {
     this.projects = _projects,
     this.projectDetail = _projectDetail,
     this.studyPlan = _studyPlan,
+    this.codingChallenges = _codingChallenges,
+    this.codingChallenge = _codingChallenge,
     this.systemDesign = _systemDesign,
     this.systemDesignExercise = _systemDesignExercise,
     this.interviewSession = _interviewSession,
@@ -126,6 +130,8 @@ class AppScreens {
   final ScreenBuilder projects;
   final ScreenBuilder projectDetail;
   final ScreenBuilder studyPlan;
+  final ScreenBuilder codingChallenges;
+  final ScreenBuilder codingChallenge;
   final ScreenBuilder systemDesign;
   final ScreenBuilder systemDesignExercise;
   final ScreenBuilder interviewSession;
@@ -186,6 +192,10 @@ class AppScreens {
       const SystemDesignListScreen();
   static Widget _systemDesignExercise(GoRouterState s) =>
       SystemDesignExerciseScreen(exerciseId: s.pathParameters['exerciseId']!);
+  static Widget _codingChallenges(GoRouterState s) =>
+      const CodingChallengeListScreen();
+  static Widget _codingChallenge(GoRouterState s) =>
+      CodingChallengeScreen(challengeId: s.pathParameters['challengeId']!);
   static Widget _dashboard(GoRouterState s) => const DashboardScreen();
   static Widget _learn(GoRouterState s) => const LearningPathsScreen();
   static Widget _progress(GoRouterState s) => const ProgressScreen();
@@ -251,6 +261,16 @@ List<RouteBase> buildAppRoutes({AppScreens screens = const AppScreens()}) {
           path: ':exerciseId',
           builder: (context, state) =>
               page(screens.systemDesignExercise, state),
+        ),
+      ],
+    ),
+    GoRoute(
+      path: Routes.codingChallenges,
+      builder: (context, state) => page(screens.codingChallenges, state),
+      routes: [
+        GoRoute(
+          path: ':challengeId',
+          builder: (context, state) => page(screens.codingChallenge, state),
         ),
       ],
     ),

@@ -63,6 +63,22 @@ class ChallengeLabScreen extends ConsumerWidget {
                   ],
                 ),
                 const SizedBox(height: 12),
+                GradientCard(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    leading: Icon(
+                      Icons.terminal_outlined,
+                      color: theme.colorScheme.primary,
+                    ),
+                    title: const Text('Long-form Challenges'),
+                    subtitle: const Text(
+                      'Multi-part problems across courses, with reference '
+                      'solutions.',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.openCodingChallenges(),
+                  ),
+                ),
                 for (final kind in ChallengeKind.values)
                   GradientCard(
                     margin: const EdgeInsets.only(bottom: 8),

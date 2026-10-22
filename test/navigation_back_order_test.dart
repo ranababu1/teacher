@@ -34,8 +34,14 @@ final _screens = AppScreens(
   learn: (_) => _screen('learn', {'path': (c) => c.openLearningPath('py')}),
   progress: (_) => _screen('progress', {'analytics': (c) => c.openAnalytics()}),
   analytics: (_) => _screen('analytics'),
-  challengeLab: (_) =>
-      _screen('lab', {'set': (c) => c.openChallengeSet('py', 'debugging')}),
+  challengeLab: (_) => _screen('lab', {
+    'set': (c) => c.openChallengeSet('py', 'debugging'),
+    'long': (c) => c.openCodingChallenges(),
+  }),
+  codingChallenges: (_) => _screen('long', {
+    'challenge': (c) => c.openCodingChallenge('go-lru-cache'),
+  }),
+  codingChallenge: (s) => _screen('long:${s.pathParameters['challengeId']}'),
   challengeSet: (s) =>
       _screen('set:${s.pathParameters['pathId']}:${s.pathParameters['kind']}'),
   systemDesign: (_) => _screen('design', {
@@ -268,6 +274,20 @@ void main() {
     _on('design:rate-limiter');
     await _back(t);
     _on('design');
+    await _back(t);
+    _on('dashboard');
+  });
+
+  testWidgets('lab > long-form list > challenge, back x3', (t) async {
+    await _pump(t);
+    await _tap(t, 'lab');
+    await _tap(t, 'long');
+    await _tap(t, 'challenge');
+    _on('long:go-lru-cache');
+    await _back(t);
+    _on('long');
+    await _back(t);
+    _on('lab');
     await _back(t);
     _on('dashboard');
   });

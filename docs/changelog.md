@@ -12,6 +12,14 @@
   a reference solution and an explanation; there is still no code runner
   (instructions.md section 33). Finished attempts go in a new
   `coding_challenge_attempts` table (schema v6, additive).
+- **Long-form Challenges screens**, opened from a new card at the top of
+  the Challenge Lab: a list with course, part count, time and best score,
+  and a challenge screen that goes part by part. One code editor is kept
+  across parts so later parts extend your earlier code; reveal hints one at
+  a time, tick off the behaviours to check, then reveal the highlighted
+  reference solution and explanation and rate yourself. The summary shows
+  your score and the parts to revisit; the attempt is saved. Routes
+  `/coding-challenges` and `/coding-challenges/:challengeId`.
 
 ## 2026-10-22 (release: v0.25.0 - AI study coach)
 

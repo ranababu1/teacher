@@ -15,6 +15,8 @@ class Routes {
   static const challengeLab = '/challenges';
   static const projects = '/projects';
   static const studyPlan = '/plan';
+  static const codingChallenges = '/coding-challenges';
+  static String codingChallenge(String id) => '/coding-challenges/$id';
   static const systemDesign = '/system-design';
   static String systemDesignExercise(String id) => '/system-design/$id';
   static String project(String projectId) => '/projects/$projectId';
