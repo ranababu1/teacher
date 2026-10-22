@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-10-23 (unreleased)
+
+### Added
+- **Interview prep scenarios for 14 courses.** 28 new scenario questions
+  with model answers across every course except Python and React (which
+  already had them), feeding Interview Prep and the lesson "Check Your
+  Understanding" section. Module tests are unchanged (multiple choice only).
+- **Vector databases debugging exercises.** 10 new debugging exercises,
+  one per concept, each checked by running the buggy code (wrong output)
+  and the fix (correct output).
+- **Long-form challenges for LLM engineering, statistics and system
+  design.** A token-budgeted RAG prompt packer with JSON answer
+  validation, an A/B test analysed with the bootstrap and a permutation
+  test, and consistent hashing with virtual nodes. Every part's solution
+  was run against its checks.
+- `test/content_coverage_test.dart` guards the minimum interview and
+  debugging coverage per course and unique exercise and assessment ids.
+
 ## 2026-10-22 (release: v0.29.0 - Career roadmap built from your goal)
 
 ### Added

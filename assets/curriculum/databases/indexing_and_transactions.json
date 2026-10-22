@@ -478,6 +478,12 @@
           ],
           "correctOptionIndex": 2,
           "explanation": "Option C is correct: neither transaction ever re-read a changed value for the same row (ruling out non-repeatable read), and no new row appeared or disappeared from either transaction's snapshot (ruling out phantom read), and neither transaction ever observed the other's uncommitted data (ruling out dirty read) -- each transaction's own view of the world was entirely self-consistent under its REPEATABLE READ snapshot. The bug only exists when considering both transactions together: two individually valid decisions, made from two separate but equally valid snapshots, combine into an outcome that violates a cross-row invariant ('total bookings must not exceed seats_remaining') that no single transaction's isolation guarantee was ever designed to protect. This is exactly why SERIALIZABLE (or explicit row locking with SELECT ... FOR UPDATE) is needed for this specific class of problem, not REPEATABLE READ."
+        },
+        {
+          "id": "databases-isolation-levels-assess-scenario1",
+          "type": "scenario",
+          "prompt": "Two customers buy the last ticket for a concert at the same moment, and both get a confirmation. The code reads the remaining count, checks it is above zero, then decrements it. Explain what went wrong and give at least two ways to fix it.",
+          "modelAnswer": "This is a race condition: both transactions read remaining = 1 before either wrote, both passed the check, and both decremented, so the database oversold. Under the default READ COMMITTED level each statement sees committed data, but nothing stops two transactions from acting on the same stale read. Fixes: make the check and update one atomic statement, such as UPDATE tickets SET remaining = remaining - 1 WHERE id = ? AND remaining > 0, and treat zero affected rows as sold out; or lock the row with SELECT ... FOR UPDATE inside the transaction so the second buyer waits and then sees zero; or run the transaction at SERIALIZABLE and retry on serialization failures; or add a CHECK (remaining >= 0) constraint as a last line of defence. Whichever you choose, write a concurrent test that proves only one purchase succeeds."
         }
       ]
     }

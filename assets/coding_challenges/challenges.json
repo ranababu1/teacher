@@ -494,6 +494,189 @@
           "explanation": "An inverted-file (IVF) index trades a little recall for speed: a query scores only a fraction of the data. `add` and `delete` now keep buckets in sync. Production systems pick centroids with k-means and tune n_probe for the recall they need."
         }
       ]
+    },
+    {
+      "id": "py-llm-context-packer",
+      "learningPathId": "llm-engineering",
+      "language": "python",
+      "title": "Build a token-budgeted RAG prompt packer",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 45,
+      "summary": "Fit the best retrieved chunks into a context window, then validate the model's JSON answer.",
+      "statement": "Every RAG request has to fit a system prompt, retrieved chunks and room for the answer inside a fixed context window. Build the packing step in plain Python. Token counts are approximated as one token per whitespace-separated word so the code runs anywhere. Each part builds on the previous one.",
+      "starterCode": "import json\n\n\ndef count_tokens(text: str) -> int:\n    ...\n\n\ndef pack_chunks(chunks, budget):\n    \"\"\"chunks: list of dicts with \"id\", \"text\" and \"score\".\"\"\"\n    ...\n",
+      "parts": [
+        {
+          "id": "p1",
+          "title": "Count tokens and pack by score",
+          "task": "Implement `count_tokens(text)` (number of whitespace-separated words) and `pack_chunks(chunks, budget)` that returns the ids of the highest-scoring chunks whose total tokens fit within `budget`. Consider chunks from best to worst score and skip any chunk that would overflow, but keep trying smaller ones after it. Return ids in the order they were chosen.",
+          "hints": [
+            "Sort a copy of the chunks by score, highest first.",
+            "Keep a running total; a chunk that does not fit is skipped, not a reason to stop."
+          ],
+          "checks": [
+            "count_tokens('a b  c') == 3",
+            "Chunks are chosen best score first",
+            "A chunk too big for the remaining budget is skipped while later, smaller chunks can still fit"
+          ],
+          "solution": "def count_tokens(text):\n    return len(text.split())\n\n\ndef pack_chunks(chunks, budget):\n    chosen, used = [], 0\n    for chunk in sorted(chunks, key=lambda c: c[\"score\"], reverse=True):\n        cost = count_tokens(chunk[\"text\"])\n        if used + cost <= budget:\n            chosen.append(chunk[\"id\"])\n            used += cost\n    return chosen\n",
+          "explanation": "Greedy packing by score is the usual first approach: it keeps the most relevant evidence and uses leftover space for smaller chunks instead of stopping at the first one that does not fit. Real systems use the model's tokenizer, but the structure is identical."
+        },
+        {
+          "id": "p2",
+          "title": "Assemble the prompt within the window",
+          "task": "Implement `build_prompt(system, question, chunks, window, reserve_for_answer)`. The budget for chunks is `window - reserve_for_answer - count_tokens(system) - count_tokens(question)`. Raise `ValueError` if that budget is negative. Pack chunks with `pack_chunks`, then return a string: the system text, a blank line, each chosen chunk as `[id] text` on its own line in the chosen order, a blank line, and `Question: <question>`.",
+          "hints": [
+            "Reuse pack_chunks; look chunks up by id to get their text.",
+            "Reserving answer tokens up front prevents truncated answers."
+          ],
+          "checks": [
+            "The prompt never exceeds window minus the answer reserve",
+            "Chunks appear as [id] text lines in the chosen order",
+            "A system prompt plus question larger than the window raises ValueError"
+          ],
+          "solution": "def build_prompt(system, question, chunks, window, reserve_for_answer):\n    budget = (\n        window\n        - reserve_for_answer\n        - count_tokens(system)\n        - count_tokens(question)\n    )\n    if budget < 0:\n        raise ValueError(\"system prompt and question do not fit the window\")\n    by_id = {c[\"id\"]: c for c in chunks}\n    ids = pack_chunks(chunks, budget)\n    context = \"\\n\".join(f\"[{i}] {by_id[i]['text']}\" for i in ids)\n    return f\"{system}\\n\\n{context}\\n\\nQuestion: {question}\"\n",
+          "explanation": "Budgeting the fixed parts first and giving retrieval only what is left keeps the request inside the window and guarantees space for the answer. The [id] labels let the model cite sources, which the next part checks. (The tiny label overhead is ignored here; production code counts it too.)"
+        },
+        {
+          "id": "p3",
+          "title": "Validate the JSON answer",
+          "task": "The model is asked to reply with JSON like `{\"answer\": \"...\", \"sources\": [\"c1\"]}`. Implement `parse_answer(raw, allowed_ids)` that returns `(answer, sources)` and raises `ValueError` if the text is not valid JSON, `answer` is not a non-empty string, `sources` is not a list of strings, or any source is not in `allowed_ids` (the chunks actually sent). Strip a surrounding Markdown code fence (```json ... ```) before parsing.",
+          "hints": [
+            "json.loads raises json.JSONDecodeError, which is a subclass of ValueError.",
+            "Check every source against the set of ids that were in the prompt."
+          ],
+          "checks": [
+            "A valid reply returns the answer and its sources",
+            "A reply wrapped in a ```json fence is accepted",
+            "A source id that was not in the prompt raises ValueError"
+          ],
+          "solution": "def parse_answer(raw, allowed_ids):\n    text = raw.strip()\n    if text.startswith(\"```\"):\n        text = text.split(\"\\n\", 1)[1] if \"\\n\" in text else \"\"\n        if text.rstrip().endswith(\"```\"):\n            text = text.rstrip()[:-3]\n    data = json.loads(text)\n    if not isinstance(data, dict):\n        raise ValueError(\"reply is not a JSON object\")\n    answer = data.get(\"answer\")\n    sources = data.get(\"sources\")\n    if not isinstance(answer, str) or not answer.strip():\n        raise ValueError(\"missing answer\")\n    if not isinstance(sources, list) or not all(isinstance(s, str) for s in sources):\n        raise ValueError(\"sources must be a list of strings\")\n    unknown = set(sources) - set(allowed_ids)\n    if unknown:\n        raise ValueError(f\"unknown sources: {sorted(unknown)}\")\n    return answer, sources\n",
+          "explanation": "Never trust model output blindly: parse strictly, check types, and verify that cited sources were really in the context. A citation to an id that was never sent is a hallucination, and rejecting it (then retrying or falling back) is how production RAG systems keep answers grounded."
+        }
+      ]
+    },
+    {
+      "id": "py-bootstrap-ab-test",
+      "learningPathId": "statistics",
+      "language": "python",
+      "title": "Analyse an A/B test with the bootstrap and a permutation test",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 45,
+      "summary": "Resampling-based confidence intervals and p-values in plain Python, with a seeded RNG.",
+      "statement": "You have per-user conversion outcomes (1 or 0) for a control and a variant. Instead of formulas, use resampling to quantify uncertainty. Use `random.Random(seed)` so results are reproducible, and the standard library only. Each part builds on the previous one.",
+      "starterCode": "import random\nimport statistics\n\n\ndef mean_diff(control, variant):\n    ...\n\n\ndef bootstrap_ci(control, variant, n_resamples=2000, alpha=0.05, seed=0):\n    ...\n",
+      "parts": [
+        {
+          "id": "p1",
+          "title": "Effect size and a bootstrap interval",
+          "task": "Implement `mean_diff(control, variant)` returning mean(variant) - mean(control), and `bootstrap_ci(control, variant, n_resamples, alpha, seed)` that resamples each group with replacement (same size as the original), computes `mean_diff` each time, and returns the `(alpha/2, 1 - alpha/2)` percentile interval as a tuple `(low, high)`. Sort the resampled differences and take the values at indices `int(alpha/2 * n)` and `int((1 - alpha/2) * n) - 1`. Raise `ValueError` if either group is empty.",
+          "hints": [
+            "rng.choices(group, k=len(group)) resamples with replacement.",
+            "Resample both groups independently in every iteration."
+          ],
+          "checks": [
+            "mean_diff([0, 1], [1, 1]) == 0.5",
+            "The interval contains the observed difference for a reasonable sample",
+            "An empty group raises ValueError"
+          ],
+          "solution": "def mean_diff(control, variant):\n    return statistics.fmean(variant) - statistics.fmean(control)\n\n\ndef bootstrap_ci(control, variant, n_resamples=2000, alpha=0.05, seed=0):\n    if not control or not variant:\n        raise ValueError(\"both groups need data\")\n    rng = random.Random(seed)\n    diffs = sorted(\n        mean_diff(\n            rng.choices(control, k=len(control)),\n            rng.choices(variant, k=len(variant)),\n        )\n        for _ in range(n_resamples)\n    )\n    low = diffs[int(alpha / 2 * n_resamples)]\n    high = diffs[int((1 - alpha / 2) * n_resamples) - 1]\n    return low, high\n",
+          "explanation": "The bootstrap treats the sample as a stand-in for the population: resampling it many times shows how much the difference would wobble from sample to sample. The percentile interval needs no normality assumption, which is useful for skewed metrics like revenue."
+        },
+        {
+          "id": "p2",
+          "title": "Permutation test p-value",
+          "task": "Implement `permutation_p_value(control, variant, n_permutations, seed)`: pool both groups, repeatedly shuffle the pool, split it back into groups of the original sizes, and count how often the absolute shuffled `mean_diff` is at least the absolute observed difference. Return `(count + 1) / (n_permutations + 1)`.",
+          "hints": [
+            "Shuffling the pool simulates the null hypothesis that the label (control or variant) does not matter.",
+            "Copy the pool before shuffling so the inputs are not modified."
+          ],
+          "checks": [
+            "Identical groups give a p-value near 1",
+            "A large, consistent difference gives a small p-value",
+            "The +1 correction means the p-value is never exactly 0"
+          ],
+          "solution": "def permutation_p_value(control, variant, n_permutations=2000, seed=0):\n    rng = random.Random(seed)\n    observed = abs(mean_diff(control, variant))\n    pool = list(control) + list(variant)\n    n = len(control)\n    count = 0\n    for _ in range(n_permutations):\n        rng.shuffle(pool)\n        if abs(mean_diff(pool[:n], pool[n:])) >= observed:\n            count += 1\n    return (count + 1) / (n_permutations + 1)\n",
+          "explanation": "If the variant truly made no difference, group labels are arbitrary, so shuffling them generates the null distribution of the difference directly. The p-value is the share of shuffles at least as extreme as what we saw. Adding one to numerator and denominator counts the observed split itself and avoids reporting an impossible p of 0."
+        },
+        {
+          "id": "p3",
+          "title": "Make the decision",
+          "task": "Implement `decide(control, variant, min_effect, alpha=0.05, seed=0)` returning one of `\"ship\"`, `\"no difference\"` or `\"inconclusive\"`. Ship only if the permutation p-value is below `alpha` and the bootstrap interval's lower bound is at least `min_effect`. Return `\"no difference\"` if the whole interval lies strictly between `-min_effect` and `min_effect`. Otherwise return `\"inconclusive\"`.",
+          "hints": [
+            "Statistical significance alone is not enough; the effect must also be big enough to matter.",
+            "A narrow interval around zero is evidence of no meaningful effect, which is different from not knowing."
+          ],
+          "checks": [
+            "A large, clear lift returns ship",
+            "Two nearly identical large groups return no difference",
+            "Small noisy samples return inconclusive"
+          ],
+          "solution": "def decide(control, variant, min_effect, alpha=0.05, seed=0):\n    low, high = bootstrap_ci(control, variant, alpha=alpha, seed=seed)\n    p = permutation_p_value(control, variant, seed=seed)\n    if p < alpha and low >= min_effect:\n        return \"ship\"\n    if -min_effect < low and high < min_effect:\n        return \"no difference\"\n    return \"inconclusive\"\n",
+          "explanation": "Good experiment decisions combine significance with practical importance. Requiring the interval's lower bound to clear the minimum effect means you ship only when even the pessimistic estimate is worth it, and separating 'no difference' from 'inconclusive' tells the team whether to stop or to collect more data."
+        }
+      ]
+    },
+    {
+      "id": "py-consistent-hashing",
+      "learningPathId": "system-design",
+      "language": "python",
+      "title": "Implement consistent hashing with virtual nodes",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 40,
+      "summary": "Route keys to cache servers so adding or removing a server moves only a small share of keys.",
+      "statement": "A cache cluster must map keys to servers. Plain `hash(key) % n` remaps almost every key when a server is added. Build a consistent hash ring in plain Python using `hashlib.md5` for stable hashes and `bisect` for lookups. Each part builds on the previous one.",
+      "starterCode": "import bisect\nimport hashlib\n\n\ndef stable_hash(value: str) -> int:\n    ...\n\n\nclass HashRing:\n    def __init__(self, nodes=(), replicas=100):\n        ...\n",
+      "parts": [
+        {
+          "id": "p1",
+          "title": "The ring and lookups",
+          "task": "Implement `stable_hash(value)` as the integer value of the MD5 hex digest of the UTF-8 string, and `HashRing` with `add(node)`, `remove(node)` and `get(key)`. Each node is placed on the ring `replicas` times at `stable_hash(f\"{node}#{i}\")`. `get` returns the node at the first ring position clockwise from `stable_hash(key)`, wrapping around to the start. `get` on an empty ring raises `LookupError`.",
+          "hints": [
+            "Keep a sorted list of positions and a dict from position to node.",
+            "bisect.bisect(positions, h) finds the first position after h; use modulo to wrap."
+          ],
+          "checks": [
+            "The same key always maps to the same node",
+            "get on an empty ring raises LookupError",
+            "After remove, no key maps to the removed node"
+          ],
+          "solution": "def stable_hash(value):\n    return int(hashlib.md5(value.encode(\"utf-8\")).hexdigest(), 16)\n\n\nclass HashRing:\n    def __init__(self, nodes=(), replicas=100):\n        self.replicas = replicas\n        self._positions = []\n        self._owner = {}\n        for node in nodes:\n            self.add(node)\n\n    def add(self, node):\n        for i in range(self.replicas):\n            pos = stable_hash(f\"{node}#{i}\")\n            self._owner[pos] = node\n            bisect.insort(self._positions, pos)\n\n    def remove(self, node):\n        for i in range(self.replicas):\n            pos = stable_hash(f\"{node}#{i}\")\n            if self._owner.pop(pos, None) is not None:\n                self._positions.remove(pos)\n\n    def get(self, key):\n        if not self._positions:\n            raise LookupError(\"ring is empty\")\n        i = bisect.bisect(self._positions, stable_hash(key))\n        return self._owner[self._positions[i % len(self._positions)]]\n",
+          "explanation": "Placing nodes and keys on the same hash circle means a key's owner only changes when a node appears or disappears between the key and its old owner. Python's built-in hash() is randomised per process, which is why a stable hash like MD5 is required for routing that must agree across machines."
+        },
+        {
+          "id": "p2",
+          "title": "Measure how many keys move",
+          "task": "Implement `moved_fraction(keys, before, after)` that returns the fraction of keys whose node differs between two rings. Then verify the core property: with 4 nodes and 10,000 keys, adding a 5th node should move roughly 1/5 of the keys (between 0.1 and 0.3), while the modulo approach `nodes[stable_hash(key) % len(nodes)]` moves far more (over 0.6).",
+          "hints": [
+            "Build a second ring with the extra node rather than mutating the first, so you can compare.",
+            "For modulo hashing, compare the index computed with 4 nodes against 5 nodes."
+          ],
+          "checks": [
+            "moved_fraction of a ring compared with itself is 0",
+            "Adding a fifth node moves between 10% and 30% of keys",
+            "Modulo hashing moves more than 60% of keys for the same change"
+          ],
+          "solution": "def moved_fraction(keys, before, after):\n    moved = sum(1 for k in keys if before.get(k) != after.get(k))\n    return moved / len(keys)\n\n\ndef modulo_moved_fraction(keys, nodes_before, nodes_after):\n    def owner(key, nodes):\n        return nodes[stable_hash(key) % len(nodes)]\n\n    moved = sum(1 for k in keys if owner(k, nodes_before) != owner(k, nodes_after))\n    return moved / len(keys)\n",
+          "explanation": "This is the reason consistent hashing exists: when a cache node is added, only about 1/n of keys change owner, so the cluster keeps most of its hit rate. With modulo hashing nearly every key moves, which empties the cache and can stampede the database."
+        },
+        {
+          "id": "p3",
+          "title": "Balance with virtual nodes",
+          "task": "Implement `load_spread(ring, keys)` returning `max_count / min_count` across the ring's nodes (count how many keys each node owns; nodes with zero keys count as 0 and should make the result `float('inf')`). Show that with 4 nodes and 10,000 keys, `replicas=1` usually gives a much worse spread than `replicas=200`, which should be below 1.5.",
+          "hints": [
+            "Use collections.Counter over ring.get(key) for every key.",
+            "Remember to include nodes that received no keys at all."
+          ],
+          "checks": [
+            "load_spread is at least 1.0",
+            "With 200 virtual nodes per server the spread is below 1.5",
+            "A ring where one node owns no keys returns infinity"
+          ],
+          "solution": "from collections import Counter\n\n\ndef load_spread(ring, keys):\n    nodes = set(ring._owner.values())\n    counts = Counter(ring.get(k) for k in keys)\n    loads = [counts.get(n, 0) for n in nodes]\n    if min(loads) == 0:\n        return float(\"inf\")\n    return max(loads) / min(loads)\n",
+          "explanation": "With one position per server the arcs between positions are very uneven, so some servers own far more keys than others. Many virtual nodes per server average those arcs out, giving each server close to an equal share, and they also spread a removed server's keys across all remaining servers instead of dumping them on one neighbour."
+        }
+      ]
     }
   ]
 }

@@ -254,6 +254,19 @@
           ],
           "solutionCode": "true_top3 = [\"b2\", \"b4\", \"a2\"]\napprox_nprobe1 = [\"b2\", \"b4\", \"b1\"]\napprox_nprobe2 = [\"b2\", \"b4\", \"a2\"]\n\ndef recall_at_k(true_ids, approx_ids):\n    true_set = set(true_ids)\n    approx_set = set(approx_ids)\n    return len(true_set & approx_set) / len(true_set)\n\nprint(recall_at_k(true_top3, approx_nprobe1))\nprint(recall_at_k(true_top3, approx_nprobe2))",
           "solutionExplanation": "recall_at_k converts both lists to sets and intersects them: set(true_ids) & set(approx_ids) contains exactly the ids that show up in both the true top-k and the approximate top-k. Dividing the size of that intersection by len(true_ids) -- the number of true results, which is what 'k' refers to -- gives the fraction of the true top-k that the approximate search actually managed to find. For approx_nprobe1 = ['b2', 'b4', 'b1'], only 'b2' and 'b4' overlap with true_top3, so recall_at_k returns 2/3, about 0.667; for approx_nprobe2 = ['b2', 'b4', 'a2'], all three ids overlap, so it returns 1.0. This is exactly the metric a real production evaluation would compute -- just here applied by hand to a tiny example, instead of averaged automatically across thousands of held-out queries against a real brute-force baseline."
+        },
+        {
+          "id": "vector-databases-indexing-recall-tradeoffs-ex3",
+          "type": "debugging",
+          "prompt": "This function measures recall@k of an approximate index against exact search: the share of the true top-k neighbours that the ANN result also found. The ANN result below finds 2 of the 3 true neighbours, so recall should be 0.67, but it prints 1.0. Find and fix the bug.",
+          "code": "def recall_at_k(exact_ids, ann_ids, k):\n    exact_top = exact_ids[:k]\n    ann_top = ann_ids[:k]\n    found = [i for i in ann_top if i in ann_top]\n    return round(len(found) / k, 2)\n\nexact = [\"d1\", \"d2\", \"d3\", \"d4\"]\nann = [\"d1\", \"d3\", \"d9\", \"d2\"]\nprint(recall_at_k(exact, ann, 3))   # expected: 0.67\n",
+          "hints": [
+            "Read the list comprehension slowly: what is each id checked against?",
+            "Recall asks: of the true neighbours, how many did the approximate search return?",
+            "Compare the ANN ids with the exact ids, not with themselves."
+          ],
+          "solutionCode": "def recall_at_k(exact_ids, ann_ids, k):\n    exact_top = set(exact_ids[:k])\n    ann_top = ann_ids[:k]\n    found = [i for i in ann_top if i in exact_top]\n    return round(len(found) / k, 2)\n\nexact = [\"d1\", \"d2\", \"d3\", \"d4\"]\nann = [\"d1\", \"d3\", \"d9\", \"d2\"]\nprint(recall_at_k(exact, ann, 3))   # 0.67\n",
+          "solutionExplanation": "The comprehension tested each ANN id for membership in `ann_top` itself, which is always true, so recall was always 1.0 and the index looked perfect. Recall@k must compare the approximate top-k with the exact top-k: here d1 and d3 are in both, d9 is not a true neighbour, and d2 fell just outside the ANN top 3, so recall is 2/3. Using a set for the exact ids also makes lookups fast. A metric that cannot fail is worse than no metric, because it hides real recall loss when you tune parameters like ef or nprobe."
         }
       ],
       "assessments": [
@@ -418,6 +431,19 @@
           ],
           "solutionCode": "def build_prompt(question, retrieved_chunks):\n    context = \"\\n\\n\".join(\n        f\"[Source: {chunk['source']}]\\n{chunk['text']}\"\n        for chunk in retrieved_chunks\n    )\n    return (\n        \"Answer the question using ONLY the context below. \"\n        \"If the context does not contain the answer, say you do not know.\\n\\n\"\n        f\"Context:\\n{context}\\n\\n\"\n        f\"Question: {question}\"\n    )\n\nretrieved_chunks = [\n    {\"source\": \"handbook.md#section-4\", \"text\": \"Employees accrue 1.5 vacation days per month.\"},\n    {\"source\": \"handbook.md#section-7\", \"text\": \"Unused vacation days roll over up to a cap of 10 days.\"},\n]\n\nprint(build_prompt(\"How many vacation days do I get per year?\", retrieved_chunks))",
           "solutionExplanation": "The generator expression inside \"\\n\\n\".join(...) formats each chunk dict into a two-line string -- a bracketed source label, then the chunk's text -- and joining those with \"\\n\\n\" puts exactly one blank line between chunks, so multiple retrieved chunks stay visually distinct instead of running together. The outer return statement then wraps that already-assembled context string into the fixed instruction template, using an f-string to drop in both the context block and the original question. Running it on the two sample handbook chunks produces one clean, self-contained prompt string that an LLM call would receive as its entire input for this request -- with both retrieved facts clearly labeled by source, which is exactly what lets a well-behaved model produce an answer that can cite 'handbook.md#section-4' or '#section-7' specifically, rather than an unattributed claim."
+        },
+        {
+          "id": "vector-databases-metadata-filtering-rag-ex3",
+          "type": "debugging",
+          "prompt": "A RAG retriever should return the top 2 chunks from the 'billing' category only. It searches first and filters afterwards, and for this query it returns an empty list even though two billing chunks exist. Find and fix the bug.",
+          "code": "chunks = [\n    {\"id\": 1, \"category\": \"shipping\", \"score\": 0.95},\n    {\"id\": 2, \"category\": \"shipping\", \"score\": 0.93},\n    {\"id\": 3, \"category\": \"billing\", \"score\": 0.90},\n    {\"id\": 4, \"category\": \"billing\", \"score\": 0.80},\n]\n\ndef retrieve(category, k):\n    top = sorted(chunks, key=lambda c: c[\"score\"], reverse=True)[:k]\n    return [c[\"id\"] for c in top if c[\"category\"] == category]\n\nprint(retrieve(\"billing\", 2))   # expected: [3, 4]\n",
+          "hints": [
+            "What does the list look like right after slicing to k, before the category check?",
+            "If the best matches overall are in another category, how many are left after filtering?",
+            "Apply the metadata filter before taking the top k."
+          ],
+          "solutionCode": "chunks = [\n    {\"id\": 1, \"category\": \"shipping\", \"score\": 0.95},\n    {\"id\": 2, \"category\": \"shipping\", \"score\": 0.93},\n    {\"id\": 3, \"category\": \"billing\", \"score\": 0.90},\n    {\"id\": 4, \"category\": \"billing\", \"score\": 0.80},\n]\n\ndef retrieve(category, k):\n    allowed = [c for c in chunks if c[\"category\"] == category]\n    top = sorted(allowed, key=lambda c: c[\"score\"], reverse=True)[:k]\n    return [c[\"id\"] for c in top]\n\nprint(retrieve(\"billing\", 2))   # [3, 4]\n",
+          "solutionExplanation": "The code took the overall top 2 (two shipping chunks) and only then removed non-billing ones, leaving nothing at all; with a slightly different query it would return just one. This is the post-filtering trap: when the filter is selective, the top-k is mostly thrown away. Filtering first (pre-filtering, which vector databases support through metadata filters in the query) guarantees k results from the allowed set when they exist. If a system can only post-filter, it must over-fetch, for example retrieve 10k and then filter, but pre-filtering is the correct default."
         }
       ],
       "assessments": [

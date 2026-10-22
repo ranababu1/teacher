@@ -261,6 +261,19 @@
           ],
           "solutionCode": "import math\n\ndef required_overfetch(k, selectivity):\n    return math.ceil(k / selectivity)\n\n\ndef combined_selectivity(*selectivities):\n    result = 1.0\n    for s in selectivities:\n        result *= s\n    return result\n\n\nhardcoded_overfetch = 150\nk = 15\ntenant_selectivity = 0.08\nnot_deleted_selectivity = 0.6\n\nsingle_filter_requirement = required_overfetch(k, tenant_selectivity)\ncombined = combined_selectivity(tenant_selectivity, not_deleted_selectivity)\ncombined_requirement = required_overfetch(k, combined)\n\nprint(single_filter_requirement)\nprint(round(combined, 4))\nprint(combined_requirement)\nprint(hardcoded_overfetch >= combined_requirement)\n",
           "solutionExplanation": "required_overfetch(15, 0.08) comes out to 188 (math.ceil(15 / 0.08) = math.ceil(187.5) = 188) -- already more than the hardcoded 150, meaning the tenant filter alone was already slightly under-provisioned by this exact model, but combined_selectivity(0.08, 0.6) = 0.048 makes it dramatically worse: required_overfetch(15, 0.048) = math.ceil(312.5) = 313. hardcoded_overfetch (150) >= combined_requirement (313) is False -- the team's fixed factor is now covering less than half of what's actually needed once the second filter is ANDed on, exactly the silent-shortfall scenario this concept warns about. Note that this exercise's numbers were chosen so that even the single-filter requirement (188) already exceeds the hardcoded value (150) -- a reminder that 'it happened to work in testing' isn't the same as 'it was correctly sized,' since a team might get lucky in a small test environment even when the underlying math already didn't support their chosen factor."
+        },
+        {
+          "id": "vector-databases-metadata-filtering-at-scale-ex3",
+          "type": "debugging",
+          "prompt": "Searches should only return documents a user is allowed to see, using an access list stored as metadata. A user in group 'eng' should see doc 1 and doc 3, but doc 2 (restricted to 'hr') also appears. Find and fix the bug.",
+          "code": "docs = [\n    {\"id\": 1, \"groups\": [\"eng\", \"all\"]},\n    {\"id\": 2, \"groups\": [\"hr\"]},\n    {\"id\": 3, \"groups\": [\"all\"]},\n]\n\ndef visible(user_groups):\n    return [d[\"id\"] for d in docs if user_groups or d[\"groups\"]]\n\nprint(visible([\"eng\", \"all\"]))   # expected: [1, 3]\n",
+          "hints": [
+            "What does the expression `user_groups or d['groups']` evaluate to?",
+            "A non-empty list is truthy, so the condition is true for every document.",
+            "You need to check whether the two lists share at least one group."
+          ],
+          "solutionCode": "docs = [\n    {\"id\": 1, \"groups\": [\"eng\", \"all\"]},\n    {\"id\": 2, \"groups\": [\"hr\"]},\n    {\"id\": 3, \"groups\": [\"all\"]},\n]\n\ndef visible(user_groups):\n    allowed = set(user_groups)\n    return [d[\"id\"] for d in docs if allowed & set(d[\"groups\"])]\n\nprint(visible([\"eng\", \"all\"]))   # [1, 3]\n",
+          "solutionExplanation": "`user_groups or d['groups']` is not a membership test: `or` returns its first truthy operand, and a non-empty list is truthy, so every document passed and restricted HR content leaked. The correct check is whether the user's groups and the document's groups intersect, done here with a set intersection. In a real vector database this filter belongs in the query itself (for example a `groups $in [...]` filter) and in one shared data-access layer, with a test that asserts restricted documents never appear."
         }
       ],
       "assessments": [
@@ -321,6 +334,12 @@
           "type": "explanation",
           "prompt": "A teammate proposes: 'Pre-filtering is always correct and post-filtering can silently under-return -- let's just always pre-filter everywhere and never worry about this again.' Explain why this isn't automatically the right call at scale, referencing selectivity and how ANN indexes work.",
           "modelAnswer": "Pre-filtering really is correct by construction -- restricting to the matching subset before ranking guarantees you never miss a matching result the way naive post-filtering can. But 'correct' and 'fast' are separate properties, and pre-filtering's speed depends entirely on how selective the filter actually is. HNSW's graph and IVF's clusters are built once, over the entire collection, specifically to make nearest-neighbor search over that whole collection fast; naive pre-filtering, as usually implemented, restricts to the matching subset and then computes distances directly against every member of that subset, which isn't using the ANN index's structure at all for the filtered search -- it's a plain scan, just over a smaller set than the full collection. For a highly selective filter (a small tenant among many, say), that smaller set really is small, and scanning it directly is fast regardless of ANN structure. But for a filter that matches a large fraction of the collection -- a boolean flag true for 70% of documents, say -- 'the matching subset' is nearly the whole collection, and pre-filtering degenerates into something close to a full brute-force scan, precisely the cost the ANN index was built to avoid in the first place. So 'always pre-filter' trades away a real, measurable performance benefit (the ANN index's speedup) specifically in the cases where the filter doesn't narrow things down much -- which are common in practice (soft-delete exclusions, broad category filters). The better approach is to actually estimate or measure the filter's selectivity and choose per-filter: pre-filter when selective, use post-filtering with proper oversampling (fixed or adaptive) when not, or fall back to a dedicated partition/namespace strategy for filters that are both broad and extremely frequent -- not commit to one strategy unconditionally for every filter a system will ever see."
+        },
+        {
+          "id": "vector-databases-metadata-filtering-at-scale-assess-scenario1",
+          "type": "scenario",
+          "prompt": "In a multi-tenant SaaS product, a customer reports seeing a snippet from another company's document in a chatbot answer. What likely went wrong, and how do you make tenant isolation reliable?",
+          "modelAnswer": "Most likely the retrieval query ran without a tenant filter in some code path, or the filter was applied after retrieving the top k results, or a metadata field was missing on some ingested chunks, so another tenant's vectors were returned. This is a data leak and should be handled as a security incident. Make isolation structural rather than optional: use a separate namespace, collection or index per tenant where the database supports it, or enforce a mandatory tenant_id filter in a single data-access layer that every query must go through, rejecting queries without it. Validate at ingestion that every chunk carries tenant metadata. Use pre-filtering supported by the index so results are filtered during search, not after. Add automated tests that query as one tenant and assert no other tenant's IDs ever appear, and audit logs of what was retrieved."
         }
       ]
     },
@@ -418,6 +437,19 @@
           ],
           "solutionCode": "def deterministic_hash(s):\n    return sum(ord(c) for c in s)\n\n\ndef route_tenant(tenant_id, tenant_vector_count, whale_threshold, num_shared_partitions):\n    if tenant_vector_count >= whale_threshold:\n        return f\"dedicated_namespace:{tenant_id}\"\n    partition = deterministic_hash(tenant_id) % num_shared_partitions\n    return f\"shared_partition_{partition}\"\n\n\ntenants = [\n    (\"tenant_x\", 500),\n    (\"tenant_y\", 2_000_000),\n    (\"tenant_z\", 4000),\n]\n\nfor tenant_id, size in tenants:\n    print(tenant_id, route_tenant(tenant_id, size, whale_threshold=1_000_000, num_shared_partitions=4))\n",
           "solutionExplanation": "tenant_y, at 2 million vectors, meets the whale_threshold of 1 million and is routed straight to its own dedicated_namespace:tenant_y, regardless of anything about its tenant_id string -- size alone decides that branch. tenant_x (500 vectors) and tenant_z (4000 vectors) both stay under the threshold, so each gets hashed via deterministic_hash(tenant_id) % 4 into one of the 4 shared partitions -- a stable, repeatable assignment based purely on the tenant_id's own characters, so the same tenant always lands in the same partition on every call, which matters for actually routing that tenant's future reads and writes consistently to the same physical location."
+        },
+        {
+          "id": "vector-databases-multi-tenant-namespaces-ex3",
+          "type": "debugging",
+          "prompt": "Each tenant's vectors should live in a separate namespace. After ingesting documents for 'acme' and 'globex', a search in acme's namespace should return only acme's document, but globex's appears too. Find and fix the bug.",
+          "code": "def make_store(tenants, empty=[]):\n    return {t: empty for t in tenants}\n\nstore = make_store([\"acme\", \"globex\"])\nstore[\"acme\"].append(\"acme-pricing\")\nstore[\"globex\"].append(\"globex-roadmap\")\n\nprint(store[\"acme\"])   # expected: ['acme-pricing']\n",
+          "hints": [
+            "How many list objects exist in this program?",
+            "Every namespace is assigned the same `empty` object.",
+            "Create a fresh list for each tenant (and avoid mutable default arguments)."
+          ],
+          "solutionCode": "def make_store(tenants):\n    return {t: [] for t in tenants}\n\nstore = make_store([\"acme\", \"globex\"])\nstore[\"acme\"].append(\"acme-pricing\")\nstore[\"globex\"].append(\"globex-roadmap\")\n\nprint(store[\"acme\"])   # ['acme-pricing']\n",
+          "solutionExplanation": "Every tenant key pointed at the same list object (the mutable default `empty`), so appending to one namespace appended to all of them and one customer's data became visible to another. Building a new `[]` inside the comprehension gives each tenant its own list. The mutable default argument makes it worse, since the shared list would also survive between calls. In multi-tenant systems isolation must be structural and tested: write a test that inserts into one tenant and asserts the other tenant's results are unchanged."
         }
       ],
       "assessments": [

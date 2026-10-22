@@ -417,6 +417,19 @@
           ],
           "solutionCode": "def rerank_cost(n, cost_per_pair_ms):\n    return n * cost_per_pair_ms\n\nsmall_candidate_set = 20\nfull_collection = 1_000_000\ncost_per_pair_ms = 5\n\nprint(rerank_cost(small_candidate_set, cost_per_pair_ms) / 1000, \"seconds\")\nprint(rerank_cost(full_collection, cost_per_pair_ms) / 1000, \"seconds\")",
           "solutionExplanation": "rerank_cost(20, 5) returns 100 (milliseconds), or 0.1 seconds -- fast enough for an interactive query, since reranking a small, already-narrowed candidate set is exactly what this second stage is designed to do cheaply. rerank_cost(1_000_000, 5) returns 5,000,000 (milliseconds), or 5000.0 seconds -- well over 83 minutes for a single query, if the cross-encoder were run directly over an entire million-document collection instead of a small candidate set. The 50,000x difference between these two numbers, produced by nothing more than changing which quantity (a small candidate set versus an entire collection) gets multiplied by the same fixed per-pair cost, is the whole quantitative case for why reranking is layered on top of a fast first-stage retriever rather than ever applied to a full collection directly."
+        },
+        {
+          "id": "vector-databases-reranking-ex3",
+          "type": "debugging",
+          "prompt": "After vector search returns candidates, a reranker gives each one a relevance score and the pipeline should return candidates ordered by that score. Here doc 'c' has the best rerank score, but the output still follows the original vector order. Find and fix the bug.",
+          "code": "candidates = [\n    {\"id\": \"a\", \"vector_score\": 0.91},\n    {\"id\": \"b\", \"vector_score\": 0.88},\n    {\"id\": \"c\", \"vector_score\": 0.85},\n]\nrerank_scores = {\"a\": 0.20, \"b\": 0.55, \"c\": 0.97}\n\ndef rerank(cands):\n    for c in cands:\n        c[\"rerank_score\"] = rerank_scores[c[\"id\"]]\n    sorted(cands, key=lambda c: c[\"rerank_score\"], reverse=True)\n    return [c[\"id\"] for c in cands]\n\nprint(rerank(candidates))   # expected: ['c', 'b', 'a']\n",
+          "hints": [
+            "Does sorted() change the list it is given?",
+            "Where does the result of the sorted() call go?",
+            "Either use list.sort() in place or keep the value sorted() returns."
+          ],
+          "solutionCode": "candidates = [\n    {\"id\": \"a\", \"vector_score\": 0.91},\n    {\"id\": \"b\", \"vector_score\": 0.88},\n    {\"id\": \"c\", \"vector_score\": 0.85},\n]\nrerank_scores = {\"a\": 0.20, \"b\": 0.55, \"c\": 0.97}\n\ndef rerank(cands):\n    for c in cands:\n        c[\"rerank_score\"] = rerank_scores[c[\"id\"]]\n    ranked = sorted(cands, key=lambda c: c[\"rerank_score\"], reverse=True)\n    return [c[\"id\"] for c in ranked]\n\nprint(rerank(candidates))   # ['c', 'b', 'a']\n",
+          "solutionExplanation": "`sorted()` returns a new list and leaves its argument unchanged, and the code threw that new list away, so the reranker's work had no effect and the original vector order was returned. Keeping the result (`ranked = sorted(...)`) or calling `cands.sort(...)` fixes it. This kind of bug is easy to miss because the pipeline still returns plausible results; only an evaluation comparing quality with and without reranking reveals that the expensive step changed nothing."
         }
       ],
       "assessments": [
