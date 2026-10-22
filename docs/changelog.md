@@ -26,6 +26,7 @@
   navigation test for dashboard > interview > session > back x2.
   `flutter analyze --no-fatal-infos` no errors or warnings;
   `flutter test` 195 passing.
+- Version bumped to 0.19.0+26 (r26).
 
 ## 2026-10-22 (release: v0.18.0 - skill check: find where to start in a course)
 
