@@ -52,24 +52,32 @@ void main() {
     expect(records.containsKey('c'), isFalse);
   });
 
-  test('upgrading a v3 database adds the project and design tables', () async {
-    final dir = Directory.systemTemp.createTempSync('teacher_db');
-    addTearDown(() => dir.deleteSync(recursive: true));
-    final file = File('${dir.path}/app.sqlite');
+  test(
+    'upgrading a v3 database adds the project, design and challenge tables',
+    () async {
+      final dir = Directory.systemTemp.createTempSync('teacher_db');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final file = File('${dir.path}/app.sqlite');
 
-    // Build a current database, then roll it back to look like v3.
-    var db = AppDatabase.forTesting(NativeDatabase(file));
-    await db.customSelect('SELECT 1').get();
-    await db.customStatement('DROP TABLE project_milestone_progress_table');
-    await db.customStatement('DROP TABLE system_design_attempts_table');
-    await db.customStatement('PRAGMA user_version = 3');
-    await db.close();
+      // Build a current database, then roll it back to look like v3.
+      var db = AppDatabase.forTesting(NativeDatabase(file));
+      await db.customSelect('SELECT 1').get();
+      await db.customStatement('DROP TABLE project_milestone_progress_table');
+      await db.customStatement('DROP TABLE system_design_attempts_table');
+      await db.customStatement('DROP TABLE coding_challenge_attempts_table');
+      await db.customStatement('PRAGMA user_version = 3');
+      await db.close();
 
-    db = AppDatabase.forTesting(NativeDatabase(file));
-    addTearDown(db.close);
-    await SystemDesignProgressRepositoryImpl(db)
-        .recordAttempt(exerciseId: 'x', score: 1, maxScore: 2);
-    expect((await db.select(db.systemDesignAttemptsTable).get()), hasLength(1));
-    expect(await db.select(db.projectMilestoneProgressTable).get(), isEmpty);
-  });
+      db = AppDatabase.forTesting(NativeDatabase(file));
+      addTearDown(db.close);
+      await SystemDesignProgressRepositoryImpl(db)
+          .recordAttempt(exerciseId: 'x', score: 1, maxScore: 2);
+      expect(
+        (await db.select(db.systemDesignAttemptsTable).get()),
+        hasLength(1),
+      );
+      expect(await db.select(db.projectMilestoneProgressTable).get(), isEmpty);
+      expect(await db.select(db.codingChallengeAttemptsTable).get(), isEmpty);
+    },
+  );
 }

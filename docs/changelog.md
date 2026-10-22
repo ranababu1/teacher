@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-10-22 (unreleased)
+
+### Added
+- **Long-form coding challenges: content and storage** (Phase 5 "long-form
+  coding challenges"): six multi-part challenges in
+  `assets/coding_challenges/challenges.json` (Python log analyzer, Node
+  promise pool with retries, Go thread-safe LRU cache, Java bank ledger with
+  deadlock-free transfers, React debounced search with cancellation, SQL
+  sales reports). Each part has a task, hints, behaviours to check by hand,
+  a reference solution and an explanation; there is still no code runner
+  (instructions.md section 33). Finished attempts go in a new
+  `coding_challenge_attempts` table (schema v6, additive).
+
 ## 2026-10-22 (release: v0.25.0 - AI study coach)
 
 ### Added

@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 
 import 'tables/attempts_table.dart';
+import 'tables/coding_challenge_attempts_table.dart';
 import 'tables/concept_mastery_table.dart';
 import 'tables/learning_path_progress_table.dart';
 import 'tables/misconceptions_table.dart';
@@ -26,6 +27,7 @@ part 'app_database.g.dart';
     ModuleTestProgressTable,
     ProjectMilestoneProgressTable,
     SystemDesignAttemptsTable,
+    CodingChallengeAttemptsTable,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -34,7 +36,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.connection);
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -100,6 +102,9 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 5) {
         await m.createTable(systemDesignAttemptsTable);
+      }
+      if (from < 6) {
+        await m.createTable(codingChallengeAttemptsTable);
       }
     },
   );

@@ -1,0 +1,375 @@
+{
+  "version": 1,
+  "challenges": [
+    {
+      "id": "py-log-analyzer",
+      "learningPathId": "python",
+      "language": "python",
+      "title": "Build a web log analyzer",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 60,
+      "summary": "Parse, aggregate and stream access logs in three parts.",
+      "statement": "You are given web server access log lines like:\n\n```\n2026-10-01T12:00:03Z GET /api/users 200 35ms\n```\n\nFields are: ISO timestamp, HTTP method, path, status code, duration in milliseconds with an `ms` suffix. Build a small analyzer step by step. Each part builds on the previous one.",
+      "starterCode": "from dataclasses import dataclass\n\n\n@dataclass(frozen=True)\nclass Entry:\n    timestamp: str\n    method: str\n    path: str\n    status: int\n    duration_ms: int\n\n\ndef parse_line(line: str) -> Entry:\n    ...\n",
+      "parts": [
+        {
+          "id": "p1",
+          "title": "Parse one line",
+          "task": "Implement `parse_line(line)` returning an `Entry`. Raise `ValueError` with a helpful message if the line does not have exactly 5 fields, the status is not an integer, or the duration does not end in `ms`.",
+          "hints": [
+            "`str.split()` with no argument also strips surrounding whitespace.",
+            "`removesuffix('ms')` only removes the suffix if present, so check `endswith` first."
+          ],
+          "checks": [
+            "parse_line('2026-10-01T12:00:03Z GET /api/users 200 35ms').status == 200",
+            "parse_line(' ... 35ms\\n') ignores surrounding whitespace",
+            "parse_line('bad line') raises ValueError",
+            "A duration of '35s' raises ValueError"
+          ],
+          "solution": "def parse_line(line: str) -> Entry:\n    parts = line.split()\n    if len(parts) != 5:\n        raise ValueError(f\"expected 5 fields, got {len(parts)}: {line!r}\")\n    timestamp, method, path, status, duration = parts\n    if not duration.endswith(\"ms\"):\n        raise ValueError(f\"duration must end in 'ms': {duration!r}\")\n    try:\n        return Entry(timestamp, method, path, int(status), int(duration[:-2]))\n    except ValueError as e:\n        raise ValueError(f\"bad number in line {line!r}\") from e\n",
+          "explanation": "Splitting on whitespace handles trailing newlines. Validating the field count first gives a clear error, and chaining with `from e` keeps the original cause for debugging."
+        },
+        {
+          "id": "p2",
+          "title": "Aggregate a report",
+          "task": "Implement `summarize(entries)` returning a dict with: `total` (count), `errors` (count of status >= 500), `by_status` (dict status -> count) and `slowest_paths` (top 3 paths by average duration, as a list of `(path, avg_ms)` sorted slowest first).",
+          "hints": [
+            "`collections.Counter` handles the status counts.",
+            "Track sum and count per path, then divide at the end.",
+            "Sort by `-avg` and slice `[:3]`."
+          ],
+          "checks": [
+            "An empty list gives total 0 and empty collections",
+            "Two 500s and one 200 give errors == 2",
+            "Paths with equal averages keep a stable, deterministic order"
+          ],
+          "solution": "from collections import Counter, defaultdict\n\n\ndef summarize(entries):\n    by_status = Counter()\n    sums = defaultdict(int)\n    counts = defaultdict(int)\n    for e in entries:\n        by_status[e.status] += 1\n        sums[e.path] += e.duration_ms\n        counts[e.path] += 1\n    averages = [(p, sums[p] / counts[p]) for p in sums]\n    averages.sort(key=lambda pa: (-pa[1], pa[0]))\n    return {\n        \"total\": sum(by_status.values()),\n        \"errors\": sum(n for s, n in by_status.items() if s >= 500),\n        \"by_status\": dict(by_status),\n        \"slowest_paths\": averages[:3],\n    }\n",
+          "explanation": "One pass collects everything. Sorting by `(-avg, path)` makes ties deterministic, which matters for tests and for users comparing reports."
+        },
+        {
+          "id": "p3",
+          "title": "Stream a large file",
+          "task": "Logs can be several GB. Write `read_entries(path)` as a generator that yields `Entry` objects line by line, skipping blank lines, and counting (not crashing on) malformed lines. After iteration, the generator should make the number of skipped lines available, for example by returning it (accessible via `StopIteration.value`) or via a small stats object you pass in.",
+          "hints": [
+            "Iterate the file object directly; it reads lazily.",
+            "Catch only `ValueError` from `parse_line`.",
+            "A mutable stats object is easier for callers than `StopIteration.value`."
+          ],
+          "checks": [
+            "Memory stays flat for a 5 GB file (no `readlines()`)",
+            "Malformed lines are counted, not raised",
+            "`summarize(read_entries(path, stats))` works without building a list"
+          ],
+          "solution": "from dataclasses import dataclass\n\n\n@dataclass\nclass ReadStats:\n    skipped: int = 0\n\n\ndef read_entries(path, stats=None):\n    stats = stats if stats is not None else ReadStats()\n    with open(path, encoding=\"utf-8\") as f:\n        for line in f:\n            if not line.strip():\n                continue\n            try:\n                yield parse_line(line)\n            except ValueError:\n                stats.skipped += 1\n",
+          "explanation": "Iterating the file object reads one buffered line at a time, so memory is constant. Because `summarize` only iterates once, it can consume the generator directly. Passing a stats object keeps the API simple for callers."
+        }
+      ]
+    },
+    {
+      "id": "node-promise-pool",
+      "learningPathId": "nodejs",
+      "language": "javascript",
+      "title": "Write a promise pool with retries",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 50,
+      "summary": "Run async tasks with a concurrency limit, ordered results and retries.",
+      "statement": "You need to call a rate-limited API for 1,000 items, but never more than `limit` requests at once. Build `promisePool(tasks, limit)` where `tasks` is an array of functions that each return a promise.",
+      "starterCode": "async function promisePool(tasks, limit) {\n  // TODO\n}\n\nmodule.exports = { promisePool };\n",
+      "parts": [
+        {
+          "id": "p1",
+          "title": "Limit concurrency",
+          "task": "Implement `promisePool` so that at most `limit` tasks run at the same time and the function resolves when all tasks have finished. Return results in the same order as `tasks`, regardless of completion order.",
+          "hints": [
+            "Start `limit` workers; each worker pulls the next index from a shared counter.",
+            "Write each result into `results[index]`."
+          ],
+          "checks": [
+            "With limit 2 and 5 tasks, no more than 2 are ever in flight",
+            "Results are in input order even if task 0 finishes last",
+            "An empty task list resolves to []"
+          ],
+          "solution": "async function promisePool(tasks, limit) {\n  const results = new Array(tasks.length);\n  let next = 0;\n  async function worker() {\n    while (next < tasks.length) {\n      const index = next++;\n      results[index] = await tasks[index]();\n    }\n  }\n  const workers = Array.from(\n    { length: Math.min(limit, tasks.length) },\n    worker,\n  );\n  await Promise.all(workers);\n  return results;\n}\n",
+          "explanation": "JavaScript is single-threaded, so `next++` cannot race. Each worker loops until the queue is empty, which keeps exactly `limit` tasks busy without extra bookkeeping."
+        },
+        {
+          "id": "p2",
+          "title": "Collect failures",
+          "task": "Change the pool so one failing task does not stop the others. Return an array of `{ status: 'fulfilled', value }` or `{ status: 'rejected', reason }` objects, like `Promise.allSettled`.",
+          "hints": [
+            "Wrap the `await` in try/catch inside the worker."
+          ],
+          "checks": [
+            "A rejected task does not reject the pool",
+            "Every task still runs exactly once",
+            "Output shape matches Promise.allSettled"
+          ],
+          "solution": "async function promisePool(tasks, limit) {\n  const results = new Array(tasks.length);\n  let next = 0;\n  async function worker() {\n    while (next < tasks.length) {\n      const index = next++;\n      try {\n        results[index] = { status: 'fulfilled', value: await tasks[index]() };\n      } catch (reason) {\n        results[index] = { status: 'rejected', reason };\n      }\n    }\n  }\n  await Promise.all(\n    Array.from({ length: Math.min(limit, tasks.length) }, worker),\n  );\n  return results;\n}\n",
+          "explanation": "Without the try/catch, one rejection would reject `Promise.all` while other workers keep running in the background, which is a classic source of unhandled work."
+        },
+        {
+          "id": "p3",
+          "title": "Retry with backoff",
+          "task": "Add an options argument `{ retries = 2, baseDelayMs = 100 }`. Retry a failing task up to `retries` extra times, waiting `baseDelayMs * 2 ** attempt` plus random jitter between attempts. A retried task keeps its pool slot while waiting.",
+          "hints": [
+            "Write a small `sleep(ms)` helper with `setTimeout`.",
+            "Jitter: `Math.random() * baseDelayMs`."
+          ],
+          "checks": [
+            "A task that fails twice then succeeds is fulfilled with retries = 2",
+            "A task that always fails is rejected after 3 attempts",
+            "Delays grow 100, 200, ... plus jitter"
+          ],
+          "solution": "const sleep = (ms) => new Promise((r) => setTimeout(r, ms));\n\nasync function withRetry(task, retries, baseDelayMs) {\n  for (let attempt = 0; ; attempt++) {\n    try {\n      return await task();\n    } catch (err) {\n      if (attempt >= retries) throw err;\n      await sleep(baseDelayMs * 2 ** attempt + Math.random() * baseDelayMs);\n    }\n  }\n}\n\nasync function promisePool(tasks, limit, { retries = 2, baseDelayMs = 100 } = {}) {\n  const results = new Array(tasks.length);\n  let next = 0;\n  async function worker() {\n    while (next < tasks.length) {\n      const index = next++;\n      try {\n        const value = await withRetry(tasks[index], retries, baseDelayMs);\n        results[index] = { status: 'fulfilled', value };\n      } catch (reason) {\n        results[index] = { status: 'rejected', reason };\n      }\n    }\n  }\n  await Promise.all(\n    Array.from({ length: Math.min(limit, tasks.length) }, worker),\n  );\n  return results;\n}\n",
+          "explanation": "Exponential backoff with jitter spreads retries out so many clients do not hammer a recovering service in sync. Keeping the slot while sleeping preserves the concurrency guarantee."
+        }
+      ]
+    },
+    {
+      "id": "go-lru-cache",
+      "learningPathId": "go",
+      "language": "go",
+      "title": "Implement a thread-safe LRU cache",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 50,
+      "summary": "O(1) get and put with eviction, then make it safe for goroutines.",
+      "statement": "Build an in-memory LRU (least recently used) cache with a fixed capacity. `Get` and `Put` must both be O(1).",
+      "starterCode": "package lru\n\ntype Cache struct {\n\t// TODO\n}\n\nfunc New(capacity int) *Cache {\n\treturn nil\n}\n",
+      "parts": [
+        {
+          "id": "p1",
+          "title": "Get and Put in O(1)",
+          "task": "Implement `New(capacity)`, `Get(key string) (int, bool)` and `Put(key string, value int)` using a map plus `container/list`. A `Get` hit or a `Put` marks the key as most recently used.",
+          "hints": [
+            "Store `*list.Element` in the map; the element's Value holds key and value.",
+            "`MoveToFront` on every access."
+          ],
+          "checks": [
+            "Get on a missing key returns (0, false)",
+            "Put then Get returns the value",
+            "Put on an existing key updates the value without growing the cache"
+          ],
+          "solution": "package lru\n\nimport \"container/list\"\n\ntype entry struct {\n\tkey   string\n\tvalue int\n}\n\ntype Cache struct {\n\tcapacity int\n\tll       *list.List\n\titems    map[string]*list.Element\n}\n\nfunc New(capacity int) *Cache {\n\treturn &Cache{capacity: capacity, ll: list.New(), items: map[string]*list.Element{}}\n}\n\nfunc (c *Cache) Get(key string) (int, bool) {\n\tel, ok := c.items[key]\n\tif !ok {\n\t\treturn 0, false\n\t}\n\tc.ll.MoveToFront(el)\n\treturn el.Value.(*entry).value, true\n}\n\nfunc (c *Cache) Put(key string, value int) {\n\tif el, ok := c.items[key]; ok {\n\t\tel.Value.(*entry).value = value\n\t\tc.ll.MoveToFront(el)\n\t\treturn\n\t}\n\tc.items[key] = c.ll.PushFront(&entry{key, value})\n}\n",
+          "explanation": "The map gives O(1) lookup and the doubly linked list gives O(1) reordering. Storing the key inside the entry is what makes eviction possible in the next part."
+        },
+        {
+          "id": "p2",
+          "title": "Evict the least recently used",
+          "task": "When a `Put` adds a new key and the cache is over capacity, remove the least recently used entry. Also add `Len() int`.",
+          "hints": [
+            "The back of the list is the least recently used.",
+            "Delete from both the list and the map."
+          ],
+          "checks": [
+            "Capacity 2: put a, b, c evicts a",
+            "Get a after put a, b, then put c evicts b instead",
+            "Len never exceeds capacity"
+          ],
+          "solution": "func (c *Cache) Put(key string, value int) {\n\tif el, ok := c.items[key]; ok {\n\t\tel.Value.(*entry).value = value\n\t\tc.ll.MoveToFront(el)\n\t\treturn\n\t}\n\tc.items[key] = c.ll.PushFront(&entry{key, value})\n\tif c.ll.Len() > c.capacity {\n\t\toldest := c.ll.Back()\n\t\tc.ll.Remove(oldest)\n\t\tdelete(c.items, oldest.Value.(*entry).key)\n\t}\n}\n\nfunc (c *Cache) Len() int { return c.ll.Len() }\n",
+          "explanation": "Eviction needs the key to delete the map entry, which is why the list stores the whole entry rather than just the value."
+        },
+        {
+          "id": "p3",
+          "title": "Make it safe for goroutines",
+          "task": "Many goroutines will call `Get` and `Put` concurrently. Make the cache safe and explain why `sync.RWMutex` with `RLock` in `Get` would be a bug here.",
+          "hints": [
+            "`Get` mutates the list (MoveToFront).",
+            "Run your tests with `go test -race`."
+          ],
+          "checks": [
+            "`go test -race` passes with 100 goroutines doing mixed Get/Put",
+            "No method holds the lock while calling user code"
+          ],
+          "solution": "type Cache struct {\n\tmu       sync.Mutex\n\tcapacity int\n\tll       *list.List\n\titems    map[string]*list.Element\n}\n\nfunc (c *Cache) Get(key string) (int, bool) {\n\tc.mu.Lock()\n\tdefer c.mu.Unlock()\n\tel, ok := c.items[key]\n\tif !ok {\n\t\treturn 0, false\n\t}\n\tc.ll.MoveToFront(el)\n\treturn el.Value.(*entry).value, true\n}\n\n// Put and Len take c.mu.Lock() / defer c.mu.Unlock() the same way.\n",
+          "explanation": "`Get` is a write in an LRU because it reorders the list. With an `RLock`, two readers could call `MoveToFront` at the same time and corrupt the list. A plain `Mutex` is correct; for very high contention, shard the cache by key hash."
+        }
+      ]
+    },
+    {
+      "id": "java-bank-ledger",
+      "learningPathId": "java",
+      "language": "java",
+      "title": "Model a bank ledger with safe transfers",
+      "difficulty": "advanced",
+      "estimatedMinutes": 60,
+      "summary": "Validated accounts, deadlock-free transfers and an audit trail.",
+      "statement": "Build the core of a bank ledger: accounts that hold a balance in cents, and transfers between them that are safe under concurrency.",
+      "starterCode": "public final class Account {\n    private final String id;\n    private long balanceCents;\n\n    public Account(String id, long openingCents) {\n        this.id = id;\n        this.balanceCents = openingCents;\n    }\n}\n",
+      "parts": [
+        {
+          "id": "p1",
+          "title": "Validated deposits and withdrawals",
+          "task": "Add `deposit(long cents)` and `withdraw(long cents)`. Reject non-positive amounts with `IllegalArgumentException` and overdrafts with a custom checked `InsufficientFundsException`. Add `balance()`. Make the methods thread-safe for a single account.",
+          "hints": [
+            "Use `long` cents, never `double`, for money.",
+            "`synchronized` methods lock on `this`."
+          ],
+          "checks": [
+            "withdraw(0) throws IllegalArgumentException",
+            "Withdrawing more than the balance throws InsufficientFundsException and leaves the balance unchanged",
+            "1,000 concurrent deposits of 1 cent add exactly 1,000"
+          ],
+          "solution": "public final class Account {\n    private final String id;\n    private long balanceCents;\n\n    public Account(String id, long openingCents) {\n        if (openingCents < 0) throw new IllegalArgumentException(\"negative opening balance\");\n        this.id = id;\n        this.balanceCents = openingCents;\n    }\n\n    public String id() { return id; }\n\n    public synchronized long balance() { return balanceCents; }\n\n    public synchronized void deposit(long cents) {\n        requirePositive(cents);\n        balanceCents = Math.addExact(balanceCents, cents);\n    }\n\n    public synchronized void withdraw(long cents) throws InsufficientFundsException {\n        requirePositive(cents);\n        if (cents > balanceCents) throw new InsufficientFundsException(id, cents, balanceCents);\n        balanceCents -= cents;\n    }\n\n    private static void requirePositive(long cents) {\n        if (cents <= 0) throw new IllegalArgumentException(\"amount must be positive: \" + cents);\n    }\n}\n",
+          "explanation": "Integer cents avoid floating-point rounding errors. `Math.addExact` turns a silent overflow into an exception. Checking before mutating keeps the balance unchanged on failure."
+        },
+        {
+          "id": "p2",
+          "title": "Transfer without deadlocks",
+          "task": "Write `Ledger.transfer(Account from, Account to, long cents)` that moves money atomically: no other thread may see the money missing from both or present in both. Two threads transferring A to B and B to A at the same time must not deadlock.",
+          "hints": [
+            "Lock both accounts, but always in the same global order.",
+            "Order by account id.",
+            "Reject transfers to the same account."
+          ],
+          "checks": [
+            "Concurrent A->B and B->A transfers finish (no deadlock)",
+            "Total money across accounts is constant under concurrent transfers",
+            "A failed transfer changes neither balance"
+          ],
+          "solution": "public final class Ledger {\n    public void transfer(Account from, Account to, long cents) throws InsufficientFundsException {\n        if (from == to) throw new IllegalArgumentException(\"same account\");\n        Account first = from.id().compareTo(to.id()) < 0 ? from : to;\n        Account second = first == from ? to : from;\n        synchronized (first) {\n            synchronized (second) {\n                from.withdraw(cents);\n                to.deposit(cents);\n            }\n        }\n    }\n}\n",
+          "explanation": "Deadlock needs a cycle of waiting. Acquiring locks in a single global order (by id) makes a cycle impossible. Because `synchronized` is reentrant, the nested `withdraw` and `deposit` calls re-acquire the same monitors safely. If `withdraw` throws, `deposit` never runs."
+        },
+        {
+          "id": "p3",
+          "title": "Add an audit trail",
+          "task": "Every successful transfer must be recorded as an immutable `Transfer` record (id, from, to, cents, timestamp). Expose `List<Transfer> history()` that callers cannot modify, and make sure a record is only added when the transfer succeeded.",
+          "hints": [
+            "Java records are immutable value types.",
+            "Return `List.copyOf(...)`.",
+            "Inject a `Clock` so tests can control time."
+          ],
+          "checks": [
+            "Failed transfers add no record",
+            "Modifying the returned list throws UnsupportedOperationException",
+            "Records appear in the order transfers completed"
+          ],
+          "solution": "public record Transfer(UUID id, String fromId, String toId, long cents, Instant at) {}\n\npublic final class Ledger {\n    private final Clock clock;\n    private final List<Transfer> history = new ArrayList<>();\n\n    public Ledger(Clock clock) { this.clock = clock; }\n\n    public void transfer(Account from, Account to, long cents) throws InsufficientFundsException {\n        if (from == to) throw new IllegalArgumentException(\"same account\");\n        Account first = from.id().compareTo(to.id()) < 0 ? from : to;\n        Account second = first == from ? to : from;\n        synchronized (first) {\n            synchronized (second) {\n                from.withdraw(cents);\n                to.deposit(cents);\n                synchronized (history) {\n                    history.add(new Transfer(UUID.randomUUID(), from.id(), to.id(), cents, clock.instant()));\n                }\n            }\n        }\n    }\n\n    public List<Transfer> history() {\n        synchronized (history) {\n            return List.copyOf(history);\n        }\n    }\n}\n",
+          "explanation": "Recording inside the critical section, after both balance changes succeed, ties the audit entry to the real outcome. The history lock is always taken last, so it cannot form a cycle with account locks. `List.copyOf` hands out an unmodifiable snapshot."
+        }
+      ]
+    },
+    {
+      "id": "react-debounced-search",
+      "learningPathId": "react",
+      "language": "javascript",
+      "title": "Build a debounced search with cancellation",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 45,
+      "summary": "A search box that waits for typing to pause and never shows stale results.",
+      "statement": "Build a search box for a product API (`GET /api/search?q=`) that does not fire a request on every keystroke and never shows results for an older query.",
+      "starterCode": "import { useEffect, useState } from 'react';\n\nexport function useDebouncedValue(value, delayMs) {\n  // TODO\n}\n",
+      "parts": [
+        {
+          "id": "p1",
+          "title": "Debounce the input",
+          "task": "Implement `useDebouncedValue(value, delayMs)` that returns `value` only after it has stopped changing for `delayMs`.",
+          "hints": [
+            "Set a timeout in an effect and clear it in the cleanup.",
+            "The cleanup runs before the next effect and on unmount."
+          ],
+          "checks": [
+            "Typing 'r', 're', 'rea' quickly yields only 'rea' after the delay",
+            "Unmounting before the delay causes no state update"
+          ],
+          "solution": "export function useDebouncedValue(value, delayMs) {\n  const [debounced, setDebounced] = useState(value);\n  useEffect(() => {\n    const id = setTimeout(() => setDebounced(value), delayMs);\n    return () => clearTimeout(id);\n  }, [value, delayMs]);\n  return debounced;\n}\n",
+          "explanation": "Every change schedules a new timeout and the cleanup cancels the previous one, so only the last value survives a pause."
+        },
+        {
+          "id": "p2",
+          "title": "Fetch and cancel stale requests",
+          "task": "Write `useSearch(query)` returning `{ results, loading, error }`. Skip the request for an empty query. When the query changes, abort the previous request with `AbortController` so a slow old response can never overwrite newer results.",
+          "hints": [
+            "Create the controller inside the effect.",
+            "Ignore `AbortError` in the catch.",
+            "Pass `signal` to `fetch`."
+          ],
+          "checks": [
+            "An empty query returns [] without fetching",
+            "A slow response for 'rea' arriving after 'react' is ignored",
+            "Network errors set `error` and clear `loading`"
+          ],
+          "solution": "export function useSearch(query) {\n  const [state, setState] = useState({ results: [], loading: false, error: null });\n  useEffect(() => {\n    if (!query) {\n      setState({ results: [], loading: false, error: null });\n      return;\n    }\n    const controller = new AbortController();\n    setState((s) => ({ ...s, loading: true, error: null }));\n    fetch(`/api/search?q=${encodeURIComponent(query)}`, { signal: controller.signal })\n      .then((r) => {\n        if (!r.ok) throw new Error(`HTTP ${r.status}`);\n        return r.json();\n      })\n      .then((results) => setState({ results, loading: false, error: null }))\n      .catch((error) => {\n        if (error.name === 'AbortError') return;\n        setState({ results: [], loading: false, error });\n      });\n    return () => controller.abort();\n  }, [query]);\n  return state;\n}\n",
+          "explanation": "Aborting in the cleanup cancels the network request and makes its promise reject with AbortError, which we ignore. That removes the race where an old response lands last. `encodeURIComponent` prevents broken URLs for queries with spaces or symbols."
+        },
+        {
+          "id": "p3",
+          "title": "Wire up the component",
+          "task": "Build `<ProductSearch />` that uses both hooks with a 300 ms delay, shows a loading indicator, an error message with the error text, an empty state when a query has no results, and the result list with stable keys.",
+          "hints": [
+            "Keys should come from the product id, not the array index.",
+            "Render states in a clear order: error, loading, empty, list."
+          ],
+          "checks": [
+            "No request is sent until typing pauses for 300 ms",
+            "Each state renders exactly one of: error, loading, empty, list",
+            "Clearing the input clears the results"
+          ],
+          "solution": "export function ProductSearch() {\n  const [text, setText] = useState('');\n  const query = useDebouncedValue(text.trim(), 300);\n  const { results, loading, error } = useSearch(query);\n\n  let body;\n  if (error) body = <p role=\"alert\">Search failed: {error.message}</p>;\n  else if (loading) body = <p>Searching...</p>;\n  else if (query && results.length === 0) body = <p>No products match \"{query}\".</p>;\n  else body = (\n    <ul>\n      {results.map((p) => <li key={p.id}>{p.name}</li>)}\n    </ul>\n  );\n\n  return (\n    <div>\n      <input\n        aria-label=\"Search products\"\n        value={text}\n        onChange={(e) => setText(e.target.value)}\n      />\n      {body}\n    </div>\n  );\n}\n",
+          "explanation": "Trimming before debouncing avoids requests for whitespace changes. Stable keys from product ids keep React from reusing the wrong list items when results change."
+        }
+      ]
+    },
+    {
+      "id": "sql-sales-reports",
+      "learningPathId": "databases",
+      "language": "sql",
+      "title": "Write sales reporting queries",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 45,
+      "summary": "Joins, grouping and window functions on an orders schema.",
+      "statement": "Schema:\n\n```sql\ncustomers(id, name, country)\nproducts(id, name, category, price_cents)\norders(id, customer_id, ordered_at)\norder_items(order_id, product_id, quantity, unit_price_cents)\n```\n\nWrite each report as a single SQL query (PostgreSQL).",
+      "starterCode": "-- Part 1: revenue per customer\nSELECT ...\n",
+      "parts": [
+        {
+          "id": "p1",
+          "title": "Revenue per customer",
+          "task": "List every customer with their total revenue in cents (sum of quantity * unit_price_cents), including customers with no orders (revenue 0). Sort by revenue descending, then name.",
+          "hints": [
+            "LEFT JOIN from customers so nobody is dropped.",
+            "COALESCE turns NULL sums into 0."
+          ],
+          "checks": [
+            "A customer with no orders appears with 0",
+            "Revenue uses the price at order time (unit_price_cents), not today's price",
+            "Ties are ordered by name"
+          ],
+          "solution": "SELECT c.id, c.name,\n       COALESCE(SUM(oi.quantity * oi.unit_price_cents), 0) AS revenue_cents\nFROM customers c\nLEFT JOIN orders o ON o.customer_id = c.id\nLEFT JOIN order_items oi ON oi.order_id = o.id\nGROUP BY c.id, c.name\nORDER BY revenue_cents DESC, c.name;\n",
+          "explanation": "Both joins must be LEFT joins; an inner join to order_items would silently drop customers without orders. Using the stored unit price keeps historical revenue correct after price changes."
+        },
+        {
+          "id": "p2",
+          "title": "Monthly revenue with running total",
+          "task": "Show revenue per calendar month for 2026 with a running total for the year, one row per month that had orders.",
+          "hints": [
+            "`date_trunc('month', ordered_at)` groups by month.",
+            "A window `SUM(...) OVER (ORDER BY month)` gives the running total."
+          ],
+          "checks": [
+            "Months are in chronological order",
+            "The running total of the last row equals the year's revenue",
+            "Only 2026 orders are included, using a range filter that can use an index"
+          ],
+          "solution": "WITH monthly AS (\n  SELECT date_trunc('month', o.ordered_at) AS month,\n         SUM(oi.quantity * oi.unit_price_cents) AS revenue_cents\n  FROM orders o\n  JOIN order_items oi ON oi.order_id = o.id\n  WHERE o.ordered_at >= '2026-01-01' AND o.ordered_at < '2027-01-01'\n  GROUP BY 1\n)\nSELECT month, revenue_cents,\n       SUM(revenue_cents) OVER (ORDER BY month) AS running_total_cents\nFROM monthly\nORDER BY month;\n",
+          "explanation": "Filtering with a half-open range keeps the predicate sargable (an index on ordered_at can be used), unlike `EXTRACT(YEAR FROM ordered_at) = 2026`. Aggregating first in a CTE, then windowing, keeps the logic readable."
+        },
+        {
+          "id": "p3",
+          "title": "Best seller per category",
+          "task": "For each product category, return the single product with the most units sold, with its units. Break ties by product name.",
+          "hints": [
+            "Aggregate units per product first.",
+            "`ROW_NUMBER() OVER (PARTITION BY category ORDER BY units DESC, name)`.",
+            "Filter `rn = 1` in an outer query."
+          ],
+          "checks": [
+            "Exactly one row per category that has sales",
+            "Ties go to the alphabetically first product",
+            "Products with no sales do not appear"
+          ],
+          "solution": "WITH units AS (\n  SELECT p.id, p.name, p.category, SUM(oi.quantity) AS units_sold\n  FROM products p\n  JOIN order_items oi ON oi.product_id = p.id\n  GROUP BY p.id, p.name, p.category\n), ranked AS (\n  SELECT *, ROW_NUMBER() OVER (\n           PARTITION BY category ORDER BY units_sold DESC, name\n         ) AS rn\n  FROM units\n)\nSELECT category, name, units_sold\nFROM ranked\nWHERE rn = 1\nORDER BY category;\n",
+          "explanation": "Window functions cannot be used in WHERE, so ranking happens in a CTE and filtering outside. ROW_NUMBER guarantees one row per category; RANK would return several on ties."
+        }
+      ]
+    }
+  ]
+}

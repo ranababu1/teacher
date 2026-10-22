@@ -4339,6 +4339,378 @@ class SystemDesignAttemptsTableCompanion
   }
 }
 
+class $CodingChallengeAttemptsTableTable extends CodingChallengeAttemptsTable
+    with
+        TableInfo<
+          $CodingChallengeAttemptsTableTable,
+          CodingChallengeAttemptsTableData
+        > {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CodingChallengeAttemptsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _challengeIdMeta = const VerificationMeta(
+    'challengeId',
+  );
+  @override
+  late final GeneratedColumn<String> challengeId = GeneratedColumn<String>(
+    'challenge_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _scoreMeta = const VerificationMeta('score');
+  @override
+  late final GeneratedColumn<int> score = GeneratedColumn<int>(
+    'score',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _maxScoreMeta = const VerificationMeta(
+    'maxScore',
+  );
+  @override
+  late final GeneratedColumn<int> maxScore = GeneratedColumn<int>(
+    'max_score',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _completedAtMeta = const VerificationMeta(
+    'completedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> completedAt = GeneratedColumn<DateTime>(
+    'completed_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    challengeId,
+    score,
+    maxScore,
+    completedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'coding_challenge_attempts_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CodingChallengeAttemptsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('challenge_id')) {
+      context.handle(
+        _challengeIdMeta,
+        challengeId.isAcceptableOrUnknown(
+          data['challenge_id']!,
+          _challengeIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_challengeIdMeta);
+    }
+    if (data.containsKey('score')) {
+      context.handle(
+        _scoreMeta,
+        score.isAcceptableOrUnknown(data['score']!, _scoreMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_scoreMeta);
+    }
+    if (data.containsKey('max_score')) {
+      context.handle(
+        _maxScoreMeta,
+        maxScore.isAcceptableOrUnknown(data['max_score']!, _maxScoreMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_maxScoreMeta);
+    }
+    if (data.containsKey('completed_at')) {
+      context.handle(
+        _completedAtMeta,
+        completedAt.isAcceptableOrUnknown(
+          data['completed_at']!,
+          _completedAtMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_completedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CodingChallengeAttemptsTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CodingChallengeAttemptsTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      challengeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}challenge_id'],
+      )!,
+      score: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}score'],
+      )!,
+      maxScore: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}max_score'],
+      )!,
+      completedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}completed_at'],
+      )!,
+    );
+  }
+
+  @override
+  $CodingChallengeAttemptsTableTable createAlias(String alias) {
+    return $CodingChallengeAttemptsTableTable(attachedDatabase, alias);
+  }
+}
+
+class CodingChallengeAttemptsTableData extends DataClass
+    implements Insertable<CodingChallengeAttemptsTableData> {
+  final int id;
+  final String challengeId;
+  final int score;
+  final int maxScore;
+  final DateTime completedAt;
+  const CodingChallengeAttemptsTableData({
+    required this.id,
+    required this.challengeId,
+    required this.score,
+    required this.maxScore,
+    required this.completedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['challenge_id'] = Variable<String>(challengeId);
+    map['score'] = Variable<int>(score);
+    map['max_score'] = Variable<int>(maxScore);
+    map['completed_at'] = Variable<DateTime>(completedAt);
+    return map;
+  }
+
+  CodingChallengeAttemptsTableCompanion toCompanion(bool nullToAbsent) {
+    return CodingChallengeAttemptsTableCompanion(
+      id: Value(id),
+      challengeId: Value(challengeId),
+      score: Value(score),
+      maxScore: Value(maxScore),
+      completedAt: Value(completedAt),
+    );
+  }
+
+  factory CodingChallengeAttemptsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CodingChallengeAttemptsTableData(
+      id: serializer.fromJson<int>(json['id']),
+      challengeId: serializer.fromJson<String>(json['challengeId']),
+      score: serializer.fromJson<int>(json['score']),
+      maxScore: serializer.fromJson<int>(json['maxScore']),
+      completedAt: serializer.fromJson<DateTime>(json['completedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'challengeId': serializer.toJson<String>(challengeId),
+      'score': serializer.toJson<int>(score),
+      'maxScore': serializer.toJson<int>(maxScore),
+      'completedAt': serializer.toJson<DateTime>(completedAt),
+    };
+  }
+
+  CodingChallengeAttemptsTableData copyWith({
+    int? id,
+    String? challengeId,
+    int? score,
+    int? maxScore,
+    DateTime? completedAt,
+  }) => CodingChallengeAttemptsTableData(
+    id: id ?? this.id,
+    challengeId: challengeId ?? this.challengeId,
+    score: score ?? this.score,
+    maxScore: maxScore ?? this.maxScore,
+    completedAt: completedAt ?? this.completedAt,
+  );
+  CodingChallengeAttemptsTableData copyWithCompanion(
+    CodingChallengeAttemptsTableCompanion data,
+  ) {
+    return CodingChallengeAttemptsTableData(
+      id: data.id.present ? data.id.value : this.id,
+      challengeId: data.challengeId.present
+          ? data.challengeId.value
+          : this.challengeId,
+      score: data.score.present ? data.score.value : this.score,
+      maxScore: data.maxScore.present ? data.maxScore.value : this.maxScore,
+      completedAt: data.completedAt.present
+          ? data.completedAt.value
+          : this.completedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CodingChallengeAttemptsTableData(')
+          ..write('id: $id, ')
+          ..write('challengeId: $challengeId, ')
+          ..write('score: $score, ')
+          ..write('maxScore: $maxScore, ')
+          ..write('completedAt: $completedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, challengeId, score, maxScore, completedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CodingChallengeAttemptsTableData &&
+          other.id == this.id &&
+          other.challengeId == this.challengeId &&
+          other.score == this.score &&
+          other.maxScore == this.maxScore &&
+          other.completedAt == this.completedAt);
+}
+
+class CodingChallengeAttemptsTableCompanion
+    extends UpdateCompanion<CodingChallengeAttemptsTableData> {
+  final Value<int> id;
+  final Value<String> challengeId;
+  final Value<int> score;
+  final Value<int> maxScore;
+  final Value<DateTime> completedAt;
+  const CodingChallengeAttemptsTableCompanion({
+    this.id = const Value.absent(),
+    this.challengeId = const Value.absent(),
+    this.score = const Value.absent(),
+    this.maxScore = const Value.absent(),
+    this.completedAt = const Value.absent(),
+  });
+  CodingChallengeAttemptsTableCompanion.insert({
+    this.id = const Value.absent(),
+    required String challengeId,
+    required int score,
+    required int maxScore,
+    required DateTime completedAt,
+  }) : challengeId = Value(challengeId),
+       score = Value(score),
+       maxScore = Value(maxScore),
+       completedAt = Value(completedAt);
+  static Insertable<CodingChallengeAttemptsTableData> custom({
+    Expression<int>? id,
+    Expression<String>? challengeId,
+    Expression<int>? score,
+    Expression<int>? maxScore,
+    Expression<DateTime>? completedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (challengeId != null) 'challenge_id': challengeId,
+      if (score != null) 'score': score,
+      if (maxScore != null) 'max_score': maxScore,
+      if (completedAt != null) 'completed_at': completedAt,
+    });
+  }
+
+  CodingChallengeAttemptsTableCompanion copyWith({
+    Value<int>? id,
+    Value<String>? challengeId,
+    Value<int>? score,
+    Value<int>? maxScore,
+    Value<DateTime>? completedAt,
+  }) {
+    return CodingChallengeAttemptsTableCompanion(
+      id: id ?? this.id,
+      challengeId: challengeId ?? this.challengeId,
+      score: score ?? this.score,
+      maxScore: maxScore ?? this.maxScore,
+      completedAt: completedAt ?? this.completedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (challengeId.present) {
+      map['challenge_id'] = Variable<String>(challengeId.value);
+    }
+    if (score.present) {
+      map['score'] = Variable<int>(score.value);
+    }
+    if (maxScore.present) {
+      map['max_score'] = Variable<int>(maxScore.value);
+    }
+    if (completedAt.present) {
+      map['completed_at'] = Variable<DateTime>(completedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CodingChallengeAttemptsTableCompanion(')
+          ..write('id: $id, ')
+          ..write('challengeId: $challengeId, ')
+          ..write('score: $score, ')
+          ..write('maxScore: $maxScore, ')
+          ..write('completedAt: $completedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -4360,6 +4732,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $ProjectMilestoneProgressTableTable(this);
   late final $SystemDesignAttemptsTableTable systemDesignAttemptsTable =
       $SystemDesignAttemptsTableTable(this);
+  late final $CodingChallengeAttemptsTableTable codingChallengeAttemptsTable =
+      $CodingChallengeAttemptsTableTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -4375,6 +4749,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     moduleTestProgressTable,
     projectMilestoneProgressTable,
     systemDesignAttemptsTable,
+    codingChallengeAttemptsTable,
   ];
 }
 
@@ -6761,6 +7136,223 @@ typedef $$SystemDesignAttemptsTableTableProcessedTableManager =
       SystemDesignAttemptsTableData,
       PrefetchHooks Function()
     >;
+typedef $$CodingChallengeAttemptsTableTableCreateCompanionBuilder =
+    CodingChallengeAttemptsTableCompanion Function({
+      Value<int> id,
+      required String challengeId,
+      required int score,
+      required int maxScore,
+      required DateTime completedAt,
+    });
+typedef $$CodingChallengeAttemptsTableTableUpdateCompanionBuilder =
+    CodingChallengeAttemptsTableCompanion Function({
+      Value<int> id,
+      Value<String> challengeId,
+      Value<int> score,
+      Value<int> maxScore,
+      Value<DateTime> completedAt,
+    });
+
+class $$CodingChallengeAttemptsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $CodingChallengeAttemptsTableTable> {
+  $$CodingChallengeAttemptsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get challengeId => $composableBuilder(
+    column: $table.challengeId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get score => $composableBuilder(
+    column: $table.score,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get maxScore => $composableBuilder(
+    column: $table.maxScore,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get completedAt => $composableBuilder(
+    column: $table.completedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$CodingChallengeAttemptsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $CodingChallengeAttemptsTableTable> {
+  $$CodingChallengeAttemptsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get challengeId => $composableBuilder(
+    column: $table.challengeId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get score => $composableBuilder(
+    column: $table.score,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get maxScore => $composableBuilder(
+    column: $table.maxScore,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get completedAt => $composableBuilder(
+    column: $table.completedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CodingChallengeAttemptsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CodingChallengeAttemptsTableTable> {
+  $$CodingChallengeAttemptsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get challengeId => $composableBuilder(
+    column: $table.challengeId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get score =>
+      $composableBuilder(column: $table.score, builder: (column) => column);
+
+  GeneratedColumn<int> get maxScore =>
+      $composableBuilder(column: $table.maxScore, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get completedAt => $composableBuilder(
+    column: $table.completedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$CodingChallengeAttemptsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $CodingChallengeAttemptsTableTable,
+          CodingChallengeAttemptsTableData,
+          $$CodingChallengeAttemptsTableTableFilterComposer,
+          $$CodingChallengeAttemptsTableTableOrderingComposer,
+          $$CodingChallengeAttemptsTableTableAnnotationComposer,
+          $$CodingChallengeAttemptsTableTableCreateCompanionBuilder,
+          $$CodingChallengeAttemptsTableTableUpdateCompanionBuilder,
+          (
+            CodingChallengeAttemptsTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $CodingChallengeAttemptsTableTable,
+              CodingChallengeAttemptsTableData
+            >,
+          ),
+          CodingChallengeAttemptsTableData,
+          PrefetchHooks Function()
+        > {
+  $$CodingChallengeAttemptsTableTableTableManager(
+    _$AppDatabase db,
+    $CodingChallengeAttemptsTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CodingChallengeAttemptsTableTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$CodingChallengeAttemptsTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$CodingChallengeAttemptsTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> challengeId = const Value.absent(),
+                Value<int> score = const Value.absent(),
+                Value<int> maxScore = const Value.absent(),
+                Value<DateTime> completedAt = const Value.absent(),
+              }) => CodingChallengeAttemptsTableCompanion(
+                id: id,
+                challengeId: challengeId,
+                score: score,
+                maxScore: maxScore,
+                completedAt: completedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String challengeId,
+                required int score,
+                required int maxScore,
+                required DateTime completedAt,
+              }) => CodingChallengeAttemptsTableCompanion.insert(
+                id: id,
+                challengeId: challengeId,
+                score: score,
+                maxScore: maxScore,
+                completedAt: completedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$CodingChallengeAttemptsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $CodingChallengeAttemptsTableTable,
+      CodingChallengeAttemptsTableData,
+      $$CodingChallengeAttemptsTableTableFilterComposer,
+      $$CodingChallengeAttemptsTableTableOrderingComposer,
+      $$CodingChallengeAttemptsTableTableAnnotationComposer,
+      $$CodingChallengeAttemptsTableTableCreateCompanionBuilder,
+      $$CodingChallengeAttemptsTableTableUpdateCompanionBuilder,
+      (
+        CodingChallengeAttemptsTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $CodingChallengeAttemptsTableTable,
+          CodingChallengeAttemptsTableData
+        >,
+      ),
+      CodingChallengeAttemptsTableData,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -6797,5 +7389,11 @@ class $AppDatabaseManager {
       $$SystemDesignAttemptsTableTableTableManager(
         _db,
         _db.systemDesignAttemptsTable,
+      );
+  $$CodingChallengeAttemptsTableTableTableManager
+  get codingChallengeAttemptsTable =>
+      $$CodingChallengeAttemptsTableTableTableManager(
+        _db,
+        _db.codingChallengeAttemptsTable,
       );
 }
