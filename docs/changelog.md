@@ -21,6 +21,15 @@
   in the prompt. Native JSON schemas for Gemini and Anthropic, a shape
   instruction for OpenAI-compatible providers, shared parsing via
   `parseRoadmapDraft` with the usual single retry on malformed output.
+- **Personal roadmap: data and use case.** `RoadmapRepository` saves the
+  roadmap offline as JSON in the settings table (no schema migration; a
+  corrupt value reads as "no roadmap"). `GenerateRoadmapUseCase` asks the
+  AI and validates the answer, falls back to the offline builder when
+  there is no key or no network, and surfaces other AI errors so the
+  screen can offer a retry. Providers build the catalog from the real
+  content and completion from existing progress (topic tests, project
+  milestones, design and challenge records); `RoadmapController` saves
+  edits (remove, move between weeks, delete, regenerate).
 
 ## 2026-10-22 (release: v0.28.1 - Smooth app launch without flicker)
 
