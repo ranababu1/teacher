@@ -3,6 +3,7 @@ import '../../curriculum/domain/models/exercise.dart';
 import '../../settings/domain/settings_models.dart';
 import '../domain/ai_provider.dart';
 import '../domain/models/module_test_context.dart';
+import '../domain/models/study_coaching.dart';
 import '../domain/models/teacher_response.dart';
 import '../domain/models/teaching_context.dart';
 import 'ai_response_parsing.dart' as parsing;
@@ -194,5 +195,35 @@ class GeminiProvider implements AIProvider {
       responseSchema: teacherResponseSchema,
     );
     parsing.reqString(json, 'explanation', providerLabel: _providerLabel);
+  }
+
+  @override
+  Future<StudyCoachingAdvice> coachStudyPlan(StudyCoachingRequest request) {
+    final prompt = buildCoachStudyPlanPrompt(request, depth: explanationDepth);
+    return parsing.callWithRetry(() async {
+      final json = await _client.generateContent(
+        model: _model,
+        systemInstruction: prompt.systemInstruction,
+        userContent: prompt.userContent,
+        responseSchema: studyCoachingSchema,
+      );
+      return StudyCoachingAdvice(
+        summary: parsing.reqString(
+          json,
+          'summary',
+          providerLabel: _providerLabel,
+        ),
+        weeklyFocus: parsing.reqString(
+          json,
+          'weeklyFocus',
+          providerLabel: _providerLabel,
+        ),
+        stepTips: parsing.reqStringList(
+          json,
+          'stepTips',
+          providerLabel: _providerLabel,
+        ),
+      );
+    });
   }
 }

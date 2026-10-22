@@ -1,6 +1,7 @@
 import '../../../core/errors/app_exception.dart';
 import '../../curriculum/domain/models/assessment.dart';
 import '../../curriculum/domain/models/exercise.dart';
+import 'models/study_coaching.dart';
 import 'models/teacher_response.dart';
 
 /// Provider-agnostic AI teaching contract — see instructions.md section 19.
@@ -31,4 +32,8 @@ abstract class AIProvider {
   /// [AppException]s as every other method so callers get one consistent
   /// set of specific, plain-language failure reasons.
   Future<void> testConnection();
+
+  /// Coaching on the learner's study plan: a short assessment, a weekly
+  /// focus and one tip per step. See StudyCoachingRequest.
+  Future<StudyCoachingAdvice> coachStudyPlan(StudyCoachingRequest request);
 }

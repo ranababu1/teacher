@@ -5,6 +5,7 @@ import 'package:teacher/features/ai_teacher/domain/assess_use_case.dart';
 import 'package:teacher/features/ai_teacher/domain/evaluate_explanation_use_case.dart';
 import 'package:teacher/features/ai_teacher/domain/generate_exercise_use_case.dart';
 import 'package:teacher/features/ai_teacher/domain/misconception_repository.dart';
+import 'package:teacher/features/ai_teacher/domain/models/study_coaching.dart';
 import 'package:teacher/features/ai_teacher/domain/models/detected_misconception.dart';
 import 'package:teacher/features/ai_teacher/domain/models/teacher_response.dart';
 import 'package:teacher/features/ai_teacher/domain/models/teaching_context.dart';
@@ -191,6 +192,10 @@ class _FakeAIProvider implements AIProvider {
     testConnectionCalled = true;
     if (testConnectionError != null) throw testConnectionError!;
   }
+
+  @override
+  Future<StudyCoachingAdvice> coachStudyPlan(StudyCoachingRequest request) =>
+      throw UnimplementedError();
 }
 
 void main() {

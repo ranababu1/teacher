@@ -3,6 +3,7 @@ import 'package:teacher/core/errors/app_exception.dart';
 import 'package:teacher/features/ai_teacher/domain/ai_provider.dart';
 import 'package:teacher/features/ai_teacher/domain/generate_module_test_use_case.dart';
 import 'package:teacher/features/ai_teacher/domain/misconception_repository.dart';
+import 'package:teacher/features/ai_teacher/domain/models/study_coaching.dart';
 import 'package:teacher/features/ai_teacher/domain/models/detected_misconception.dart';
 import 'package:teacher/features/ai_teacher/domain/models/module_test_context.dart';
 import 'package:teacher/features/ai_teacher/domain/models/teacher_response.dart';
@@ -134,6 +135,10 @@ class _FakeAIProvider implements AIProvider {
 
   @override
   Future<void> testConnection() => throw UnimplementedError();
+
+  @override
+  Future<StudyCoachingAdvice> coachStudyPlan(StudyCoachingRequest request) =>
+      throw UnimplementedError();
 }
 
 Assessment _mcq(String id, {int correctOptionIndex = 0, List<String>? options}) {

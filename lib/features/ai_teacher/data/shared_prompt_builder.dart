@@ -1,5 +1,6 @@
 import '../../settings/domain/settings_models.dart';
 import '../domain/models/module_test_context.dart';
+import '../domain/models/study_coaching.dart';
 import '../domain/models/teaching_context.dart';
 
 /// A ready-to-send AI prompt: a system instruction (persona, teaching
@@ -140,6 +141,51 @@ AiPrompt buildModuleTestPrompt(
 
   return (systemInstruction: system, userContent: buffer.toString());
 }
+
+/// Pure prompt construction for the "study coach" capability: the app's
+/// own plan plus a learner summary in, short advice out.
+AiPrompt buildCoachStudyPlanPrompt(
+  StudyCoachingRequest request, {
+  required ExplanationDepth depth,
+  required String outputInstruction,
+}) {
+  final system = _systemInstruction(
+    depth: depth,
+    addendum: _coachAddendum,
+    outputInstruction: outputInstruction,
+  );
+  final buffer = StringBuffer()
+    ..writeln('## Learner')
+    ..writeln(request.learnerSummary.trim());
+  final goal = request.careerGoal?.trim();
+  if (goal != null && goal.isNotEmpty) {
+    buffer.writeln('Career goal: $goal');
+  }
+  buffer
+    ..writeln()
+    ..writeln("## Today's plan (built by the app, in order)");
+  for (final (i, step) in request.planSteps.indexed) {
+    buffer.writeln('${i + 1}. $step');
+  }
+  buffer
+    ..writeln()
+    ..writeln('## Task')
+    ..writeln(
+      'Coach this learner on the plan above. Write a 2-3 sentence '
+      'honest summary of where they stand, one concrete focus for the '
+      'coming week tied to their goal when one is given, and exactly '
+      '${request.planSteps.length} short tips (one per plan step, same '
+      'order, at most 25 words each) on how to get the most out of that '
+      'step. Do not add steps, reorder them, or mention content the plan '
+      'does not include.',
+    );
+  return (systemInstruction: system, userContent: buffer.toString());
+}
+
+const _coachAddendum =
+    'For this request you are acting as a study coach, not explaining a '
+    'concept. Be specific and practical, refer to the actual topics named, '
+    'and never pad with generic motivation.';
 
 // ---------------------------------------------------------------------------
 // System instruction — shared core + capability-specific addendum.

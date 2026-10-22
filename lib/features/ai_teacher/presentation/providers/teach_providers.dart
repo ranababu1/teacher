@@ -14,6 +14,7 @@ import '../../data/anthropic_provider.dart';
 import '../../data/gemini_provider.dart';
 import '../../data/openai_compatible_provider.dart';
 import '../../domain/ai_provider.dart';
+import '../../domain/models/study_coaching.dart';
 import '../../domain/models/teacher_response.dart';
 import '../../domain/teach_use_case.dart';
 import '../../domain/teaching_context_builder.dart';
@@ -50,11 +51,17 @@ class _UnavailableAiProvider implements AIProvider {
   ) async => _throwUnavailable();
 
   @override
-  Future<List<Assessment>> generateModuleTest(ModuleTestRequest request) async =>
-      _throwUnavailable();
+  Future<List<Assessment>> generateModuleTest(
+    ModuleTestRequest request,
+  ) async => _throwUnavailable();
 
   @override
   Future<void> testConnection() async => _throwUnavailable();
+
+  @override
+  Future<StudyCoachingAdvice> coachStudyPlan(
+    StudyCoachingRequest request,
+  ) async => _throwUnavailable();
 
   Never _throwUnavailable() {
     final name = _providerKind.displayName;
@@ -134,9 +141,7 @@ String _effectiveModel(
 
 /// Shared by every AI Teacher use case so context assembly can't drift
 /// between them.
-final teachingContextBuilderProvider = Provider<TeachingContextBuilder>((
-  ref,
-) {
+final teachingContextBuilderProvider = Provider<TeachingContextBuilder>((ref) {
   return TeachingContextBuilder(
     curriculumRepository: ref.watch(curriculumRepositoryProvider),
     masteryRepository: ref.watch(conceptMasteryRepositoryProvider),

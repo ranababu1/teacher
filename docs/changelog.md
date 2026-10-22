@@ -9,6 +9,14 @@
 - **System design in your study plan**: learners on the System Design
   course get a design step: the first exercise not yet tried, otherwise the
   one with the lowest best score under 75%.
+- **AI study coach capability** (Phase 5 "AI-generated personalized
+  curriculum", groundwork): `AIProvider.coachStudyPlan` takes a learner
+  summary, the app's ordered plan and the career goal, and returns a short
+  assessment, a weekly focus and one tip per step. Implemented for Gemini
+  and Anthropic (native JSON schemas) and OpenAI-compatible providers
+  (DeepSeek, OpenAI) with the usual retry-once parsing; without an API key
+  it fails with the standard "add a key" message. Prompt and provider tests
+  included.
 
 ## 2026-10-22 (release: v0.24.0 - System design exercises)
 

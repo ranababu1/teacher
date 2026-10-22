@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:teacher/core/errors/app_exception.dart';
 import 'package:teacher/features/ai_teacher/data/openai_compatible_api_client.dart';
 import 'package:teacher/features/ai_teacher/data/openai_compatible_provider.dart';
+import 'package:teacher/features/ai_teacher/domain/models/study_coaching.dart';
 import 'package:teacher/features/ai_teacher/domain/models/module_test_context.dart';
 import 'package:teacher/features/ai_teacher/domain/models/teacher_response.dart';
 import 'package:teacher/features/ai_teacher/domain/models/teaching_context.dart';
@@ -345,6 +346,36 @@ void main() {
         ),
         throwsA(isA<NetworkUnavailableException>()),
       );
+    });
+  });
+
+  group('OpenAiCompatibleProvider.coachStudyPlan', () {
+    test('parses summary, weekly focus and step tips', () async {
+      final adapter = _FakeAdapter([
+        (_) => _jsonResponse(
+          _envelope(
+            jsonEncode({
+              'summary': 'Solid on basics, shaky on closures.',
+              'weeklyFocus': 'Closures and scope.',
+              'stepTips': ['Say each answer aloud.', 'Trace by hand.'],
+            }),
+          ),
+        ),
+      ]);
+      final provider = _providerWith(adapter);
+
+      final advice = await provider.coachStudyPlan(
+        const StudyCoachingRequest(
+          learnerSummary: 'Python, 3 topics passed.',
+          planSteps: ['Review 2 due concepts', 'Strengthen Closures'],
+          careerGoal: 'Backend engineer',
+        ),
+      );
+
+      expect(advice.summary, 'Solid on basics, shaky on closures.');
+      expect(advice.weeklyFocus, 'Closures and scope.');
+      expect(advice.stepTips, hasLength(2));
+      expect(adapter.callCount, 1);
     });
   });
 }

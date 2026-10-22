@@ -1,11 +1,14 @@
 import '../../settings/domain/settings_models.dart';
 import '../domain/models/module_test_context.dart';
+import '../domain/models/study_coaching.dart';
 import '../domain/models/teaching_context.dart';
 import 'shared_prompt_builder.dart' as shared;
 
 /// A ready-to-send prompt for an OpenAI-compatible chat model.
-typedef OpenAiCompatiblePrompt =
-    ({String systemInstruction, String userContent});
+typedef OpenAiCompatiblePrompt = ({
+  String systemInstruction,
+  String userContent,
+});
 
 // Thin wrapper over the shared, provider-agnostic prompt builders in
 // shared_prompt_builder.dart. Unlike Gemini/Anthropic, this provider's
@@ -47,6 +50,12 @@ const _evaluateExplanationShapeInstruction =
     '"feedback": "<string>", "detectedMisconceptions": ["<string>", ...]} '
     '— use an empty array if none were detected. No markdown code fences, '
     'no prose before or after it, nothing but the JSON object itself.';
+
+const _coachShapeInstruction =
+    'Output requirement: respond with ONLY a raw JSON object of exactly '
+    'this shape: {"summary": "<string>", "weeklyFocus": "<string>", '
+    '"stepTips": ["<string>", ...]}. No markdown code fences, no prose '
+    'before or after it, nothing but the JSON object itself.';
 
 String _moduleTestShapeInstruction(int questionCount) =>
     'Output requirement: respond with ONLY a raw JSON object of exactly '
@@ -110,4 +119,13 @@ OpenAiCompatiblePrompt buildModuleTestPrompt(
   questionCount: questionCount,
   depth: depth,
   outputInstruction: _moduleTestShapeInstruction(questionCount),
+);
+
+OpenAiCompatiblePrompt buildCoachStudyPlanPrompt(
+  StudyCoachingRequest request, {
+  required ExplanationDepth depth,
+}) => shared.buildCoachStudyPlanPrompt(
+  request,
+  depth: depth,
+  outputInstruction: _coachShapeInstruction,
 );

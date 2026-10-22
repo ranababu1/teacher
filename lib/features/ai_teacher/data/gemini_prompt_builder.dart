@@ -1,5 +1,6 @@
 import '../../settings/domain/settings_models.dart';
 import '../domain/models/module_test_context.dart';
+import '../domain/models/study_coaching.dart';
 import '../domain/models/teaching_context.dart';
 import 'shared_prompt_builder.dart' as shared;
 
@@ -60,6 +61,15 @@ GeminiPrompt buildModuleTestPrompt(
 }) => shared.buildModuleTestPrompt(
   context,
   questionCount: questionCount,
+  depth: depth,
+  outputInstruction: shared.nativeSchemaOutputInstruction,
+);
+
+GeminiPrompt buildCoachStudyPlanPrompt(
+  StudyCoachingRequest request, {
+  required ExplanationDepth depth,
+}) => shared.buildCoachStudyPlanPrompt(
+  request,
   depth: depth,
   outputInstruction: shared.nativeSchemaOutputInstruction,
 );

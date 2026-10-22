@@ -149,3 +149,18 @@ const Map<String, dynamic> moduleTestSchema = {
   'required': ['questions'],
   'additionalProperties': false,
 };
+
+/// Shape of [StudyCoachingAdvice].
+const Map<String, dynamic> studyCoachingSchema = {
+  'type': 'object',
+  'properties': {
+    'summary': {'type': 'string'},
+    'weeklyFocus': {'type': 'string'},
+    'stepTips': {
+      'type': 'array',
+      'items': {'type': 'string'},
+    },
+  },
+  'required': ['summary', 'weeklyFocus', 'stepTips'],
+  'additionalProperties': false,
+};
