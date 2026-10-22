@@ -8,6 +8,11 @@
   301 vs 302 and abuse handling) and "Design search autocomplete"
   (intermediate: tries with precomputed top-k per node, offline snapshot
   builds, trending layer and prefix sharding). Eight exercises in total.
+- **Two more long-form coding challenges**: "Build a k-nearest neighbours
+  classifier" (AI/ML course: distance and majority vote, feature scaling,
+  choosing k) and "Build a tiny vector search index" (Vector Databases
+  course: cosine search, metadata filters, an IVF-style bucketed index).
+  Eight challenges in total.
 
 ## 2026-10-22 (release: v0.27.0 - Build and design dashboard)
 

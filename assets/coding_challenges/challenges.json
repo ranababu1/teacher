@@ -370,6 +370,130 @@
           "explanation": "Window functions cannot be used in WHERE, so ranking happens in a CTE and filtering outside. ROW_NUMBER guarantees one row per category; RANK would return several on ties."
         }
       ]
+    },
+    {
+      "id": "py-knn-classifier",
+      "learningPathId": "ai-ml",
+      "language": "python",
+      "title": "Build a k-nearest neighbours classifier",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 50,
+      "summary": "Implement k-NN from scratch, then add scaling and evaluation.",
+      "statement": "Implement a k-nearest neighbours classifier in plain Python (no NumPy or scikit-learn) so you understand every step. Points are lists of floats and labels are strings. Each part builds on the previous one.",
+      "starterCode": "import math\nfrom collections import Counter\n\n\ndef distance(a: list[float], b: list[float]) -> float:\n    ...\n\n\ndef predict(train_x, train_y, point, k=3):\n    ...\n",
+      "parts": [
+        {
+          "id": "p1",
+          "title": "Distance and prediction",
+          "task": "Implement `distance(a, b)` (Euclidean) and `predict(train_x, train_y, point, k)` that returns the majority label among the `k` closest training points. Break ties by choosing the label of the single nearest neighbour among the tied labels.",
+          "hints": [
+            "Sort (distance, label) pairs and take the first k.",
+            "`Counter.most_common()` gives counts; check whether the top count is shared."
+          ],
+          "checks": [
+            "distance([0, 0], [3, 4]) == 5.0",
+            "With k=1 the label of the closest point is returned",
+            "A 2-2 tie with k=4 is broken by the nearest neighbour"
+          ],
+          "solution": "def distance(a, b):\n    return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))\n\n\ndef predict(train_x, train_y, point, k=3):\n    ranked = sorted(\n        (distance(x, point), y) for x, y in zip(train_x, train_y)\n    )[:k]\n    counts = Counter(label for _, label in ranked)\n    best = max(counts.values())\n    tied = {label for label, n in counts.items() if n == best}\n    for _, label in ranked:\n        if label in tied:\n            return label\n",
+          "explanation": "Sorting is O(n log n) per query, which is fine for learning; `heapq.nsmallest(k, ...)` is O(n log k). Walking the ranked list for ties picks the tied label that appears nearest, which is deterministic."
+        },
+        {
+          "id": "p2",
+          "title": "Feature scaling",
+          "task": "Features on large scales (salary in dollars next to age in years) dominate the distance. Implement `fit_scaler(train_x)` returning per-feature `(min, max)` and `scale(point, ranges)` mapping each feature to [0, 1]. A feature where min equals max should scale to 0.",
+          "hints": [
+            "Compute ranges on the training data only, then reuse them for test points.",
+            "Guard against dividing by zero."
+          ],
+          "checks": [
+            "Scaling the training minimum gives 0 and the maximum gives 1",
+            "A constant feature scales to 0, not a division error",
+            "Test points outside the training range may fall outside [0, 1]"
+          ],
+          "solution": "def fit_scaler(train_x):\n    columns = list(zip(*train_x))\n    return [(min(c), max(c)) for c in columns]\n\n\ndef scale(point, ranges):\n    return [\n        0.0 if hi == lo else (v - lo) / (hi - lo)\n        for v, (lo, hi) in zip(point, ranges)\n    ]\n",
+          "explanation": "Fitting on training data only avoids leaking information from the test set. Out-of-range test values are expected and harmless; clipping is optional."
+        },
+        {
+          "id": "p3",
+          "title": "Evaluate and choose k",
+          "task": "Implement `accuracy(train_x, train_y, test_x, test_y, k)` and `best_k(train_x, train_y, test_x, test_y, ks)` that returns the `k` with the highest accuracy, preferring the smaller `k` on ties. Scale features inside both using a scaler fit on the training set.",
+          "hints": [
+            "Reuse `fit_scaler`, `scale` and `predict`.",
+            "Iterate `ks` in ascending order and only replace on a strictly better score."
+          ],
+          "checks": [
+            "Perfectly separable data gives accuracy 1.0",
+            "Ties between k values return the smaller k",
+            "Empty test data raises ValueError"
+          ],
+          "solution": "def accuracy(train_x, train_y, test_x, test_y, k):\n    if not test_x:\n        raise ValueError('test set is empty')\n    ranges = fit_scaler(train_x)\n    scaled_train = [scale(x, ranges) for x in train_x]\n    hits = sum(\n        predict(scaled_train, train_y, scale(x, ranges), k) == y\n        for x, y in zip(test_x, test_y)\n    )\n    return hits / len(test_x)\n\n\ndef best_k(train_x, train_y, test_x, test_y, ks):\n    best, best_score = None, -1.0\n    for k in sorted(ks):\n        score = accuracy(train_x, train_y, test_x, test_y, k)\n        if score > best_score:\n            best, best_score = k, score\n    return best\n",
+          "explanation": "Choosing k on a held-out set is a tiny version of hyperparameter tuning. In practice use cross-validation so the choice does not overfit one split; odd k values also reduce ties in binary problems."
+        }
+      ]
+    },
+    {
+      "id": "py-vector-search",
+      "learningPathId": "vector-databases",
+      "language": "python",
+      "title": "Build a tiny vector search index",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 50,
+      "summary": "Cosine similarity, top-k search with filters, then a faster bucketed index.",
+      "statement": "Vector databases store embeddings and return the most similar items to a query vector. Build a minimal in-memory index in plain Python. Vectors are lists of floats of the same length; each item has an `id`, a `vector` and a `metadata` dict.",
+      "starterCode": "import heapq\nimport math\n\n\nclass VectorIndex:\n    def __init__(self, dim: int):\n        self.dim = dim\n        self.items = {}\n\n    def add(self, item_id, vector, metadata=None):\n        ...\n\n    def search(self, query, k=5):\n        ...\n",
+      "parts": [
+        {
+          "id": "p1",
+          "title": "Add and search by cosine similarity",
+          "task": "Implement `add` (reject vectors of the wrong dimension with `ValueError`; adding an existing id replaces it) and `search(query, k)` returning up to `k` `(id, score)` pairs sorted by cosine similarity, highest first. Store vectors normalised to unit length so search is a dot product.",
+          "hints": [
+            "Normalise once on insert: divide by the vector's length.",
+            "A zero vector has no direction; reject it.",
+            "`heapq.nlargest(k, ...)` avoids sorting everything."
+          ],
+          "checks": [
+            "Identical direction scores 1.0 and opposite scores -1.0",
+            "A wrong-dimension vector raises ValueError",
+            "Re-adding an id replaces the old vector"
+          ],
+          "solution": "def _normalise(v):\n    norm = math.sqrt(sum(x * x for x in v))\n    if norm == 0:\n        raise ValueError('zero vector')\n    return [x / norm for x in v]\n\n\nclass VectorIndex:\n    def __init__(self, dim):\n        self.dim = dim\n        self.items = {}\n\n    def add(self, item_id, vector, metadata=None):\n        if len(vector) != self.dim:\n            raise ValueError(f'expected {self.dim} dims, got {len(vector)}')\n        self.items[item_id] = (_normalise(vector), metadata or {})\n\n    def search(self, query, k=5):\n        q = _normalise(query)\n        scored = (\n            (sum(a * b for a, b in zip(q, v)), item_id)\n            for item_id, (v, _) in self.items.items()\n        )\n        return [(i, s) for s, i in heapq.nlargest(k, scored)]\n",
+          "explanation": "With unit vectors, cosine similarity equals the dot product, so the expensive normalisation happens once per insert instead of once per comparison."
+        },
+        {
+          "id": "p2",
+          "title": "Metadata filters",
+          "task": "Add an optional `where` dict to `search` so only items whose metadata matches every key and value are considered, for example `where={'lang': 'en'}`. Also add `delete(item_id)` that returns whether the item existed.",
+          "hints": [
+            "Filter before scoring so filtered items cost nothing extra.",
+            "`all(meta.get(k) == v for k, v in where.items())`."
+          ],
+          "checks": [
+            "A filter that matches nothing returns []",
+            "Deleted items never appear in results",
+            "delete on an unknown id returns False"
+          ],
+          "solution": "    def search(self, query, k=5, where=None):\n        q = _normalise(query)\n        where = where or {}\n        scored = (\n            (sum(a * b for a, b in zip(q, v)), item_id)\n            for item_id, (v, meta) in self.items.items()\n            if all(meta.get(key) == val for key, val in where.items())\n        )\n        return [(i, s) for s, i in heapq.nlargest(k, scored)]\n\n    def delete(self, item_id):\n        return self.items.pop(item_id, None) is not None\n",
+          "explanation": "Pre-filtering is exact but scans every item; real databases combine filters with the index (filtered HNSW, or partitioning by a common filter key) to keep it fast."
+        },
+        {
+          "id": "p3",
+          "title": "Approximate search with buckets",
+          "task": "Brute force is O(n) per query. Add `build_buckets(centroids)` that assigns every item to its most similar centroid, and `search_approx(query, k, n_probe)` that only scores items in the `n_probe` buckets whose centroids are most similar to the query. Items added after building go to their nearest bucket immediately.",
+          "hints": [
+            "This is the idea behind IVF indexes.",
+            "Keep `self.buckets` as a dict from centroid index to a set of ids.",
+            "More probes means better recall but slower queries."
+          ],
+          "checks": [
+            "With n_probe equal to the number of centroids, results match exact search",
+            "With n_probe=1 only one bucket is scored",
+            "Items added after build_buckets are still findable"
+          ],
+          "solution": "    def add(self, item_id, vector, metadata=None):\n        if len(vector) != self.dim:\n            raise ValueError(f'expected {self.dim} dims, got {len(vector)}')\n        self.delete(item_id)\n        v = _normalise(vector)\n        self.items[item_id] = (v, metadata or {})\n        if getattr(self, 'buckets', None):\n            self.buckets[self._nearest(v)].add(item_id)\n\n    def delete(self, item_id):\n        for bucket in getattr(self, 'buckets', {}).values():\n            bucket.discard(item_id)\n        return self.items.pop(item_id, None) is not None\n\n    def build_buckets(self, centroids):\n        self.centroids = [_normalise(c) for c in centroids]\n        self.buckets = {i: set() for i in range(len(self.centroids))}\n        for item_id, (v, _) in self.items.items():\n            self.buckets[self._nearest(v)].add(item_id)\n\n    def _nearest(self, v, n=1):\n        sims = [\n            (sum(a * b for a, b in zip(c, v)), i)\n            for i, c in enumerate(self.centroids)\n        ]\n        best = [i for _, i in heapq.nlargest(n, sims)]\n        return best[0] if n == 1 else best\n\n    def search_approx(self, query, k=5, n_probe=1):\n        q = _normalise(query)\n        ids = set().union(*(self.buckets[i] for i in self._nearest(q, n_probe)))\n        scored = (\n            (sum(a * b for a, b in zip(q, self.items[i][0])), i) for i in ids\n        )\n        return [(i, s) for s, i in heapq.nlargest(k, scored)]\n",
+          "explanation": "An inverted-file (IVF) index trades a little recall for speed: a query scores only a fraction of the data. `add` and `delete` now keep buckets in sync. Production systems pick centroids with k-means and tune n_probe for the recall they need."
+        }
+      ]
     }
   ]
 }
