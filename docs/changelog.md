@@ -15,6 +15,14 @@
   check is answered (any answer unlocks), stops back at step 1 and never
   lets a jump skip an unanswered check. Tests in
   `test/lesson_steps_test.dart`, including every shipped concept.
+- **Step-by-step lessons: resume and completion.** The last step viewed
+  in each lesson is kept offline in the settings table (key
+  `lesson_step_<conceptId>`, no schema migration) behind
+  `LessonResumeRepository`, and the lesson reopens there; quick checks
+  before that point count as passed. `CompleteLessonUseCase` marks the
+  concept completed with the existing progress logic and clears the resume
+  point. `LessonFlowController` ties it together. Tests in
+  `test/lesson_resume_test.dart`.
 
 ## 2026-10-23 (release: v0.31.0 - Optional code runner groundwork)
 
