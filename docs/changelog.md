@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026-10-22 (unreleased)
+## 2026-10-22 (release: v0.23.0 - Personal study plan)
 
 ### Added
 - **Your study plan** (Phase 4/5 "personalized learning paths" and
