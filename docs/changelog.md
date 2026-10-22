@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-10-22 (unreleased)
+
+### Added
+- **Guided projects content and storage** (Phase 5/9 "projects", section 47):
+  ten bundled multi-milestone projects in `assets/projects/projects.json`
+  (Python, React, Java, Node, Go, system design, databases, Docker), each
+  with a brief, milestones, a self-review rubric and stretch goals. Milestone
+  completion is stored in a new `project_milestone_progress` table (schema
+  v4, additive migration). Content and repository tests included.
+
 ## 2026-10-22 (release: v0.21.0 - Challenge Lab: debugging, coding and scenarios)
 
 ### Added

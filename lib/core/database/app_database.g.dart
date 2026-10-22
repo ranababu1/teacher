@@ -3681,6 +3681,296 @@ class ModuleTestProgressTableCompanion
   }
 }
 
+class $ProjectMilestoneProgressTableTable extends ProjectMilestoneProgressTable
+    with
+        TableInfo<
+          $ProjectMilestoneProgressTableTable,
+          ProjectMilestoneProgressTableData
+        > {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ProjectMilestoneProgressTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _projectIdMeta = const VerificationMeta(
+    'projectId',
+  );
+  @override
+  late final GeneratedColumn<String> projectId = GeneratedColumn<String>(
+    'project_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _milestoneIdMeta = const VerificationMeta(
+    'milestoneId',
+  );
+  @override
+  late final GeneratedColumn<String> milestoneId = GeneratedColumn<String>(
+    'milestone_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _completedAtMeta = const VerificationMeta(
+    'completedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> completedAt = GeneratedColumn<DateTime>(
+    'completed_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [projectId, milestoneId, completedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'project_milestone_progress_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ProjectMilestoneProgressTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('project_id')) {
+      context.handle(
+        _projectIdMeta,
+        projectId.isAcceptableOrUnknown(data['project_id']!, _projectIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_projectIdMeta);
+    }
+    if (data.containsKey('milestone_id')) {
+      context.handle(
+        _milestoneIdMeta,
+        milestoneId.isAcceptableOrUnknown(
+          data['milestone_id']!,
+          _milestoneIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_milestoneIdMeta);
+    }
+    if (data.containsKey('completed_at')) {
+      context.handle(
+        _completedAtMeta,
+        completedAt.isAcceptableOrUnknown(
+          data['completed_at']!,
+          _completedAtMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_completedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {projectId, milestoneId};
+  @override
+  ProjectMilestoneProgressTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ProjectMilestoneProgressTableData(
+      projectId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}project_id'],
+      )!,
+      milestoneId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}milestone_id'],
+      )!,
+      completedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}completed_at'],
+      )!,
+    );
+  }
+
+  @override
+  $ProjectMilestoneProgressTableTable createAlias(String alias) {
+    return $ProjectMilestoneProgressTableTable(attachedDatabase, alias);
+  }
+}
+
+class ProjectMilestoneProgressTableData extends DataClass
+    implements Insertable<ProjectMilestoneProgressTableData> {
+  final String projectId;
+  final String milestoneId;
+  final DateTime completedAt;
+  const ProjectMilestoneProgressTableData({
+    required this.projectId,
+    required this.milestoneId,
+    required this.completedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['project_id'] = Variable<String>(projectId);
+    map['milestone_id'] = Variable<String>(milestoneId);
+    map['completed_at'] = Variable<DateTime>(completedAt);
+    return map;
+  }
+
+  ProjectMilestoneProgressTableCompanion toCompanion(bool nullToAbsent) {
+    return ProjectMilestoneProgressTableCompanion(
+      projectId: Value(projectId),
+      milestoneId: Value(milestoneId),
+      completedAt: Value(completedAt),
+    );
+  }
+
+  factory ProjectMilestoneProgressTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ProjectMilestoneProgressTableData(
+      projectId: serializer.fromJson<String>(json['projectId']),
+      milestoneId: serializer.fromJson<String>(json['milestoneId']),
+      completedAt: serializer.fromJson<DateTime>(json['completedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'projectId': serializer.toJson<String>(projectId),
+      'milestoneId': serializer.toJson<String>(milestoneId),
+      'completedAt': serializer.toJson<DateTime>(completedAt),
+    };
+  }
+
+  ProjectMilestoneProgressTableData copyWith({
+    String? projectId,
+    String? milestoneId,
+    DateTime? completedAt,
+  }) => ProjectMilestoneProgressTableData(
+    projectId: projectId ?? this.projectId,
+    milestoneId: milestoneId ?? this.milestoneId,
+    completedAt: completedAt ?? this.completedAt,
+  );
+  ProjectMilestoneProgressTableData copyWithCompanion(
+    ProjectMilestoneProgressTableCompanion data,
+  ) {
+    return ProjectMilestoneProgressTableData(
+      projectId: data.projectId.present ? data.projectId.value : this.projectId,
+      milestoneId: data.milestoneId.present
+          ? data.milestoneId.value
+          : this.milestoneId,
+      completedAt: data.completedAt.present
+          ? data.completedAt.value
+          : this.completedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ProjectMilestoneProgressTableData(')
+          ..write('projectId: $projectId, ')
+          ..write('milestoneId: $milestoneId, ')
+          ..write('completedAt: $completedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(projectId, milestoneId, completedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ProjectMilestoneProgressTableData &&
+          other.projectId == this.projectId &&
+          other.milestoneId == this.milestoneId &&
+          other.completedAt == this.completedAt);
+}
+
+class ProjectMilestoneProgressTableCompanion
+    extends UpdateCompanion<ProjectMilestoneProgressTableData> {
+  final Value<String> projectId;
+  final Value<String> milestoneId;
+  final Value<DateTime> completedAt;
+  final Value<int> rowid;
+  const ProjectMilestoneProgressTableCompanion({
+    this.projectId = const Value.absent(),
+    this.milestoneId = const Value.absent(),
+    this.completedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ProjectMilestoneProgressTableCompanion.insert({
+    required String projectId,
+    required String milestoneId,
+    required DateTime completedAt,
+    this.rowid = const Value.absent(),
+  }) : projectId = Value(projectId),
+       milestoneId = Value(milestoneId),
+       completedAt = Value(completedAt);
+  static Insertable<ProjectMilestoneProgressTableData> custom({
+    Expression<String>? projectId,
+    Expression<String>? milestoneId,
+    Expression<DateTime>? completedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (projectId != null) 'project_id': projectId,
+      if (milestoneId != null) 'milestone_id': milestoneId,
+      if (completedAt != null) 'completed_at': completedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ProjectMilestoneProgressTableCompanion copyWith({
+    Value<String>? projectId,
+    Value<String>? milestoneId,
+    Value<DateTime>? completedAt,
+    Value<int>? rowid,
+  }) {
+    return ProjectMilestoneProgressTableCompanion(
+      projectId: projectId ?? this.projectId,
+      milestoneId: milestoneId ?? this.milestoneId,
+      completedAt: completedAt ?? this.completedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (projectId.present) {
+      map['project_id'] = Variable<String>(projectId.value);
+    }
+    if (milestoneId.present) {
+      map['milestone_id'] = Variable<String>(milestoneId.value);
+    }
+    if (completedAt.present) {
+      map['completed_at'] = Variable<DateTime>(completedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ProjectMilestoneProgressTableCompanion(')
+          ..write('projectId: $projectId, ')
+          ..write('milestoneId: $milestoneId, ')
+          ..write('completedAt: $completedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -3698,6 +3988,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $LearningPathProgressTableTable(this);
   late final $ModuleTestProgressTableTable moduleTestProgressTable =
       $ModuleTestProgressTableTable(this);
+  late final $ProjectMilestoneProgressTableTable projectMilestoneProgressTable =
+      $ProjectMilestoneProgressTableTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -3711,6 +4003,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     settingsTable,
     learningPathProgressTable,
     moduleTestProgressTable,
+    projectMilestoneProgressTable,
   ];
 }
 
@@ -5695,6 +5988,191 @@ typedef $$ModuleTestProgressTableTableProcessedTableManager =
       ModuleTestProgressTableData,
       PrefetchHooks Function()
     >;
+typedef $$ProjectMilestoneProgressTableTableCreateCompanionBuilder =
+    ProjectMilestoneProgressTableCompanion Function({
+      required String projectId,
+      required String milestoneId,
+      required DateTime completedAt,
+      Value<int> rowid,
+    });
+typedef $$ProjectMilestoneProgressTableTableUpdateCompanionBuilder =
+    ProjectMilestoneProgressTableCompanion Function({
+      Value<String> projectId,
+      Value<String> milestoneId,
+      Value<DateTime> completedAt,
+      Value<int> rowid,
+    });
+
+class $$ProjectMilestoneProgressTableTableFilterComposer
+    extends Composer<_$AppDatabase, $ProjectMilestoneProgressTableTable> {
+  $$ProjectMilestoneProgressTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get projectId => $composableBuilder(
+    column: $table.projectId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get milestoneId => $composableBuilder(
+    column: $table.milestoneId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get completedAt => $composableBuilder(
+    column: $table.completedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ProjectMilestoneProgressTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $ProjectMilestoneProgressTableTable> {
+  $$ProjectMilestoneProgressTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get projectId => $composableBuilder(
+    column: $table.projectId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get milestoneId => $composableBuilder(
+    column: $table.milestoneId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get completedAt => $composableBuilder(
+    column: $table.completedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ProjectMilestoneProgressTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ProjectMilestoneProgressTableTable> {
+  $$ProjectMilestoneProgressTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get projectId =>
+      $composableBuilder(column: $table.projectId, builder: (column) => column);
+
+  GeneratedColumn<String> get milestoneId => $composableBuilder(
+    column: $table.milestoneId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get completedAt => $composableBuilder(
+    column: $table.completedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$ProjectMilestoneProgressTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ProjectMilestoneProgressTableTable,
+          ProjectMilestoneProgressTableData,
+          $$ProjectMilestoneProgressTableTableFilterComposer,
+          $$ProjectMilestoneProgressTableTableOrderingComposer,
+          $$ProjectMilestoneProgressTableTableAnnotationComposer,
+          $$ProjectMilestoneProgressTableTableCreateCompanionBuilder,
+          $$ProjectMilestoneProgressTableTableUpdateCompanionBuilder,
+          (
+            ProjectMilestoneProgressTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $ProjectMilestoneProgressTableTable,
+              ProjectMilestoneProgressTableData
+            >,
+          ),
+          ProjectMilestoneProgressTableData,
+          PrefetchHooks Function()
+        > {
+  $$ProjectMilestoneProgressTableTableTableManager(
+    _$AppDatabase db,
+    $ProjectMilestoneProgressTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ProjectMilestoneProgressTableTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$ProjectMilestoneProgressTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$ProjectMilestoneProgressTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> projectId = const Value.absent(),
+                Value<String> milestoneId = const Value.absent(),
+                Value<DateTime> completedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ProjectMilestoneProgressTableCompanion(
+                projectId: projectId,
+                milestoneId: milestoneId,
+                completedAt: completedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String projectId,
+                required String milestoneId,
+                required DateTime completedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => ProjectMilestoneProgressTableCompanion.insert(
+                projectId: projectId,
+                milestoneId: milestoneId,
+                completedAt: completedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ProjectMilestoneProgressTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ProjectMilestoneProgressTableTable,
+      ProjectMilestoneProgressTableData,
+      $$ProjectMilestoneProgressTableTableFilterComposer,
+      $$ProjectMilestoneProgressTableTableOrderingComposer,
+      $$ProjectMilestoneProgressTableTableAnnotationComposer,
+      $$ProjectMilestoneProgressTableTableCreateCompanionBuilder,
+      $$ProjectMilestoneProgressTableTableUpdateCompanionBuilder,
+      (
+        ProjectMilestoneProgressTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $ProjectMilestoneProgressTableTable,
+          ProjectMilestoneProgressTableData
+        >,
+      ),
+      ProjectMilestoneProgressTableData,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -5720,5 +6198,11 @@ class $AppDatabaseManager {
       $$ModuleTestProgressTableTableTableManager(
         _db,
         _db.moduleTestProgressTable,
+      );
+  $$ProjectMilestoneProgressTableTableTableManager
+  get projectMilestoneProgressTable =>
+      $$ProjectMilestoneProgressTableTableTableManager(
+        _db,
+        _db.projectMilestoneProgressTable,
       );
 }
