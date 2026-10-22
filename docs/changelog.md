@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-10-23 (unreleased)
+
+### Added
+- **Personal roadmap: domain** (Phase 6 "AI-personalized curriculum"):
+  `lib/features/roadmap/domain` models a multi-week roadmap built only from
+  the app's own topics, projects, system design exercises and long-form
+  challenges (`Roadmap`, `RoadmapGoal` with goal, level, hours per week and
+  weeks). `RoadmapCatalog` lists every usable item by real id;
+  `RoadmapValidator` turns an AI draft into a roadmap, dropping unknown or
+  duplicate ids and taking titles from the catalog, never from the AI.
+  `OfflineRoadmapBuilder` is the rule-based fallback (goal keywords to
+  courses, level skips early topics, passed topics skipped, projects after
+  their recommended topic, packed into weekly hours). `RoadmapProgress`
+  derives progress from existing completion data. Items can be removed or
+  moved between weeks. Tests in `test/roadmap_domain_test.dart`.
+
 ## 2026-10-22 (release: v0.28.1 - Smooth app launch without flicker)
 
 ### Fixed
