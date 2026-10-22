@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026-10-22 (unreleased)
+## 2026-10-22 (release: v0.25.0 - AI study coach)
 
 ### Added
 - **Projects on the course screen**: each course's detail screen now lists
