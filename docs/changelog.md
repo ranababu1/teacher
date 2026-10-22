@@ -26,6 +26,7 @@
   widget content and empty state) and a navigation test for
   progress > analytics > back. `flutter analyze --no-fatal-infos` no
   errors or warnings; `flutter test` 199 passing.
+- Version bumped to 0.20.0+27 (r27).
 
 ## 2026-10-22 (release: v0.19.0 - interview prep: mock interviews with model answers)
 
