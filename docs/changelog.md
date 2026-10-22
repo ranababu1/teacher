@@ -12,6 +12,11 @@
   the https-only URL is stored in the settings table and running without
   one is a configuration error. Learner code never runs inside the app.
   Tests in `test/code_runner_test.dart`.
+- **Code runner settings and Run code button.** Settings, Code Execution
+  lets the learner save or turn off a runner URL (validated, https only).
+  Long-form challenges show a "Run code" button with running, error and
+  output states only once a URL is saved; otherwise nothing is shown.
+  Tests in `test/run_code_panel_test.dart`.
 
 ## 2026-10-23 (release: v0.30.0 - More interview, debugging and challenge content)
 

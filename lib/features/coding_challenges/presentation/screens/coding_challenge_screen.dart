@@ -9,6 +9,7 @@ import '../../../../shared/widgets/code_block.dart';
 import '../../../../shared/widgets/glass_app_bar.dart';
 import '../../../../shared/widgets/gradient_card.dart';
 import '../../../../shared/widgets/markdown_text.dart';
+import '../../../code_runner/presentation/widgets/run_code_panel.dart';
 import '../../../interview/domain/models/interview.dart';
 import '../../domain/models/coding_challenge.dart';
 import '../providers/coding_challenge_providers.dart';
@@ -183,6 +184,7 @@ class _ChallengeFlowState extends ConsumerState<_ChallengeFlow> {
             border: const OutlineInputBorder(),
           ),
         ),
+        RunCodePanel(language: c.language, source: () => _code.text),
         const SizedBox(height: 12),
         Text('Check your work', style: theme.textTheme.titleSmall),
         for (final (i, check) in part.checks.indexed)

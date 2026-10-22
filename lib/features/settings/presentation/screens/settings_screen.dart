@@ -8,6 +8,7 @@ import '../../../../core/services/crash_reporting_service.dart';
 import '../../../../shared/widgets/async_value_view.dart';
 import '../../../../shared/widgets/glass_app_bar.dart';
 import '../../../../shared/widgets/gradient_card.dart';
+import '../../../code_runner/presentation/widgets/code_runner_settings_tile.dart';
 import '../../../flashcards/domain/models/flash_card.dart';
 import '../../../flashcards/presentation/providers/flashcard_providers.dart';
 import '../../domain/settings_models.dart';
@@ -223,6 +224,11 @@ class SettingsScreen extends ConsumerWidget {
                     },
                   ),
                 ],
+              ),
+              const SizedBox(height: 16),
+              const _SectionCard(
+                title: 'Code Execution',
+                children: [CodeRunnerSettingsTile()],
               ),
               const SizedBox(height: 16),
               _SectionCard(
