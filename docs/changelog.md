@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-10-22 (unreleased)
+
+### Fixed
+- **Flicker on first launch.** Three causes, all fixed:
+  - The router started on the dashboard while the learner profile was
+    still loading, so a fresh install drew the dashboard (with its loading
+    cards) for a moment and then jumped to onboarding. Until the profile is
+    known, every location now waits on a blank `/launch` page that shows
+    only the app background, then goes straight to onboarding or to the
+    original destination (`startupRedirect` in `lib/app/startup_redirect.dart`).
+    A failed profile load never leaves you stuck there.
+  - Theme mode and onboarding state are now loaded before `runApp`, while
+    the native splash is still up (`preloadStartupState`, capped at 3 s),
+    so the first Flutter frame already uses your saved theme instead of the
+    default and switching a moment later.
+  - The native splash used the stock Android colours (pure white in light
+    mode, pure black in dark mode, and a hardcoded white drawable on old
+    Android versions), which did not match the app background. The splash,
+    the window behind Flutter and the Android 12+ system splash
+    (`windowSplashScreenBackground`) now use `@color/launch_background`,
+    equal to `AppColors.lightSurface` / `AppColors.darkSurface` in light
+    and dark mode.
+  - Tests: `test/startup_redirect_test.dart`, `test/startup_preload_test.dart`
+    and `test/launch_colors_test.dart` (fails if the Android colours drift
+    from the theme).
+
 ## 2026-10-22 (release: v0.28.0 - More projects, design exercises and challenges)
 
 ### Added

@@ -35,6 +35,7 @@ import '../features/settings/presentation/screens/settings_screen.dart';
 import '../features/skill_check/presentation/screens/skill_check_screen.dart';
 import 'app_shell.dart';
 import 'navigation.dart';
+import 'startup_redirect.dart';
 
 /// Lets code outside the widget tree (a tapped notification callback) push
 /// a route without needing a [BuildContext] of its own.
@@ -57,18 +58,10 @@ final routerProvider = Provider<GoRouter>((ref) {
     navigatorKey: rootNavigatorKey,
     initialLocation: Routes.dashboard,
     refreshListenable: refresh,
-    redirect: (context, state) {
-      final profile = ref.read(learnerProfileControllerProvider).valueOrNull;
-      if (profile == null) return null;
-      final onOnboarding = state.matchedLocation == Routes.onboarding;
-      if (!profile.hasCompletedOnboarding && !onOnboarding) {
-        return Routes.onboarding;
-      }
-      if (profile.hasCompletedOnboarding && onOnboarding) {
-        return Routes.dashboard;
-      }
-      return null;
-    },
+    redirect: (context, state) => startupRedirect(
+      profile: ref.read(learnerProfileControllerProvider),
+      uri: state.uri,
+    ),
     routes: buildAppRoutes(),
   );
 });
@@ -217,6 +210,12 @@ List<RouteBase> buildAppRoutes({AppScreens screens = const AppScreens()}) {
   Widget page(ScreenBuilder b, GoRouterState s) => _BackFallback(child: b(s));
 
   return [
+    GoRoute(
+      path: Routes.launch,
+      // Paints nothing: the app-wide background from TeacherApp shows
+      // through, which matches the native splash colour.
+      builder: (context, state) => const SizedBox.expand(),
+    ),
     GoRoute(
       path: Routes.onboarding,
       builder: (context, state) => screens.onboarding(state),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app/app.dart';
+import 'app/startup.dart';
 import 'core/services/app_logger.dart';
 import 'core/services/crash_reporting_service.dart';
 
@@ -14,5 +15,12 @@ Future<void> main() async {
 
   AppLogger.info('Teacher starting up');
 
-  runApp(const ProviderScope(child: TeacherApp()));
+  // Resolve theme mode and onboarding state while the native splash is
+  // still showing, so the first frame is final (no theme or screen switch).
+  final container = ProviderContainer();
+  await preloadStartupState(container);
+
+  runApp(
+    UncontrolledProviderScope(container: container, child: const TeacherApp()),
+  );
 }

@@ -10,6 +10,10 @@ class Routes {
   static const profile = '/profile';
   static const flashCard = '/flash-card';
   static const onboarding = '/onboarding';
+
+  /// Blank holding page shown only while the learner profile is still
+  /// loading, so neither the dashboard nor onboarding flashes up first.
+  static const launch = '/launch';
   static const interviewPrep = '/interview';
   static const analytics = '/analytics';
   static const challengeLab = '/challenges';
