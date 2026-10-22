@@ -20,6 +20,8 @@ extension AppNavigation on BuildContext {
   void openLearningPath(String pathId) =>
       _router.push(Routes.learningPath(pathId));
 
+  void openSkillCheck(String pathId) => _router.push(Routes.skillCheck(pathId));
+
   void openTopic(String pathId, String moduleId) =>
       _router.push(Routes.module(pathId, moduleId));
 

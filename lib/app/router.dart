@@ -20,6 +20,7 @@ import '../features/progress/presentation/screens/progress_screen.dart';
 import '../features/review/presentation/screens/review_screen.dart';
 import '../features/review/presentation/screens/review_session_screen.dart';
 import '../features/settings/presentation/screens/settings_screen.dart';
+import '../features/skill_check/presentation/screens/skill_check_screen.dart';
 import 'app_shell.dart';
 import 'navigation.dart';
 
@@ -78,6 +79,7 @@ class AppScreens {
     this.topic = _topic,
     this.topicTest = _topicTest,
     this.lesson = _lesson,
+    this.skillCheck = _skillCheck,
     this.dashboard = _dashboard,
     this.learn = _learn,
     this.progress = _progress,
@@ -96,6 +98,7 @@ class AppScreens {
   final ScreenBuilder topic;
   final ScreenBuilder topicTest;
   final ScreenBuilder lesson;
+  final ScreenBuilder skillCheck;
   final ScreenBuilder dashboard;
   final ScreenBuilder learn;
   final ScreenBuilder progress;
@@ -134,6 +137,8 @@ class AppScreens {
     moduleId: s.pathParameters['moduleId']!,
     conceptId: s.pathParameters['conceptId']!,
   );
+  static Widget _skillCheck(GoRouterState s) =>
+      SkillCheckScreen(pathId: s.pathParameters['pathId']!);
   static Widget _dashboard(GoRouterState s) => const DashboardScreen();
   static Widget _learn(GoRouterState s) => const LearningPathsScreen();
   static Widget _progress(GoRouterState s) => const ProgressScreen();
@@ -195,6 +200,11 @@ List<RouteBase> buildAppRoutes({AppScreens screens = const AppScreens()}) {
       path: '${Routes.learn}/:pathId',
       builder: (context, state) => page(screens.learningPath, state),
       routes: [
+        // Static segment before the `:moduleId` wildcard (declaration order).
+        GoRoute(
+          path: 'skill-check',
+          builder: (context, state) => page(screens.skillCheck, state),
+        ),
         GoRoute(
           path: ':moduleId',
           builder: (context, state) => page(screens.topic, state),

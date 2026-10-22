@@ -1,5 +1,38 @@
 # Changelog
 
+## 2026-10-22 (release: v0.18.0 - skill check: find where to start in a course)
+
+### Added
+- **Course skill check** (Phase 5 "skill assessments"): every course with
+  more than one topic shows "Already know some of this? Take a 5-minute
+  skill check" on its detail screen. It samples the bundled
+  multiple-choice assessments, offline and without AI: two per topic for
+  courses with up to 8 topics, otherwise one per topic, capped at 16 and
+  spread evenly across the course. Each question can be answered or
+  skipped with "I don't know".
+- **Results and placement**: overall score, a per-topic breakdown, and a
+  "Where to start" recommendation. The leading run of topics answered
+  perfectly can be skipped. A topic that was not asked, or any miss, stops
+  the run, so a learner is never moved past unchecked material. "Unlock N
+  topics" starts the course if needed and records those topics as passed
+  (score 100), which opens the recommended topic under the normal
+  topic-test gate; "Go to ..." then replaces the skill check with that
+  topic, so back returns to the course.
+- Code: lib/features/skill_check (SkillCheckService builds and scores,
+  ApplySkillCheckPlacementUseCase writes through the existing progress
+  repositories, providers bump dataRevision). Route
+  `/learn/:pathId/skill-check` (declared before `:moduleId`), helper
+  `openSkillCheck`. No database schema change.
+
+### Verification
+- test/skill_check_test.dart (question sampling for short, long and empty
+  courses; scoring and placement rules; placement writes against an
+  in-memory database; widget flow for answer, skip, results, unlock; empty
+  state) and a navigation test that the skill-check URL is not taken by
+  the topic route. `flutter analyze --no-fatal-infos` no errors or
+  warnings; `flutter test` 188 passing.
+- Version bumped to 0.18.0+25 (r25).
+
 ## 2026-10-15 (release: v0.17.2 - bigger app icon)
 
 ### Changed

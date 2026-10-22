@@ -107,6 +107,24 @@ class LearningPathDetailScreen extends ConsumerWidget {
                       ],
                     ),
                   ),
+                if (path.modules.length > 1)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: GradientCard(
+                      child: ListTile(
+                        leading: Icon(
+                          Icons.fact_check_outlined,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                        title: const Text('Already know some of this?'),
+                        subtitle: const Text(
+                          'Take a 5-minute skill check to find where to start.',
+                        ),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => context.openSkillCheck(path.id),
+                      ),
+                    ),
+                  ),
                 if (path.modules.isEmpty)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 32),

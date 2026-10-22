@@ -46,12 +46,12 @@ final _screens = AppScreens(
     'pass-next': (c) => c.continueFromTestToNextTopic('py', 'm2'),
     'fail-back': (c) => c.goBack(),
   }),
-  practice: (_) => _screen('practice', {
-    'session': (c) => c.openPracticeSession('c1'),
-  }),
+  practice: (_) =>
+      _screen('practice', {'session': (c) => c.openPracticeSession('c1')}),
   practiceSession: (_) =>
       _screen('practice-session', {'done': (c) => c.goBack()}),
   settings: (_) => _screen('settings'),
+  skillCheck: (s) => _screen('skill-check:${s.pathParameters['pathId']}'),
   shell: (shell) => Scaffold(body: shell),
 );
 
@@ -180,6 +180,11 @@ void main() {
     await _tap(t, 'settings');
     await _back(t);
     _on('profile');
+  });
+
+  testWidgets('skill-check URL is not swallowed by the topic route', (t) async {
+    await _pump(t, initial: Routes.skillCheck('py'));
+    _on('skill-check:py');
   });
 
   testWidgets('old /profile/settings link still opens settings', (t) async {

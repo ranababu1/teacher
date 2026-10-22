@@ -19,6 +19,7 @@ class Routes {
   static String get legacyProfileSettings => '$profile/settings';
 
   static String learningPath(String pathId) => '/learn/$pathId';
+  static String skillCheck(String pathId) => '/learn/$pathId/skill-check';
   static String module(String pathId, String moduleId) =>
       '/learn/$pathId/$moduleId';
   static String moduleTest(String pathId, String moduleId) =>
