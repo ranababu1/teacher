@@ -27,6 +27,7 @@ final _screens = AppScreens(
     'lab': (c) => c.openChallengeLab(),
     'projects': (c) => c.openProjects(),
     'plan': (c) => c.openStudyPlan(),
+    'design': (c) => c.openSystemDesign(),
     'continue': (c) => c.openLesson('py', 'm1', 'c1'),
     'practice': (c) => c.openPractice(),
   }),
@@ -37,6 +38,11 @@ final _screens = AppScreens(
       _screen('lab', {'set': (c) => c.openChallengeSet('py', 'debugging')}),
   challengeSet: (s) =>
       _screen('set:${s.pathParameters['pathId']}:${s.pathParameters['kind']}'),
+  systemDesign: (_) => _screen('design', {
+    'exercise': (c) => c.openSystemDesignExercise('rate-limiter'),
+  }),
+  systemDesignExercise: (s) =>
+      _screen('design:${s.pathParameters['exerciseId']}'),
   studyPlan: (_) => _screen('plan', {'step': (c) => c.openProject('p1')}),
   projects: (_) =>
       _screen('projects', {'open': (c) => c.openProject('react-kanban')}),
@@ -251,6 +257,17 @@ void main() {
     _on('project:p1');
     await _back(t);
     _on('plan');
+    await _back(t);
+    _on('dashboard');
+  });
+
+  testWidgets('dashboard > system design > exercise, back x2', (t) async {
+    await _pump(t);
+    await _tap(t, 'design');
+    await _tap(t, 'exercise');
+    _on('design:rate-limiter');
+    await _back(t);
+    _on('design');
     await _back(t);
     _on('dashboard');
   });

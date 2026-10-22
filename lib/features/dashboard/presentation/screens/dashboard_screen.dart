@@ -36,6 +36,7 @@ class DashboardScreen extends ConsumerWidget {
       _InterviewPrepCard(),
       _ChallengeLabCard(),
       _ProjectsCard(),
+      _SystemDesignCard(),
       _WhyTeacherSection(),
       _RecentActivitySection(),
     ];
@@ -727,6 +728,24 @@ class _StudyPlanCard extends ConsumerWidget {
         leading: const Icon(Icons.route_outlined),
         title: const Text('Your study plan'),
         subtitle: Text(subtitle),
+        trailing: const Icon(Icons.chevron_right),
+      ),
+    );
+  }
+}
+
+class _SystemDesignCard extends StatelessWidget {
+  const _SystemDesignCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return GradientCard(
+      elevation: AppElevation.flat,
+      child: ListTile(
+        onTap: () => context.openSystemDesign(),
+        leading: const Icon(Icons.account_tree_outlined),
+        title: const Text('System Design'),
+        subtitle: const Text('Staged design walkthroughs with model answers'),
         trailing: const Icon(Icons.chevron_right),
       ),
     );

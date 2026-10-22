@@ -12,6 +12,13 @@
   answer, plus common pitfalls. Finished attempts are stored in a new
   `system_design_attempts` table (schema v5, additive). Tests cover the
   content, best-score records and a v3 to v5 upgrade.
+- **System Design screens**, opened from a new Dashboard card: a list with
+  difficulty, time and your best score, and a walkthrough screen that goes
+  stage by stage. Read the scenario, reveal hints one at a time, write notes,
+  reveal the model answer and rate yourself (Nailed it / Partly / Missed
+  it). The summary shows your score, the stages to revisit and common
+  pitfalls; the attempt is saved. Routes `/system-design` and
+  `/system-design/:exerciseId`.
 
 ## 2026-10-22 (release: v0.23.0 - Personal study plan)
 
