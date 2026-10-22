@@ -11,6 +11,7 @@ import '../../../progress/domain/models/mastery_status.dart';
 import '../../../progress/domain/module_unlock.dart';
 import '../../../progress/presentation/providers/progress_providers.dart';
 import '../../../progress/presentation/widgets/mastery_status_icon.dart';
+import '../../../projects/presentation/providers/project_providers.dart';
 import '../../domain/models/curriculum_module.dart';
 import '../../domain/models/learning_path.dart';
 import '../curriculum_providers.dart';
@@ -169,11 +170,59 @@ class LearningPathDetailScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 12),
                   ],
+                _CourseProjectsSection(pathId: path.id),
               ],
             );
           },
         ),
       ),
+    );
+  }
+}
+
+/// Guided projects for this course. Secondary content, so it simply stays
+/// hidden while loading, on error, or when the course has none.
+class _CourseProjectsSection extends ConsumerWidget {
+  const _CourseProjectsSection({required this.pathId});
+
+  final String pathId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final projects = (ref.watch(projectOverviewsProvider).valueOrNull ?? [])
+        .where((o) => o.project.learningPathId == pathId)
+        .toList();
+    if (projects.isEmpty) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 8),
+        Text('Projects', style: theme.textTheme.titleMedium),
+        const SizedBox(height: 8),
+        for (final o in projects)
+          GradientCard(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: ListTile(
+              leading: Icon(
+                o.isComplete
+                    ? Icons.verified_outlined
+                    : Icons.construction_outlined,
+                color: theme.colorScheme.primary,
+              ),
+              title: Text(o.project.title),
+              subtitle: Text(
+                o.isStarted
+                    ? '${o.completedCount}/${o.totalCount} milestones'
+                    : o.isRecommendedTopicPassed
+                    ? 'Ready to start · ~${o.project.estimatedHours} h'
+                    : 'Best after "${o.recommendedTopicTitle}"',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.openProject(o.project.id),
+            ),
+          ),
+      ],
     );
   }
 }

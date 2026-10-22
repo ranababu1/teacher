@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-22 (unreleased)
+
+### Added
+- **Projects on the course screen**: each course's detail screen now lists
+  its guided projects below the topics, with milestone progress or
+  readiness, and opens the project on tap. Hidden when a course has none.
+
 ## 2026-10-22 (release: v0.24.0 - System design exercises)
 
 ### Added

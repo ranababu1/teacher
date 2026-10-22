@@ -8,6 +8,8 @@ import 'package:teacher/features/curriculum/domain/models/curriculum_module.dart
 import 'package:teacher/features/curriculum/domain/models/difficulty.dart';
 import 'package:teacher/features/curriculum/domain/models/learning_path.dart';
 import 'package:teacher/features/curriculum/presentation/curriculum_providers.dart';
+import 'package:teacher/features/curriculum/presentation/screens/learning_path_detail_screen.dart';
+import 'package:teacher/features/projects/domain/models/project_overview.dart';
 import 'package:teacher/features/progress/presentation/providers/progress_providers.dart';
 import 'package:teacher/features/projects/domain/models/project.dart';
 import 'package:teacher/features/projects/domain/project_repository.dart';
@@ -160,5 +162,49 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('No projects are available yet.'), findsOneWidget);
+  });
+
+  testWidgets('course screen lists only that course\'s projects', (
+    tester,
+  ) async {
+    ProjectOverview o(String id, String pathId) => ProjectOverview(
+      project: Project.fromJson({
+        'id': id,
+        'learningPathId': pathId,
+        'title': 'Project $id',
+        'summary': '',
+        'brief': '',
+        'difficulty': 'beginner',
+        'estimatedHours': 4,
+        'milestones': [
+          {'id': 'm1', 'title': 'A', 'description': ''},
+        ],
+      }),
+      courseTitle: pathId,
+      completedMilestoneIds: const {},
+      isRecommendedTopicPassed: true,
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          appDatabaseProvider.overrideWithValue(db),
+          learningPathProvider.overrideWith((ref, id) async => _path),
+          passedModuleIdsProvider.overrideWith((ref, id) async => const {}),
+          projectOverviewsProvider.overrideWith(
+            (ref) async => [o('mine', 'py'), o('other', 'go')],
+          ),
+        ],
+        child: const MaterialApp(home: LearningPathDetailScreen(pathId: 'py')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Project mine'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Project mine'), findsOneWidget);
+    expect(find.text('Ready to start · ~4 h'), findsOneWidget);
+    expect(find.text('Project other'), findsNothing);
   });
 }
