@@ -13,6 +13,10 @@
   choosing k) and "Build a tiny vector search index" (Vector Databases
   course: cosine search, metadata filters, an IVF-style bucketed index).
   Eight challenges in total.
+- **Two more guided projects**: "RAG Docs Assistant" (LLM Engineering:
+  chunking, retrieval, grounded answers with citations and a small eval set)
+  and "Deploy a Web App to Kubernetes" (probes, StatefulSet database,
+  ConfigMap and Secret, Ingress and a Helm chart). Twelve projects in total.
 
 ## 2026-10-22 (release: v0.27.0 - Build and design dashboard)
 
