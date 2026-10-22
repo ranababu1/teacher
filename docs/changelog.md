@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026-10-22 (unreleased)
+## 2026-10-22 (release: v0.28.0 - More projects, design exercises and challenges)
 
 ### Added
 - **Two more system design exercises**: "Design a URL shortener"
