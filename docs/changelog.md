@@ -17,6 +17,12 @@
   (DeepSeek, OpenAI) with the usual retry-once parsing; without an API key
   it fails with the standard "add a key" message. Prompt and provider tests
   included.
+- **AI coach on the study plan**: an "Ask the AI Coach" card at the bottom
+  of Your study plan. On tap (never automatically, since it uses your own
+  API key) it sends only counts, titles, accuracy, the plan and your goal,
+  then shows a short read on where you stand, a focus for the week, and a
+  "Coach:" tip under each step. Missing keys or AI errors show the plain
+  message with Try Again; the plan itself always works offline.
 
 ## 2026-10-22 (release: v0.24.0 - System design exercises)
 

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/navigation.dart';
 import '../../../../core/constants/routes.dart';
+import '../../../../core/errors/app_exception.dart';
 import '../../../../shared/widgets/async_value_view.dart';
 import '../../../../shared/widgets/glass_app_bar.dart';
 import '../../../../shared/widgets/gradient_card.dart';
@@ -63,6 +64,9 @@ class StudyPlanScreen extends ConsumerWidget {
           onRetry: () => ref.invalidate(studyPlanProvider),
           skeleton: () => const SkeletonCardList(),
           data: (plan) {
+            final tips =
+                ref.watch(studyCoachControllerProvider).valueOrNull?.stepTips ??
+                const <String>[];
             if (plan.steps.isEmpty) {
               return const EmptyState(
                 message:
@@ -102,14 +106,114 @@ class StudyPlanScreen extends ConsumerWidget {
                         child: Icon(planStepIcon(step.kind)),
                       ),
                       title: Text('${i + 1}. ${step.title}'),
-                      subtitle: Text('${step.reason}\n~${step.minutes} min'),
+                      subtitle: Text(
+                        '${step.reason}\n~${step.minutes} min'
+                        '${i < tips.length ? '\nCoach: ${tips[i]}' : ''}',
+                      ),
                       isThreeLine: true,
                       trailing: const Icon(Icons.chevron_right),
                     ),
                   ),
+                const SizedBox(height: 8),
+                const _CoachCard(),
               ],
             );
           },
+        ),
+      ),
+    );
+  }
+}
+
+/// Optional AI coaching on the plan, fetched only when asked for.
+class _CoachCard extends ConsumerWidget {
+  const _CoachCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final value = ref.watch(studyCoachControllerProvider);
+    void ask() => ref.read(studyCoachControllerProvider.notifier).request();
+
+    final Widget body;
+    if (value.isLoading) {
+      body = const Padding(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    } else if (value.hasError) {
+      final error = value.error;
+      body = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            error is AppException
+                ? error.userMessage
+                : "The AI coach couldn't answer right now.",
+            style: TextStyle(color: theme.colorScheme.error),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton(onPressed: ask, child: const Text('Try Again')),
+        ],
+      );
+    } else if (value.valueOrNull case final advice?) {
+      body = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(advice.summary),
+          const SizedBox(height: 8),
+          Text('This week', style: theme.textTheme.titleSmall),
+          Text(advice.weeklyFocus),
+          const SizedBox(height: 4),
+          Text(
+            'Tips are shown under each step above.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(onPressed: ask, child: const Text('Ask Again')),
+          ),
+        ],
+      );
+    } else {
+      body = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Get a short read on where you stand, a focus for the week and '
+            'a tip for each step. Uses your AI provider and API key from '
+            'Settings; only counts, titles and accuracy are sent.',
+          ),
+          const SizedBox(height: 8),
+          FilledButton.icon(
+            onPressed: ask,
+            icon: const Icon(Icons.auto_awesome_outlined),
+            label: const Text('Ask the AI Coach'),
+          ),
+        ],
+      );
+    }
+    return GradientCard(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.auto_awesome_outlined,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Text('AI coach', style: theme.textTheme.titleMedium),
+              ],
+            ),
+            const SizedBox(height: 8),
+            body,
+          ],
         ),
       ),
     );

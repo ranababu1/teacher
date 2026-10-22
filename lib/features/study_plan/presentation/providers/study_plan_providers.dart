@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../ai_teacher/domain/models/study_coaching.dart';
+import '../../../ai_teacher/presentation/providers/teach_providers.dart';
 import '../../../analytics/presentation/providers/analytics_providers.dart';
 import '../../../challenges/domain/challenge_service.dart';
 import '../../../challenges/presentation/providers/challenge_providers.dart';
@@ -11,6 +13,7 @@ import '../../../progress/presentation/providers/progress_providers.dart';
 import '../../../projects/presentation/providers/project_providers.dart';
 import '../../../review/presentation/providers/review_providers.dart';
 import '../../../system_design/presentation/providers/system_design_providers.dart';
+import '../../domain/coach_study_plan_use_case.dart';
 import '../../domain/models/study_plan.dart';
 import '../../domain/study_plan_service.dart';
 
@@ -59,3 +62,33 @@ final studyPlanProvider = FutureProvider<StudyPlan>((ref) async {
   final inputs = await ref.watch(studyPlanInputsProvider.future);
   return StudyPlanService().build(inputs);
 });
+
+final coachStudyPlanUseCaseProvider = Provider<CoachStudyPlanUseCase>(
+  (ref) => CoachStudyPlanUseCase(aiProvider: ref.watch(aiProviderProvider)),
+);
+
+/// AI coaching for the current plan. Starts empty; only calls the AI when
+/// the learner asks, since it costs a request on their own API key.
+class StudyCoachController
+    extends AutoDisposeAsyncNotifier<StudyCoachingAdvice?> {
+  @override
+  Future<StudyCoachingAdvice?> build() async => null;
+
+  Future<void> request() async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
+      final inputs = await ref.read(studyPlanInputsProvider.future);
+      final plan = await ref.read(studyPlanProvider.future);
+      return ref.read(coachStudyPlanUseCaseProvider)(
+        plan: plan,
+        inputs: inputs,
+      );
+    });
+  }
+}
+
+final studyCoachControllerProvider =
+    AsyncNotifierProvider.autoDispose<
+      StudyCoachController,
+      StudyCoachingAdvice?
+    >(StudyCoachController.new);
