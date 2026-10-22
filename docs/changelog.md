@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026-10-23 (unreleased)
+## 2026-10-22 (release: v0.29.0 - Career roadmap built from your goal)
 
 ### Added
 - **Personal roadmap: domain** (Phase 6 "AI-personalized curriculum"):
