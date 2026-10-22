@@ -399,6 +399,138 @@
         "Last-writer-wins that silently destroys a user's edits.",
         "Treating metadata and blob storage as one system with one consistency model."
       ]
+    },
+    {
+      "id": "url-shortener",
+      "title": "Design a URL shortener",
+      "difficulty": "beginner",
+      "estimatedMinutes": 30,
+      "summary": "Turn long links into short codes that redirect fast, at large scale.",
+      "scenario": "Build a service like bit.ly: users submit a long URL and get a short link such as sho.rt/aZ3kQ9. Anyone opening the short link is redirected to the original. Links are created far less often than they are opened.",
+      "stages": [
+        {
+          "id": "s1",
+          "title": "Clarify requirements",
+          "prompt": "List the functional and non-functional requirements you would confirm.",
+          "hints": [
+            "Custom aliases? Expiry?",
+            "Can a link be edited or deleted?",
+            "How fast must a redirect be?"
+          ],
+          "modelAnswer": "Functional: create a short code for a long URL, optional custom alias, optional expiry, redirect with HTTP 301 or 302, basic click counts. Non-functional: redirects are read-heavy and must be fast (under ~20 ms at the server) and highly available; codes must be unique and hard to guess if links are private; creation can be slightly slower. Decide 302 if you need accurate click analytics, since browsers cache 301s."
+        },
+        {
+          "id": "s2",
+          "title": "Estimate scale",
+          "prompt": "Estimate writes, reads and storage.",
+          "hints": [
+            "Assume a read to write ratio.",
+            "How many characters does the code need?"
+          ],
+          "modelAnswer": "Assume 100M new links per month (~40 writes/s) and a 100:1 read ratio (~4k redirects/s, peaks around 20k/s). Over 5 years that is 6B links; at ~500 bytes per row that is ~3 TB. A 7-character base62 code gives 62^7 = 3.5 trillion combinations, plenty of room, so 7 characters is enough."
+        },
+        {
+          "id": "s3",
+          "title": "API and data model",
+          "prompt": "Define the API and what you store.",
+          "hints": [
+            "One table is enough to start.",
+            "What is the primary key?"
+          ],
+          "modelAnswer": "POST /links {longUrl, alias?, expiresAt?} -> {code, shortUrl}. GET /{code} -> 302 Location: longUrl (404 if missing or expired). Table links(code PK, long_url, owner_id, created_at, expires_at). A key-value store (DynamoDB, Cassandra) or sharded SQL keyed by code fits, because every read is a point lookup by code. Click counts go to a separate analytics pipeline, not the hot table."
+        },
+        {
+          "id": "s4",
+          "title": "High-level design",
+          "prompt": "Sketch the components and both flows.",
+          "hints": [
+            "How do you generate unique codes without collisions?",
+            "Where does caching help most?"
+          ],
+          "modelAnswer": "Write path: API server gets a unique ID from a counter service that hands out ranges (e.g. blocks of 1000 per server, backed by a DB sequence or ZooKeeper), encodes it in base62 and stores the row. Read path: CDN or edge cache, then an in-memory cache (Redis) in front of the store; most traffic hits a small set of popular links, so the cache hit rate is high. Redirect servers are stateless behind a load balancer. Click events are published to a queue (Kafka) and aggregated asynchronously."
+        },
+        {
+          "id": "s5",
+          "title": "Deep dive and trade-offs",
+          "prompt": "Discuss code generation choices, abuse and expiry.",
+          "hints": [
+            "Sequential IDs are guessable; is that a problem?",
+            "What about hashing the URL?"
+          ],
+          "modelAnswer": "Hashing the long URL (e.g. first 7 chars of base62 SHA-256) deduplicates but needs collision checks and retries. Counter ranges never collide but produce guessable, sequential codes; scramble them with a reversible permutation or use random codes with an insert-if-absent check when privacy matters. Expiry: store expires_at, check it on read, and delete lazily or with a periodic sweep. Abuse: rate-limit creation per user, scan URLs against malware lists, and allow takedowns. Custom aliases share the same keyspace, so reserve them with a conditional insert."
+        }
+      ],
+      "commonPitfalls": [
+        "Using 301 and then wondering why click counts are missing (browsers cache it).",
+        "Generating random codes without checking for collisions.",
+        "Putting analytics writes on the redirect hot path."
+      ]
+    },
+    {
+      "id": "search-autocomplete",
+      "title": "Design search autocomplete",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 40,
+      "summary": "Suggest the top completions for every keystroke within milliseconds.",
+      "scenario": "A search box shows the top 5 suggested queries as the user types, ranked by popularity and refreshed as trends change. It serves a large consumer site with users worldwide.",
+      "stages": [
+        {
+          "id": "s1",
+          "title": "Clarify requirements",
+          "prompt": "List the functional and non-functional requirements you would confirm.",
+          "hints": [
+            "How many suggestions, ranked by what?",
+            "How fresh must trends be?",
+            "Personalised or global?"
+          ],
+          "modelAnswer": "Functional: return the top 5 completions for a prefix, ranked by query popularity, filtered for offensive terms, optionally per language or region. Non-functional: very low latency (under ~50 ms end to end, so under ~10 ms at the server) because it runs on every keystroke, high availability, and freshness within minutes to an hour rather than real time. Personalisation can be a later layer."
+        },
+        {
+          "id": "s2",
+          "title": "Estimate scale",
+          "prompt": "Estimate request rate and index size.",
+          "hints": [
+            "How many searches per day, and keystrokes per search?",
+            "How many distinct queries matter?"
+          ],
+          "modelAnswer": "Assume 10M daily users doing 10 searches each, ~6 keystrokes per search after debouncing: 600M suggestion requests/day, ~7k/s average and ~20k/s at peak. Keep the top ~100M distinct queries; at ~30 bytes per query plus counts that is a few GB, which fits in memory on each serving node, so the index can be replicated rather than sharded at first."
+        },
+        {
+          "id": "s3",
+          "title": "API and data model",
+          "prompt": "Define the API and the index structure.",
+          "hints": [
+            "What structure answers prefix queries fast?",
+            "Can you precompute answers?"
+          ],
+          "modelAnswer": "GET /suggest?q=pre&lang=en -> [{text, score}]. Use a trie where each node stores the precomputed top 5 completions for its prefix, so a lookup is O(length of prefix) with no traversal of the subtree. Alternatively, a sorted key-value map from prefix to top-5 list. Query logs are stored separately (append-only) for offline aggregation."
+        },
+        {
+          "id": "s4",
+          "title": "High-level design",
+          "prompt": "Sketch the serving path and the data pipeline.",
+          "hints": [
+            "Separate serving from building.",
+            "How does a new trie reach the servers?"
+          ],
+          "modelAnswer": "Serving: client debounces keystrokes (~100 ms), CDN or browser caches popular prefixes for a short TTL, then stateless suggestion servers hold the trie in memory. Building: search events stream into Kafka, a batch or streaming job (Spark, Flink) aggregates counts with time decay, builds a new trie snapshot, applies the blocklist and publishes it to object storage. Servers load new snapshots and swap atomically, so reads are never blocked."
+        },
+        {
+          "id": "s5",
+          "title": "Deep dive and trade-offs",
+          "prompt": "Discuss freshness, sharding and quality.",
+          "hints": [
+            "How do trending terms appear quickly?",
+            "What if the trie no longer fits on one machine?"
+          ],
+          "modelAnswer": "Freshness: rebuild hourly and merge a small real-time trending layer computed over the last few minutes. Sharding: when the index outgrows a node, shard by prefix range (balanced by traffic, not alphabet, since 's' is far busier than 'x') with a routing layer. Quality: apply time decay so old spikes fade, filter offensive or unsafe completions before publishing, and respect locale. Short prefixes (1 to 2 chars) are the hottest and can be served fully from cache."
+        }
+      ],
+      "commonPitfalls": [
+        "Traversing the whole subtree at query time instead of storing top-k per node.",
+        "Updating the live trie on every search instead of building snapshots offline.",
+        "Sharding alphabetically and creating hot shards."
+      ]
     }
   ]
 }
