@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/constants/routes.dart';
+import '../features/analytics/presentation/screens/analytics_screen.dart';
 import '../features/assessment/presentation/screens/module_test_screen.dart';
 import '../features/curriculum/presentation/screens/learning_path_detail_screen.dart';
 import '../features/curriculum/presentation/screens/learning_paths_screen.dart';
@@ -83,6 +84,7 @@ class AppScreens {
     this.lesson = _lesson,
     this.skillCheck = _skillCheck,
     this.interviewPrep = _interviewPrep,
+    this.analytics = _analytics,
     this.interviewSession = _interviewSession,
     this.dashboard = _dashboard,
     this.learn = _learn,
@@ -104,6 +106,7 @@ class AppScreens {
   final ScreenBuilder lesson;
   final ScreenBuilder skillCheck;
   final ScreenBuilder interviewPrep;
+  final ScreenBuilder analytics;
   final ScreenBuilder interviewSession;
   final ScreenBuilder dashboard;
   final ScreenBuilder learn;
@@ -148,6 +151,7 @@ class AppScreens {
   static Widget _interviewPrep(GoRouterState s) => const InterviewPrepScreen();
   static Widget _interviewSession(GoRouterState s) =>
       InterviewSessionScreen(pathId: s.pathParameters['pathId']!);
+  static Widget _analytics(GoRouterState s) => const AnalyticsScreen();
   static Widget _dashboard(GoRouterState s) => const DashboardScreen();
   static Widget _learn(GoRouterState s) => const LearningPathsScreen();
   static Widget _progress(GoRouterState s) => const ProgressScreen();
@@ -194,6 +198,10 @@ List<RouteBase> buildAppRoutes({AppScreens screens = const AppScreens()}) {
           builder: (context, state) => page(screens.practiceSession, state),
         ),
       ],
+    ),
+    GoRoute(
+      path: Routes.analytics,
+      builder: (context, state) => page(screens.analytics, state),
     ),
     GoRoute(
       path: Routes.interviewPrep,

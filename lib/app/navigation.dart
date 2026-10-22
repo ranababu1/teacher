@@ -46,6 +46,8 @@ extension AppNavigation on BuildContext {
   void openInterviewSession(String pathId) =>
       _router.push(Routes.interviewSession(pathId));
 
+  void openAnalytics() => _router.push(Routes.analytics);
+
   void openSettings() => _router.push(Routes.settings);
 
   /// Switches to a bottom-bar tab (a root, not a drill-down).

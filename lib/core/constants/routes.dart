@@ -11,6 +11,7 @@ class Routes {
   static const flashCard = '/flash-card';
   static const onboarding = '/onboarding';
   static const interviewPrep = '/interview';
+  static const analytics = '/analytics';
   static String interviewSession(String pathId) => '/interview/$pathId';
 
   /// Settings is a full-screen page pushed over whatever is open, so back

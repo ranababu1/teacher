@@ -12,6 +12,7 @@ import '../../../assessment/domain/models/learning_stats.dart';
 import '../../../assessment/presentation/providers/learning_stats_provider.dart';
 import '../../domain/models/path_progress_summary.dart';
 import '../providers/progress_providers.dart';
+import '../../../../app/navigation.dart';
 
 class ProgressScreen extends ConsumerWidget {
   const ProgressScreen({super.key});
@@ -52,6 +53,21 @@ class ProgressScreen extends ConsumerWidget {
                         child: Center(child: CircularProgressIndicator()),
                       ),
                       error: (_, _) => const SizedBox.shrink(),
+                    ),
+                    const SizedBox(height: 16),
+                    GradientCard(
+                      child: ListTile(
+                        leading: Icon(
+                          Icons.query_stats_outlined,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                        title: const Text('Learning analytics'),
+                        subtitle: const Text(
+                          'Activity, accuracy trend, weak spots',
+                        ),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => context.openAnalytics(),
+                      ),
                     ),
                   ],
                 ),

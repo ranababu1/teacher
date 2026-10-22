@@ -28,7 +28,8 @@ final _screens = AppScreens(
     'practice': (c) => c.openPractice(),
   }),
   learn: (_) => _screen('learn', {'path': (c) => c.openLearningPath('py')}),
-  progress: (_) => _screen('progress'),
+  progress: (_) => _screen('progress', {'analytics': (c) => c.openAnalytics()}),
+  analytics: (_) => _screen('analytics'),
   profile: (_) => _screen('profile', {'settings': (c) => c.openSettings()}),
   learningPath: (s) => _screen('path:${s.pathParameters['pathId']}', {
     'topic': (c) => c.openTopic('py', 'm1'),
@@ -200,6 +201,14 @@ void main() {
     _on('interview');
     await _back(t);
     _on('dashboard');
+  });
+
+  testWidgets('progress > analytics > back', (t) async {
+    await _pump(t, initial: Routes.progress);
+    await _tap(t, 'analytics');
+    _on('analytics');
+    await _back(t);
+    _on('progress');
   });
 
   testWidgets('old /profile/settings link still opens settings', (t) async {

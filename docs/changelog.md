@@ -1,5 +1,32 @@
 # Changelog
 
+## 2026-10-22 (release: v0.20.0 - learning analytics)
+
+### Added
+- **Learning analytics screen** (Phase 5 "learning analytics"), opened
+  from a new "Learning analytics" card on the Progress tab. Built from
+  real attempt history (the old Dashboard sparklines are decorative):
+  - answers, active days in the last 28 days, usual study time;
+  - a 28-day activity chart (bar height = answers per day, filled part =
+    answers that met the success bar);
+  - accuracy for each of the last four 7-day windows;
+  - accuracy and answer count per course;
+  - up to five weak spots (concepts tried at least twice and below
+    100%, lowest first), each opening its lesson;
+  - answers by part of the day.
+  "Success" uses the same bar as the Progress screen (attempt quality
+  >= 0.6). Empty state until the first answer.
+- Code: lib/features/analytics (pure LearningAnalyticsService, provider
+  with an injectable clock); route `/analytics`, helper `openAnalytics`.
+  Theme colours only; no new dependencies, no schema change.
+
+### Verification
+- test/learning_analytics_test.dart (empty history; daily, weekly,
+  course, weak-spot and day-part maths incl. old and unknown attempts;
+  widget content and empty state) and a navigation test for
+  progress > analytics > back. `flutter analyze --no-fatal-infos` no
+  errors or warnings; `flutter test` 199 passing.
+
 ## 2026-10-22 (release: v0.19.0 - interview prep: mock interviews with model answers)
 
 ### Added
