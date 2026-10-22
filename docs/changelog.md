@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026-10-23 (unreleased)
+## 2026-10-23 (release: v0.32.0 - Step-by-step lessons)
 
 ### Added
 - **Step-by-step lessons: steps and flow.** `lib/features/learning/domain`
