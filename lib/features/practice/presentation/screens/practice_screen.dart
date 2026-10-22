@@ -28,6 +28,11 @@ class PracticeScreen extends ConsumerWidget {
         title: const Text('Practice'),
         actions: [
           IconButton(
+            tooltip: 'Challenge Lab',
+            icon: const Icon(Icons.bug_report_outlined),
+            onPressed: () => context.openChallengeLab(),
+          ),
+          IconButton(
             tooltip: 'Interview prep',
             icon: const Icon(Icons.record_voice_over_outlined),
             onPressed: () => context.openInterviewPrep(),

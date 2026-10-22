@@ -12,6 +12,9 @@ class Routes {
   static const onboarding = '/onboarding';
   static const interviewPrep = '/interview';
   static const analytics = '/analytics';
+  static const challengeLab = '/challenges';
+  static String challengeSet(String pathId, String kind) =>
+      '/challenges/$pathId/$kind';
   static String interviewSession(String pathId) => '/interview/$pathId';
 
   /// Settings is a full-screen page pushed over whatever is open, so back

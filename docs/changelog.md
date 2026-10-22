@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-10-22 (release: v0.21.0 - Challenge Lab: debugging, coding and scenarios)
+
+### Added
+- **Challenge Lab** (Phase 9 "coding challenges, debugging sessions,
+  scenario-based problems"), opened from a Dashboard card or the Practice
+  screen's app-bar button. Pick a course, then one of: Debugging Sessions
+  (358 bundled exercises across courses), Coding Challenges (68) or
+  Real-World Scenarios (8). Each kind shows how many are available; empty
+  kinds are disabled.
+- **Challenge sets**: three challenges from different concepts where
+  possible, easiest first, played with the standard exercise player
+  (hints, model solution, AI check when configured, attempts recorded so
+  mastery, review and analytics update). "New Set" draws again, "Done"
+  goes back.
+- Code: lib/features/challenges (ChallengeService, providers, two
+  screens); routes `/challenges` and `/challenges/:pathId/:kind`; helpers
+  `openChallengeLab`, `openChallengeSet`. Offline, content-driven, no new
+  dependencies.
+
+### Verification
+- test/challenge_lab_test.dart (counts per kind, set size, distinct
+  concepts and difficulty order, small and empty pools, kind parsing,
+  lab and set widget states) and a navigation test for
+  dashboard > lab > set > back x2. `flutter analyze --no-fatal-infos` no
+  errors or warnings; `flutter test` 205 passing.
+
 ## 2026-10-22 (release: v0.20.0 - learning analytics)
 
 ### Added

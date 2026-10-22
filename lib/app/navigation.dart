@@ -48,6 +48,11 @@ extension AppNavigation on BuildContext {
 
   void openAnalytics() => _router.push(Routes.analytics);
 
+  void openChallengeLab() => _router.push(Routes.challengeLab);
+
+  void openChallengeSet(String pathId, String kind) =>
+      _router.push(Routes.challengeSet(pathId, kind));
+
   void openSettings() => _router.push(Routes.settings);
 
   /// Switches to a bottom-bar tab (a root, not a drill-down).

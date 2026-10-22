@@ -24,12 +24,17 @@ Widget _screen(String name, [Map<String, void Function(BuildContext)>? acts]) {
 final _screens = AppScreens(
   dashboard: (_) => _screen('dashboard', {
     'interview': (c) => c.openInterviewPrep(),
+    'lab': (c) => c.openChallengeLab(),
     'continue': (c) => c.openLesson('py', 'm1', 'c1'),
     'practice': (c) => c.openPractice(),
   }),
   learn: (_) => _screen('learn', {'path': (c) => c.openLearningPath('py')}),
   progress: (_) => _screen('progress', {'analytics': (c) => c.openAnalytics()}),
   analytics: (_) => _screen('analytics'),
+  challengeLab: (_) =>
+      _screen('lab', {'set': (c) => c.openChallengeSet('py', 'debugging')}),
+  challengeSet: (s) =>
+      _screen('set:${s.pathParameters['pathId']}:${s.pathParameters['kind']}'),
   profile: (_) => _screen('profile', {'settings': (c) => c.openSettings()}),
   learningPath: (s) => _screen('path:${s.pathParameters['pathId']}', {
     'topic': (c) => c.openTopic('py', 'm1'),
@@ -209,6 +214,17 @@ void main() {
     _on('analytics');
     await _back(t);
     _on('progress');
+  });
+
+  testWidgets('dashboard > challenge lab > set, back x2', (t) async {
+    await _pump(t);
+    await _tap(t, 'lab');
+    await _tap(t, 'set');
+    _on('set:py:debugging');
+    await _back(t);
+    _on('lab');
+    await _back(t);
+    _on('dashboard');
   });
 
   testWidgets('old /profile/settings link still opens settings', (t) async {
