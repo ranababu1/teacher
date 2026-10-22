@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026-10-22 (unreleased)
+## 2026-10-22 (release: v0.26.0 - Long-form coding challenges)
 
 ### Added
 - **Long-form coding challenges: content and storage** (Phase 5 "long-form
