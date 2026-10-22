@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026-10-23 (unreleased)
+## 2026-10-23 (release: v0.30.0 - More interview, debugging and challenge content)
 
 ### Added
 - **Interview prep scenarios for 14 courses.** 28 new scenario questions
