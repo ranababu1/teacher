@@ -26,6 +26,21 @@
 - `MarkdownText` takes `selectable` (default true). Selectable text claims
   horizontal drags, so text on swipeable lesson pages turns it off.
 
+### Changed
+- **Lessons are now step by step** instead of one tall scrolling page.
+  Each step is one card (goals, a bite-sized piece of the explanation, a
+  quick check, one example, misconceptions, Try It, Check Your
+  Understanding). A thin progress bar at the top shows "Step X of N";
+  tapping it opens a step list to jump (steps past an unanswered quick
+  check stay locked). Back and Next sit in a bottom bar, swiping works
+  too, and the last step's "Finish lesson" marks the lesson complete and
+  returns to where the learner came from. System back and the app-bar
+  back go to the previous step, and leave the lesson from step 1. Long
+  content or code scrolls inside its own card; cards are width-capped on
+  tablets. Reduced motion jumps between steps instead of animating. The AI
+  teacher moved to an app-bar button that opens it in a sheet. Tests in
+  `test/lesson_screen_test.dart` (S25 Ultra screen size).
+
 ## 2026-10-23 (release: v0.31.0 - Optional code runner groundwork)
 
 ### Added
