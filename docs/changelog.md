@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-10-23 (unreleased)
+
+### Added
+- **Code runner groundwork** (instructions.md section 33). A pluggable
+  `CodeRunner` interface and `CodeRunnerRepository` in
+  `lib/features/code_runner`. `RemoteCodeRunner` posts
+  `{"language", "source", "stdin", "timeoutSeconds"}` to a learner-chosen
+  execution API and expects `{"stdout", "stderr", "exitCode", "timedOut"}`
+  back. Off by default: there is no built-in endpoint and no credentials;
+  the https-only URL is stored in the settings table and running without
+  one is a configuration error. Learner code never runs inside the app.
+  Tests in `test/code_runner_test.dart`.
+
 ## 2026-10-23 (release: v0.30.0 - More interview, debugging and challenge content)
 
 ### Added
