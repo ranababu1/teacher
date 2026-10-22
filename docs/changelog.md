@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-10-22 (unreleased)
+
+### Added
+- **Hands-on progress summary** (Phase 5 "projects / system design /
+  challenges"): `BuildProgress` in `lib/features/build_hub` counts, per
+  track, how many guided projects are finished or in progress and how many
+  system design walkthroughs and long-form challenges have been completed at
+  least once. `buildProgressProvider` joins the three existing list
+  providers; tests in `test/build_progress_test.dart`.
+
 ## 2026-10-22 (release: v0.26.0 - Study plan, AI coach, system design and long-form challenges)
 
 One release for versions 0.23.0 to 0.26.0: 0.23.0 to 0.25.0 were
