@@ -123,3 +123,37 @@ const Map<String, dynamic> studyCoachingSchema = {
   },
   'required': ['summary', 'weeklyFocus', 'stepTips'],
 };
+
+/// Shape of RoadmapDraft.
+const Map<String, dynamic> roadmapDraftSchema = {
+  'type': 'OBJECT',
+  'properties': {
+    'summary': {'type': 'STRING'},
+    'weeks': {
+      'type': 'ARRAY',
+      'items': {
+        'type': 'OBJECT',
+        'properties': {
+          'focus': {'type': 'STRING'},
+          'items': {
+            'type': 'ARRAY',
+            'items': {
+              'type': 'OBJECT',
+              'properties': {
+                'kind': {
+                  'type': 'STRING',
+                  'enum': ['topic', 'project', 'systemDesign', 'challenge'],
+                },
+                'id': {'type': 'STRING'},
+                'note': {'type': 'STRING'},
+              },
+              'required': ['kind', 'id', 'note'],
+            },
+          },
+        },
+        'required': ['focus', 'items'],
+      },
+    },
+  },
+  'required': ['summary', 'weeks'],
+};

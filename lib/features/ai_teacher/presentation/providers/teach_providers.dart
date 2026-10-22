@@ -14,6 +14,7 @@ import '../../data/anthropic_provider.dart';
 import '../../data/gemini_provider.dart';
 import '../../data/openai_compatible_provider.dart';
 import '../../domain/ai_provider.dart';
+import '../../domain/models/roadmap_generation.dart';
 import '../../domain/models/study_coaching.dart';
 import '../../domain/models/teacher_response.dart';
 import '../../domain/teach_use_case.dart';
@@ -61,6 +62,11 @@ class _UnavailableAiProvider implements AIProvider {
   @override
   Future<StudyCoachingAdvice> coachStudyPlan(
     StudyCoachingRequest request,
+  ) async => _throwUnavailable();
+
+  @override
+  Future<RoadmapDraft> generateRoadmap(
+    RoadmapGenerationRequest request,
   ) async => _throwUnavailable();
 
   Never _throwUnavailable() {

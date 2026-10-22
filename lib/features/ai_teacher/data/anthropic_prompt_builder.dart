@@ -1,5 +1,6 @@
 import '../../settings/domain/settings_models.dart';
 import '../domain/models/module_test_context.dart';
+import '../domain/models/roadmap_generation.dart';
 import '../domain/models/study_coaching.dart';
 import '../domain/models/teaching_context.dart';
 import 'shared_prompt_builder.dart' as shared;
@@ -70,6 +71,15 @@ AnthropicPrompt buildCoachStudyPlanPrompt(
   StudyCoachingRequest request, {
   required ExplanationDepth depth,
 }) => shared.buildCoachStudyPlanPrompt(
+  request,
+  depth: depth,
+  outputInstruction: shared.nativeSchemaOutputInstruction,
+);
+
+AnthropicPrompt buildGenerateRoadmapPrompt(
+  RoadmapGenerationRequest request, {
+  required ExplanationDepth depth,
+}) => shared.buildGenerateRoadmapPrompt(
   request,
   depth: depth,
   outputInstruction: shared.nativeSchemaOutputInstruction,

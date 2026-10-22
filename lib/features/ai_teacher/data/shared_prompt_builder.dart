@@ -1,5 +1,6 @@
 import '../../settings/domain/settings_models.dart';
 import '../domain/models/module_test_context.dart';
+import '../domain/models/roadmap_generation.dart';
 import '../domain/models/study_coaching.dart';
 import '../domain/models/teaching_context.dart';
 
@@ -181,6 +182,56 @@ AiPrompt buildCoachStudyPlanPrompt(
     );
   return (systemInstruction: system, userContent: buffer.toString());
 }
+
+/// Pure prompt construction for the "personal roadmap" capability: the
+/// learner's goal and the app's content catalog in, a week-by-week plan
+/// out that uses only catalog ids.
+AiPrompt buildGenerateRoadmapPrompt(
+  RoadmapGenerationRequest request, {
+  required ExplanationDepth depth,
+  required String outputInstruction,
+}) {
+  final system = _systemInstruction(
+    depth: depth,
+    addendum: _roadmapAddendum,
+    outputInstruction: outputInstruction,
+  );
+  final buffer = StringBuffer()
+    ..writeln('## Learner')
+    ..writeln('Goal: ${request.goal.trim()}')
+    ..writeln('Current level: ${request.level}')
+    ..writeln('Time available: ${request.hoursPerWeek} hours per week')
+    ..writeln('Plan length: ${request.weeks} weeks');
+  final summary = request.learnerSummary.trim();
+  if (summary.isNotEmpty) buffer.writeln(summary);
+  buffer
+    ..writeln()
+    ..writeln('## Catalog (the only content you may use)')
+    ..writeln(request.catalog.trim())
+    ..writeln()
+    ..writeln('## Task')
+    ..writeln(
+      'Build a ${request.weeks}-week roadmap toward the goal. Return '
+      'exactly ${request.weeks} weeks in order. Each week has a short '
+      'focus (at most 8 words) and items whose total hours roughly fit '
+      '${request.hoursPerWeek} hours. Every item must use a kind and an id '
+      'copied exactly from the catalog ("topic" ids look like '
+      '"course/topic"). Never invent ids, courses or resources outside the '
+      'catalog. Order topics within a course as listed, skip what the '
+      'level or progress says they already know, and add a project, a '
+      'coding challenge or a system design exercise once the topics it '
+      'builds on are covered. Give each item a note of at most 20 words '
+      'on why it matters for the goal, and a 2-3 sentence summary of the '
+      'plan.',
+    );
+  return (systemInstruction: system, userContent: buffer.toString());
+}
+
+const _roadmapAddendum =
+    'For this request you are acting as a curriculum planner, not '
+    'explaining a concept. Be realistic about time, prefer depth in a few '
+    'relevant courses over a little of everything, and only use content '
+    'from the catalog provided.';
 
 const _coachAddendum =
     'For this request you are acting as a study coach, not explaining a '

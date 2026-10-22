@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:teacher/features/ai_teacher/domain/models/roadmap_generation.dart';
 import 'package:teacher/core/errors/app_exception.dart';
 import 'package:teacher/features/ai_teacher/domain/ai_provider.dart';
 import 'package:teacher/features/ai_teacher/domain/models/study_coaching.dart';
@@ -32,6 +33,10 @@ class _FakeAi implements AIProvider {
       stepTips: ['Do it before new lessons.', 'Explain it aloud.'],
     );
   }
+
+  @override
+  Future<RoadmapDraft> generateRoadmap(RoadmapGenerationRequest request) =>
+      throw UnimplementedError();
 
   @override
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();

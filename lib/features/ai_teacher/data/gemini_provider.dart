@@ -3,6 +3,7 @@ import '../../curriculum/domain/models/exercise.dart';
 import '../../settings/domain/settings_models.dart';
 import '../domain/ai_provider.dart';
 import '../domain/models/module_test_context.dart';
+import '../domain/models/roadmap_generation.dart';
 import '../domain/models/study_coaching.dart';
 import '../domain/models/teacher_response.dart';
 import '../domain/models/teaching_context.dart';
@@ -224,6 +225,20 @@ class GeminiProvider implements AIProvider {
           providerLabel: _providerLabel,
         ),
       );
+    });
+  }
+
+  @override
+  Future<RoadmapDraft> generateRoadmap(RoadmapGenerationRequest request) {
+    final prompt = buildGenerateRoadmapPrompt(request, depth: explanationDepth);
+    return parsing.callWithRetry(() async {
+      final json = await _client.generateContent(
+        model: _model,
+        systemInstruction: prompt.systemInstruction,
+        userContent: prompt.userContent,
+        responseSchema: roadmapDraftSchema,
+      );
+      return parsing.parseRoadmapDraft(json, providerLabel: _providerLabel);
     });
   }
 }

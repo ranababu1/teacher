@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:teacher/features/ai_teacher/domain/models/roadmap_generation.dart';
 import 'package:teacher/core/errors/app_exception.dart';
 import 'package:teacher/features/ai_teacher/data/openai_compatible_api_client.dart';
 import 'package:teacher/features/ai_teacher/data/openai_compatible_provider.dart';
@@ -32,9 +33,7 @@ class _FakeAdapter implements HttpClientAdapter {
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
   ) async {
-    final index = callCount < _actions.length
-        ? callCount
-        : _actions.length - 1;
+    final index = callCount < _actions.length ? callCount : _actions.length - 1;
     callCount++;
     return _actions[index](options);
   }
@@ -150,31 +149,41 @@ OpenAiCompatibleProvider _providerWith(
 
 void main() {
   group('OpenAiCompatibleProvider.teach', () {
-    test('a well-formed success response parses into a TeacherResponse', () async {
-      final adapter = _FakeAdapter([
-        (_) => _jsonResponse(
-          _envelope(
-            jsonEncode({
-              'explanation': 'A closure captures variables by reference.',
-              'followUpQuestion': 'What happens if the captured variable changes?',
-            }),
+    test(
+      'a well-formed success response parses into a TeacherResponse',
+      () async {
+        final adapter = _FakeAdapter([
+          (_) => _jsonResponse(
+            _envelope(
+              jsonEncode({
+                'explanation': 'A closure captures variables by reference.',
+                'followUpQuestion':
+                    'What happens if the captured variable changes?',
+              }),
+            ),
           ),
-        ),
-      ]);
-      final provider = _providerWith(adapter);
+        ]);
+        final provider = _providerWith(adapter);
 
-      final result = await provider.teach(
-        TeacherRequest(context: _buildContext(), learnerMessage: 'What is a closure?'),
-      );
+        final result = await provider.teach(
+          TeacherRequest(
+            context: _buildContext(),
+            learnerMessage: 'What is a closure?',
+          ),
+        );
 
-      expect(result, isA<TeacherResponse>());
-      expect(result.explanation, 'A closure captures variables by reference.');
-      expect(
-        result.followUpQuestion,
-        'What happens if the captured variable changes?',
-      );
-      expect(adapter.callCount, 1);
-    });
+        expect(result, isA<TeacherResponse>());
+        expect(
+          result.explanation,
+          'A closure captures variables by reference.',
+        );
+        expect(
+          result.followUpQuestion,
+          'What happens if the captured variable changes?',
+        );
+        expect(adapter.callCount, 1);
+      },
+    );
 
     test(
       'the same success path works identically for a DeepSeek-labeled provider',
@@ -182,7 +191,9 @@ void main() {
         final adapter = _FakeAdapter([
           (_) => _jsonResponse(
             _envelope(
-              jsonEncode({'explanation': 'A closure captures variables by reference.'}),
+              jsonEncode({
+                'explanation': 'A closure captures variables by reference.',
+              }),
             ),
           ),
         ]);
@@ -193,10 +204,16 @@ void main() {
         );
 
         final result = await provider.teach(
-          TeacherRequest(context: _buildContext(), learnerMessage: 'What is a closure?'),
+          TeacherRequest(
+            context: _buildContext(),
+            learnerMessage: 'What is a closure?',
+          ),
         );
 
-        expect(result.explanation, 'A closure captures variables by reference.');
+        expect(
+          result.explanation,
+          'A closure captures variables by reference.',
+        );
         expect(adapter.callCount, 1);
       },
     );
@@ -241,40 +258,37 @@ void main() {
       expect(adapter.callCount, 1);
     });
 
-    test(
-      'fewer questions than requested retries exactly once then throws InvalidAIResponseException',
-      () async {
-        final adapter = _FakeAdapter([
-          (_) => _jsonResponse(
-            _envelope(
-              jsonEncode({
-                'questions': [
-                  {
-                    'id': 'q1',
-                    'type': 'multipleChoice',
-                    'prompt': 'Only one question came back',
-                    'options': ['A', 'B'],
-                    'correctOptionIndex': 0,
-                  },
-                ],
-              }),
-            ),
+    test('fewer questions than requested retries exactly once then throws InvalidAIResponseException', () async {
+      final adapter = _FakeAdapter([
+        (_) => _jsonResponse(
+          _envelope(
+            jsonEncode({
+              'questions': [
+                {
+                  'id': 'q1',
+                  'type': 'multipleChoice',
+                  'prompt': 'Only one question came back',
+                  'options': ['A', 'B'],
+                  'correctOptionIndex': 0,
+                },
+              ],
+            }),
           ),
-        ]);
-        final provider = _providerWith(adapter);
+        ),
+      ]);
+      final provider = _providerWith(adapter);
 
-        await expectLater(
-          provider.generateModuleTest(
-            ModuleTestRequest(
-              context: _buildModuleTestContext(),
-              questionCount: 10,
-            ),
+      await expectLater(
+        provider.generateModuleTest(
+          ModuleTestRequest(
+            context: _buildModuleTestContext(),
+            questionCount: 10,
           ),
-          throwsA(isA<InvalidAIResponseException>()),
-        );
-        expect(adapter.callCount, 2);
-      },
-    );
+        ),
+        throwsA(isA<InvalidAIResponseException>()),
+      );
+      expect(adapter.callCount, 2);
+    });
   });
 
   group('error mapping', () {
@@ -292,44 +306,37 @@ void main() {
       );
     });
 
-    test(
-      'malformed inner JSON retries exactly once then throws InvalidAIResponseException',
-      () async {
-        final adapter = _FakeAdapter([
-          (_) => _jsonResponse(_envelope('not valid json {{{')),
-        ]);
-        final provider = _providerWith(adapter);
+    test('malformed inner JSON retries exactly once then throws InvalidAIResponseException', () async {
+      final adapter = _FakeAdapter([
+        (_) => _jsonResponse(_envelope('not valid json {{{')),
+      ]);
+      final provider = _providerWith(adapter);
 
-        await expectLater(
-          provider.teach(
-            TeacherRequest(context: _buildContext(), learnerMessage: 'hi'),
-          ),
-          throwsA(isA<InvalidAIResponseException>()),
-        );
-        expect(adapter.callCount, 2);
-      },
-    );
+      await expectLater(
+        provider.teach(
+          TeacherRequest(context: _buildContext(), learnerMessage: 'hi'),
+        ),
+        throwsA(isA<InvalidAIResponseException>()),
+      );
+      expect(adapter.callCount, 2);
+    });
 
-    test(
-      'a response missing a required key retries exactly once then throws InvalidAIResponseException',
-      () async {
-        final adapter = _FakeAdapter([
-          // Missing the required "explanation" key.
-          (_) => _jsonResponse(
-            _envelope(jsonEncode({'followUpQuestion': 'huh?'})),
-          ),
-        ]);
-        final provider = _providerWith(adapter);
+    test('a response missing a required key retries exactly once then throws InvalidAIResponseException', () async {
+      final adapter = _FakeAdapter([
+        // Missing the required "explanation" key.
+        (_) =>
+            _jsonResponse(_envelope(jsonEncode({'followUpQuestion': 'huh?'}))),
+      ]);
+      final provider = _providerWith(adapter);
 
-        await expectLater(
-          provider.teach(
-            TeacherRequest(context: _buildContext(), learnerMessage: 'hi'),
-          ),
-          throwsA(isA<InvalidAIResponseException>()),
-        );
-        expect(adapter.callCount, 2);
-      },
-    );
+      await expectLater(
+        provider.teach(
+          TeacherRequest(context: _buildContext(), learnerMessage: 'hi'),
+        ),
+        throwsA(isA<InvalidAIResponseException>()),
+      );
+      expect(adapter.callCount, 2);
+    });
 
     test('a connection error throws NetworkUnavailableException', () async {
       final adapter = _FakeAdapter([
@@ -376,6 +383,71 @@ void main() {
       expect(advice.weeklyFocus, 'Closures and scope.');
       expect(advice.stepTips, hasLength(2));
       expect(adapter.callCount, 1);
+    });
+  });
+
+  group('OpenAiCompatibleProvider.generateRoadmap', () {
+    test('parses weeks and items, tolerating a missing note', () async {
+      final adapter = _FakeAdapter([
+        (_) => _jsonResponse(
+          _envelope(
+            jsonEncode({
+              'summary': 'Python first, then databases.',
+              'weeks': [
+                {
+                  'focus': 'Python basics',
+                  'items': [
+                    {'kind': 'topic', 'id': 'python/basics', 'note': 'Start'},
+                    {'kind': 'challenge', 'id': 'py-ch'},
+                  ],
+                },
+              ],
+            }),
+          ),
+        ),
+      ]);
+      final provider = _providerWith(adapter);
+
+      final draft = await provider.generateRoadmap(
+        const RoadmapGenerationRequest(
+          goal: 'Backend job',
+          level: 'beginner',
+          hoursPerWeek: 6,
+          weeks: 4,
+          catalog: 'topic python/basics',
+        ),
+      );
+
+      expect(draft.summary, 'Python first, then databases.');
+      expect(draft.weeks.single.focus, 'Python basics');
+      expect(draft.weeks.single.items.map((i) => i.id), [
+        'python/basics',
+        'py-ch',
+      ]);
+      expect(draft.weeks.single.items.last.note, '');
+      expect(adapter.callCount, 1);
+    });
+
+    test('a response without weeks is retried, then rejected', () async {
+      final adapter = _FakeAdapter([
+        (_) => _jsonResponse(_envelope(jsonEncode({'summary': 'x'}))),
+        (_) => _jsonResponse(_envelope(jsonEncode({'summary': 'x'}))),
+      ]);
+      final provider = _providerWith(adapter);
+
+      await expectLater(
+        provider.generateRoadmap(
+          const RoadmapGenerationRequest(
+            goal: 'g',
+            level: 'beginner',
+            hoursPerWeek: 5,
+            weeks: 2,
+            catalog: '',
+          ),
+        ),
+        throwsA(isA<InvalidAIResponseException>()),
+      );
+      expect(adapter.callCount, 2);
     });
   });
 }

@@ -1,5 +1,6 @@
 import '../../settings/domain/settings_models.dart';
 import '../domain/models/module_test_context.dart';
+import '../domain/models/roadmap_generation.dart';
 import '../domain/models/study_coaching.dart';
 import '../domain/models/teaching_context.dart';
 import 'shared_prompt_builder.dart' as shared;
@@ -56,6 +57,14 @@ const _coachShapeInstruction =
     'this shape: {"summary": "<string>", "weeklyFocus": "<string>", '
     '"stepTips": ["<string>", ...]}. No markdown code fences, no prose '
     'before or after it, nothing but the JSON object itself.';
+
+const _roadmapShapeInstruction =
+    'Output requirement: respond with ONLY a raw JSON object of exactly '
+    'this shape: {"summary": "<string>", "weeks": [{"focus": "<string>", '
+    '"items": [{"kind": "topic" | "project" | "systemDesign" | '
+    '"challenge", "id": "<string, copied from the catalog>", "note": '
+    '"<string>"}, ...]}, ...]}. No markdown code fences, no prose before '
+    'or after it, nothing but the JSON object itself.';
 
 String _moduleTestShapeInstruction(int questionCount) =>
     'Output requirement: respond with ONLY a raw JSON object of exactly '
@@ -128,4 +137,13 @@ OpenAiCompatiblePrompt buildCoachStudyPlanPrompt(
   request,
   depth: depth,
   outputInstruction: _coachShapeInstruction,
+);
+
+OpenAiCompatiblePrompt buildGenerateRoadmapPrompt(
+  RoadmapGenerationRequest request, {
+  required ExplanationDepth depth,
+}) => shared.buildGenerateRoadmapPrompt(
+  request,
+  depth: depth,
+  outputInstruction: _roadmapShapeInstruction,
 );

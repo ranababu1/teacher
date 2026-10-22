@@ -1,5 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:teacher/core/errors/app_exception.dart';
+import 'package:teacher/features/ai_teacher/data/shared_prompt_builder.dart'
+    as shared;
+import 'package:teacher/features/settings/domain/settings_models.dart';
 import 'package:teacher/features/ai_teacher/domain/models/roadmap_generation.dart';
 import 'package:teacher/features/roadmap/domain/models/roadmap.dart';
 import 'package:teacher/features/roadmap/domain/models/roadmap_catalog.dart';
@@ -320,5 +323,24 @@ void main() {
     expect(progress.total, roadmap.allItems.length);
     expect(progress.next!.refId, 'python/p1');
     expect(progress.doneInWeek(roadmap.weeks.first), 1);
+  });
+
+  test('the AI prompt carries the catalog and the hard constraints', () {
+    final prompt = shared.buildGenerateRoadmapPrompt(
+      RoadmapGenerationRequest(
+        goal: 'Backend job',
+        level: 'beginner',
+        hoursPerWeek: 6,
+        weeks: 4,
+        catalog: _catalog.toPromptText(),
+      ),
+      depth: ExplanationDepth.values.first,
+      outputInstruction: 'JSON',
+    );
+    expect(prompt.userContent, contains('python/p0'));
+    expect(prompt.userContent, contains('py-proj'));
+    expect(prompt.userContent, contains('exactly 4 weeks'));
+    expect(prompt.userContent, contains('Never invent ids'));
+    expect(prompt.systemInstruction, contains('JSON'));
   });
 }

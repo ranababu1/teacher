@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:teacher/features/ai_teacher/domain/models/roadmap_generation.dart';
 import 'package:teacher/core/errors/app_exception.dart';
 import 'package:teacher/features/ai_teacher/domain/ai_provider.dart';
 import 'package:teacher/features/ai_teacher/domain/assess_use_case.dart';
@@ -196,6 +197,10 @@ class _FakeAIProvider implements AIProvider {
   @override
   Future<StudyCoachingAdvice> coachStudyPlan(StudyCoachingRequest request) =>
       throw UnimplementedError();
+
+  @override
+  Future<RoadmapDraft> generateRoadmap(RoadmapGenerationRequest request) =>
+      throw UnimplementedError();
 }
 
 void main() {
@@ -230,17 +235,20 @@ void main() {
   });
 
   group('TeachingContextBuilder', () {
-    test('assembles context from concept, mastery, and unresolved misconceptions', () async {
-      final context = await contextBuilder.build('python-closures');
+    test(
+      'assembles context from concept, mastery, and unresolved misconceptions',
+      () async {
+        final context = await contextBuilder.build('python-closures');
 
-      expect(context.concept.id, 'python-closures');
-      expect(context.mastery.status, MasteryStatus.developing);
-      expect(
-        context.recentMisconceptions,
-        contains('Thinks closures copy by value'),
-      );
-      expect(context.currentDifficultyLevel, 3); // developing -> 3
-    });
+        expect(context.concept.id, 'python-closures');
+        expect(context.mastery.status, MasteryStatus.developing);
+        expect(
+          context.recentMisconceptions,
+          contains('Thinks closures copy by value'),
+        );
+        expect(context.currentDifficultyLevel, 3); // developing -> 3
+      },
+    );
 
     test('throws ContentNotFoundException when the concept does not exist', () {
       curriculumRepository.concept = null;
@@ -252,50 +260,61 @@ void main() {
   });
 
   group('TeachUseCase', () {
-    test('passes an assembled context and the learner message to AIProvider.teach', () async {
-      final useCase = TeachUseCase(
-        contextBuilder: contextBuilder,
-        aiProvider: aiProvider,
-      );
+    test(
+      'passes an assembled context and the learner message to AIProvider.teach',
+      () async {
+        final useCase = TeachUseCase(
+          contextBuilder: contextBuilder,
+          aiProvider: aiProvider,
+        );
 
-      final response = await useCase.call(
-        conceptId: 'python-closures',
-        learnerMessage: 'Why does this keep state?',
-      );
+        final response = await useCase.call(
+          conceptId: 'python-closures',
+          learnerMessage: 'Why does this keep state?',
+        );
 
-      expect(response.explanation, 'ok');
-      expect(aiProvider.lastTeachRequest?.learnerMessage, 'Why does this keep state?');
-      final context = aiProvider.lastTeachRequest?.context;
-      expect(context, isA<TeachingContext>());
-      expect((context as TeachingContext).concept.id, 'python-closures');
-    });
+        expect(response.explanation, 'ok');
+        expect(
+          aiProvider.lastTeachRequest?.learnerMessage,
+          'Why does this keep state?',
+        );
+        final context = aiProvider.lastTeachRequest?.context;
+        expect(context, isA<TeachingContext>());
+        expect((context as TeachingContext).concept.id, 'python-closures');
+      },
+    );
   });
 
   group('AssessUseCase', () {
-    test('returns the AI verdict and persists every detected misconception', () async {
-      aiProvider.assessResult = const AssessmentResult(
-        isCorrect: false,
-        feedback: 'Not quite — closures capture the variable, not its value.',
-        detectedMisconceptions: ['Believes closures copy by value'],
-      );
-      final useCase = AssessUseCase(
-        contextBuilder: contextBuilder,
-        misconceptionRepository: misconceptionRepository,
-        aiProvider: aiProvider,
-      );
+    test(
+      'returns the AI verdict and persists every detected misconception',
+      () async {
+        aiProvider.assessResult = const AssessmentResult(
+          isCorrect: false,
+          feedback: 'Not quite — closures capture the variable, not its value.',
+          detectedMisconceptions: ['Believes closures copy by value'],
+        );
+        final useCase = AssessUseCase(
+          contextBuilder: contextBuilder,
+          misconceptionRepository: misconceptionRepository,
+          aiProvider: aiProvider,
+        );
 
-      final result = await useCase.call(
-        conceptId: 'python-closures',
-        learnerResponse: 'It copies the value.',
-      );
+        final result = await useCase.call(
+          conceptId: 'python-closures',
+          learnerResponse: 'It copies the value.',
+        );
 
-      expect(result.isCorrect, isFalse);
-      expect(aiProvider.lastAssessRequest?.learnerResponse, 'It copies the value.');
-      expect(
-        misconceptionRepository.recordedDescriptions,
-        ['Believes closures copy by value'],
-      );
-    });
+        expect(result.isCorrect, isFalse);
+        expect(
+          aiProvider.lastAssessRequest?.learnerResponse,
+          'It copies the value.',
+        );
+        expect(misconceptionRepository.recordedDescriptions, [
+          'Believes closures copy by value',
+        ]);
+      },
+    );
 
     test('persists nothing when the AI detects no misconceptions', () async {
       final useCase = AssessUseCase(
@@ -314,69 +333,77 @@ void main() {
   });
 
   group('EvaluateExplanationUseCase', () {
-    test('returns the AI verdict and persists detected misconceptions', () async {
-      aiProvider.explanationResult = const ExplanationEvaluation(
-        isCorrect: true,
-        isComplete: false,
-        feedback: 'Correct so far, but you left out how it terminates.',
-        detectedMisconceptions: ['Assumes static always means final'],
-      );
-      final useCase = EvaluateExplanationUseCase(
-        contextBuilder: contextBuilder,
-        misconceptionRepository: misconceptionRepository,
-        aiProvider: aiProvider,
-      );
+    test(
+      'returns the AI verdict and persists detected misconceptions',
+      () async {
+        aiProvider.explanationResult = const ExplanationEvaluation(
+          isCorrect: true,
+          isComplete: false,
+          feedback: 'Correct so far, but you left out how it terminates.',
+          detectedMisconceptions: ['Assumes static always means final'],
+        );
+        final useCase = EvaluateExplanationUseCase(
+          contextBuilder: contextBuilder,
+          misconceptionRepository: misconceptionRepository,
+          aiProvider: aiProvider,
+        );
 
-      final result = await useCase.call(
-        conceptId: 'python-closures',
-        learnerExplanation: 'A closure remembers variables from its scope.',
-      );
+        final result = await useCase.call(
+          conceptId: 'python-closures',
+          learnerExplanation: 'A closure remembers variables from its scope.',
+        );
 
-      expect(result.isCorrect, isTrue);
-      expect(result.isComplete, isFalse);
-      expect(
-        aiProvider.lastExplanationRequest?.learnerExplanation,
-        'A closure remembers variables from its scope.',
-      );
-      expect(
-        misconceptionRepository.recordedDescriptions,
-        ['Assumes static always means final'],
-      );
-    });
+        expect(result.isCorrect, isTrue);
+        expect(result.isComplete, isFalse);
+        expect(
+          aiProvider.lastExplanationRequest?.learnerExplanation,
+          'A closure remembers variables from its scope.',
+        );
+        expect(misconceptionRepository.recordedDescriptions, [
+          'Assumes static always means final',
+        ]);
+      },
+    );
   });
 
   group('GenerateExerciseUseCase', () {
-    test('returns the AI-authored exercise, passing the assembled context', () async {
-      aiProvider.generatedExercise = const Exercise(
-        id: 'generated-closures-1',
-        type: ItemType.predictOutput,
-        prompt: 'What does this print?',
-        hints: ['Think about scope'],
-        code: 'x = 1',
-      );
-      final useCase = GenerateExerciseUseCase(
-        contextBuilder: contextBuilder,
-        aiProvider: aiProvider,
-      );
+    test(
+      'returns the AI-authored exercise, passing the assembled context',
+      () async {
+        aiProvider.generatedExercise = const Exercise(
+          id: 'generated-closures-1',
+          type: ItemType.predictOutput,
+          prompt: 'What does this print?',
+          hints: ['Think about scope'],
+          code: 'x = 1',
+        );
+        final useCase = GenerateExerciseUseCase(
+          contextBuilder: contextBuilder,
+          aiProvider: aiProvider,
+        );
 
-      final exercise = await useCase.call(conceptId: 'python-closures');
+        final exercise = await useCase.call(conceptId: 'python-closures');
 
-      expect(exercise.id, 'generated-closures-1');
-      expect(exercise.prompt, 'What does this print?');
-      final context = aiProvider.lastExerciseRequest?.context;
-      expect(context, isA<TeachingContext>());
-      expect((context as TeachingContext).concept.id, 'python-closures');
-    });
+        expect(exercise.id, 'generated-closures-1');
+        expect(exercise.prompt, 'What does this print?');
+        final context = aiProvider.lastExerciseRequest?.context;
+        expect(context, isA<TeachingContext>());
+        expect((context as TeachingContext).concept.id, 'python-closures');
+      },
+    );
   });
 
   group('TestAiConnectionUseCase', () {
-    test('delegates to AIProvider.testConnection and completes on success', () async {
-      final useCase = TestAiConnectionUseCase(aiProvider: aiProvider);
+    test(
+      'delegates to AIProvider.testConnection and completes on success',
+      () async {
+        final useCase = TestAiConnectionUseCase(aiProvider: aiProvider);
 
-      await useCase.call();
+        await useCase.call();
 
-      expect(aiProvider.testConnectionCalled, isTrue);
-    });
+        expect(aiProvider.testConnectionCalled, isTrue);
+      },
+    );
 
     test('propagates whatever the provider throws', () async {
       aiProvider.testConnectionError = const AIUnavailableException(

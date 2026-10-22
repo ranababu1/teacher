@@ -1,6 +1,7 @@
 import '../../../core/errors/app_exception.dart';
 import '../../curriculum/domain/models/assessment.dart';
 import '../../curriculum/domain/models/exercise.dart';
+import 'models/roadmap_generation.dart';
 import 'models/study_coaching.dart';
 import 'models/teacher_response.dart';
 
@@ -36,4 +37,9 @@ abstract class AIProvider {
   /// Coaching on the learner's study plan: a short assessment, a weekly
   /// focus and one tip per step. See StudyCoachingRequest.
   Future<StudyCoachingAdvice> coachStudyPlan(StudyCoachingRequest request);
+
+  /// A multi-week roadmap for the learner's goal, chosen only from the
+  /// catalog in [request]. The result is unvalidated: callers must check
+  /// every id against the app's content (see RoadmapValidator).
+  Future<RoadmapDraft> generateRoadmap(RoadmapGenerationRequest request);
 }

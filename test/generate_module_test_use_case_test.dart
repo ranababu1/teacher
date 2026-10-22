@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:teacher/features/ai_teacher/domain/models/roadmap_generation.dart';
 import 'package:teacher/core/errors/app_exception.dart';
 import 'package:teacher/features/ai_teacher/domain/ai_provider.dart';
 import 'package:teacher/features/ai_teacher/domain/generate_module_test_use_case.dart';
@@ -121,17 +122,21 @@ class _FakeAIProvider implements AIProvider {
   }
 
   @override
-  Future<TeacherResponse> teach(TeacherRequest request) => throw UnimplementedError();
-
-  @override
-  Future<AssessmentResult> assess(AssessmentRequest request) => throw UnimplementedError();
-
-  @override
-  Future<Exercise> generateExercise(ExerciseRequest request) => throw UnimplementedError();
-
-  @override
-  Future<ExplanationEvaluation> evaluateExplanation(ExplanationRequest request) =>
+  Future<TeacherResponse> teach(TeacherRequest request) =>
       throw UnimplementedError();
+
+  @override
+  Future<AssessmentResult> assess(AssessmentRequest request) =>
+      throw UnimplementedError();
+
+  @override
+  Future<Exercise> generateExercise(ExerciseRequest request) =>
+      throw UnimplementedError();
+
+  @override
+  Future<ExplanationEvaluation> evaluateExplanation(
+    ExplanationRequest request,
+  ) => throw UnimplementedError();
 
   @override
   Future<void> testConnection() => throw UnimplementedError();
@@ -139,9 +144,17 @@ class _FakeAIProvider implements AIProvider {
   @override
   Future<StudyCoachingAdvice> coachStudyPlan(StudyCoachingRequest request) =>
       throw UnimplementedError();
+
+  @override
+  Future<RoadmapDraft> generateRoadmap(RoadmapGenerationRequest request) =>
+      throw UnimplementedError();
 }
 
-Assessment _mcq(String id, {int correctOptionIndex = 0, List<String>? options}) {
+Assessment _mcq(
+  String id, {
+  int correctOptionIndex = 0,
+  List<String>? options,
+}) {
   return Assessment(
     id: id,
     type: ItemType.multipleChoice,
@@ -190,7 +203,10 @@ void main() {
       _mcq('q1', correctOptionIndex: 1, options: ['A', 'B', 'C']),
     ];
 
-    final result = await useCase.call(learningPathId: 'python', moduleId: 'basics');
+    final result = await useCase.call(
+      learningPathId: 'python',
+      moduleId: 'basics',
+    );
 
     expect(result, hasLength(1));
     expect(result.first.id, 'q1');
@@ -202,7 +218,10 @@ void main() {
       _mcq('bad-index', correctOptionIndex: 5, options: ['A', 'B']),
     ];
 
-    final result = await useCase.call(learningPathId: 'python', moduleId: 'basics');
+    final result = await useCase.call(
+      learningPathId: 'python',
+      moduleId: 'basics',
+    );
 
     expect(result.map((a) => a.id), ['good']);
   });
@@ -213,7 +232,10 @@ void main() {
       const Assessment(id: 'not-mcq', type: ItemType.shortAnswer, prompt: 'p'),
     ];
 
-    final result = await useCase.call(learningPathId: 'python', moduleId: 'basics');
+    final result = await useCase.call(
+      learningPathId: 'python',
+      moduleId: 'basics',
+    );
 
     expect(result.map((a) => a.id), ['good']);
   });
@@ -230,22 +252,25 @@ void main() {
     expect(aiProvider.lastRequest!.questionCount, 20);
   });
 
-  test('throws ContentNotFoundException for an unknown learning path', () async {
-    final missingPathUseCase = GenerateModuleTestUseCase(
-      curriculumRepository: _FakeCurriculumRepository(null),
-      contextBuilder: TeachingContextBuilder(
+  test(
+    'throws ContentNotFoundException for an unknown learning path',
+    () async {
+      final missingPathUseCase = GenerateModuleTestUseCase(
         curriculumRepository: _FakeCurriculumRepository(null),
-        masteryRepository: _FakeMasteryRepository(),
-        misconceptionRepository: _FakeMisconceptionRepository(),
-      ),
-      aiProvider: aiProvider,
-    );
+        contextBuilder: TeachingContextBuilder(
+          curriculumRepository: _FakeCurriculumRepository(null),
+          masteryRepository: _FakeMasteryRepository(),
+          misconceptionRepository: _FakeMisconceptionRepository(),
+        ),
+        aiProvider: aiProvider,
+      );
 
-    await expectLater(
-      missingPathUseCase.call(learningPathId: 'nope', moduleId: 'basics'),
-      throwsA(isA<ContentNotFoundException>()),
-    );
-  });
+      await expectLater(
+        missingPathUseCase.call(learningPathId: 'nope', moduleId: 'basics'),
+        throwsA(isA<ContentNotFoundException>()),
+      );
+    },
+  );
 
   test('throws ContentNotFoundException for an unknown module', () async {
     await expectLater(

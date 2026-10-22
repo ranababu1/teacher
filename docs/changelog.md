@@ -15,6 +15,12 @@
   their recommended topic, packed into weekly hours). `RoadmapProgress`
   derives progress from existing completion data. Items can be removed or
   moved between weeks. Tests in `test/roadmap_domain_test.dart`.
+- **Personal roadmap: AI capability.** `AIProvider.generateRoadmap` asks
+  the configured provider (Gemini, Anthropic or OpenAI-compatible, the
+  user's own key) for a week-by-week plan built only from the catalog sent
+  in the prompt. Native JSON schemas for Gemini and Anthropic, a shape
+  instruction for OpenAI-compatible providers, shared parsing via
+  `parseRoadmapDraft` with the usual single retry on malformed output.
 
 ## 2026-10-22 (release: v0.28.1 - Smooth app launch without flicker)
 

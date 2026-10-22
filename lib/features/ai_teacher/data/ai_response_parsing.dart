@@ -1,6 +1,7 @@
 import '../../../core/errors/app_exception.dart';
 import '../../curriculum/domain/models/assessment.dart';
 import '../../curriculum/domain/models/exercise.dart';
+import '../domain/models/roadmap_generation.dart';
 
 /// Strict field extraction shared by every AIProvider implementation —
 /// throws [InvalidAIResponseException] (rather than letting a raw
@@ -137,4 +138,51 @@ Future<T> callWithRetry<T>(Future<T> Function() attempt) async {
   } on InvalidAIResponseException {
     return await attempt();
   }
+}
+
+/// Parses `{"summary": ..., "weeks": [{"focus": ..., "items": [{"kind",
+/// "id", "note"}]}]}`. Shape errors throw [InvalidAIResponseException];
+/// whether ids are real is checked later against the app's catalog.
+RoadmapDraft parseRoadmapDraft(
+  Map<String, dynamic> json, {
+  required String providerLabel,
+}) {
+  final weeksRaw = json['weeks'];
+  if (weeksRaw is! List) {
+    throw InvalidAIResponseException(
+      '$providerLabel response missing required array field "weeks"',
+    );
+  }
+  final weeks = <RoadmapDraftWeek>[];
+  for (final w in weeksRaw) {
+    if (w is! Map<String, dynamic>) {
+      throw InvalidAIResponseException(
+        '$providerLabel response has a non-object week',
+      );
+    }
+    final itemsRaw = w['items'];
+    if (itemsRaw is! List) {
+      throw InvalidAIResponseException(
+        '$providerLabel response week missing array field "items"',
+      );
+    }
+    weeks.add(
+      RoadmapDraftWeek(
+        focus: optString(w, 'focus', providerLabel: providerLabel) ?? '',
+        items: [
+          for (final i in itemsRaw)
+            if (i is Map<String, dynamic>)
+              RoadmapDraftItem(
+                kind: reqString(i, 'kind', providerLabel: providerLabel),
+                id: reqString(i, 'id', providerLabel: providerLabel),
+                note: optString(i, 'note', providerLabel: providerLabel) ?? '',
+              ),
+        ],
+      ),
+    );
+  }
+  return RoadmapDraft(
+    summary: optString(json, 'summary', providerLabel: providerLabel) ?? '',
+    weeks: weeks,
+  );
 }
