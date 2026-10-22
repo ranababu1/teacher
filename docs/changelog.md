@@ -23,6 +23,8 @@
   concept completed with the existing progress logic and clears the resume
   point. `LessonFlowController` ties it together. Tests in
   `test/lesson_resume_test.dart`.
+- `MarkdownText` takes `selectable` (default true). Selectable text claims
+  horizontal drags, so text on swipeable lesson pages turns it off.
 
 ## 2026-10-23 (release: v0.31.0 - Optional code runner groundwork)
 
