@@ -1,6 +1,10 @@
 # Changelog
 
-## 2026-10-22 (release: v0.26.0 - Long-form coding challenges)
+## 2026-10-22 (release: v0.26.0 - Study plan, AI coach, system design and long-form challenges)
+
+One release for versions 0.23.0 to 0.26.0: 0.23.0 to 0.25.0 were
+version bumps that were not tagged separately, so their entries below ship
+in v0.26.0.
 
 ### Added
 - **Long-form coding challenges: content and storage** (Phase 5 "long-form
@@ -24,7 +28,7 @@
   more passed topics, the plan adds the first long-form challenge for that
   course you have not tried yet.
 
-## 2026-10-22 (release: v0.25.0 - AI study coach)
+## 2026-10-22 (version 0.25.0, released in v0.26.0: AI study coach)
 
 ### Added
 - **Projects on the course screen**: each course's detail screen now lists
@@ -48,7 +52,7 @@
   "Coach:" tip under each step. Missing keys or AI errors show the plain
   message with Try Again; the plan itself always works offline.
 
-## 2026-10-22 (release: v0.24.0 - System design exercises)
+## 2026-10-22 (version 0.24.0, released in v0.26.0: System design exercises)
 
 ### Added
 - **System design exercises: content and storage** (Phase 5 "system design
@@ -68,7 +72,7 @@
   pitfalls; the attempt is saved. Routes `/system-design` and
   `/system-design/:exerciseId`.
 
-## 2026-10-22 (release: v0.23.0 - Personal study plan)
+## 2026-10-22 (version 0.23.0, released in v0.26.0: Personal study plan)
 
 ### Added
 - **Your study plan** (Phase 4/5 "personalized learning paths" and
