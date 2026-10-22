@@ -20,6 +20,9 @@
   reference solution and explanation and rate yourself. The summary shows
   your score and the parts to revisit; the attempt is saved. Routes
   `/coding-challenges` and `/coding-challenges/:challengeId`.
+- **Long-form challenges in your study plan**: for a course with two or
+  more passed topics, the plan adds the first long-form challenge for that
+  course you have not tried yet.
 
 ## 2026-10-22 (release: v0.25.0 - AI study coach)
 

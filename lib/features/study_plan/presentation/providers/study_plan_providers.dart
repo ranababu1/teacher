@@ -5,6 +5,7 @@ import '../../../ai_teacher/presentation/providers/teach_providers.dart';
 import '../../../analytics/presentation/providers/analytics_providers.dart';
 import '../../../challenges/domain/challenge_service.dart';
 import '../../../challenges/presentation/providers/challenge_providers.dart';
+import '../../../coding_challenges/presentation/providers/coding_challenge_providers.dart';
 import '../../../curriculum/presentation/curriculum_providers.dart';
 import '../../../dashboard/domain/models/continue_learning_state.dart';
 import '../../../dashboard/presentation/providers/dashboard_providers.dart';
@@ -36,6 +37,7 @@ final studyPlanInputsProvider = FutureProvider<StudyPlanInputs>((ref) async {
   final profile = await ref.watch(learnerProfileControllerProvider.future);
   final challenges = ref.read(challengeServiceProvider);
   final design = await ref.watch(systemDesignListProvider.future);
+  final longChallenges = await ref.watch(codingChallengeListProvider.future);
   return StudyPlanInputs(
     startedPaths: started,
     completedConceptIds: {
@@ -53,6 +55,10 @@ final studyPlanInputsProvider = FutureProvider<StudyPlanInputs>((ref) async {
         p.id: challenges.counts(p)[ChallengeKind.debugging] ?? 0,
     },
     systemDesign: design,
+    longChallenges: [
+      for (final c in longChallenges)
+        (challenge: c.challenge, record: c.record),
+    ],
     nextConcept: next,
     careerGoal: profile.careerGoal,
   );

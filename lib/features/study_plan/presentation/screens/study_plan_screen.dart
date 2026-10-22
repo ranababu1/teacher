@@ -20,6 +20,7 @@ IconData planStepIcon(PlanStepKind kind) => switch (kind) {
   PlanStepKind.challenge => Icons.bug_report_outlined,
   PlanStepKind.interview => Icons.record_voice_over_outlined,
   PlanStepKind.systemDesign => Icons.account_tree_outlined,
+  PlanStepKind.longChallenge => Icons.terminal_outlined,
   PlanStepKind.startCourse => Icons.school_outlined,
 };
 
@@ -42,6 +43,8 @@ void openPlanStep(BuildContext context, PlanStep step) {
       context.openInterviewSession(step.pathId!);
     case PlanStepKind.systemDesign:
       context.openSystemDesignExercise(step.exerciseId!);
+    case PlanStepKind.longChallenge:
+      context.openCodingChallenge(step.challengeId!);
     case PlanStepKind.startCourse:
       context.switchToTab(Routes.learn);
   }

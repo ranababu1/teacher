@@ -1,4 +1,5 @@
 import '../../analytics/domain/models/learning_analytics.dart';
+import '../../coding_challenges/domain/models/coding_challenge.dart';
 import '../../curriculum/domain/models/concept.dart';
 import '../../curriculum/domain/models/learning_path.dart';
 import '../../projects/domain/models/project_overview.dart';
@@ -17,6 +18,7 @@ class StudyPlanInputs {
     required this.projects,
     required this.debuggingCountByPath,
     this.systemDesign = const [],
+    this.longChallenges = const [],
     this.nextConcept,
     this.careerGoal,
   });
@@ -33,6 +35,10 @@ class StudyPlanInputs {
   /// System design exercises with the learner's best result, if any.
   final List<({SystemDesignExercise exercise, SystemDesignRecord? record})>
   systemDesign;
+
+  /// Long-form coding challenges with the learner's best result, if any.
+  final List<({LongFormChallenge challenge, ChallengeRecord? record})>
+  longChallenges;
 
   /// The next lesson (from the Continue Learning or recommendation logic).
   final Concept? nextConcept;
@@ -128,6 +134,9 @@ class StudyPlanService {
 
     final design = _systemDesign(i);
     if (design != null) steps.add(design);
+
+    final longChallenge = _longChallenge(i);
+    if (longChallenge != null) steps.add(longChallenge);
 
     return StudyPlan(
       careerGoal: i.careerGoal,
@@ -233,6 +242,32 @@ class StudyPlanService {
       minutes: d.exercise.estimatedMinutes,
       exerciseId: d.exercise.id,
     );
+  }
+
+  /// An untried long-form challenge for a course with 2+ passed topics.
+  PlanStep? _longChallenge(StudyPlanInputs i) {
+    for (final path in i.startedPaths) {
+      final passed = (i.passedModuleIdsByPath[path.id] ?? const {}).length;
+      if (passed < 2) continue;
+      final untried = i.longChallenges
+          .where(
+            (c) => c.record == null && c.challenge.learningPathId == path.id,
+          )
+          .firstOrNull;
+      if (untried != null) {
+        return PlanStep(
+          kind: PlanStepKind.longChallenge,
+          title: 'Challenge: ${untried.challenge.title}',
+          reason:
+              'A multi-part problem that puts your ${path.title} topics '
+              'together in one piece of code.',
+          minutes: untried.challenge.estimatedMinutes,
+          pathId: path.id,
+          challengeId: untried.challenge.id,
+        );
+      }
+    }
+    return null;
   }
 
   PlanStep? _challengeOrInterview(StudyPlanInputs i) {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:teacher/features/analytics/domain/models/learning_analytics.dart';
+import 'package:teacher/features/coding_challenges/domain/models/coding_challenge.dart';
 import 'package:teacher/features/curriculum/domain/models/concept.dart';
 import 'package:teacher/features/curriculum/domain/models/curriculum_module.dart';
 import 'package:teacher/features/curriculum/domain/models/difficulty.dart';
@@ -286,6 +287,52 @@ void main() {
         isEmpty,
       );
     });
+  });
+
+  test('2+ passed topics also suggest an untried long-form challenge', () {
+    LongFormChallenge ch(String id, String pathId) => LongFormChallenge(
+      id: id,
+      learningPathId: pathId,
+      language: 'python',
+      title: 'Ch $id',
+      difficulty: Difficulty.intermediate,
+      estimatedMinutes: 50,
+      summary: '',
+      statement: '',
+      starterCode: '',
+      parts: const [],
+    );
+    final plan = service.build(
+      StudyPlanInputs(
+        startedPaths: [_path],
+        completedConceptIds: const {},
+        passedModuleIdsByPath: const {
+          'py': {'m1', 'm2'},
+        },
+        dueReviews: const [],
+        weakConcepts: const [],
+        projects: const [],
+        debuggingCountByPath: const {},
+        longChallenges: [
+          (
+            challenge: ch('done', 'py'),
+            record: const ChallengeRecord(
+              attempts: 1,
+              bestScore: 6,
+              maxScore: 6,
+            ),
+          ),
+          (challenge: ch('other-course', 'go'), record: null),
+          (challenge: ch('fresh', 'py'), record: null),
+        ],
+      ),
+    );
+    expect(plan.steps.map((s) => s.kind), [
+      PlanStepKind.interview,
+      PlanStepKind.longChallenge,
+    ]);
+    expect(plan.steps.last.challengeId, 'fresh');
+    expect(plan.steps.last.minutes, 50);
   });
 
   test('caps the plan at maxSteps', () {
