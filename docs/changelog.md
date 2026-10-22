@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-10-23 (unreleased)
+
+### Added
+- **Step-by-step lessons: steps and flow.** `lib/features/learning/domain`
+  turns a concept into ordered steps: goals (objectives and
+  prerequisites), the explanation split into bite-sized chunks (paragraphs
+  and code fences kept whole, never crossing a heading), one example per
+  step, common misconceptions, Try It and Check Your Understanding. Empty
+  steps are skipped. Quick checks sit between explanation chunks and are
+  drawn only from the concept's own data: misconceptions as true/false
+  statements, then its multiple-choice questions; a concept with neither
+  gets none. `LessonFlow` holds the current step, gates Next until a quick
+  check is answered (any answer unlocks), stops back at step 1 and never
+  lets a jump skip an unanswered check. Tests in
+  `test/lesson_steps_test.dart`, including every shipped concept.
+
 ## 2026-10-23 (release: v0.31.0 - Optional code runner groundwork)
 
 ### Added
