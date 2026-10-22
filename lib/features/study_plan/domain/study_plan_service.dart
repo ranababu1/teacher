@@ -2,6 +2,7 @@ import '../../analytics/domain/models/learning_analytics.dart';
 import '../../curriculum/domain/models/concept.dart';
 import '../../curriculum/domain/models/learning_path.dart';
 import '../../projects/domain/models/project_overview.dart';
+import '../../system_design/domain/models/system_design_exercise.dart';
 import 'models/study_plan.dart';
 
 /// Everything the planner looks at. Built by the provider from the
@@ -15,6 +16,7 @@ class StudyPlanInputs {
     required this.weakConcepts,
     required this.projects,
     required this.debuggingCountByPath,
+    this.systemDesign = const [],
     this.nextConcept,
     this.careerGoal,
   });
@@ -28,6 +30,10 @@ class StudyPlanInputs {
   final List<ProjectOverview> projects;
   final Map<String, int> debuggingCountByPath;
 
+  /// System design exercises with the learner's best result, if any.
+  final List<({SystemDesignExercise exercise, SystemDesignRecord? record})>
+  systemDesign;
+
   /// The next lesson (from the Continue Learning or recommendation logic).
   final Concept? nextConcept;
   final String? careerGoal;
@@ -40,6 +46,9 @@ class StudyPlanInputs {
 /// Deterministic and offline. Each step says why it is there.
 class StudyPlanService {
   static const maxSteps = 6;
+
+  /// The course whose learners get system design exercises in their plan.
+  static const systemDesignPathId = 'system-design';
 
   StudyPlan build(StudyPlanInputs i) {
     final steps = <PlanStep>[];
@@ -117,6 +126,9 @@ class StudyPlanService {
     final applied = _challengeOrInterview(i);
     if (applied != null) steps.add(applied);
 
+    final design = _systemDesign(i);
+    if (design != null) steps.add(design);
+
     return StudyPlan(
       careerGoal: i.careerGoal,
       steps: steps.take(maxSteps).toList(),
@@ -187,6 +199,39 @@ class StudyPlanService {
       minutes: 45,
       pathId: readyOne.project.learningPathId,
       projectId: readyOne.project.id,
+    );
+  }
+
+  /// For learners taking the system design course: the first exercise not
+  /// yet tried, else the weakest one below 75%.
+  PlanStep? _systemDesign(StudyPlanInputs i) {
+    if (!i.startedPaths.any((p) => p.id == systemDesignPathId)) return null;
+    final untried = i.systemDesign.where((d) => d.record == null).firstOrNull;
+    if (untried != null) {
+      return PlanStep(
+        kind: PlanStepKind.systemDesign,
+        title: 'Design: ${untried.exercise.title}',
+        reason:
+            'Practise the design interview flow on a classic problem, '
+            'stage by stage.',
+        minutes: untried.exercise.estimatedMinutes,
+        exerciseId: untried.exercise.id,
+      );
+    }
+    final weak =
+        i.systemDesign.where((d) => d.record!.bestPercent < 75).toList()..sort(
+          (a, b) => a.record!.bestPercent.compareTo(b.record!.bestPercent),
+        );
+    if (weak.isEmpty) return null;
+    final d = weak.first;
+    return PlanStep(
+      kind: PlanStepKind.systemDesign,
+      title: 'Redo: ${d.exercise.title}',
+      reason:
+          'Your best is ${d.record!.bestPercent}%. A second pass makes the '
+          'trade-offs stick.',
+      minutes: d.exercise.estimatedMinutes,
+      exerciseId: d.exercise.id,
     );
   }
 

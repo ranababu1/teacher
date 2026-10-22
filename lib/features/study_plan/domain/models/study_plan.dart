@@ -8,6 +8,7 @@ enum PlanStepKind {
   project,
   challenge,
   interview,
+  systemDesign,
   startCourse,
 }
 
@@ -22,6 +23,7 @@ class PlanStep extends Equatable {
     this.moduleId,
     this.conceptId,
     this.projectId,
+    this.exerciseId,
   });
 
   final PlanStepKind kind;
@@ -34,6 +36,7 @@ class PlanStep extends Equatable {
   final String? moduleId;
   final String? conceptId;
   final String? projectId;
+  final String? exerciseId;
 
   @override
   List<Object?> get props => [
@@ -45,6 +48,7 @@ class PlanStep extends Equatable {
     moduleId,
     conceptId,
     projectId,
+    exerciseId,
   ];
 }
 

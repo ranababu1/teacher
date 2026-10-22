@@ -6,6 +6,9 @@
 - **Projects on the course screen**: each course's detail screen now lists
   its guided projects below the topics, with milestone progress or
   readiness, and opens the project on tap. Hidden when a course has none.
+- **System design in your study plan**: learners on the System Design
+  course get a design step: the first exercise not yet tried, otherwise the
+  one with the lowest best score under 75%.
 
 ## 2026-10-22 (release: v0.24.0 - System design exercises)
 

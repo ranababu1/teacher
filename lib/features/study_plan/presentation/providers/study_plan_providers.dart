@@ -10,6 +10,7 @@ import '../../../profile/presentation/providers/profile_providers.dart';
 import '../../../progress/presentation/providers/progress_providers.dart';
 import '../../../projects/presentation/providers/project_providers.dart';
 import '../../../review/presentation/providers/review_providers.dart';
+import '../../../system_design/presentation/providers/system_design_providers.dart';
 import '../../domain/models/study_plan.dart';
 import '../../domain/study_plan_service.dart';
 
@@ -31,6 +32,7 @@ final studyPlanInputsProvider = FutureProvider<StudyPlanInputs>((ref) async {
       : (await ref.watch(dashboardRecommendationProvider.future))?.concept;
   final profile = await ref.watch(learnerProfileControllerProvider.future);
   final challenges = ref.read(challengeServiceProvider);
+  final design = await ref.watch(systemDesignListProvider.future);
   return StudyPlanInputs(
     startedPaths: started,
     completedConceptIds: {
@@ -47,6 +49,7 @@ final studyPlanInputsProvider = FutureProvider<StudyPlanInputs>((ref) async {
       for (final p in started)
         p.id: challenges.counts(p)[ChallengeKind.debugging] ?? 0,
     },
+    systemDesign: design,
     nextConcept: next,
     careerGoal: profile.careerGoal,
   );

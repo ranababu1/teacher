@@ -12,6 +12,7 @@ import 'package:teacher/features/study_plan/domain/models/study_plan.dart';
 import 'package:teacher/features/study_plan/domain/study_plan_service.dart';
 import 'package:teacher/features/study_plan/presentation/providers/study_plan_providers.dart';
 import 'package:teacher/features/study_plan/presentation/screens/study_plan_screen.dart';
+import 'package:teacher/features/system_design/domain/models/system_design_exercise.dart';
 
 Concept _c(String id, String module, {List<String> prereqs = const []}) =>
     Concept(
@@ -200,6 +201,91 @@ void main() {
       ),
     );
     expect(plan.steps.single.kind, PlanStepKind.interview);
+  });
+
+  group('system design step', () {
+    SystemDesignExercise ex(String id) => SystemDesignExercise(
+      id: id,
+      title: 'Design $id',
+      difficulty: Difficulty.intermediate,
+      estimatedMinutes: 40,
+      summary: '',
+      scenario: '',
+      stages: const [],
+      commonPitfalls: const [],
+    );
+    SystemDesignRecord rec(int best) => SystemDesignRecord(
+      attempts: 1,
+      bestScore: best,
+      maxScore: 10,
+      lastCompletedAt: DateTime(2026),
+    );
+    final sdPath = LearningPath(
+      id: StudyPlanService.systemDesignPathId,
+      title: 'System Design',
+      description: '',
+      difficulty: Difficulty.intermediate,
+      iconName: 'sd',
+      estimatedHours: 1,
+      modules: const [],
+    );
+    StudyPlanInputs withDesign(
+      List<({SystemDesignExercise exercise, SystemDesignRecord? record})> d, {
+      List<LearningPath>? started,
+    }) => StudyPlanInputs(
+      startedPaths: started ?? [sdPath],
+      completedConceptIds: const {},
+      passedModuleIdsByPath: const {},
+      dueReviews: const [],
+      weakConcepts: const [],
+      projects: const [],
+      debuggingCountByPath: const {},
+      systemDesign: d,
+    );
+
+    test('only for learners on the system design course', () {
+      expect(
+        service
+            .build(
+              withDesign([(exercise: ex('a'), record: null)], started: [_path]),
+            )
+            .steps,
+        isEmpty,
+      );
+    });
+
+    test('first untried exercise, else the weakest under 75%', () {
+      var step = service
+          .build(
+            withDesign([
+              (exercise: ex('a'), record: rec(9)),
+              (exercise: ex('b'), record: null),
+            ]),
+          )
+          .steps
+          .single;
+      expect(step.kind, PlanStepKind.systemDesign);
+      expect(step.exerciseId, 'b');
+      expect(step.title, 'Design: Design b');
+
+      step = service
+          .build(
+            withDesign([
+              (exercise: ex('a'), record: rec(6)),
+              (exercise: ex('b'), record: rec(4)),
+              (exercise: ex('c'), record: rec(9)),
+            ]),
+          )
+          .steps
+          .single;
+      expect(step.exerciseId, 'b');
+      expect(step.reason, contains('40%'));
+
+      expect(
+        service.build(withDesign([(exercise: ex('a'), record: rec(8))])).steps,
+        isEmpty,
+      );
+    });
   });
 
   test('caps the plan at maxSteps', () {
