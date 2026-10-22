@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026-10-22 (unreleased)
+## 2026-10-22 (release: v0.22.0 - Guided projects)
 
 ### Added
 - **Guided projects content and storage** (Phase 5/9 "projects", section 47):
