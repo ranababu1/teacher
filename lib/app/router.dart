@@ -11,6 +11,7 @@ import '../features/coding_challenges/presentation/screens/coding_challenge_list
 import '../features/coding_challenges/presentation/screens/coding_challenge_screen.dart';
 import '../features/projects/presentation/screens/project_detail_screen.dart';
 import '../features/projects/presentation/screens/projects_screen.dart';
+import '../features/roadmap/presentation/screens/roadmap_screen.dart';
 import '../features/study_plan/presentation/screens/study_plan_screen.dart';
 import '../features/system_design/presentation/screens/system_design_exercise_screen.dart';
 import '../features/system_design/presentation/screens/system_design_list_screen.dart';
@@ -92,6 +93,7 @@ class AppScreens {
     this.projects = _projects,
     this.projectDetail = _projectDetail,
     this.studyPlan = _studyPlan,
+    this.roadmap = _roadmap,
     this.codingChallenges = _codingChallenges,
     this.codingChallenge = _codingChallenge,
     this.systemDesign = _systemDesign,
@@ -123,6 +125,7 @@ class AppScreens {
   final ScreenBuilder projects;
   final ScreenBuilder projectDetail;
   final ScreenBuilder studyPlan;
+  final ScreenBuilder roadmap;
   final ScreenBuilder codingChallenges;
   final ScreenBuilder codingChallenge;
   final ScreenBuilder systemDesign;
@@ -181,6 +184,7 @@ class AppScreens {
   static Widget _projectDetail(GoRouterState s) =>
       ProjectDetailScreen(projectId: s.pathParameters['projectId']!);
   static Widget _studyPlan(GoRouterState s) => const StudyPlanScreen();
+  static Widget _roadmap(GoRouterState s) => const RoadmapScreen();
   static Widget _systemDesign(GoRouterState s) =>
       const SystemDesignListScreen();
   static Widget _systemDesignExercise(GoRouterState s) =>
@@ -276,6 +280,10 @@ List<RouteBase> buildAppRoutes({AppScreens screens = const AppScreens()}) {
     GoRoute(
       path: Routes.studyPlan,
       builder: (context, state) => page(screens.studyPlan, state),
+    ),
+    GoRoute(
+      path: Routes.roadmap,
+      builder: (context, state) => page(screens.roadmap, state),
     ),
     GoRoute(
       path: Routes.projects,

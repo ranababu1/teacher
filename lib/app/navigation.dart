@@ -59,6 +59,8 @@ extension AppNavigation on BuildContext {
 
   void openStudyPlan() => _router.push(Routes.studyPlan);
 
+  void openRoadmap() => _router.push(Routes.roadmap);
+
   void openSystemDesign() => _router.push(Routes.systemDesign);
 
   void openSystemDesignExercise(String exerciseId) =>

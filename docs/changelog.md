@@ -30,6 +30,18 @@
   content and completion from existing progress (topic tests, project
   milestones, design and challenge records); `RoadmapController` saves
   edits (remove, move between weeks, delete, regenerate).
+- **Career roadmap screen** (`/roadmap`, `context.openRoadmap()`, and a
+  "Career roadmap" card on the dashboard under the study plan). Goal form
+  (goal prefilled from the profile, level, hours per week, weeks) with
+  "Generate with AI" and "Build offline plan" (just "Build my plan" when no
+  AI key is set). Shows a building state, an error state with "Try again"
+  and "Use offline plan", and an empty state when every item was removed.
+  The saved plan shows the goal, summary, a progress bar, a "Next" button
+  and week-by-week items that open the real topic, project, design
+  exercise or challenge (push, so back returns here). Each item can be
+  moved to the previous or next week or removed; the top bar regenerates,
+  changes the goal or deletes the plan. Widget tests in
+  `test/roadmap_screen_test.dart`.
 
 ## 2026-10-22 (release: v0.28.1 - Smooth app launch without flicker)
 

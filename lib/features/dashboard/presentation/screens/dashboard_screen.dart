@@ -15,6 +15,7 @@ import '../../../profile/presentation/providers/profile_providers.dart';
 import '../../../progress/domain/models/path_progress_summary.dart';
 import '../../../progress/presentation/providers/progress_providers.dart';
 import '../../../review/presentation/providers/review_providers.dart';
+import '../../../roadmap/presentation/providers/roadmap_providers.dart';
 import '../../../study_plan/presentation/providers/study_plan_providers.dart';
 import '../../domain/models/continue_learning_state.dart';
 import '../providers/dashboard_providers.dart';
@@ -30,6 +31,7 @@ class DashboardScreen extends ConsumerWidget {
       _ContinueLearningCard(),
       _StatRow(),
       _StudyPlanCard(),
+      _RoadmapCard(),
       _JourneySection(),
       _RecommendedNextStepCard(),
       _CurriculumSnapshotCard(),
@@ -728,6 +730,32 @@ class _StudyPlanCard extends ConsumerWidget {
         leading: const Icon(Icons.route_outlined),
         title: const Text('Your study plan'),
         subtitle: Text(subtitle),
+        trailing: const Icon(Icons.chevron_right),
+      ),
+    );
+  }
+}
+
+class _RoadmapCard extends ConsumerWidget {
+  const _RoadmapCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final roadmap = ref.watch(roadmapControllerProvider).valueOrNull;
+    final progress = ref.watch(roadmapProgressProvider).valueOrNull;
+    final subtitle = roadmap == null
+        ? 'Set a goal and get a week-by-week plan from these courses'
+        : progress == null
+        ? roadmap.goal.goal
+        : '${roadmap.goal.goal} · ${progress.done}/${progress.total} done';
+    return GradientCard(
+      elevation: AppElevation.flat,
+      child: ListTile(
+        key: const ValueKey('dashboard-roadmap-card'),
+        onTap: () => context.openRoadmap(),
+        leading: const Icon(Icons.map_outlined),
+        title: const Text('Career roadmap'),
+        subtitle: Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis),
         trailing: const Icon(Icons.chevron_right),
       ),
     );
