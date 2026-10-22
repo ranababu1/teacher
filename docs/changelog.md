@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-10-22 (unreleased)
+
+### Added
+- **Your study plan** (Phase 4/5 "personalized learning paths" and
+  "personalized curriculum"), opened from a new Dashboard card that previews
+  the step count, total minutes and first step. Built offline from your own
+  data, in priority order: due reviews, up to two weak concepts (from
+  learning analytics), a topic test you are ready for (all lessons done, test
+  not passed), the next lesson, a project milestone (in progress first, or a
+  project whose recommended topic you passed), then a mock interview (2+
+  topics passed) or a debugging session. At most six steps, each with a
+  plain reason and a time estimate; tapping a step opens it. Shows your
+  career goal when set. New learners get a single "pick your first course"
+  step. Route `/plan`.
+
 ## 2026-10-22 (release: v0.22.0 - Guided projects)
 
 ### Added

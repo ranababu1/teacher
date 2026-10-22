@@ -14,6 +14,7 @@ import '../../../profile/presentation/providers/profile_providers.dart';
 import '../../../progress/domain/models/path_progress_summary.dart';
 import '../../../progress/presentation/providers/progress_providers.dart';
 import '../../../review/presentation/providers/review_providers.dart';
+import '../../../study_plan/presentation/providers/study_plan_providers.dart';
 import '../../domain/models/continue_learning_state.dart';
 import '../providers/dashboard_providers.dart';
 import '../../../../app/navigation.dart';
@@ -27,6 +28,7 @@ class DashboardScreen extends ConsumerWidget {
       _Greeting(),
       _ContinueLearningCard(),
       _StatRow(),
+      _StudyPlanCard(),
       _JourneySection(),
       _RecommendedNextStepCard(),
       _CurriculumSnapshotCard(),
@@ -702,6 +704,29 @@ class _ChallengeLabCard extends StatelessWidget {
         leading: const Icon(Icons.bug_report_outlined),
         title: const Text('Challenge Lab'),
         subtitle: const Text('Debugging, coding and real-world scenarios'),
+        trailing: const Icon(Icons.chevron_right),
+      ),
+    );
+  }
+}
+
+class _StudyPlanCard extends ConsumerWidget {
+  const _StudyPlanCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final plan = ref.watch(studyPlanProvider).valueOrNull;
+    final subtitle = plan == null || plan.steps.isEmpty
+        ? 'Reviews, weak spots and next steps, picked for you'
+        : '${plan.steps.length} steps · ~${plan.totalMinutes} min · '
+              'first: ${plan.steps.first.title}';
+    return GradientCard(
+      elevation: AppElevation.flat,
+      child: ListTile(
+        onTap: () => context.openStudyPlan(),
+        leading: const Icon(Icons.route_outlined),
+        title: const Text('Your study plan'),
+        subtitle: Text(subtitle),
         trailing: const Icon(Icons.chevron_right),
       ),
     );

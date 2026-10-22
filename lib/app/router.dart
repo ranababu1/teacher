@@ -9,6 +9,7 @@ import '../features/challenges/presentation/screens/challenge_lab_screen.dart';
 import '../features/challenges/presentation/screens/challenge_set_screen.dart';
 import '../features/projects/presentation/screens/project_detail_screen.dart';
 import '../features/projects/presentation/screens/projects_screen.dart';
+import '../features/study_plan/presentation/screens/study_plan_screen.dart';
 import '../features/curriculum/presentation/screens/learning_path_detail_screen.dart';
 import '../features/curriculum/presentation/screens/learning_paths_screen.dart';
 import '../features/curriculum/presentation/screens/module_detail_screen.dart';
@@ -93,6 +94,7 @@ class AppScreens {
     this.challengeSet = _challengeSet,
     this.projects = _projects,
     this.projectDetail = _projectDetail,
+    this.studyPlan = _studyPlan,
     this.interviewSession = _interviewSession,
     this.dashboard = _dashboard,
     this.learn = _learn,
@@ -119,6 +121,7 @@ class AppScreens {
   final ScreenBuilder challengeSet;
   final ScreenBuilder projects;
   final ScreenBuilder projectDetail;
+  final ScreenBuilder studyPlan;
   final ScreenBuilder interviewSession;
   final ScreenBuilder dashboard;
   final ScreenBuilder learn;
@@ -172,6 +175,7 @@ class AppScreens {
   static Widget _projects(GoRouterState s) => const ProjectsScreen();
   static Widget _projectDetail(GoRouterState s) =>
       ProjectDetailScreen(projectId: s.pathParameters['projectId']!);
+  static Widget _studyPlan(GoRouterState s) => const StudyPlanScreen();
   static Widget _dashboard(GoRouterState s) => const DashboardScreen();
   static Widget _learn(GoRouterState s) => const LearningPathsScreen();
   static Widget _progress(GoRouterState s) => const ProgressScreen();
@@ -228,6 +232,10 @@ List<RouteBase> buildAppRoutes({AppScreens screens = const AppScreens()}) {
           builder: (context, state) => page(screens.challengeSet, state),
         ),
       ],
+    ),
+    GoRoute(
+      path: Routes.studyPlan,
+      builder: (context, state) => page(screens.studyPlan, state),
     ),
     GoRoute(
       path: Routes.projects,
