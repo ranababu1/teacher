@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026-10-23 (unreleased)
+## 2026-10-23 (release: v0.31.0 - Optional code runner groundwork)
 
 ### Added
 - **Code runner groundwork** (instructions.md section 33). A pluggable
