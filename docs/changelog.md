@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026-10-22 (unreleased)
+## 2026-10-22 (release: v0.28.1 - Smooth app launch without flicker)
 
 ### Fixed
 - **Flicker on first launch.** Three causes, all fixed:
