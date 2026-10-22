@@ -9,6 +9,7 @@ import 'tables/module_test_progress_table.dart';
 import 'tables/project_milestone_progress_table.dart';
 import 'tables/review_schedule_table.dart';
 import 'tables/settings_table.dart';
+import 'tables/system_design_attempts_table.dart';
 import 'tables/student_progress_table.dart';
 
 part 'app_database.g.dart';
@@ -24,6 +25,7 @@ part 'app_database.g.dart';
     LearningPathProgressTable,
     ModuleTestProgressTable,
     ProjectMilestoneProgressTable,
+    SystemDesignAttemptsTable,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -32,7 +34,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.connection);
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -95,6 +97,9 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 4) {
         await m.createTable(projectMilestoneProgressTable);
+      }
+      if (from < 5) {
+        await m.createTable(systemDesignAttemptsTable);
       }
     },
   );

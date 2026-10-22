@@ -1,0 +1,404 @@
+{
+  "version": 1,
+  "exercises": [
+    {
+      "id": "rate-limiter",
+      "title": "Design a distributed rate limiter",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 40,
+      "summary": "Protect a public API from abuse across many gateway servers.",
+      "scenario": "Your company exposes a public REST API behind 40 stateless gateway servers. Some clients hammer it. Design a rate limiter that enforces per-API-key limits such as 100 requests per minute, consistently across all gateways.",
+      "stages": [
+        {
+          "id": "s1",
+          "title": "Clarify requirements",
+          "prompt": "List the functional and non-functional requirements you would confirm before designing.",
+          "hints": [
+            "Who is limited: users, API keys, IPs?",
+            "What happens to a rejected request?",
+            "How exact must the limit be?"
+          ],
+          "modelAnswer": "Functional: limit per API key (optionally per endpoint), configurable rules (e.g. 100/min, 5000/day), reject with HTTP 429 plus Retry-After and X-RateLimit-* headers. Non-functional: adds under ~2 ms p99 to each request, highly available (fail open if the limiter is down, so an outage does not take the API down), consistent enough across gateways that a client cannot get 40x the limit by spreading requests, small memory per key."
+        },
+        {
+          "id": "s2",
+          "title": "Estimate scale",
+          "prompt": "Estimate the request rate and the state the limiter must hold.",
+          "hints": [
+            "How many active keys?",
+            "How many requests per second at peak?",
+            "How many bytes per key per window?"
+          ],
+          "modelAnswer": "Assume 1M active keys and 50k requests/s at peak. Each check is one read-modify-write, so the store must handle ~50k ops/s, which a small Redis cluster (a few shards) handles easily. Per key, a fixed window needs a counter plus expiry (~50-100 bytes in Redis with overhead), so 1M keys is roughly 100 MB. A sliding-window log storing every timestamp would be far larger (100 entries per key), which pushes us toward counters."
+        },
+        {
+          "id": "s3",
+          "title": "API and data model",
+          "prompt": "Define how rules are configured and what the limiter stores per key.",
+          "hints": [
+            "Separate rule config from counters.",
+            "What key format lets counters expire on their own?"
+          ],
+          "modelAnswer": "Rules live in a config service or DB, e.g. {keyTier: 'free', endpoint: '*', limit: 100, window: 60s}, cached in every gateway and refreshed periodically. Counters live in Redis with keys like rl:{apiKey}:{endpoint}:{windowStart} and a TTL of one window, so cleanup is automatic. Internal check: allow(apiKey, endpoint) -> {allowed, remaining, resetAt}."
+        },
+        {
+          "id": "s4",
+          "title": "High-level design",
+          "prompt": "Sketch the components and the request flow.",
+          "hints": [
+            "Where does the check run: in the gateway or a separate service?",
+            "What talks to Redis?"
+          ],
+          "modelAnswer": "Client -> load balancer -> gateway. The gateway runs limiter middleware: look up the rule from its local cache, then run an atomic script in Redis (INCR plus EXPIRE, or a token-bucket Lua script) on the shard chosen by hashing the API key. If allowed, forward to the backend; otherwise return 429 with headers. Embedding the check in the gateway avoids an extra network hop to a separate limiter service. Redis is replicated per shard for availability."
+        },
+        {
+          "id": "s5",
+          "title": "Deep dive and trade-offs",
+          "prompt": "Compare algorithms and explain how you handle burstiness, races and Redis failure.",
+          "hints": [
+            "Fixed window vs sliding window vs token bucket.",
+            "What makes INCR then EXPIRE safe?",
+            "What if Redis is slow?"
+          ],
+          "modelAnswer": "Fixed window is cheap but allows 2x bursts at window edges. A sliding-window counter (weighting the previous window) smooths that at the same cost. A token bucket allows controlled bursts and is what most APIs want. Races are avoided by doing the read-modify-write atomically in a Lua script. If Redis is unreachable or slow, fail open with a short timeout and fall back to a coarse local in-memory limit per gateway (limit/40), and alert. For very hot keys, batch locally (reserve 10 tokens at a time) to cut Redis traffic at the cost of slight overshoot."
+        }
+      ],
+      "commonPitfalls": [
+        "Keeping counters in each gateway's memory, which lets clients get N times the limit.",
+        "Non-atomic read-then-write that undercounts under concurrency.",
+        "Failing closed and turning a limiter outage into a full API outage."
+      ]
+    },
+    {
+      "id": "news-feed",
+      "title": "Design a social news feed",
+      "difficulty": "advanced",
+      "estimatedMinutes": 40,
+      "summary": "Show each user a ranked feed of posts from people they follow.",
+      "scenario": "Design the home feed for a social app with 300M daily active users. Users follow others, post short text and images, and open the app to see recent posts from people they follow, newest or ranked first.",
+      "stages": [
+        {
+          "id": "s1",
+          "title": "Clarify requirements",
+          "prompt": "What do you need to pin down about the feed?",
+          "hints": [
+            "Chronological or ranked?",
+            "How fresh must it be?",
+            "What about celebrities with millions of followers?"
+          ],
+          "modelAnswer": "Functional: create posts, follow/unfollow, fetch a paginated home feed of posts from followed accounts, ranked (or reverse chronological for v1). Non-functional: feed load p99 under ~200 ms, new posts visible to followers within seconds to a minute (eventual consistency is fine), very read-heavy (reads outnumber writes ~100:1), highly available. Must handle accounts with tens of millions of followers."
+        },
+        {
+          "id": "s2",
+          "title": "Estimate scale",
+          "prompt": "Estimate read and write load and storage.",
+          "hints": [
+            "Feed opens per user per day?",
+            "Posts per day?",
+            "Average followers?"
+          ],
+          "modelAnswer": "300M DAU x 10 feed loads = 3B reads/day, about 35k/s average and ~100k/s peak. Posts: 300M x 0.5 = 150M/day, ~2k/s. With ~200 average followers, fan-out on write is 30B feed inserts/day (~350k/s), heavy but feasible with sharded caches. Post metadata ~1 KB means 150 GB/day; media lives in object storage behind a CDN."
+        },
+        {
+          "id": "s3",
+          "title": "API and data model",
+          "prompt": "Define the key APIs and data stores.",
+          "hints": [
+            "What is stored per post, per follow edge, per feed?",
+            "How do you paginate?"
+          ],
+          "modelAnswer": "APIs: POST /posts, POST /follow/{id}, GET /feed?cursor=... (cursor-based, not offset). Stores: Posts table (postId, authorId, createdAt, text, mediaUrls) sharded by postId; Follow graph (followerId -> followeeIds and the reverse) in a wide-column store or graph store; per-user feed cache as a Redis sorted set or list of postIds (keep the latest ~800) keyed by userId. Post bodies are hydrated by ID from a post cache."
+        },
+        {
+          "id": "s4",
+          "title": "High-level design",
+          "prompt": "Describe how a post reaches followers' feeds.",
+          "hints": [
+            "Fan-out on write vs fan-out on read.",
+            "Where does a queue help?"
+          ],
+          "modelAnswer": "Write path: the post service stores the post, then publishes an event to a queue. Fan-out workers read the follower list and push the postId into each follower's feed cache. Read path: the feed service reads postIds from the user's feed cache, merges in posts from followed celebrities fetched at read time, hydrates post bodies from the post cache, ranks, and returns a page with a cursor. Media is served by a CDN."
+        },
+        {
+          "id": "s5",
+          "title": "Deep dive and trade-offs",
+          "prompt": "Discuss the celebrity problem, ranking and failure modes.",
+          "hints": [
+            "What breaks for an account with 50M followers?",
+            "How do you rebuild a cold feed?"
+          ],
+          "modelAnswer": "Hybrid fan-out: push for normal accounts, pull for accounts above a follower threshold, since pushing 50M inserts per post is slow and wasteful. Inactive users can be skipped during fan-out and their feed rebuilt on demand from followees' recent posts. Ranking runs as a lightweight scoring pass (recency, affinity, engagement) on a few hundred candidates. Trade-offs: fan-out on write gives fast reads but costly writes and stale feeds after an unfollow (filter at read time); queues absorb spikes but add delay, which the requirements allow."
+        }
+      ],
+      "commonPitfalls": [
+        "Pure fan-out on write with no plan for celebrity accounts.",
+        "Offset pagination, which shifts as new posts arrive.",
+        "Storing full post bodies in every feed instead of IDs."
+      ]
+    },
+    {
+      "id": "chat-system",
+      "title": "Design a 1:1 and group chat system",
+      "difficulty": "advanced",
+      "estimatedMinutes": 40,
+      "summary": "Real-time messaging with delivery receipts and offline sync.",
+      "scenario": "Design the backend for a messaging app like WhatsApp: 1:1 and small group chats (up to 200 members), online presence, delivered and read receipts, and history synced across a user's phone and laptop.",
+      "stages": [
+        {
+          "id": "s1",
+          "title": "Clarify requirements",
+          "prompt": "Which requirements shape the design most?",
+          "hints": [
+            "Latency target?",
+            "Message ordering guarantees?",
+            "Multiple devices per user?"
+          ],
+          "modelAnswer": "Functional: send and receive messages in 1:1 and groups up to 200, delivered/read receipts, online/last-seen, offline delivery when the user reconnects, history on multiple devices, media attachments. Non-functional: under ~200 ms delivery when both users are online, no lost messages (at-least-once delivery with dedup), messages ordered within a conversation, high availability. Optional: end-to-end encryption, which means the server only stores ciphertext."
+        },
+        {
+          "id": "s2",
+          "title": "Estimate scale",
+          "prompt": "Estimate connections, message rate and storage.",
+          "hints": [
+            "Concurrent connections?",
+            "Messages per user per day?",
+            "Bytes per message?"
+          ],
+          "modelAnswer": "500M DAU, ~40 messages each = 20B messages/day, ~230k/s average and ~1M/s peak. ~100M concurrent persistent connections; at ~50k connections per gateway server that is ~2,000 servers. Storage: ~200 bytes per message is 4 TB/day before replication; media goes to object storage."
+        },
+        {
+          "id": "s3",
+          "title": "API and data model",
+          "prompt": "Define the client protocol and the storage model.",
+          "hints": [
+            "HTTP polling, long polling, or WebSockets?",
+            "How do you order messages?"
+          ],
+          "modelAnswer": "Clients keep a WebSocket to a chat gateway. Frames: send{clientMsgId, conversationId, body}, ack{clientMsgId, serverMsgId, seq}, deliver{...}, receipt{type: delivered|read, upToSeq}. Messages are stored in a wide-column store partitioned by conversationId and clustered by a per-conversation sequence number, which gives ordered range reads for sync. Each device stores the last seq it has seen per conversation, so sync is 'give me everything after seq N'."
+        },
+        {
+          "id": "s4",
+          "title": "High-level design",
+          "prompt": "Walk through sending a message to an online and an offline recipient.",
+          "hints": [
+            "How does the sender's gateway find the recipient's gateway?",
+            "What happens if the recipient is offline?"
+          ],
+          "modelAnswer": "Sender -> gateway A -> chat service: assign seq (per-conversation counter), persist, ack to the sender. The service looks up the recipient's active sessions in a presence/session registry (Redis: userId -> gateway ids) and routes the message to gateway B, which pushes it down the socket. Device B acks, which produces a 'delivered' receipt routed back the same way. If the recipient is offline, the message is already stored; a push notification is sent, and on reconnect the device syncs from its last seq. Groups fan out the same way to each member's sessions."
+        },
+        {
+          "id": "s5",
+          "title": "Deep dive and trade-offs",
+          "prompt": "Cover ordering, duplicates, presence at scale and large groups.",
+          "hints": [
+            "What if the sender retries after a timeout?",
+            "Why not broadcast presence to everyone?"
+          ],
+          "modelAnswer": "Retries use clientMsgId as an idempotency key, so a resend never creates a duplicate. Ordering comes from the per-conversation seq, not timestamps from clients. Presence is expensive (every status change fans out to all contacts), so send it only to users who currently have that chat open, and batch heartbeats. Groups of 200 use fan-out on write to member sessions; much larger channels would switch to fan-out on read. Gateways are stateful, so a gateway crash drops sockets; clients reconnect with backoff and resync from seq, which keeps it correct."
+        }
+      ],
+      "commonPitfalls": [
+        "Ordering messages by client timestamps.",
+        "No idempotency key, so retries create duplicate messages.",
+        "Broadcasting presence to every contact on every change."
+      ]
+    },
+    {
+      "id": "notification-service",
+      "title": "Design a notification service",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 40,
+      "summary": "Send push, email and SMS reliably without spamming users.",
+      "scenario": "Many internal teams need to notify users (order shipped, password reset, weekly digest) via push, email and SMS. Design a shared notification service that respects user preferences and never sends the same alert twice.",
+      "stages": [
+        {
+          "id": "s1",
+          "title": "Clarify requirements",
+          "prompt": "What should the service guarantee to callers and to users?",
+          "hints": [
+            "Priority differences: password reset vs marketing?",
+            "User preferences and quiet hours?",
+            "Exactly-once is impossible; what do you promise?"
+          ],
+          "modelAnswer": "Functional: one API for callers with a template id and user id; channels push, email, SMS; per-user preferences (opt-outs per category, quiet hours, preferred channel); templates with localisation; delivery status tracking. Non-functional: transactional messages (password reset, OTP) delivered within seconds even during marketing blasts; at-least-once processing with deduplication so users effectively never see duplicates; rate limits per user to avoid spam; horizontally scalable for bursts of millions."
+        },
+        {
+          "id": "s2",
+          "title": "Estimate scale",
+          "prompt": "Estimate volume and peak bursts.",
+          "hints": [
+            "Daily notifications?",
+            "What does a marketing blast look like?"
+          ],
+          "modelAnswer": "50M notifications/day, ~600/s average, but a marketing campaign may enqueue 20M at once. Third-party providers (APNs, FCM, an email provider, an SMS gateway) have their own rate limits, so the system must queue and smooth bursts. SMS is the most expensive, so it is reserved for critical messages."
+        },
+        {
+          "id": "s3",
+          "title": "API and data model",
+          "prompt": "Design the request API and core tables.",
+          "hints": [
+            "How does a caller avoid triggering duplicates on retry?",
+            "What do you record per send?"
+          ],
+          "modelAnswer": "POST /notifications {idempotencyKey, userId, templateId, category, priority, data}. Tables: Preferences(userId, category, channel, enabled, quietHours), Templates(templateId, channel, locale, body), Notifications(id, idempotencyKey unique, userId, status, createdAt), DeliveryAttempts(notificationId, channel, providerMessageId, status, attemptAt). Device tokens in a separate table keyed by userId."
+        },
+        {
+          "id": "s4",
+          "title": "High-level design",
+          "prompt": "Describe the pipeline from API call to delivery.",
+          "hints": [
+            "Where do preferences get applied?",
+            "Why separate queues per priority and channel?"
+          ],
+          "modelAnswer": "API validates, dedups on idempotencyKey, stores the notification and enqueues it on a priority queue (critical vs bulk). A router worker loads preferences, applies opt-outs, quiet hours and per-user rate limits, renders the template, and enqueues per-channel jobs. Channel workers (push, email, SMS) call the providers with retries and exponential backoff, respecting provider rate limits, and record attempts. Provider callbacks/webhooks update delivery status. Failed jobs go to a dead-letter queue for inspection."
+        },
+        {
+          "id": "s5",
+          "title": "Deep dive and trade-offs",
+          "prompt": "How do you keep critical messages fast and avoid duplicates and spam?",
+          "hints": [
+            "What happens when a worker crashes mid-send?",
+            "How do you stop a blast from delaying OTPs?"
+          ],
+          "modelAnswer": "Separate queues and worker pools by priority so a 20M blast never delays an OTP. Workers are at-least-once, so before calling a provider they check or claim (notificationId, channel) in a dedup store; providers that accept idempotency keys get them too. Per-user rate limits and digesting (collapse 10 likes into one push) stop spam. Quiet hours defer non-critical messages via a delay queue. Trade-off: the dedup check adds a DB hit per send, which is cheap compared to a user receiving duplicate SMS charges."
+        }
+      ],
+      "commonPitfalls": [
+        "A single shared queue where bulk campaigns starve critical messages.",
+        "Ignoring provider rate limits and getting throttled or blocked.",
+        "Applying preferences in each calling team instead of centrally."
+      ]
+    },
+    {
+      "id": "distributed-cache",
+      "title": "Design a distributed cache",
+      "difficulty": "intermediate",
+      "estimatedMinutes": 40,
+      "summary": "A shared in-memory cache in front of a slow database.",
+      "scenario": "A product catalogue database is struggling under read load. Design a distributed in-memory cache cluster (like Memcached or Redis Cluster) that services can use to cut database reads by 90 percent.",
+      "stages": [
+        {
+          "id": "s1",
+          "title": "Clarify requirements",
+          "prompt": "What behaviour must the cache provide?",
+          "hints": [
+            "What consistency do readers need?",
+            "What happens when memory is full?"
+          ],
+          "modelAnswer": "Functional: get/set/delete with TTL, used as a look-aside cache by many services. Non-functional: sub-millisecond reads within a data centre, scale out by adding nodes with minimal data movement, tolerate node failures (a lost node only means extra DB reads, not errors), eviction when memory is full (LRU or LFU), and acceptable staleness bounded by TTL plus explicit invalidation on writes."
+        },
+        {
+          "id": "s2",
+          "title": "Estimate scale",
+          "prompt": "Estimate memory and throughput.",
+          "hints": [
+            "Hot working set size?",
+            "Reads per second?"
+          ],
+          "modelAnswer": "10M hot products x ~5 KB = 50 GB of hot data; with overhead and headroom, ~100 GB. 200k reads/s at peak. A single cache node handles ~100k+ ops/s and ~32-64 GB, so start with ~6 nodes (plus replicas) for both memory and throughput headroom."
+        },
+        {
+          "id": "s3",
+          "title": "API and data model",
+          "prompt": "Define the client interface and key design.",
+          "hints": [
+            "How do clients pick a node?",
+            "How are keys named and versioned?"
+          ],
+          "modelAnswer": "Client library API: get(key), set(key, value, ttl), delete(key), getMany(keys). Keys are namespaced and versioned, e.g. product:v3:{id}, so a schema change just bumps the version. Clients find the node with consistent hashing over a ring of virtual nodes, using a cluster map from a config service."
+        },
+        {
+          "id": "s4",
+          "title": "High-level design",
+          "prompt": "Describe reads, writes and invalidation.",
+          "hints": [
+            "Look-aside vs write-through.",
+            "Who deletes stale entries?"
+          ],
+          "modelAnswer": "Read: check cache; on a miss, read the DB, then set the value with a TTL (look-aside). Write: update the DB, then delete the cache key (not update it, to avoid races that leave stale data). Optionally a change-data-capture stream from the DB triggers deletes for writers that forget. Each shard has a replica; the cluster manager detects failures and promotes replicas or remaps the ring."
+        },
+        {
+          "id": "s5",
+          "title": "Deep dive and trade-offs",
+          "prompt": "Handle hot keys, stampedes and node changes.",
+          "hints": [
+            "What happens when a very popular key expires?",
+            "How much data moves when a node is added?"
+          ],
+          "modelAnswer": "Cache stampede: when a hot key expires, thousands of requests hit the DB at once. Mitigate with request coalescing (one loader per key via a short lock), early probabilistic refresh, and TTL jitter so keys do not expire together. Hot keys can be replicated to several nodes or held in a small in-process cache. Consistent hashing with virtual nodes moves only about 1/N of keys when a node joins or leaves. Trade-off: delete-on-write still allows a brief stale window under concurrent read/write, which TTLs bound."
+        }
+      ],
+      "commonPitfalls": [
+        "Updating the cache on write instead of deleting, causing stale-data races.",
+        "Modulo hashing, which reshuffles almost every key when a node is added.",
+        "No protection against cache stampedes on hot keys."
+      ]
+    },
+    {
+      "id": "file-storage",
+      "title": "Design cloud file storage and sync",
+      "difficulty": "advanced",
+      "estimatedMinutes": 40,
+      "summary": "Upload, store and sync files across devices, like Dropbox.",
+      "scenario": "Design a service where users store files up to 10 GB, see them on all their devices, share folders, and get changes synced within seconds. Bandwidth and storage cost matter.",
+      "stages": [
+        {
+          "id": "s1",
+          "title": "Clarify requirements",
+          "prompt": "Which requirements drive the architecture?",
+          "hints": [
+            "Large files on flaky mobile networks?",
+            "Conflicting edits on two devices?",
+            "Version history?"
+          ],
+          "modelAnswer": "Functional: upload/download files up to 10 GB, folder hierarchy, sync changes to all of a user's devices, sharing with permissions, version history (e.g. 30 days), conflict handling. Non-functional: resumable uploads on unreliable networks, durability of 11 nines (never lose a file), sync latency of seconds, efficient bandwidth (only send changed parts), strong consistency for metadata so devices agree on the folder tree."
+        },
+        {
+          "id": "s2",
+          "title": "Estimate scale",
+          "prompt": "Estimate users, storage and traffic.",
+          "hints": [
+            "Average storage per user?",
+            "Daily changed data?"
+          ],
+          "modelAnswer": "100M users x 10 GB average allocation but ~2 GB used = 200 PB raw. Deduplication across users and versions might save 30-50%. Daily uploads ~1% of data changed = ~2 PB/day of new blocks before dedup. Metadata (file entries, versions) is tiny in comparison but very hot."
+        },
+        {
+          "id": "s3",
+          "title": "API and data model",
+          "prompt": "Define the data model for files, blocks and changes.",
+          "hints": [
+            "Why split files into blocks?",
+            "How does a device learn what changed?"
+          ],
+          "modelAnswer": "Files are split into ~4 MB blocks identified by their content hash (SHA-256). Metadata DB: Files(fileId, ownerId, path, latestVersion), FileVersions(fileId, version, blockHashes[], size, modifiedAt, deviceId), Blocks(hash, storageLocation, refCount), plus a per-user change journal (cursor, fileId, version). APIs: POST /upload/session, PUT /blocks/{hash}, POST /commit {fileId, baseVersion, blockHashes}, GET /changes?cursor=..."
+        },
+        {
+          "id": "s4",
+          "title": "High-level design",
+          "prompt": "Walk through an edit on one device appearing on another.",
+          "hints": [
+            "Which blocks get uploaded?",
+            "How is the other device notified?"
+          ],
+          "modelAnswer": "Device A detects a change, re-chunks the file, hashes the blocks and asks which hashes the server lacks; it uploads only those to block storage (object storage) via a resumable session, then commits the new version listing block hashes. The metadata service validates baseVersion, writes the version and appends to the change journal. A notification service (long-poll or WebSocket) tells device B 'changes after cursor X'; B fetches the journal entries, downloads only the blocks it does not have, and reassembles the file."
+        },
+        {
+          "id": "s5",
+          "title": "Deep dive and trade-offs",
+          "prompt": "Handle conflicts, deduplication and durability.",
+          "hints": [
+            "Two devices edit the same file offline.",
+            "What does dedup cost you?"
+          ],
+          "modelAnswer": "Conflicts: commit uses optimistic concurrency on baseVersion. If the base is stale, the server keeps both and creates a 'conflicted copy' rather than silently overwriting. Dedup by content hash saves storage and upload bandwidth but needs reference counting and careful garbage collection, and cross-user dedup can leak whether a file exists (mitigate by deduping per user or using convergent encryption carefully). Durability comes from object storage with erasure coding across zones. Metadata needs strong consistency (sharded SQL by userId), while block storage only needs immutable writes."
+        }
+      ],
+      "commonPitfalls": [
+        "Uploading whole files on every change instead of changed blocks.",
+        "Last-writer-wins that silently destroys a user's edits.",
+        "Treating metadata and blob storage as one system with one consistency model."
+      ]
+    }
+  ]
+}

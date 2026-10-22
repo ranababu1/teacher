@@ -3971,6 +3971,374 @@ class ProjectMilestoneProgressTableCompanion
   }
 }
 
+class $SystemDesignAttemptsTableTable extends SystemDesignAttemptsTable
+    with
+        TableInfo<
+          $SystemDesignAttemptsTableTable,
+          SystemDesignAttemptsTableData
+        > {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SystemDesignAttemptsTableTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _exerciseIdMeta = const VerificationMeta(
+    'exerciseId',
+  );
+  @override
+  late final GeneratedColumn<String> exerciseId = GeneratedColumn<String>(
+    'exercise_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _scoreMeta = const VerificationMeta('score');
+  @override
+  late final GeneratedColumn<int> score = GeneratedColumn<int>(
+    'score',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _maxScoreMeta = const VerificationMeta(
+    'maxScore',
+  );
+  @override
+  late final GeneratedColumn<int> maxScore = GeneratedColumn<int>(
+    'max_score',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _completedAtMeta = const VerificationMeta(
+    'completedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> completedAt = GeneratedColumn<DateTime>(
+    'completed_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    exerciseId,
+    score,
+    maxScore,
+    completedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'system_design_attempts_table';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SystemDesignAttemptsTableData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('exercise_id')) {
+      context.handle(
+        _exerciseIdMeta,
+        exerciseId.isAcceptableOrUnknown(data['exercise_id']!, _exerciseIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_exerciseIdMeta);
+    }
+    if (data.containsKey('score')) {
+      context.handle(
+        _scoreMeta,
+        score.isAcceptableOrUnknown(data['score']!, _scoreMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_scoreMeta);
+    }
+    if (data.containsKey('max_score')) {
+      context.handle(
+        _maxScoreMeta,
+        maxScore.isAcceptableOrUnknown(data['max_score']!, _maxScoreMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_maxScoreMeta);
+    }
+    if (data.containsKey('completed_at')) {
+      context.handle(
+        _completedAtMeta,
+        completedAt.isAcceptableOrUnknown(
+          data['completed_at']!,
+          _completedAtMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_completedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  SystemDesignAttemptsTableData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SystemDesignAttemptsTableData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      exerciseId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}exercise_id'],
+      )!,
+      score: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}score'],
+      )!,
+      maxScore: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}max_score'],
+      )!,
+      completedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}completed_at'],
+      )!,
+    );
+  }
+
+  @override
+  $SystemDesignAttemptsTableTable createAlias(String alias) {
+    return $SystemDesignAttemptsTableTable(attachedDatabase, alias);
+  }
+}
+
+class SystemDesignAttemptsTableData extends DataClass
+    implements Insertable<SystemDesignAttemptsTableData> {
+  final int id;
+  final String exerciseId;
+  final int score;
+  final int maxScore;
+  final DateTime completedAt;
+  const SystemDesignAttemptsTableData({
+    required this.id,
+    required this.exerciseId,
+    required this.score,
+    required this.maxScore,
+    required this.completedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['exercise_id'] = Variable<String>(exerciseId);
+    map['score'] = Variable<int>(score);
+    map['max_score'] = Variable<int>(maxScore);
+    map['completed_at'] = Variable<DateTime>(completedAt);
+    return map;
+  }
+
+  SystemDesignAttemptsTableCompanion toCompanion(bool nullToAbsent) {
+    return SystemDesignAttemptsTableCompanion(
+      id: Value(id),
+      exerciseId: Value(exerciseId),
+      score: Value(score),
+      maxScore: Value(maxScore),
+      completedAt: Value(completedAt),
+    );
+  }
+
+  factory SystemDesignAttemptsTableData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SystemDesignAttemptsTableData(
+      id: serializer.fromJson<int>(json['id']),
+      exerciseId: serializer.fromJson<String>(json['exerciseId']),
+      score: serializer.fromJson<int>(json['score']),
+      maxScore: serializer.fromJson<int>(json['maxScore']),
+      completedAt: serializer.fromJson<DateTime>(json['completedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'exerciseId': serializer.toJson<String>(exerciseId),
+      'score': serializer.toJson<int>(score),
+      'maxScore': serializer.toJson<int>(maxScore),
+      'completedAt': serializer.toJson<DateTime>(completedAt),
+    };
+  }
+
+  SystemDesignAttemptsTableData copyWith({
+    int? id,
+    String? exerciseId,
+    int? score,
+    int? maxScore,
+    DateTime? completedAt,
+  }) => SystemDesignAttemptsTableData(
+    id: id ?? this.id,
+    exerciseId: exerciseId ?? this.exerciseId,
+    score: score ?? this.score,
+    maxScore: maxScore ?? this.maxScore,
+    completedAt: completedAt ?? this.completedAt,
+  );
+  SystemDesignAttemptsTableData copyWithCompanion(
+    SystemDesignAttemptsTableCompanion data,
+  ) {
+    return SystemDesignAttemptsTableData(
+      id: data.id.present ? data.id.value : this.id,
+      exerciseId: data.exerciseId.present
+          ? data.exerciseId.value
+          : this.exerciseId,
+      score: data.score.present ? data.score.value : this.score,
+      maxScore: data.maxScore.present ? data.maxScore.value : this.maxScore,
+      completedAt: data.completedAt.present
+          ? data.completedAt.value
+          : this.completedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SystemDesignAttemptsTableData(')
+          ..write('id: $id, ')
+          ..write('exerciseId: $exerciseId, ')
+          ..write('score: $score, ')
+          ..write('maxScore: $maxScore, ')
+          ..write('completedAt: $completedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, exerciseId, score, maxScore, completedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SystemDesignAttemptsTableData &&
+          other.id == this.id &&
+          other.exerciseId == this.exerciseId &&
+          other.score == this.score &&
+          other.maxScore == this.maxScore &&
+          other.completedAt == this.completedAt);
+}
+
+class SystemDesignAttemptsTableCompanion
+    extends UpdateCompanion<SystemDesignAttemptsTableData> {
+  final Value<int> id;
+  final Value<String> exerciseId;
+  final Value<int> score;
+  final Value<int> maxScore;
+  final Value<DateTime> completedAt;
+  const SystemDesignAttemptsTableCompanion({
+    this.id = const Value.absent(),
+    this.exerciseId = const Value.absent(),
+    this.score = const Value.absent(),
+    this.maxScore = const Value.absent(),
+    this.completedAt = const Value.absent(),
+  });
+  SystemDesignAttemptsTableCompanion.insert({
+    this.id = const Value.absent(),
+    required String exerciseId,
+    required int score,
+    required int maxScore,
+    required DateTime completedAt,
+  }) : exerciseId = Value(exerciseId),
+       score = Value(score),
+       maxScore = Value(maxScore),
+       completedAt = Value(completedAt);
+  static Insertable<SystemDesignAttemptsTableData> custom({
+    Expression<int>? id,
+    Expression<String>? exerciseId,
+    Expression<int>? score,
+    Expression<int>? maxScore,
+    Expression<DateTime>? completedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (exerciseId != null) 'exercise_id': exerciseId,
+      if (score != null) 'score': score,
+      if (maxScore != null) 'max_score': maxScore,
+      if (completedAt != null) 'completed_at': completedAt,
+    });
+  }
+
+  SystemDesignAttemptsTableCompanion copyWith({
+    Value<int>? id,
+    Value<String>? exerciseId,
+    Value<int>? score,
+    Value<int>? maxScore,
+    Value<DateTime>? completedAt,
+  }) {
+    return SystemDesignAttemptsTableCompanion(
+      id: id ?? this.id,
+      exerciseId: exerciseId ?? this.exerciseId,
+      score: score ?? this.score,
+      maxScore: maxScore ?? this.maxScore,
+      completedAt: completedAt ?? this.completedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (exerciseId.present) {
+      map['exercise_id'] = Variable<String>(exerciseId.value);
+    }
+    if (score.present) {
+      map['score'] = Variable<int>(score.value);
+    }
+    if (maxScore.present) {
+      map['max_score'] = Variable<int>(maxScore.value);
+    }
+    if (completedAt.present) {
+      map['completed_at'] = Variable<DateTime>(completedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SystemDesignAttemptsTableCompanion(')
+          ..write('id: $id, ')
+          ..write('exerciseId: $exerciseId, ')
+          ..write('score: $score, ')
+          ..write('maxScore: $maxScore, ')
+          ..write('completedAt: $completedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -3990,6 +4358,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $ModuleTestProgressTableTable(this);
   late final $ProjectMilestoneProgressTableTable projectMilestoneProgressTable =
       $ProjectMilestoneProgressTableTable(this);
+  late final $SystemDesignAttemptsTableTable systemDesignAttemptsTable =
+      $SystemDesignAttemptsTableTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -4004,6 +4374,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     learningPathProgressTable,
     moduleTestProgressTable,
     projectMilestoneProgressTable,
+    systemDesignAttemptsTable,
   ];
 }
 
@@ -6173,6 +6544,223 @@ typedef $$ProjectMilestoneProgressTableTableProcessedTableManager =
       ProjectMilestoneProgressTableData,
       PrefetchHooks Function()
     >;
+typedef $$SystemDesignAttemptsTableTableCreateCompanionBuilder =
+    SystemDesignAttemptsTableCompanion Function({
+      Value<int> id,
+      required String exerciseId,
+      required int score,
+      required int maxScore,
+      required DateTime completedAt,
+    });
+typedef $$SystemDesignAttemptsTableTableUpdateCompanionBuilder =
+    SystemDesignAttemptsTableCompanion Function({
+      Value<int> id,
+      Value<String> exerciseId,
+      Value<int> score,
+      Value<int> maxScore,
+      Value<DateTime> completedAt,
+    });
+
+class $$SystemDesignAttemptsTableTableFilterComposer
+    extends Composer<_$AppDatabase, $SystemDesignAttemptsTableTable> {
+  $$SystemDesignAttemptsTableTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get exerciseId => $composableBuilder(
+    column: $table.exerciseId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get score => $composableBuilder(
+    column: $table.score,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get maxScore => $composableBuilder(
+    column: $table.maxScore,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get completedAt => $composableBuilder(
+    column: $table.completedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SystemDesignAttemptsTableTableOrderingComposer
+    extends Composer<_$AppDatabase, $SystemDesignAttemptsTableTable> {
+  $$SystemDesignAttemptsTableTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get exerciseId => $composableBuilder(
+    column: $table.exerciseId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get score => $composableBuilder(
+    column: $table.score,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get maxScore => $composableBuilder(
+    column: $table.maxScore,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get completedAt => $composableBuilder(
+    column: $table.completedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SystemDesignAttemptsTableTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SystemDesignAttemptsTableTable> {
+  $$SystemDesignAttemptsTableTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get exerciseId => $composableBuilder(
+    column: $table.exerciseId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get score =>
+      $composableBuilder(column: $table.score, builder: (column) => column);
+
+  GeneratedColumn<int> get maxScore =>
+      $composableBuilder(column: $table.maxScore, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get completedAt => $composableBuilder(
+    column: $table.completedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$SystemDesignAttemptsTableTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SystemDesignAttemptsTableTable,
+          SystemDesignAttemptsTableData,
+          $$SystemDesignAttemptsTableTableFilterComposer,
+          $$SystemDesignAttemptsTableTableOrderingComposer,
+          $$SystemDesignAttemptsTableTableAnnotationComposer,
+          $$SystemDesignAttemptsTableTableCreateCompanionBuilder,
+          $$SystemDesignAttemptsTableTableUpdateCompanionBuilder,
+          (
+            SystemDesignAttemptsTableData,
+            BaseReferences<
+              _$AppDatabase,
+              $SystemDesignAttemptsTableTable,
+              SystemDesignAttemptsTableData
+            >,
+          ),
+          SystemDesignAttemptsTableData,
+          PrefetchHooks Function()
+        > {
+  $$SystemDesignAttemptsTableTableTableManager(
+    _$AppDatabase db,
+    $SystemDesignAttemptsTableTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SystemDesignAttemptsTableTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$SystemDesignAttemptsTableTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$SystemDesignAttemptsTableTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> exerciseId = const Value.absent(),
+                Value<int> score = const Value.absent(),
+                Value<int> maxScore = const Value.absent(),
+                Value<DateTime> completedAt = const Value.absent(),
+              }) => SystemDesignAttemptsTableCompanion(
+                id: id,
+                exerciseId: exerciseId,
+                score: score,
+                maxScore: maxScore,
+                completedAt: completedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String exerciseId,
+                required int score,
+                required int maxScore,
+                required DateTime completedAt,
+              }) => SystemDesignAttemptsTableCompanion.insert(
+                id: id,
+                exerciseId: exerciseId,
+                score: score,
+                maxScore: maxScore,
+                completedAt: completedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SystemDesignAttemptsTableTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SystemDesignAttemptsTableTable,
+      SystemDesignAttemptsTableData,
+      $$SystemDesignAttemptsTableTableFilterComposer,
+      $$SystemDesignAttemptsTableTableOrderingComposer,
+      $$SystemDesignAttemptsTableTableAnnotationComposer,
+      $$SystemDesignAttemptsTableTableCreateCompanionBuilder,
+      $$SystemDesignAttemptsTableTableUpdateCompanionBuilder,
+      (
+        SystemDesignAttemptsTableData,
+        BaseReferences<
+          _$AppDatabase,
+          $SystemDesignAttemptsTableTable,
+          SystemDesignAttemptsTableData
+        >,
+      ),
+      SystemDesignAttemptsTableData,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -6204,5 +6792,10 @@ class $AppDatabaseManager {
       $$ProjectMilestoneProgressTableTableTableManager(
         _db,
         _db.projectMilestoneProgressTable,
+      );
+  $$SystemDesignAttemptsTableTableTableManager get systemDesignAttemptsTable =>
+      $$SystemDesignAttemptsTableTableTableManager(
+        _db,
+        _db.systemDesignAttemptsTable,
       );
 }

@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-10-22 (unreleased)
+
+### Added
+- **System design exercises: content and storage** (Phase 5 "system design
+  exercises"): six staged walkthroughs in
+  `assets/system_design/exercises.json` (rate limiter, news feed, chat,
+  notification service, distributed cache, file storage and sync). Each has
+  a scenario, five stages (requirements, estimates, API and data model,
+  high-level design, deep dive and trade-offs) with hints and a model
+  answer, plus common pitfalls. Finished attempts are stored in a new
+  `system_design_attempts` table (schema v5, additive). Tests cover the
+  content, best-score records and a v3 to v5 upgrade.
+
 ## 2026-10-22 (release: v0.23.0 - Personal study plan)
 
 ### Added
