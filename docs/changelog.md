@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026-10-22 (unreleased)
+## 2026-10-22 (release: v0.27.0 - Build and design dashboard)
 
 ### Added
 - **Hands-on progress summary** (Phase 5 "projects / system design /
