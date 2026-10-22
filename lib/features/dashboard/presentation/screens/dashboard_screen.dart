@@ -8,6 +8,7 @@ import '../../../../shared/widgets/glass_blob_field.dart';
 import '../../../../shared/widgets/gradient_card.dart';
 import '../../../../shared/widgets/section_label.dart';
 import '../../../../shared/widgets/sparkline.dart';
+import '../../../build_hub/presentation/build_section.dart';
 import '../../../curriculum/presentation/curriculum_providers.dart';
 import '../../../practice/presentation/providers/practice_providers.dart';
 import '../../../profile/presentation/providers/profile_providers.dart';
@@ -35,8 +36,7 @@ class DashboardScreen extends ConsumerWidget {
       _ReviewQueueCard(),
       _InterviewPrepCard(),
       _ChallengeLabCard(),
-      _ProjectsCard(),
-      _SystemDesignCard(),
+      BuildSection(),
       _WhyTeacherSection(),
       _RecentActivitySection(),
     ];
@@ -728,42 +728,6 @@ class _StudyPlanCard extends ConsumerWidget {
         leading: const Icon(Icons.route_outlined),
         title: const Text('Your study plan'),
         subtitle: Text(subtitle),
-        trailing: const Icon(Icons.chevron_right),
-      ),
-    );
-  }
-}
-
-class _SystemDesignCard extends StatelessWidget {
-  const _SystemDesignCard();
-
-  @override
-  Widget build(BuildContext context) {
-    return GradientCard(
-      elevation: AppElevation.flat,
-      child: ListTile(
-        onTap: () => context.openSystemDesign(),
-        leading: const Icon(Icons.account_tree_outlined),
-        title: const Text('System Design'),
-        subtitle: const Text('Staged design walkthroughs with model answers'),
-        trailing: const Icon(Icons.chevron_right),
-      ),
-    );
-  }
-}
-
-class _ProjectsCard extends StatelessWidget {
-  const _ProjectsCard();
-
-  @override
-  Widget build(BuildContext context) {
-    return GradientCard(
-      elevation: AppElevation.flat,
-      child: ListTile(
-        onTap: () => context.openProjects(),
-        leading: const Icon(Icons.construction_outlined),
-        title: const Text('Projects'),
-        subtitle: const Text('Guided builds with milestones and a rubric'),
         trailing: const Icon(Icons.chevron_right),
       ),
     );

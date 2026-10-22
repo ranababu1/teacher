@@ -9,6 +9,13 @@
   system design walkthroughs and long-form challenges have been completed at
   least once. `buildProgressProvider` joins the three existing list
   providers; tests in `test/build_progress_test.dart`.
+- **Build and design on the dashboard**: the separate Projects and System
+  Design cards are now one "Build and design" section (`BuildSection`) with
+  a third entry for long-form coding challenges, which were only reachable
+  from Challenge Lab before. Each entry shows its progress ("2 of 10 done,
+  1 in progress") and a progress bar once you have started; while loading or
+  on error the plain descriptions stay so the entry points never vanish.
+  Tests in `test/build_section_test.dart`.
 
 ## 2026-10-22 (release: v0.26.0 - Study plan, AI coach, system design and long-form challenges)
 
