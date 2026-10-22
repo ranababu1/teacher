@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026-10-22 (unreleased)
+## 2026-10-22 (release: v0.24.0 - System design exercises)
 
 ### Added
 - **System design exercises: content and storage** (Phase 5 "system design
