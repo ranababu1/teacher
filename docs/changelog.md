@@ -25,6 +25,7 @@
   lab and set widget states) and a navigation test for
   dashboard > lab > set > back x2. `flutter analyze --no-fatal-infos` no
   errors or warnings; `flutter test` 205 passing.
+- Version bumped to 0.21.0+28 (r28).
 
 ## 2026-10-22 (release: v0.20.0 - learning analytics)
 
