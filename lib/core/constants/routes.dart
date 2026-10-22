@@ -13,6 +13,8 @@ class Routes {
   static const interviewPrep = '/interview';
   static const analytics = '/analytics';
   static const challengeLab = '/challenges';
+  static const projects = '/projects';
+  static String project(String projectId) => '/projects/$projectId';
   static String challengeSet(String pathId, String kind) =>
       '/challenges/$pathId/$kind';
   static String interviewSession(String pathId) => '/interview/$pathId';

@@ -25,6 +25,7 @@ final _screens = AppScreens(
   dashboard: (_) => _screen('dashboard', {
     'interview': (c) => c.openInterviewPrep(),
     'lab': (c) => c.openChallengeLab(),
+    'projects': (c) => c.openProjects(),
     'continue': (c) => c.openLesson('py', 'm1', 'c1'),
     'practice': (c) => c.openPractice(),
   }),
@@ -35,6 +36,9 @@ final _screens = AppScreens(
       _screen('lab', {'set': (c) => c.openChallengeSet('py', 'debugging')}),
   challengeSet: (s) =>
       _screen('set:${s.pathParameters['pathId']}:${s.pathParameters['kind']}'),
+  projects: (_) =>
+      _screen('projects', {'open': (c) => c.openProject('react-kanban')}),
+  projectDetail: (s) => _screen('project:${s.pathParameters['projectId']}'),
   profile: (_) => _screen('profile', {'settings': (c) => c.openSettings()}),
   learningPath: (s) => _screen('path:${s.pathParameters['pathId']}', {
     'topic': (c) => c.openTopic('py', 'm1'),
@@ -223,6 +227,17 @@ void main() {
     _on('set:py:debugging');
     await _back(t);
     _on('lab');
+    await _back(t);
+    _on('dashboard');
+  });
+
+  testWidgets('dashboard > projects > project, back x2', (t) async {
+    await _pump(t);
+    await _tap(t, 'projects');
+    await _tap(t, 'open');
+    _on('project:react-kanban');
+    await _back(t);
+    _on('projects');
     await _back(t);
     _on('dashboard');
   });

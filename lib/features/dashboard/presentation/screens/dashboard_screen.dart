@@ -33,6 +33,7 @@ class DashboardScreen extends ConsumerWidget {
       _ReviewQueueCard(),
       _InterviewPrepCard(),
       _ChallengeLabCard(),
+      _ProjectsCard(),
       _WhyTeacherSection(),
       _RecentActivitySection(),
     ];
@@ -701,6 +702,24 @@ class _ChallengeLabCard extends StatelessWidget {
         leading: const Icon(Icons.bug_report_outlined),
         title: const Text('Challenge Lab'),
         subtitle: const Text('Debugging, coding and real-world scenarios'),
+        trailing: const Icon(Icons.chevron_right),
+      ),
+    );
+  }
+}
+
+class _ProjectsCard extends StatelessWidget {
+  const _ProjectsCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return GradientCard(
+      elevation: AppElevation.flat,
+      child: ListTile(
+        onTap: () => context.openProjects(),
+        leading: const Icon(Icons.construction_outlined),
+        title: const Text('Projects'),
+        subtitle: const Text('Guided builds with milestones and a rubric'),
         trailing: const Icon(Icons.chevron_right),
       ),
     );

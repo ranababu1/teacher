@@ -9,6 +9,12 @@
   with a brief, milestones, a self-review rubric and stretch goals. Milestone
   completion is stored in a new `project_milestone_progress` table (schema
   v4, additive migration). Content and repository tests included.
+- **Projects screens**, opened from a new Dashboard card: a list showing
+  each project's course, difficulty, estimated hours and milestone progress
+  (in progress first, then projects whose recommended topic you have passed,
+  then the rest; finished ones last), and a project screen with the brief,
+  a tickable milestone checklist, a self-review rubric and stretch goals.
+  Routes `/projects` and `/projects/:projectId`; back retraces as usual.
 
 ## 2026-10-22 (release: v0.21.0 - Challenge Lab: debugging, coding and scenarios)
 
