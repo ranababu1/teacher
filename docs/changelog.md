@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026-11-05 (unreleased)
+## 2026-11-05 (release: v0.32.1 - AI reliability fixes)
 
 ### Fixed
 - **Claude answers no longer fail when the model thinks first.**
