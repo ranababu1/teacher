@@ -1,5 +1,38 @@
 # Changelog
 
+## 2026-11-05 (unreleased)
+
+### Fixed
+- **Claude answers no longer fail when the model thinks first.**
+  `AnthropicApiClient` read `content[0].text`, but Claude Sonnet 5 (the
+  default) and newer models put a `thinking` block before the answer, so
+  those calls failed as "unexpected response" (and the retry with them).
+  It now reads the first `text` block.
+- **Long Claude answers are no longer cut off.** `max_tokens` goes from
+  4096 to 16000; thinking counts against the cap and a 20-question module
+  test alone needs about 4000. A `max_tokens` stop is now reported as "the
+  answer was cut off" (no automatic retry) instead of a parse failure.
+- **Slow AI answers no longer say "You're offline".** All three AI
+  clients (Claude, Gemini, OpenAI/DeepSeek) wait up to 120 s for a
+  response instead of 30 s (non-streaming calls send nothing until the
+  whole answer is ready), and a receive timeout now shows "The AI teacher
+  took too long to answer" (`aiTimeoutUserMessage`) instead of the
+  offline message. Connection failures still report offline.
+- Attempts with an unknown stored `itemKind` fall back to `exercise`
+  instead of crashing every screen that lists attempts.
+
+### Added
+- CI and the release workflow check built APKs for Google Play's 16 KB
+  page-size requirement (`tool/check_16kb.sh`: ELF LOAD alignment of
+  arm64-v8a/x86_64 libraries and `zipalign -P 16`).
+
+### Verification
+- New tests: thinking block before the answer, `max_tokens` cutoff
+  (`test/anthropic_provider_test.dart`), receive timeout for all three
+  providers (`anthropic_`, `gemini_`, `openai_provider_test.dart`).
+- flutter analyze / flutter test: run by CI on push (no Flutter SDK in the
+  authoring environment).
+
 ## 2026-10-23 (release: v0.32.0 - Step-by-step lessons)
 
 ### Added

@@ -330,6 +330,71 @@ void main() {
         throwsA(isA<NetworkUnavailableException>()),
       );
     });
+
+    test('a receive timeout is reported as slow AI, not offline', () async {
+      final adapter = _FakeAdapter([
+        (options) => throw DioException(
+          requestOptions: options,
+          type: DioExceptionType.receiveTimeout,
+        ),
+      ]);
+      final provider = _providerWith(adapter);
+
+      await expectLater(
+        provider.teach(
+          TeacherRequest(context: _buildContext(), learnerMessage: 'hi'),
+        ),
+        throwsA(
+          isA<AIUnavailableException>().having(
+            (e) => e.userMessage,
+            'userMessage',
+            aiTimeoutUserMessage,
+          ),
+        ),
+      );
+    });
+
+    test('skips a leading thinking block and reads the text block', () async {
+      final adapter = _FakeAdapter([
+        (_) => _jsonResponse(
+          jsonEncode({
+            'content': [
+              {'type': 'thinking', 'thinking': '', 'signature': 'sig'},
+              {
+                'type': 'text',
+                'text': jsonEncode({'explanation': 'A closure captures.'}),
+              },
+            ],
+            'stop_reason': 'end_turn',
+          }),
+        ),
+      ]);
+      final provider = _providerWith(adapter);
+
+      final response = await provider.teach(
+        TeacherRequest(context: _buildContext(), learnerMessage: 'hi'),
+      );
+
+      expect(response.explanation, 'A closure captures.');
+      expect(adapter.callCount, 1);
+    });
+
+    test('a max_tokens cutoff throws AIUnavailableException without retrying', () async {
+      final adapter = _FakeAdapter([
+        (_) => _jsonResponse(
+          _envelope('{"explanation": "A clos', stopReason: 'max_tokens'),
+        ),
+      ]);
+      final provider = _providerWith(adapter);
+
+      await expectLater(
+        provider.teach(
+          TeacherRequest(context: _buildContext(), learnerMessage: 'hi'),
+        ),
+        throwsA(isA<AIUnavailableException>()),
+      );
+      expect(adapter.callCount, 1);
+    });
   });
 
   group('AnthropicProvider.coachStudyPlan', () {

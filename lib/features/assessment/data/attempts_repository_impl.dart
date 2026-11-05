@@ -80,7 +80,12 @@ class AttemptsRepositoryImpl implements AttemptsRepository {
       id: row.id,
       conceptId: row.conceptId,
       itemId: row.itemId,
-      itemKind: ItemKind.values.firstWhere((k) => k.name == row.itemKind),
+      // Unknown names (a future rename) fall back instead of crashing
+      // every screen that lists attempts.
+      itemKind: ItemKind.values.firstWhere(
+        (k) => k.name == row.itemKind,
+        orElse: () => ItemKind.exercise,
+      ),
       itemType: ItemType.fromJson(row.itemType),
       isCorrect: row.isCorrect,
       selfRating: row.selfRating,

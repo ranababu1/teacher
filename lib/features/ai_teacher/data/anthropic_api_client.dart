@@ -23,13 +23,17 @@ class AnthropicApiClient {
           Dio(
             BaseOptions(
               connectTimeout: const Duration(seconds: 30),
-              receiveTimeout: const Duration(seconds: 30),
+              // Non-streaming: nothing arrives until the whole answer is done,
+              // and a 20-question test or a roadmap can take over a minute.
+              receiveTimeout: const Duration(seconds: 120),
               sendTimeout: const Duration(seconds: 30),
             ),
           );
 
   static const _anthropicVersion = '2023-06-01';
-  static const _maxTokens = 4096;
+  /// Room for adaptive thinking plus the largest structured answer (a
+  /// 20-question module test). Thinking tokens count against this cap.
+  static const _maxTokens = 16000;
 
   final String _apiKey;
   final String _baseUrl;
@@ -83,10 +87,16 @@ class AnthropicApiClient {
 
   AppException _mapDioException(DioException e) {
     switch (e.type) {
-      case DioExceptionType.connectionTimeout:
-      case DioExceptionType.sendTimeout:
+      // The request was sent, the AI just took too long: the learner is
+      // online, so don't tell them they're offline.
       case DioExceptionType.receiveTimeout:
       case DioExceptionType.transformTimeout:
+        return AIUnavailableException(
+          'Claude timed out waiting for a response (${e.type.name})',
+          aiTimeoutUserMessage,
+        );
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.sendTimeout:
       case DioExceptionType.connectionError:
         return NetworkUnavailableException(
           'Could not reach Claude (${e.type.name}): ${e.message ?? 'no further detail'}',
@@ -122,8 +132,23 @@ class AnthropicApiClient {
         );
       }
 
+      if (envelope['stop_reason'] == 'max_tokens') {
+        throw const AIUnavailableException(
+          'Claude response was truncated (stop_reason: max_tokens).',
+          "The AI teacher's answer was cut off. Try again.",
+        );
+      }
+
+      // Models that think first put a `thinking` block ahead of the
+      // answer, so take the first `text` block rather than content[0].
       final content = envelope['content'] as List<dynamic>;
-      final text = (content.first as Map<String, dynamic>)['text'] as String;
+      final textBlock = content.whereType<Map<String, dynamic>>().firstWhere(
+        (b) => b['type'] == 'text',
+        orElse: () => throw const FormatException(
+          'No text block in the Claude response content',
+        ),
+      );
+      final text = textBlock['text'] as String;
       final decoded = jsonDecode(text);
       if (decoded is! Map<String, dynamic>) {
         throw const FormatException(

@@ -33,6 +33,11 @@ class AIUnavailableException extends AppException {
   ]) : super(message, userMessage);
 }
 
+/// Shown when an AI provider received the request but didn't answer in
+/// time — distinct from being offline.
+const aiTimeoutUserMessage =
+    'The AI teacher took too long to answer. Try again in a moment.';
+
 class InvalidAIResponseException extends AppException {
   const InvalidAIResponseException([
     String message = 'AI response could not be parsed',

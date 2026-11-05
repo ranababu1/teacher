@@ -28,7 +28,9 @@ class OpenAiCompatibleApiClient {
            Dio(
              BaseOptions(
                connectTimeout: const Duration(seconds: 30),
-               receiveTimeout: const Duration(seconds: 30),
+               // Non-streaming: nothing arrives until the whole answer is done,
+               // and a 20-question test or a roadmap can take over a minute.
+               receiveTimeout: const Duration(seconds: 120),
                sendTimeout: const Duration(seconds: 30),
              ),
            );
@@ -82,10 +84,16 @@ class OpenAiCompatibleApiClient {
 
   AppException _mapDioException(DioException e) {
     switch (e.type) {
-      case DioExceptionType.connectionTimeout:
-      case DioExceptionType.sendTimeout:
+      // The request was sent, the AI just took too long: the learner is
+      // online, so don't tell them they're offline.
       case DioExceptionType.receiveTimeout:
       case DioExceptionType.transformTimeout:
+        return AIUnavailableException(
+          '$providerLabel timed out waiting for a response (${e.type.name})',
+          aiTimeoutUserMessage,
+        );
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.sendTimeout:
       case DioExceptionType.connectionError:
         return NetworkUnavailableException(
           'Could not reach $providerLabel (${e.type.name}): ${e.message ?? 'no further detail'}',

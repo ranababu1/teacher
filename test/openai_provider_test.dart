@@ -354,6 +354,29 @@ void main() {
         throwsA(isA<NetworkUnavailableException>()),
       );
     });
+
+    test('a receive timeout is reported as slow AI, not offline', () async {
+      final adapter = _FakeAdapter([
+        (options) => throw DioException(
+          requestOptions: options,
+          type: DioExceptionType.receiveTimeout,
+        ),
+      ]);
+      final provider = _providerWith(adapter);
+
+      await expectLater(
+        provider.teach(
+          TeacherRequest(context: _buildContext(), learnerMessage: 'hi'),
+        ),
+        throwsA(
+          isA<AIUnavailableException>().having(
+            (e) => e.userMessage,
+            'userMessage',
+            aiTimeoutUserMessage,
+          ),
+        ),
+      );
+    });
   });
 
   group('OpenAiCompatibleProvider.coachStudyPlan', () {
