@@ -179,7 +179,7 @@ void main() {
     );
 
     test(
-      'requests max_tokens of 30000 so long answers are not cut off',
+      "requests the model's documented max_tokens, not a low app cap",
       () async {
         RequestOptions? seen;
         final adapter = _FakeAdapter([
@@ -187,7 +187,11 @@ void main() {
             seen = options;
             return _jsonResponse(
               _envelope(
-                jsonEncode({'explanation': 'ok', 'followUpQuestion': null}),
+                jsonEncode({
+                  'explanation': 'ok',
+                  'followUpQuestion': null,
+                  'needsContinuation': false,
+                }),
               ),
             );
           },
@@ -200,7 +204,11 @@ void main() {
 
         expect(seen, isNotNull);
         expect(seen!.data, isA<Map>());
-        expect((seen!.data as Map)['max_tokens'], 30000);
+        final tokens = (seen!.data as Map)['max_tokens'];
+        // Unknown test model id uses the current-generation ceiling.
+        expect(tokens, 128000);
+        expect(tokens, isNot(30000));
+        expect(tokens, isNot(16000));
       },
     );
   });
@@ -419,7 +427,13 @@ void main() {
           provider.teach(
             TeacherRequest(context: _buildContext(), learnerMessage: 'hi'),
           ),
-          throwsA(isA<AIUnavailableException>()),
+          throwsA(
+            isA<AIUnavailableException>().having(
+              (e) => e.userMessage,
+              'userMessage',
+              aiTruncatedUserMessage,
+            ),
+          ),
         );
         expect(adapter.callCount, 1);
       },

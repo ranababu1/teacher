@@ -261,6 +261,14 @@ String _systemInstruction({
       'memorized facts.',
     )
     ..writeln(
+      'Length budget: keep each reply under about 10000 tokens (a few '
+      'pages of prose at most). Prefer a tight, complete answer over a '
+      'long one. Do not pad, repeat yourself, or write essay-length '
+      'dumps. If the topic truly needs more, set needsContinuation to '
+      'true, stop at a clean breakpoint, and leave the rest for a '
+      'follow-up turn — never truncate mid-sentence.',
+    )
+    ..writeln(
       "Ask at most one meaningful, focused question at a time when it's "
       'useful to check or advance understanding. When the learner is '
       'working through a problem, never hand them the complete answer '
@@ -294,9 +302,9 @@ String _depthInstruction(ExplanationDepth depth) {
       return 'Verbosity: standard. Give a balanced explanation together '
           'with one well-chosen example.';
     case ExplanationDepth.deep:
-      return 'Verbosity: deep. Be thorough — cover the idea from multiple '
-          'angles, call out edge cases, and connect it explicitly to '
-          'related concepts.';
+      return 'Verbosity: deep. Cover the idea from multiple angles and '
+          'note edge cases, still within the length budget — depth means '
+          'denser substance, not a longer essay.';
   }
 }
 
@@ -305,7 +313,9 @@ const _teachAddendum =
     'responding to whatever the learner just said (or opening the topic '
     "if they haven't said anything yet). End with a single focused "
     'follow-up question when doing so would move their understanding '
-    'forward; otherwise leave the follow-up question out.';
+    'forward; otherwise leave the follow-up question out. If the learner '
+    'asked you to continue a previous reply, pick up where that reply '
+    'stopped and do not repeat it.';
 
 const _assessAddendum =
     "Right now: grade the learner's response to a question about the "

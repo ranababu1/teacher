@@ -20,9 +20,10 @@ typedef OpenAiCompatiblePrompt = ({
 const _teachShapeInstruction =
     'Output requirement: respond with ONLY a raw JSON object of exactly '
     'this shape: {"explanation": "<string>", "followUpQuestion": '
-    '"<string, omit this key entirely if there is no follow-up question>"}. '
-    'No markdown code fences, no prose before or after it, nothing but the '
-    'JSON object itself.';
+    '"<string, omit this key entirely if there is no follow-up question>", '
+    '"needsContinuation": <boolean, true only if more remains after this '
+    'reply under the length budget>}. No markdown code fences, no prose '
+    'before or after it, nothing but the JSON object itself.';
 
 const _assessShapeInstruction =
     'Output requirement: respond with ONLY a raw JSON object of exactly '

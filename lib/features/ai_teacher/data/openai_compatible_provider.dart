@@ -70,6 +70,11 @@ class OpenAiCompatibleProvider implements AIProvider {
           'followUpQuestion',
           providerLabel: providerLabel,
         ),
+        needsContinuation: parsing.optBool(
+          json,
+          'needsContinuation',
+          providerLabel: providerLabel,
+        ),
       );
     });
   }

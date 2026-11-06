@@ -11,6 +11,7 @@ class ConversationMessage extends Equatable {
     required this.text,
     this.followUpQuestion,
     this.isError = false,
+    this.canContinue = false,
   });
 
   /// True if this turn was typed by the learner; false if it's the AI's
@@ -30,6 +31,17 @@ class ConversationMessage extends Equatable {
   /// instead of losing the conversation or the learner's question.
   final bool isError;
 
+  /// True when the learner can tap Continue for the next chunk (the model
+  /// flagged [TeacherResponse.needsContinuation], or the reply hit a
+  /// token ceiling).
+  final bool canContinue;
+
   @override
-  List<Object?> get props => [isFromLearner, text, followUpQuestion, isError];
+  List<Object?> get props => [
+    isFromLearner,
+    text,
+    followUpQuestion,
+    isError,
+    canContinue,
+  ];
 }

@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-11-06 (unreleased)
+
+### Changed
+- **AI answers stay concise across every provider.** Shared system prompts
+  (Claude, Gemini, OpenAI/DeepSeek) now target under about 10000 tokens,
+  ban padding and essay-length dumps, and tell the model to set
+  `needsContinuation` when more is truly needed. Deep depth still
+  deepens substance; it no longer invites a longer essay.
+- **Claude `max_tokens` uses each model's documented max output** (for
+  example 128000 on Claude Sonnet 5), not an app-side 30000/16000 ceiling.
+  The Messages API requires the field; Gemini and OpenAI/DeepSeek still
+  leave the provider default (no artificial low cap). Soft length is
+  prompt-enforced for all providers.
+- **AI teacher chat can Continue.** When the model flags
+  `needsContinuation`, or Claude hits a `max_tokens` stop, the learner
+  sees a clear cutoff message and a Continue button that fetches the next
+  chunk with prior text in context. No new product surface.
+
+### Verification
+- `test/anthropic_max_tokens_test.dart`, prompt length-budget assertions,
+  Claude request-body max_tokens, `test/ai_conversation_continue_test.dart`.
+
 ## 2026-11-06 (release: v0.32.2 - Higher AI answer token cap)
 
 ### Changed

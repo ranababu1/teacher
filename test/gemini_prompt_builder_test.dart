@@ -179,8 +179,12 @@ void main() {
       expect(concise.systemInstruction, contains('concise'));
       expect(concise.systemInstruction, isNot(contains('multiple angles')));
       expect(concise.systemInstruction, contains('Stay concise and focused'));
+      expect(concise.systemInstruction, contains('10000 tokens'));
+      expect(concise.systemInstruction, contains('needsContinuation'));
       expect(deep.systemInstruction, contains('multiple angles'));
+      expect(deep.systemInstruction, contains('not a longer essay'));
       expect(deep.systemInstruction, isNot(contains('minimal preamble')));
+      expect(deep.systemInstruction, isNot(contains('Be thorough')));
     });
 
     test('states the raw-JSON-only output requirement', () {

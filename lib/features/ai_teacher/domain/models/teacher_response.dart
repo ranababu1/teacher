@@ -12,13 +12,21 @@ class TeacherRequest extends Equatable {
 }
 
 class TeacherResponse extends Equatable {
-  const TeacherResponse({required this.explanation, this.followUpQuestion});
+  const TeacherResponse({
+    required this.explanation,
+    this.followUpQuestion,
+    this.needsContinuation = false,
+  });
 
   final String explanation;
   final String? followUpQuestion;
 
+  /// True when the model stopped early under the length budget and more
+  /// remains; the AI teacher chat can offer Continue.
+  final bool needsContinuation;
+
   @override
-  List<Object?> get props => [explanation, followUpQuestion];
+  List<Object?> get props => [explanation, followUpQuestion, needsContinuation];
 }
 
 class AssessmentRequest extends Equatable {
@@ -74,7 +82,8 @@ class ExplanationRequest extends Equatable {
 class ModuleTestRequest extends Equatable {
   const ModuleTestRequest({required this.context, required this.questionCount});
 
-  final Object context; // ModuleTestContext — kept loose, same as other requests
+  final Object
+  context; // ModuleTestContext — kept loose, same as other requests
   final int questionCount;
 
   @override

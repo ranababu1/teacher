@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import '../../../core/errors/app_exception.dart';
 import '../../../core/services/app_logger.dart';
 import 'anthropic_error_classifier.dart';
+import 'anthropic_max_tokens.dart';
 
 /// Thin, domain-agnostic wrapper around Anthropic's `/v1/messages`
 /// endpoint.
@@ -34,10 +35,6 @@ class AnthropicApiClient {
            );
 
   static const _anthropicVersion = '2023-06-01';
-
-  /// Room for adaptive thinking plus the largest structured answer (a
-  /// 20-question module test). Thinking tokens count against this cap.
-  static const _maxTokens = 30000;
 
   final String _apiKey;
   final String _baseUrl;
@@ -70,7 +67,9 @@ class AnthropicApiClient {
         ),
         data: {
           'model': model,
-          'max_tokens': _maxTokens,
+          // Required by the API; set to the model's documented max output.
+          // Soft ~10k length is prompt-enforced across all providers.
+          'max_tokens': maxTokensForAnthropicModel(model),
           'system': systemInstruction,
           'messages': [
             {'role': 'user', 'content': userContent},
@@ -139,7 +138,7 @@ class AnthropicApiClient {
       if (envelope['stop_reason'] == 'max_tokens') {
         throw const AIUnavailableException(
           'Claude response was truncated (stop_reason: max_tokens).',
-          "The AI teacher's answer was cut off. Try again.",
+          aiTruncatedUserMessage,
         );
       }
 

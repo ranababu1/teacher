@@ -48,6 +48,16 @@ class _AiTeacherPanelState extends ConsumerState<AiTeacherPanel> {
     setState(() => _isSending = false);
   }
 
+  Future<void> _continueAnswer() async {
+    if (_isSending) return;
+    setState(() => _isSending = true);
+    await ref
+        .read(aiConversationControllerProvider(widget.conceptId).notifier)
+        .continueAnswer();
+    if (!mounted) return;
+    setState(() => _isSending = false);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!ref.watch(isAiConfiguredProvider)) {
@@ -107,8 +117,17 @@ class _AiTeacherPanelState extends ConsumerState<AiTeacherPanel> {
                 padding: const EdgeInsets.only(bottom: 10),
                 child: _MessageBubble(
                   message: messages[i],
-                  onRetry: (i == messages.length - 1 && retryText != null)
+                  onRetry:
+                      (i == messages.length - 1 &&
+                          retryText != null &&
+                          !messages[i].canContinue)
                       ? () => _send(retryText)
+                      : null,
+                  onContinue:
+                      (i == messages.length - 1 &&
+                          messages[i].canContinue &&
+                          !_isSending)
+                      ? _continueAnswer
                       : null,
                 ),
               ),
@@ -130,10 +149,11 @@ class _AiTeacherPanelState extends ConsumerState<AiTeacherPanel> {
 }
 
 class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({required this.message, this.onRetry});
+  const _MessageBubble({required this.message, this.onRetry, this.onContinue});
 
   final ConversationMessage message;
   final VoidCallback? onRetry;
+  final VoidCallback? onContinue;
 
   @override
   Widget build(BuildContext context) {
@@ -181,14 +201,20 @@ class _MessageBubble extends StatelessWidget {
                 ),
               ],
             ),
-            if (onRetry != null) ...[
+            if (onContinue != null || onRetry != null) ...[
               const SizedBox(height: 8),
               Align(
                 alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: onRetry,
-                  child: const Text('Try again'),
-                ),
+                child: onContinue != null
+                    ? TextButton(
+                        key: const ValueKey('ai-continue'),
+                        onPressed: onContinue,
+                        child: const Text('Continue'),
+                      )
+                    : TextButton(
+                        onPressed: onRetry,
+                        child: const Text('Try again'),
+                      ),
               ),
             ],
           ],
@@ -236,6 +262,17 @@ class _MessageBubble extends StatelessWidget {
                     ),
                   ),
                 ],
+              ),
+            ],
+            if (onContinue != null) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  key: const ValueKey('ai-continue'),
+                  onPressed: onContinue,
+                  child: const Text('Continue'),
+                ),
               ),
             ],
           ],

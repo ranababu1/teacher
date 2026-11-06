@@ -38,6 +38,12 @@ class AIUnavailableException extends AppException {
 const aiTimeoutUserMessage =
     'The AI teacher took too long to answer. Try again in a moment.';
 
+/// Shown when a provider stopped because the reply hit its token ceiling.
+/// The AI teacher chat offers Continue so the learner can fetch the next part.
+const aiTruncatedUserMessage =
+    "The AI teacher's answer was cut off because it ran long. "
+    'Tap Continue for the next part.';
+
 class InvalidAIResponseException extends AppException {
   const InvalidAIResponseException([
     String message = 'AI response could not be parsed',

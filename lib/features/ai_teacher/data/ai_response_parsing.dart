@@ -52,6 +52,22 @@ bool reqBool(
   return value;
 }
 
+bool optBool(
+  Map<String, dynamic> json,
+  String key, {
+  required String providerLabel,
+  bool defaultValue = false,
+}) {
+  final value = json[key];
+  if (value == null) return defaultValue;
+  if (value is! bool) {
+    throw InvalidAIResponseException(
+      '$providerLabel response has a non-bool value for field "$key"',
+    );
+  }
+  return value;
+}
+
 List<String> reqStringList(
   Map<String, dynamic> json,
   String key, {

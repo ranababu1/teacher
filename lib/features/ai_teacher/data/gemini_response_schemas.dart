@@ -13,6 +13,7 @@ const Map<String, dynamic> teacherResponseSchema = {
   'properties': {
     'explanation': {'type': 'STRING'},
     'followUpQuestion': {'type': 'STRING', 'nullable': true},
+    'needsContinuation': {'type': 'BOOLEAN', 'nullable': true},
   },
   'required': ['explanation'],
 };

@@ -18,8 +18,9 @@ const Map<String, dynamic> teacherResponseSchema = {
     'followUpQuestion': {
       'type': ['string', 'null'],
     },
+    'needsContinuation': {'type': 'boolean'},
   },
-  'required': ['explanation', 'followUpQuestion'],
+  'required': ['explanation', 'followUpQuestion', 'needsContinuation'],
   'additionalProperties': false,
 };
 

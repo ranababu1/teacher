@@ -63,6 +63,11 @@ class GeminiProvider implements AIProvider {
           'followUpQuestion',
           providerLabel: _providerLabel,
         ),
+        needsContinuation: parsing.optBool(
+          json,
+          'needsContinuation',
+          providerLabel: _providerLabel,
+        ),
       );
     });
   }
