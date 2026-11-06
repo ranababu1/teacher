@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-06 (unreleased)
+
+### Changed
+- **Claude answers can use more tokens when needed.** `max_tokens` goes
+  from 16000 to 30000 so a long module test or a reply with thinking is
+  less likely to hit the cutoff. Prompts still ask for concise, focused
+  answers; nothing asks the model for longer or more detailed replies.
+  Only Anthropic sets an explicit cap (Gemini and OpenAI/DeepSeek leave
+  the provider default).
+
 ## 2026-11-05 (release: v0.32.1 - AI reliability fixes)
 
 ### Fixed

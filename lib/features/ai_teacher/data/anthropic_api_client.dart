@@ -15,25 +15,29 @@ import 'anthropic_error_classifier.dart';
 /// See `AnthropicProvider` for the domain-aware layer built on top of
 /// this.
 class AnthropicApiClient {
-  AnthropicApiClient({required String apiKey, required String baseUrl, Dio? dio})
-    : _apiKey = apiKey,
-      _baseUrl = baseUrl,
-      _dio =
-          dio ??
-          Dio(
-            BaseOptions(
-              connectTimeout: const Duration(seconds: 30),
-              // Non-streaming: nothing arrives until the whole answer is done,
-              // and a 20-question test or a roadmap can take over a minute.
-              receiveTimeout: const Duration(seconds: 120),
-              sendTimeout: const Duration(seconds: 30),
-            ),
-          );
+  AnthropicApiClient({
+    required String apiKey,
+    required String baseUrl,
+    Dio? dio,
+  }) : _apiKey = apiKey,
+       _baseUrl = baseUrl,
+       _dio =
+           dio ??
+           Dio(
+             BaseOptions(
+               connectTimeout: const Duration(seconds: 30),
+               // Non-streaming: nothing arrives until the whole answer is done,
+               // and a 20-question test or a roadmap can take over a minute.
+               receiveTimeout: const Duration(seconds: 120),
+               sendTimeout: const Duration(seconds: 30),
+             ),
+           );
 
   static const _anthropicVersion = '2023-06-01';
+
   /// Room for adaptive thinking plus the largest structured answer (a
   /// 20-question module test). Thinking tokens count against this cap.
-  static const _maxTokens = 16000;
+  static const _maxTokens = 30000;
 
   final String _apiKey;
   final String _baseUrl;

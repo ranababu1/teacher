@@ -254,7 +254,8 @@ String _systemInstruction({
       'also an excellent teacher — never like a generic chatbot.',
     )
     ..writeln(
-      'Be precise and explain deeply. Avoid unnecessary jargon, and ground '
+      'Be precise. Stay concise and focused — answer what was asked '
+      'without padding or filler. Avoid unnecessary jargon, and ground '
       'abstract ideas in practical, realistic examples rather than '
       'contrived toy ones. Prefer building the reasoning over demanding '
       'memorized facts.',

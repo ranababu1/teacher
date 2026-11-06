@@ -177,6 +177,32 @@ void main() {
         expect(adapter.callCount, 1);
       },
     );
+
+    test(
+      'requests max_tokens of 30000 so long answers are not cut off',
+      () async {
+        RequestOptions? seen;
+        final adapter = _FakeAdapter([
+          (options) {
+            seen = options;
+            return _jsonResponse(
+              _envelope(
+                jsonEncode({'explanation': 'ok', 'followUpQuestion': null}),
+              ),
+            );
+          },
+        ]);
+        final provider = _providerWith(adapter);
+
+        await provider.teach(
+          TeacherRequest(context: _buildContext(), learnerMessage: 'hi'),
+        );
+
+        expect(seen, isNotNull);
+        expect(seen!.data, isA<Map>());
+        expect((seen!.data as Map)['max_tokens'], 30000);
+      },
+    );
   });
 
   group('AnthropicProvider.generateModuleTest', () {
@@ -379,22 +405,25 @@ void main() {
       expect(adapter.callCount, 1);
     });
 
-    test('a max_tokens cutoff throws AIUnavailableException without retrying', () async {
-      final adapter = _FakeAdapter([
-        (_) => _jsonResponse(
-          _envelope('{"explanation": "A clos', stopReason: 'max_tokens'),
-        ),
-      ]);
-      final provider = _providerWith(adapter);
+    test(
+      'a max_tokens cutoff throws AIUnavailableException without retrying',
+      () async {
+        final adapter = _FakeAdapter([
+          (_) => _jsonResponse(
+            _envelope('{"explanation": "A clos', stopReason: 'max_tokens'),
+          ),
+        ]);
+        final provider = _providerWith(adapter);
 
-      await expectLater(
-        provider.teach(
-          TeacherRequest(context: _buildContext(), learnerMessage: 'hi'),
-        ),
-        throwsA(isA<AIUnavailableException>()),
-      );
-      expect(adapter.callCount, 1);
-    });
+        await expectLater(
+          provider.teach(
+            TeacherRequest(context: _buildContext(), learnerMessage: 'hi'),
+          ),
+          throwsA(isA<AIUnavailableException>()),
+        );
+        expect(adapter.callCount, 1);
+      },
+    );
   });
 
   group('AnthropicProvider.coachStudyPlan', () {

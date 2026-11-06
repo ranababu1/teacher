@@ -119,7 +119,11 @@ void main() {
 
     test('omits recentMisconceptions section when empty', () {
       final context = _buildContext();
-      final prompt = buildTeachPrompt(context, null, depth: ExplanationDepth.standard);
+      final prompt = buildTeachPrompt(
+        context,
+        null,
+        depth: ExplanationDepth.standard,
+      );
 
       expect(prompt.userContent, isNot(contains('Misconceptions recently')));
     });
@@ -130,36 +134,62 @@ void main() {
           'Believes closures copy the variable value at definition time',
         ],
       );
-      final prompt = buildTeachPrompt(context, null, depth: ExplanationDepth.standard);
+      final prompt = buildTeachPrompt(
+        context,
+        null,
+        depth: ExplanationDepth.standard,
+      );
 
       expect(prompt.userContent, contains('Misconceptions recently'));
       expect(
         prompt.userContent,
-        contains('Believes closures copy the variable value at definition time'),
+        contains(
+          'Believes closures copy the variable value at definition time',
+        ),
       );
     });
 
     test('handles a null/blank learner message by opening the topic', () {
       final context = _buildContext();
-      final prompt = buildTeachPrompt(context, null, depth: ExplanationDepth.standard);
+      final prompt = buildTeachPrompt(
+        context,
+        null,
+        depth: ExplanationDepth.standard,
+      );
 
-      expect(prompt.userContent, contains('has not asked anything specific yet'));
+      expect(
+        prompt.userContent,
+        contains('has not asked anything specific yet'),
+      );
     });
 
     test('depth changes the system instruction wording', () {
       final context = _buildContext();
-      final concise = buildTeachPrompt(context, null, depth: ExplanationDepth.concise);
-      final deep = buildTeachPrompt(context, null, depth: ExplanationDepth.deep);
+      final concise = buildTeachPrompt(
+        context,
+        null,
+        depth: ExplanationDepth.concise,
+      );
+      final deep = buildTeachPrompt(
+        context,
+        null,
+        depth: ExplanationDepth.deep,
+      );
 
       expect(concise.systemInstruction, contains('concise'));
       expect(concise.systemInstruction, isNot(contains('multiple angles')));
+      expect(concise.systemInstruction, contains('Stay concise and focused'));
       expect(deep.systemInstruction, contains('multiple angles'));
       expect(deep.systemInstruction, isNot(contains('minimal preamble')));
     });
 
     test('states the raw-JSON-only output requirement', () {
       final context = _buildContext();
-      final prompt = buildTeachPrompt(context, null, depth: ExplanationDepth.standard);
+      final prompt = buildTeachPrompt(
+        context,
+        null,
+        depth: ExplanationDepth.standard,
+      );
 
       expect(prompt.systemInstruction, contains('ONLY the raw JSON object'));
     });
@@ -174,7 +204,10 @@ void main() {
         depth: ExplanationDepth.standard,
       );
 
-      expect(prompt.userContent, contains('A closure is just a nested function.'));
+      expect(
+        prompt.userContent,
+        contains('A closure is just a nested function.'),
+      );
       expect(prompt.userContent, contains('Closures'));
       expect(prompt.systemInstruction, contains('name any misconceptions'));
     });
@@ -183,7 +216,10 @@ void main() {
   group('buildGenerateExercisePrompt', () {
     test('asks for exactly one new exercise using the context', () {
       final context = _buildContext();
-      final prompt = buildGenerateExercisePrompt(context, depth: ExplanationDepth.standard);
+      final prompt = buildGenerateExercisePrompt(
+        context,
+        depth: ExplanationDepth.standard,
+      );
 
       expect(prompt.userContent, contains('Generate one new exercise'));
       expect(prompt.userContent, contains('Closures'));
@@ -201,7 +237,9 @@ void main() {
 
       expect(
         prompt.userContent,
-        contains('Closures let a function remember variables from where it was created.'),
+        contains(
+          'Closures let a function remember variables from where it was created.',
+        ),
       );
       expect(prompt.systemInstruction, contains('correctness and'));
     });
