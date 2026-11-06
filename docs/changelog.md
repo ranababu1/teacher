@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026-11-06 (unreleased)
+## 2026-11-06 (release: v0.32.3 - Concise AI answers with continue)
 
 ### Changed
 - **AI answers stay concise across every provider.** Shared system prompts
