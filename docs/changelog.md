@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026-11-06 (unreleased)
+## 2026-11-06 (release: v0.32.2 - Higher AI answer token cap)
 
 ### Changed
 - **Claude answers can use more tokens when needed.** `max_tokens` goes
