@@ -3,8 +3,7 @@
 ## 2026-11-24 (content audit)
 
 ### Changed
-- **Python (all but error handling, files and data, advanced functions and
-  modules), Go, Spring Boot,
+- **Python, Go, Spring Boot,
   Java, Databases and System Design lessons audited.** Tighter prose with the same structure and quizzes.
 
 ### Fixed
@@ -25,6 +24,9 @@
   expiry answers, and a chat registry key that expired mid-connection.
 - Python: the `is` quiz question printed `True` as a script, a `sort()`
   example raised TypeError, and UnboundLocalError messages were pre-3.11.
+- Python: the naive/aware datetime error message, `==` between them
+  (False, not an error), a `total_seconds()` value, a regex comment that
+  claimed no match, and an unreliable `math.py` shadowing example.
 
 ## 2026-11-24 (release: v0.33.1 - Real AdMob IDs, Help & support)
 
