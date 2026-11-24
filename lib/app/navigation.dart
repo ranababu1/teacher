@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/constants/routes.dart';
+import '../features/ads/data/ad_service.dart';
 
 /// The app's navigation rules in one place (see docs/changelog.md, 0.17.0):
 ///
@@ -89,8 +90,11 @@ extension AppNavigation on BuildContext {
 
   /// From a topic page: swap it for the next topic so finished topics do
   /// not pile up in the back stack.
-  void replaceWithNextTopic(String pathId, String nextModuleId) =>
-      _router.pushReplacement(Routes.module(pathId, nextModuleId));
+  void replaceWithNextTopic(String pathId, String nextModuleId) {
+    _router.pushReplacement(Routes.module(pathId, nextModuleId));
+    // A natural break: an interstitial may show once the next topic is up.
+    AdService.instance.showAfterNavigation();
+  }
 
   /// From a passed topic test: close the test, then swap the topic it was
   /// opened from for the next topic. Back from the next topic therefore
@@ -100,6 +104,7 @@ extension AppNavigation on BuildContext {
     final next = Routes.module(pathId, nextModuleId);
     if (!router.canPop()) {
       router.go(next);
+      AdService.instance.showAfterNavigation();
       return;
     }
     router.pop();
@@ -108,5 +113,8 @@ extension AppNavigation on BuildContext {
     } else {
       router.push(next);
     }
+    // Runs after a short delay, so the test screen (a no-ads zone) is
+    // already gone and the next topic is showing. Never on the results.
+    AdService.instance.showAfterNavigation();
   }
 }
