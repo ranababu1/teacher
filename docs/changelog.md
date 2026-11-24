@@ -3,7 +3,7 @@
 ## 2026-11-24 (content audit)
 
 ### Changed
-- **AI/ML, AWS, React, Node.js, Python, Go, Spring Boot,
+- **AI/ML, AWS, LLM Engineering, React, Node.js, Python, Go, Spring Boot,
   Java, Databases, System Design, DevOps and Docker lessons audited.** Tighter prose with the same structure and quizzes.
 
 ### Fixed
@@ -49,6 +49,10 @@
   replacement and deletion policies; T3 credit defaults and the t3.micro
   baseline; N+1 across zones; anomaly-detection alarm syntax; Lambda Init
   billing.
+- LLM Engineering: JSON-mode calls whose messages never mentioned JSON,
+  tool-call guarantees that need strict mode, an eval table whose overall
+  rates could not be produced by any weighting, the sampling-order claim,
+  and an output-side prompt leak filed as input-side.
 
 ## 2026-11-24 (release: v0.33.1 - Real AdMob IDs, Help & support)
 
