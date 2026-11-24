@@ -8,8 +8,9 @@ import 'app_logger.dart';
 /// never needs to know whether Crashlytics is available on the current
 /// platform or even initialized (Android-only for now).
 ///
-/// Privacy: reports contain stack traces and device/OS metadata only — no
-/// user ids, no analytics, no message content. Collection is on by
+/// Privacy: reports contain stack traces, device/OS/app metadata and a
+/// per-install Crashlytics ID (pseudonymous, not anonymous). No name,
+/// account, analytics or message content. Collection is on by
 /// default; the learner can turn it off in Settings at any time, and the
 /// native SDK persists that choice across restarts.
 class CrashReportingService {

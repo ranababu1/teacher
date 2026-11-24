@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-24 (release: v0.34.0 - accurate crash report wording)
+
+### Changed
+- Settings: the "Share crash reports" text no longer says "anonymous". It
+  now lists what a report holds (error details, device model, OS and app
+  version, a random ID for this install) and that no name, email or
+  account is sent. The switch and its default are unchanged.
+
 ## 2026-11-24 (content audit)
 
 ### Changed

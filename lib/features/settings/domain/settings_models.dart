@@ -70,7 +70,8 @@ class AppSettings {
   final bool debugMode;
   final bool aiRequestLogging;
 
-  /// Whether anonymous crash reports (stack traces only, no user data) are
+  /// Whether crash reports (error details, device model, OS and app
+  /// version, and a per-install Crashlytics ID; no name or account) are
   /// sent to Firebase Crashlytics. On by default; the native SDK persists
   /// the effective state across restarts — this field mirrors it for the
   /// Settings UI.

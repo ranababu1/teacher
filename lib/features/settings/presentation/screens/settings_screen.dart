@@ -240,10 +240,11 @@ class SettingsScreen extends ConsumerWidget {
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Share crash reports'),
                     subtitle: const Text(
-                      'If the app crashes, an anonymous stack trace is sent '
-                      'to Firebase Crashlytics so bugs can be fixed faster. '
-                      'You can turn this off at any time. No accounts. Ads '
-                      'keep the app free.',
+                      'Helps fix bugs. If the app crashes, a report goes to '
+                      'Firebase Crashlytics with the error details, device '
+                      'model, OS and app version, and a random ID for this '
+                      'install. No name, email or account. You can turn '
+                      'this off at any time. Ads keep the app free.',
                     ),
                     value: settings.crashReportsEnabled,
                     onChanged: (value) => ref
