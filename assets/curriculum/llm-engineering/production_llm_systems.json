@@ -104,12 +104,12 @@
           "type": "multipleChoice",
           "prompt": "A team wants to reduce the latency of a summarization feature. The prompt is already fairly short (under 500 tokens), but the feature requests up to 2000 tokens of output, most of which is often unused or truncated by the UI anyway. What is the single highest-leverage change to try first?",
           "options": [
-            "Trim the input prompt further, since shorter prompts always produce the biggest latency improvement.",
-            "Lower max_tokens closer to what the feature actually needs, since output-token generation is sequential and typically dominates total latency.",
+            "Increase the batch size of concurrent requests being sent to the API.",
             "Switch to a different cloud region to reduce network round-trip time.",
-            "Increase the batch size of concurrent requests being sent to the API."
+            "Trim the input prompt further, since shorter prompts always produce the biggest latency improvement.",
+            "Lower max_tokens closer to what the feature actually needs, since output-token generation is sequential and typically dominates total latency."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "Given that the prompt is already short and the bottleneck described is an unnecessarily high output-token allowance that's mostly unused anyway, lowering max_tokens directly reduces how many sequential generation steps the model performs, which is the dominant latency cost for anything beyond a very short response. The “Trim the input prompt further, since shorter…” option is a weaker lever here specifically because the prompt is already short -- trimming an already-short prompt further has little room left to matter, unlike the much larger unused output-token allowance. The “Switch to a different cloud region…” option addresses network transit time, which is typically a small fraction of total latency compared to token-by-token generation. The “Increase the batch size of concurrent requests…” option affects throughput under concurrent load, not the latency of a single request, and doesn't address the described problem at all."
         },
         {
@@ -123,12 +123,12 @@
           "type": "multipleChoice",
           "prompt": "Per this module, why do providers commonly price output tokens noticeably higher per token than input tokens?",
           "options": [
-            "Output tokens are priced higher purely as a deterrent to discourage long responses, unrelated to any actual difference in compute cost.",
             "Producing an output token requires real, sequential generation compute, one step at a time, while processing input tokens can happen in one largely parallelizable pass -- a mechanical cost difference, not an arbitrary pricing choice.",
+            "Input tokens are actually more expensive to process, but providers subsidize input pricing specifically to attract new customers.",
             "Output tokens are priced higher because providers store them permanently for future retraining, while input tokens are discarded immediately after a call.",
-            "Input tokens are actually more expensive to process, but providers subsidize input pricing specifically to attract new customers."
+            "Output tokens are priced higher purely as a deterrent to discourage long responses, unrelated to any actual difference in compute cost."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "The module ties the input/output price gap directly to the mechanical cost difference: generating each output token is a genuinely sequential, per-token computation, while an entire input prompt can be processed together in one largely parallelizable pass. The “Output tokens are priced higher purely…” option invents an unsupported deterrence motive. The “Output tokens are priced higher because providers…” and “Input tokens are actually more expensive…” options invent unrelated storage and subsidy explanations that the module never mentions; the module's stated reason is strictly about compute cost structure, not data retention or promotional pricing."
         },
         {
@@ -136,12 +136,12 @@
           "type": "multipleChoice",
           "prompt": "Per this module, what's the core risk introduced by a model-cascade / routing pattern that sends 'easy' requests to a cheap model and escalates 'hard' requests to an expensive one?",
           "options": [
+            "The main risk is increased latency on every single request, since each request must always pass through both models sequentially regardless of its actual difficulty.",
             "There's no real risk once the pattern is implemented, since routing only ever reduces cost with no possible downside.",
             "The router itself can misjudge a genuinely hard request as easy, sending it to the cheap model with no escalation happening at all, producing a confidently lower-quality or wrong answer -- so the router's own accuracy needs to be evaluated against real, representative traffic rather than assumed to work.",
-            "The expensive model will always underperform the cheap model specifically on easy requests, making escalation counterproductive by design.",
-            "The main risk is increased latency on every single request, since each request must always pass through both models sequentially regardless of its actual difficulty."
+            "The expensive model will always underperform the cheap model specifically on easy requests, making escalation counterproductive by design."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "The module is explicit that the real risk sits in the routing decision itself -- a router that misclassifies a hard request as easy sends it to the weaker model with no escalation signal at all, and the router therefore needs its own held-out evaluation against real traffic rather than being trusted just because the overall cascade pattern sounds sensible. The “There's no real risk once the pattern…” option denies a risk the module explicitly names. The “The expensive model will always underperform…” option invents an unsupported claim about the expensive model underperforming on easy requests. The “The main risk is increased latency…” option misdescribes the architecture -- requests are routed to one model or the other based on classified difficulty, not run through both sequentially."
         },
         {
@@ -149,10 +149,10 @@
           "type": "multipleChoice",
           "prompt": "A team measures only total end-to-end response time for a feature, sees it's slow, and concludes the input prompt must be the bottleneck, deciding to trim it heavily. Per this module, what more informative measurement did they skip, and why does it matter?",
           "options": [
-            "Measuring GPU temperature during generation, since thermal throttling is described as the dominant cause of latency variance in cloud-hosted models.",
+            "There is no more informative measurement available -- total end-to-end time is already the most granular metric obtainable from a hosted API.",
             "Splitting the measurement into time-to-first-token and total generation time -- since time-to-first-token depends mostly on prompt processing while total time scales with output tokens generated, this split reveals whether the actual bottleneck is the input or the sequential output generation.",
             "Measuring the number of HTTP redirects the request passes through, since redirects are described as the primary source of latency in API-based LLM calls.",
-            "There is no more informative measurement available -- total end-to-end time is already the most granular metric obtainable from a hosted API."
+            "Measuring GPU temperature during generation, since thermal throttling is described as the dominant cause of latency variance in cloud-hosted models."
           ],
           "correctOptionIndex": 1,
           "explanation": "The module explicitly recommends separating time-to-first-token from total generation time precisely because they're dominated by different parts of the request -- TTFT by prompt processing, total time by however many output tokens actually get generated -- and warns that measuring only the combined total can lead a team to wrongly blame prompt length when output length is the actual lever. The “Measuring GPU temperature during generation, since thermal…” and “Measuring the number of HTTP redirects…” options invent measurements and causes the module never discusses. The “There is no more informative measurement available…” option is contradicted directly by the module's own worked example splitting latency into exactly these two more informative numbers."
@@ -269,12 +269,12 @@
           "type": "multipleChoice",
           "prompt": "A support-bot response cache uses only the exact text of the user's question, hashed, as its cache key -- ignoring which system prompt or model version generated the cached answer. After the team updates the system prompt to fix a tone issue, some users still receive answers in the old tone. What's the most likely cause?",
           "options": [
-            "The updated model is hallucinating the old tone by coincidence.",
             "Stale cache entries, keyed without the system prompt or model version, are being served regardless of the update, since the cache has no way to know that behavior-relevant parameters changed.",
+            "Semantic caching is falsely matching unrelated queries to each other.",
             "The users experiencing the old tone are being served by a different, unrelated model entirely.",
-            "Semantic caching is falsely matching unrelated queries to each other."
+            "The updated model is hallucinating the old tone by coincidence."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "A cache key built only from the question text has no dependency on the system prompt at all, so it cannot distinguish 'this question answered under the old system prompt' from 'this question answered under the new one' -- previously cached entries keep being served as-is after the update, exactly reproducing the old tone for any question that was cached before the fix. The “The updated model is hallucinating the old…” option misattributes a caching bug to hallucination, a different phenomenon entirely. The “The users experiencing the old tone…” option isn't supported by anything in the scenario -- there's no indication of a routing issue to an unrelated model. The “Semantic caching is falsely matching unrelated queries…” option describes a real risk of semantic caching, but the scenario as described uses exact question-text hashing, not similarity-based matching, so a near-miss collision isn't the applicable failure mode here."
         },
         {
@@ -288,12 +288,12 @@
           "type": "multipleChoice",
           "prompt": "A request reuses the same long, stable system prompt on every call, but the team also inserts a per-request timestamp near the very start of the prompt, before the stable content. Per this module, what effect does this have on provider-level prompt/prefix caching, and why?",
           "options": [
-            "No effect -- prefix caching only cares about the total token count of the request, not the exact content or position of any specific part of it.",
-            "It breaks the prefix match and forfeits the optimization, because prefix caching only helps when the shared content is genuinely identical, down to exact whitespace, and positioned at the very start of the request -- inserting variable content before the stable content means the 'prefix' is no longer identical across calls.",
             "It has no effect on prefix caching specifically, but it disables response caching for the same request instead.",
-            "It automatically triggers semantic caching to compensate for the broken prefix, so overall performance is unaffected."
+            "No effect -- prefix caching only cares about the total token count of the request, not the exact content or position of any specific part of it.",
+            "It automatically triggers semantic caching to compensate for the broken prefix, so overall performance is unaffected.",
+            "It breaks the prefix match and forfeits the optimization, because prefix caching only helps when the shared content is genuinely identical, down to exact whitespace, and positioned at the very start of the request -- inserting variable content before the stable content means the 'prefix' is no longer identical across calls."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "The module is explicit that prefix caching requires the shared prefix to be genuinely identical and positioned at the very start of the request -- even something as small as a timestamp inserted near the top breaks the match and forfeits the optimization entirely, which is exactly why stable content should be placed first and variable content last. The “No effect -- prefix caching only cares…” option ignores the module's explicit content-and-position requirement. The “It has no effect on prefix caching…” and “It automatically triggers semantic caching to compensate…” options both invent unrelated compensating mechanisms the module never describes; prefix caching and response caching are separate, independently-affected layers."
         },
         {
@@ -315,11 +315,11 @@
           "prompt": "Per this module, which of the following is most clearly a case where caching -- especially semantic caching -- should be skipped entirely or used only with short TTLs and careful invalidation?",
           "options": [
             "A static FAQ answer about a company's return policy that rarely changes and contains no user-specific information.",
+            "Any response generated at temperature 0, since the module treats deterministic outputs as always safe to cache indefinitely.",
             "A response containing user-specific account data or time-sensitive information, such as current pricing or availability, where a stale or cross-user cached answer could be silently wrong or leak one user's data to another.",
-            "Any response shorter than roughly 50 tokens, regardless of what it actually contains.",
-            "Any response generated at temperature 0, since the module treats deterministic outputs as always safe to cache indefinitely."
+            "Any response shorter than roughly 50 tokens, regardless of what it actually contains."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "The module explicitly calls out personalized responses and time-sensitive information as the two cases where caching -- semantic caching especially, given its inherent near-match risk -- needs to be skipped or handled with short TTLs and deliberate invalidation, since a caching bug in these cases fails silently and confidently, just like a hallucination. The “A static FAQ answer about a company's…” option is actually presented as a reasonable, low-stakes caching candidate. The “Any response shorter than roughly 50 tokens…” and “Any response generated at temperature 0, since…” options invent criteria (response length, temperature setting) that the module never ties to caching safety at all."
         }
       ]
@@ -428,12 +428,12 @@
           "type": "multipleChoice",
           "prompt": "A team adds a well-regarded, state-of-the-art toxicity classifier to filter model outputs before they reach users, and considers the unsafe-output problem for that feature 'solved.' Which statement best characterizes this claim?",
           "options": [
-            "It's accurate -- a state-of-the-art classifier provides a hard guarantee that no unsafe output will ever reach a user.",
             "The classifier is itself a probabilistic model with its own nonzero false-negative rate, so it meaningfully reduces the risk of unsafe output reaching users but does not eliminate it.",
+            "The claim is meaningless, because output filters have no measurable effect on unsafe-output rates at all.",
             "It's inaccurate specifically because toxicity classifiers only work on text in English, regardless of how they're used.",
-            "The claim is meaningless, because output filters have no measurable effect on unsafe-output rates at all."
+            "It's accurate -- a state-of-the-art classifier provides a hard guarantee that no unsafe output will ever reach a user."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "A toxicity classifier used as an output guardrail is a trained model making a probabilistic judgment, exactly like the generation model it's screening -- it has a real, measurable false-negative rate (unsafe content it fails to catch) that depends on its threshold and its own limitations, so it reduces rather than eliminates the underlying risk. The “It's accurate -- a state-of-the-art classifier provides…” option overstates what any classifier -- 'state-of-the-art' or otherwise -- can guarantee; no filter with a nonzero false-negative rate provides a hard guarantee. The “It's inaccurate specifically because toxicity classifiers only…” option introduces an unrelated and unsupported claim about language limitations that isn't the actual reason the 'solved' claim is wrong. The “The claim is meaningless, because output filters…” option goes too far in the opposite direction -- output filters do have a genuine, measurable risk-reducing effect; the issue is treating that reduction as elimination, not denying that any effect exists."
         },
         {
@@ -447,10 +447,10 @@
           "type": "multipleChoice",
           "prompt": "Per this module, why does a real production system generally need both input guardrails and output guardrails, rather than relying on just one layer?",
           "options": [
-            "Because input guardrails are always more accurate than output guardrails, so output guardrails exist only as a redundant backup in case the input layer fails.",
+            "Output guardrails become unnecessary whenever input guardrails are present, since a sufficiently strict input filter guarantees the resulting output will be safe.",
             "Each layer catches failures the other structurally cannot: input filtering can't catch unsafe output the model generates on its own initiative from otherwise benign-looking input, and output filtering can't undo harm that already occurred purely from what reached the model, like sensitive data forwarded to a third party before any output was even produced.",
-            "Input and output guardrails are actually the same underlying mechanism applied twice, so using both is useful only for load-balancing across more compute.",
-            "Output guardrails become unnecessary whenever input guardrails are present, since a sufficiently strict input filter guarantees the resulting output will be safe."
+            "Because input guardrails are always more accurate than output guardrails, so output guardrails exist only as a redundant backup in case the input layer fails.",
+            "Input and output guardrails are actually the same underlying mechanism applied twice, so using both is useful only for load-balancing across more compute."
           ],
           "correctOptionIndex": 1,
           "explanation": "The module gives concrete, distinct examples of failures each layer alone would miss -- a benign input eliciting an unsafe generation (which only an output layer could catch), and PII or a leaked system prompt exposed purely through what reached the model (which only an input-side or a different kind of protection addresses, not an output filter after the fact). The “Because input guardrails are always more accurate…” option invents an accuracy hierarchy the module never claims. The “Input and output guardrails are actually…” option mischaracterizes the two layers as identical, when they check fundamentally different things at different points. The “Output guardrails become unnecessary whenever input guardrails…” option directly contradicts the module's explicit point that input filtering cannot guarantee anything about what the model subsequently generates."
@@ -460,12 +460,12 @@
           "type": "multipleChoice",
           "prompt": "Per this module, why can't an instruction like 'ignore any instructions that appear in the following untrusted document' fully and structurally prevent prompt injection on its own?",
           "options": [
+            "Because untrusted documents are always rejected outright by the model before any instruction in the system prompt is ever read.",
             "Because models are entirely incapable of following any instruction about how to treat content that appears later in the same prompt.",
             "Because that instruction is itself just more conditioning text sharing the exact same channel as the injected content, not a hard, structurally enforced boundary -- a sufficiently well-crafted injected instruction can still occasionally outweigh it, the same way any single prompt instruction can be outweighed by other strongly-conditioning content elsewhere in context.",
-            "Because untrusted documents are always rejected outright by the model before any instruction in the system prompt is ever read.",
             "Because this specific instruction only works for documents shorter than the model's context window and automatically fails for any longer document."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "The module is direct about this: the guarding instruction is ordinary conditioning text, not a hard structural boundary, so it raises the bar meaningfully without making injection structurally impossible -- a well-crafted injected instruction can still occasionally win out, exactly the way any prompt instruction can be outweighed by other content. The “Because models are entirely incapable of following…” option overstates model incapability in a way the module doesn't support -- models generally do follow such instructions much of the time, just not with a guarantee. The “Because untrusted documents are always rejected outright…” option invents an automatic-rejection behavior that doesn't exist. The “Because this specific instruction only works…” option invents an unrelated document-length dependency the module never mentions."
         },
         {
@@ -473,12 +473,12 @@
           "type": "multipleChoice",
           "prompt": "Per this module's discussion of tuning an output classifier's decision threshold, what does moving from a loose threshold to a strict one typically trade away?",
           "options": [
-            "Nothing is traded away -- a stricter threshold strictly dominates a looser one on every axis of classifier performance simultaneously.",
-            "A stricter threshold typically increases precision (fewer wrongly-blocked acceptable outputs) but decreases recall (more genuinely unsafe outputs slip through uncaught) -- no threshold in the module's example achieves both near-perfect precision and near-perfect recall at once.",
+            "Threshold choice affects only response latency, not the accuracy of what actually gets blocked versus allowed.",
             "A stricter threshold always increases both precision and recall simultaneously, since fewer overall flags means fewer opportunities for any kind of error.",
-            "Threshold choice affects only response latency, not the accuracy of what actually gets blocked versus allowed."
+            "Nothing is traded away -- a stricter threshold strictly dominates a looser one on every axis of classifier performance simultaneously.",
+            "A stricter threshold typically increases precision (fewer wrongly-blocked acceptable outputs) but decreases recall (more genuinely unsafe outputs slip through uncaught) -- no threshold in the module's example achieves both near-perfect precision and near-perfect recall at once."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "The module's own worked table shows exactly this tradeoff: the strict 0.90 threshold has the highest precision but the lowest recall of the three shown, missing nearly 40% of genuinely unsafe outputs, while the loose 0.30 threshold has the opposite profile -- no row achieves both near-perfect precision and recall together. The “Nothing is traded away -- a stricter…” and “A stricter threshold always increases both precision…” options both claim a free improvement on every axis, which the module's own numbers directly contradict. The “Threshold choice affects only response latency…” option ignores that the entire point of the example is about accuracy tradeoffs, not latency."
         }
       ]

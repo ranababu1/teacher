@@ -117,12 +117,12 @@
           "type": "multipleChoice",
           "prompt": "A team needs to build a Go program on their Linux dev laptop that will run on a Windows server, with no Windows machine available for building. Which approach reflects how Go actually solves this, and what trade-off is it addressing?",
           "options": [
-            "Set GOOS=windows and GOARCH=amd64 as environment variables before running go build; this cross-compiles a native Windows binary using only the toolchain already installed on the Linux machine, addressing the fact that a compiled binary is normally tied to the platform it was built for.",
+            "Nothing needs to change -- Go binaries are platform-independent by default and run unmodified on any OS, the same way a Python script does.",
             "Install a Windows virtual machine and run go build inside it, since Go binaries can only ever be compiled on the same OS and architecture they will run on.",
-            "Use go run instead of go build, since go run produces a platform-independent binary that runs unmodified on any operating system.",
-            "Nothing needs to change -- Go binaries are platform-independent by default and run unmodified on any OS, the same way a Python script does."
+            "Set GOOS=windows and GOARCH=amd64 as environment variables before running go build; this cross-compiles a native Windows binary using only the toolchain already installed on the Linux machine, addressing the fact that a compiled binary is normally tied to the platform it was built for.",
+            "Use go run instead of go build, since go run produces a platform-independent binary that runs unmodified on any operating system."
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 2,
           "explanation": "Being a compiled language ties the produced binary to a specific OS and CPU architecture -- that's the real cost of ahead-of-time compilation. Go addresses it with trivial cross-compilation: setting the GOOS and GOARCH environment variables before go build produces a binary for an entirely different target platform, with no separate toolchain installation required. The “Install a Windows virtual machine and run…” option is wrong -- that's exactly the manual workaround cross-compilation is meant to eliminate. The “Use go run instead of go build…” option is wrong -- go run still compiles for and executes on the local host platform; it doesn't produce a cross-platform artifact, and it discards the binary immediately besides. The “Nothing needs to change -- Go binaries…” option is wrong -- compiled binaries are absolutely platform-specific, which is precisely the trade-off GOOS/GOARCH exists to address."
         },
         {
@@ -131,11 +131,11 @@
           "prompt": "A deployment script restarts a service by running `go run main.go` every time, rather than deploying a binary produced once by `go build`. What is the practical consequence of this choice?",
           "options": [
             "None -- go run and (go build followed by executing the resulting binary) are functionally identical, just different command syntax for the same outcome.",
-            "The service recompiles from source, and needs the full Go toolchain and source tree present, on every single restart -- slower than starting a prebuilt binary, and it defeats much of the point of shipping a compiled, dependency-free artifact.",
             "go run produces a smaller, more optimized binary than go build, making it the more efficient choice for a production restart loop.",
-            "go run cannot be used with a package main file, so the deployment script would fail immediately with a compile error."
+            "go run cannot be used with a package main file, so the deployment script would fail immediately with a compile error.",
+            "The service recompiles from source, and needs the full Go toolchain and source tree present, on every single restart -- slower than starting a prebuilt binary, and it defeats much of the point of shipping a compiled, dependency-free artifact."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "go run compiles to a temporary, throwaway location, executes once, and discards the binary immediately afterward -- nothing persists that could be reused on the next restart. Repeating that on every restart means recompiling from source each time, which requires the entire Go toolchain and source tree to be present at runtime, is slower than launching an already-built executable, and undermines the main operational benefit of a compiled language: shipping one self-contained artifact you don't need to rebuild to run again. The “None -- go run and…” option is wrong -- the two differ specifically in whether a permanent, reusable binary is produced. The “go run produces a smaller, more optimized…” option is wrong -- go run doesn't produce a more optimized binary; it's the same compilation, just discarded afterward. The “go run cannot be used…” option is wrong -- go run works perfectly fine with package main; that's exactly the kind of file it's designed to run."
         },
         {
@@ -264,12 +264,12 @@
           "type": "multipleChoice",
           "prompt": "Which statement correctly distinguishes the behavior of a nil slice from a nil map in Go?",
           "options": [
-            "Both panic on any read or write, since neither has been initialized with make.",
             "A nil slice supports append (which allocates storage automatically), and both nil slices and nil maps are safe to read from -- but writing into a nil map via an index assignment panics, while append remains the correct way to add to a nil slice.",
+            "Both panic on any read or write, since neither has been initialized with make.",
             "Reading from a nil map panics, but reading from a nil slice never does.",
             "Writing into a nil slice with append() panics just like writing into a nil map does."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "Reads are safe on both nil slices and nil maps: len() is 0 on either, ranging over a nil slice runs zero times, and indexing a nil map for a missing key returns that value type's zero value rather than panicking. The key divergence is in writes: append() on a nil slice is a fully supported, idiomatic operation that allocates a new backing array and returns a real, usable, non-nil slice -- but a nil map has no auto-allocation mechanism at all, so any indexed assignment (m[key] = value) panics immediately with 'assignment to entry in nil map.' The “Both panic on any read or write…” option is wrong because reads are safe on both. The “Reading from a nil map panics…” option is backwards -- reading a nil map is safe, it's writing that panics. The “Writing into a nil slice with append()…” option is wrong because append() specifically handles the nil-slice case gracefully by design; it does not panic."
         },
         {
@@ -277,10 +277,10 @@
           "type": "multipleChoice",
           "prompt": "Which of the following is a valid variable declaration at package level (outside of any function body) in Go?",
           "options": [
-            "count := 0",
+            "count = 0 (with no prior declaration anywhere)",
             "var count = 0",
-            "const count := 0",
-            "count = 0 (with no prior declaration anywhere)"
+            "count := 0",
+            "const count := 0"
           ],
           "correctOptionIndex": 1,
           "explanation": "Package-level declarations require var, const, func, or type -- the short variable declaration operator := is not legal outside a function body at all, no exceptions. `var count = 0` is valid at package level because var supports type inference from the initializer just as it does inside a function, so no explicit type annotation is required. The “count := 0” option is wrong because := is exclusively for use inside function bodies. The “const count := 0” option is wrong because const and := cannot be combined -- const declarations use `const count = 0` or `const count int = 0`, never the := form. The “count = 0 (with no prior declaration anywhere)” option is wrong because a bare assignment with no declaring keyword and no prior declaration of `count` anywhere is simply not legal Go at any scope."
@@ -291,11 +291,11 @@
           "prompt": "Given `type Counter struct { N int }` and `func (c *Counter) Inc() { c.N++ }`, which of the following actually fails to compile?",
           "options": [
             "c := Counter{}; c.Inc()",
-            "Counter{}.Inc()",
             "c := &Counter{}; c.Inc()",
+            "Counter{}.Inc()",
             "None of these -- every one of the calls compiles without error."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "Calling a pointer-receiver method directly on a bare struct literal, Counter{}.Inc(), does not compile, because a literal has no address for Go to automatically take, and pointer-receiver methods can only be auto-converted to a pointer call on an addressable value. The “c := Counter{}; c.Inc()” option compiles fine: c is an addressable local variable, so c.Inc() is automatically rewritten to (&c).Inc(). The “c := &Counter{}; c.Inc()” option also compiles fine: c is already a *Counter, so c.Inc() calls Inc directly with no conversion needed at all -- there is nothing redundant or erroneous about calling a pointer-receiver method on a value that's already a pointer. The “None of these -- every one of…” option is wrong because the literal case genuinely does fail."
         },
         {
@@ -304,11 +304,11 @@
           "prompt": "Why can you write `var mu sync.Mutex` and immediately call `mu.Lock()`, with no separate initialization step, unlike types in many other languages that require a constructor call before first use?",
           "options": [
             "sync.Mutex is a special compiler built-in that bypasses Go's normal zero-value rules entirely.",
-            "Go's zero-value guarantee applies to sync.Mutex's fields just like any other struct, and the standard library deliberately designed Mutex so that its zero value already represents a valid, correctly-initialized, unlocked mutex -- no constructor needed.",
+            "sync.Mutex has no fields at all, so there is nothing that could possibly need initializing in the first place.",
             "mu.Lock() implicitly calls a hidden constructor function the first time it's invoked, which is a special behavior unique to sync.Mutex.",
-            "sync.Mutex has no fields at all, so there is nothing that could possibly need initializing in the first place."
+            "Go's zero-value guarantee applies to sync.Mutex's fields just like any other struct, and the standard library deliberately designed Mutex so that its zero value already represents a valid, correctly-initialized, unlocked mutex -- no constructor needed."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "sync.Mutex is an ordinary struct under Go's normal rules: declaring `var mu sync.Mutex` gives every one of its fields that field's own zero value, exactly like any other struct. The standard library's authors deliberately designed Mutex (and similarly bytes.Buffer, strings.Builder) so that this zero-value state already represents a fully valid, usable, unlocked mutex, rather than requiring a separate New()-style constructor before first use. The “sync.Mutex is a special compiler built-in…” option is wrong -- there's no compiler magic involved, just an ordinary application of the zero-value guarantee combined with a deliberate design choice. The “mu.Lock() implicitly calls a hidden constructor function…” option is wrong -- there is no hidden constructor; Lock() simply operates correctly because the zero value was already meaningful. The “sync.Mutex has no fields at all…” option is wrong -- Mutex does have internal fields (state and sentinel data used for locking); they just all happen to have a zero value that means 'unlocked.'"
         },
         {
@@ -420,9 +420,9 @@
           "prompt": "Why can io.Copy(dst, src) work correctly with a file, a network connection, an HTTP response body, and a plain in-memory buffer, without having any special-case code for each one?",
           "options": [
             "io.Copy uses reflection at runtime to detect which concrete type it received and dispatches to type-specific internal logic for each one.",
-            "All of those types happen to inherit from a common base class deep in the standard library, and io.Copy calls a shared base-class method.",
+            "Go automatically converts any type into a generic byte stream before passing it to any standard library function, regardless of the function's actual parameter types.",
             "io.Copy is written against the small io.Reader and io.Writer interfaces (one method each), and every one of those types happens to implement the matching method signature, which Go's implicit interface satisfaction recognizes automatically with no declared relationship required.",
-            "Go automatically converts any type into a generic byte stream before passing it to any standard library function, regardless of the function's actual parameter types."
+            "All of those types happen to inherit from a common base class deep in the standard library, and io.Copy calls a shared base-class method."
           ],
           "correctOptionIndex": 2,
           "explanation": "io.Copy's signature is `func Copy(dst Writer, src Reader) (int64, error)`, built entirely on io.Reader and io.Writer -- interfaces with just one method each. Every type mentioned (files, network connections, HTTP bodies, buffers) happens to implement Read and/or Write with the exact matching signatures, and Go recognizes interface satisfaction purely structurally, with no explicit declaration needed from any of those types' own packages. The “io.Copy uses reflection at runtime to detect…” option is wrong -- Go doesn't use reflection-based dispatch for ordinary interface satisfaction; it's resolved statically via method sets. The “All of those types happen to inherit…” option is wrong -- Go has no class inheritance at all. The “Go automatically converts any type into…” option is wrong -- there's no such universal automatic conversion; the whole mechanism depends specifically on each type already having the right methods."
@@ -432,12 +432,12 @@
           "type": "multipleChoice",
           "prompt": "Package config has two files in the same directory: config.go defines `type Settings struct { Timeout int; secretKey string }`, and validate.go (also declaring package config) has a function that reads `s.secretKey` on a Settings value. Does this compile?",
           "options": [
-            "No -- secretKey is unexported, so it's inaccessible from any file other than the one that defines the struct, even within the same package.",
-            "Yes -- unexported identifiers are visible throughout the entire package they belong to, across every file that declares that same package; the export rule only restricts access from other packages.",
+            "Yes, but only if validate.go explicitly imports config.go by filename first.",
             "No -- unexported fields can only ever be read inside the exact same function where the struct value was originally constructed.",
-            "Yes, but only if validate.go explicitly imports config.go by filename first."
+            "No -- secretKey is unexported, so it's inaccessible from any file other than the one that defines the struct, even within the same package.",
+            "Yes -- unexported identifiers are visible throughout the entire package they belong to, across every file that declares that same package; the export rule only restricts access from other packages."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "A package is a directory's worth of .go files that all declare the same package name, and unexported identifiers are invisible outside that package -- not outside the individual file. config.go and validate.go both declare `package config`, so they're part of the very same package, and validate.go can read secretKey exactly as freely as config.go itself can. The “No -- secretKey is unexported, so it's…” and “No -- unexported fields can only ever…” options both wrongly shrink the visibility boundary down to the file or function level, when it's actually the package as a whole. The “Yes, but only if validate.go explicitly imports…” option is wrong because Go files never import each other by filename -- files within one package share scope automatically, with no import statement involved at all."
         },
         {
@@ -445,12 +445,12 @@
           "type": "multipleChoice",
           "prompt": "A function is declared as `func NewLogger() Logger`, where Logger is an interface with only a `Log(string)` method. The concrete type actually returned, `*fileLogger`, also has an exported `Close() error` method that Logger doesn't mention. What happens if calling code writes `NewLogger().Close()`?",
           "options": [
-            "It compiles fine, since Go always permits calling any method the underlying concrete type actually has, regardless of the declared return type of the function that produced it.",
             "It fails to compile -- the static type of the expression is Logger, whose method set only includes Log(string), so Close is simply not a callable method on that type, even though the concrete value underneath happens to have one.",
             "It compiles, but panics at runtime because Close was never actually implemented anywhere.",
-            "It fails to compile only if fileLogger itself is an unexported type; if it were exported, Close would become reachable through the return value."
+            "It fails to compile only if fileLogger itself is an unexported type; if it were exported, Close would become reachable through the return value.",
+            "It compiles fine, since Go always permits calling any method the underlying concrete type actually has, regardless of the declared return type of the function that produced it."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "This is exactly the cost side of returning an interface instead of a concrete struct: once NewLogger's return type is declared as the interface Logger, every caller sees only Logger's method set -- just Log(string) -- regardless of what richer concrete type is actually underneath. Close() exists on *fileLogger, but the expression NewLogger().Close() is type-checked against the declared return type Logger, not against fileLogger, so the compiler rejects it outright. The “It compiles fine, since Go always permits…” option is wrong -- Go's static typing does not let you call a method absent from the expression's static type without an explicit type assertion first. The “It compiles, but panics at runtime…” option is wrong -- this never reaches runtime at all; it's a compile error. The “It fails to compile only if fileLogger…” option is wrong -- exported-ness of the concrete type is irrelevant here; the limitation comes entirely from the declared interface return type."
         },
         {
@@ -460,8 +460,8 @@
           "options": [
             "No -- widgets would first need to import ui and explicitly declare that Button implements Drawable.",
             "Yes -- Button already has a method matching Drawable's exact method set, and Go satisfies interfaces implicitly and structurally, with no declared relationship required between the two packages at all.",
-            "No -- interface satisfaction in Go requires both the interface and the implementing type to be defined within the same package.",
-            "Yes, but only after explicitly converting the Button value with a type assertion first."
+            "Yes, but only after explicitly converting the Button value with a type assertion first.",
+            "No -- interface satisfaction in Go requires both the interface and the implementing type to be defined within the same package."
           ],
           "correctOptionIndex": 1,
           "explanation": "Go interfaces are satisfied implicitly and structurally: any type whose method set includes all of an interface's methods, with matching signatures, satisfies that interface automatically -- there is no implements keyword, and no import relationship is required between the defining package and the interface's package. Button's Draw() string method matches Drawable's method set exactly, so it satisfies Drawable with zero declarations on widgets' part, even though widgets was written with no knowledge that ui or Drawable exist. The “No -- widgets would first need…” option describes Java-style explicit implementation, which Go does not use. The “No -- interface satisfaction in Go requires…” option is wrong -- interfaces routinely live in a different package from the types that satisfy them; that's the entire point of the io.Reader/io.Writer pattern discussed earlier. The “Yes, but only after explicitly converting…” option is wrong -- no type assertion is needed to pass a value where an interface it already satisfies is expected; assertions are for the reverse direction, narrowing an interface value back down to a concrete type."

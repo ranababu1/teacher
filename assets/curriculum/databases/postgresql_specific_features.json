@@ -108,12 +108,12 @@
           "type": "multipleChoice",
           "prompt": "A table needs to store a `status` field present on every row, with exactly five allowed values enforced by business logic, alongside a small set of optional, provider-specific fields that vary depending on which third-party integration created the row. What's the most appropriate design?",
           "options": [
-            "Store everything, including status, inside a single JSONB column for maximum flexibility.",
-            "Make status a normalized TEXT column with a CHECK constraint enumerating the five allowed values, and store the genuinely variable provider-specific fields in a separate JSONB column.",
             "Create five separate boolean columns, one per possible status value.",
-            "Store status as JSONB specifically so it can be indexed with GIN, and keep the variable fields as normalized columns."
+            "Store everything, including status, inside a single JSONB column for maximum flexibility.",
+            "Store status as JSONB specifically so it can be indexed with GIN, and keep the variable fields as normalized columns.",
+            "Make status a normalized TEXT column with a CHECK constraint enumerating the five allowed values, and store the genuinely variable provider-specific fields in a separate JSONB column."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "The correct answer separates the two different shapes of data: status is present on every row, has a small fixed set of valid values, and is exactly the kind of field a CHECK constraint should enforce at the database level -- something only a real column supports. The provider-specific fields are genuinely variable in shape across rows, which is exactly what JSONB is well-suited for. The “Store everything, including status, inside a single…” option gives up constraint enforcement on status for no benefit, since status isn't actually variable. The “Create five separate boolean columns, one per…” option is a worse model of a single mutually-exclusive status than one column with a CHECK constraint, and doesn't address the variable fields at all. The “Store status as JSONB specifically…” option inverts the correct assignment -- it's the variable fields that belong in JSONB, and status (stable, fixed-set) that belongs as a normalized, constrained column; a GIN index is not what status needs, since it's a simple equality-filtered value, not a variable document."
         },
         {
@@ -127,12 +127,12 @@
           "type": "multipleChoice",
           "prompt": "What is the key structural difference between PostgreSQL's `json` and `jsonb` types?",
           "options": [
-            "json supports containment queries with @>, while jsonb does not support any operators at all.",
-            "json stores the exact original text verbatim -- preserving whitespace, key order, and duplicate keys -- and re-parses that text on every query; jsonb parses the document once, at insert time, into a decomposed binary structure with no preserved formatting or duplicate keys, trading a small insert-time cost for faster reads.",
             "json has been removed from current PostgreSQL versions entirely; jsonb is now the only valid type name.",
-            "jsonb stores data as plain text identical to json, but under a different type name kept only for backward compatibility."
+            "jsonb stores data as plain text identical to json, but under a different type name kept only for backward compatibility.",
+            "json stores the exact original text verbatim -- preserving whitespace, key order, and duplicate keys -- and re-parses that text on every query; jsonb parses the document once, at insert time, into a decomposed binary structure with no preserved formatting or duplicate keys, trading a small insert-time cost for faster reads.",
+            "json supports containment queries with @>, while jsonb does not support any operators at all."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "The correct answer describes the actual storage-strategy difference: json is a thin wrapper over the original text, re-parsed from scratch on every access, while jsonb does the parsing work once at write time and stores an already-decomposed binary structure that every subsequent read can use directly. The “json supports containment queries with @>, while…” option reverses which type supports which operators -- jsonb is the one with rich operator and indexing support; json has essentially none. The “json has been removed from current PostgreSQL…” option is false; json remains a valid, usable type in current PostgreSQL, just rarely the better default. The “jsonb stores data as plain text identical…” option ignores the entire point of jsonb's binary decomposition, which is precisely what makes it different from, and generally faster to query than, json."
         },
         {
@@ -140,12 +140,12 @@
           "type": "multipleChoice",
           "prompt": "A GIN index is created with `CREATE INDEX idx_events_payload ON events USING GIN (payload jsonb_path_ops);`. A query then filters using `payload ? 'type'` (the key-existence operator). What happens?",
           "options": [
-            "The query uses the index efficiently, since jsonb_path_ops supports every JSONB operator, including key existence.",
             "The query falls back to a sequential scan, because jsonb_path_ops only supports the containment operator @> -- not the ?, ?&, or ?| key-existence operators -- so the index exists but simply doesn't support the operator being used.",
+            "The index is automatically and silently rebuilt using the default jsonb_ops operator class the first time an unsupported operator is used against it.",
             "PostgreSQL raises an error, refusing to execute a query that uses an operator unsupported by the chosen operator class.",
-            "The index is automatically and silently rebuilt using the default jsonb_ops operator class the first time an unsupported operator is used against it."
+            "The query uses the index efficiently, since jsonb_path_ops supports every JSONB operator, including key existence."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "The correct answer matches this concept's explicit warning: jsonb_path_ops is deliberately narrower than the default jsonb_ops, supporting only @> in exchange for a smaller, faster index for that one operator -- a query using ? against a jsonb_path_ops index gets no help from it at all and silently falls back to a full scan, exactly like a B-tree index that doesn't match a query's expression. The “The query uses the index efficiently, since…” option overstates jsonb_path_ops's coverage. The “PostgreSQL raises an error, refusing to execute…” option invents an error PostgreSQL doesn't raise -- an unsupported operator simply doesn't use the index, it doesn't fail the query. The “The index is automatically and silently rebuilt…” option invents an automatic-rebuild behavior that doesn't exist; operator class mismatches are silent performance issues, not self-correcting ones."
         },
         {
@@ -153,10 +153,10 @@
           "type": "multipleChoice",
           "prompt": "A query filters using `(data->>'amount') > 100`, without casting the extracted value to a numeric type. What's the actual risk here?",
           "options": [
-            "PostgreSQL raises an immediate type-mismatch error, refusing to run the comparison at all.",
+            "The comparison always evaluates to NULL when comparing text against a number, silently excluding every row from any query that omits the cast.",
             "data->>'amount' returns text, so the comparison is silently performed as a text (lexicographic) comparison rather than a numeric one, which can produce wrong results -- for example, the string '9' sorting greater than the string '100' -- with no error to flag the mistake.",
-            "PostgreSQL automatically infers, from the key name 'amount', that the value should be treated as numeric, and casts it correctly without being asked.",
-            "The comparison always evaluates to NULL when comparing text against a number, silently excluding every row from any query that omits the cast."
+            "PostgreSQL raises an immediate type-mismatch error, refusing to run the comparison at all.",
+            "PostgreSQL automatically infers, from the key name 'amount', that the value should be treated as numeric, and casts it correctly without being asked."
           ],
           "correctOptionIndex": 1,
           "explanation": "The correct answer names the exact risk this concept flags: ->> always returns text, and comparing text against a number using > performs a lexicographic string comparison rather than a numeric one, which can produce results that look plausible but are simply wrong -- '9' > '100' is true as a string comparison even though 9 is numerically less than 100. The “PostgreSQL raises an immediate type-mismatch error, refusing…” option is false; PostgreSQL doesn't reject this comparison outright, which is exactly what makes it dangerous -- it runs and returns a result, just not necessarily the intended one. The “PostgreSQL automatically infers, from the key name…” option invents an automatic type-inference behavior based on key naming that PostgreSQL does not perform. The “The comparison always evaluates to NULL…” option invents a blanket NULL-comparison rule that doesn't apply here; text-versus-number comparisons of this kind don't uniformly resolve to NULL, they resolve to an actual (often wrong) text comparison."
@@ -267,12 +267,12 @@
           "type": "multipleChoice",
           "prompt": "Why does a search for 'run' correctly match a document containing only the word 'running' under PostgreSQL full-text search, when `ILIKE '%run%'` would need the literal substring to be present?",
           "options": [
-            "PostgreSQL automatically converts every ILIKE query into a full-text search query behind the scenes.",
-            "to_tsvector and to_tsquery both apply the same stemming process to their input, reducing 'running' and 'run' to the identical normalized lexeme before any comparison happens.",
             "Full-text search ignores the specific word entirely and matches based only on document length.",
-            "ILIKE '%run%' would actually match 'running' too, since 'run' is a literal substring of 'running'; the real difference only appears with words like 'ran' or 'runs'."
+            "ILIKE '%run%' would actually match 'running' too, since 'run' is a literal substring of 'running'; the real difference only appears with words like 'ran' or 'runs'.",
+            "PostgreSQL automatically converts every ILIKE query into a full-text search query behind the scenes.",
+            "to_tsvector and to_tsquery both apply the same stemming process to their input, reducing 'running' and 'run' to the identical normalized lexeme before any comparison happens."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "The correct answer identifies the shared mechanism: to_tsvector stems document text and to_tsquery stems query text using the same configuration's stemming dictionary, so both 'run' and 'running' reduce to one common lexeme, and the @@ match compares those normalized forms rather than the original literal words. The “PostgreSQL automatically converts every ILIKE query into…” option is false -- there is no automatic conversion from ILIKE to full-text search; they are entirely separate mechanisms a developer chooses between explicitly. The “Full-text search ignores the specific word entirely…” option is fabricated -- ranking may consider term frequency, but matching is about specific lexemes, not document length. The “ILIKE '%run%' would actually match 'running' too…” option is a reasonable observation about this specific example (since 'run' genuinely is a substring of 'running'), but it doesn't explain the general stemming mechanism, and it would not hold for a search of 'ran' or 'runs' against a document containing only 'running' -- cases where ILIKE fails but full-text search, via stemming, still succeeds."
         },
         {
@@ -286,9 +286,9 @@
           "type": "multipleChoice",
           "prompt": "`to_tsvector('english', 'The quick foxes were running through the forest')` produces lexemes for 'forest', 'fox', 'quick', and 'run', but nothing at all for 'The', 'were', or 'through'. Why?",
           "options": [
-            "to_tsvector has a maximum limit on the number of lexemes it stores per document, and those three words happened to be discarded to stay under that limit.",
-            "'The', 'were', and 'through' are common stop words carrying little search value, and to_tsvector's stop-word removal step discards them entirely before the remaining words are stemmed and stored.",
             "Those specific words failed to reduce to any valid stemmed root, so PostgreSQL silently treated the stemming step as an error and dropped them.",
+            "'The', 'were', and 'through' are common stop words carrying little search value, and to_tsvector's stop-word removal step discards them entirely before the remaining words are stemmed and stored.",
+            "to_tsvector has a maximum limit on the number of lexemes it stores per document, and those three words happened to be discarded to stay under that limit.",
             "to_tsvector only processes the first and last words of each sentence, discarding whatever falls in between that isn't a noun."
           ],
           "correctOptionIndex": 1,
@@ -299,12 +299,12 @@
           "type": "multipleChoice",
           "prompt": "A search feature passes raw, user-typed input like `running, foxes!!` directly into `to_tsquery('english', ...)` instead of `plainto_tsquery`. What's the likely problem?",
           "options": [
-            "No problem -- to_tsquery and plainto_tsquery behave identically no matter what format the input text takes.",
             "to_tsquery expects already-structured syntax with explicit &, |, or ! operators between terms, and can raise a syntax error on unexpected punctuation such as commas or exclamation marks in raw text; plainto_tsquery is specifically designed to accept unstructured free text safely instead.",
-            "to_tsquery silently strips all punctuation and behaves exactly like plainto_tsquery in every situation, so there is no actual difference in outcome.",
-            "to_tsquery requires its input to already be a valid tsvector value, so passing any plain string at all always fails."
+            "No problem -- to_tsquery and plainto_tsquery behave identically no matter what format the input text takes.",
+            "to_tsquery requires its input to already be a valid tsvector value, so passing any plain string at all always fails.",
+            "to_tsquery silently strips all punctuation and behaves exactly like plainto_tsquery in every situation, so there is no actual difference in outcome."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "The correct answer matches this concept's explicit guidance: to_tsquery is built for structured, programmatically-constructed query syntax and can reject raw punctuation it doesn't expect, while plainto_tsquery exists precisely to safely accept free-text, user-typed search input without that syntax-error risk. The “No problem -- to_tsquery and plainto_tsquery behave…” option contradicts the very reason both functions exist as separate tools with different intended inputs. The “to_tsquery silently strips all punctuation and behaves…” option overstates to_tsquery's tolerance -- it does not universally behave like plainto_tsquery; its behavior on unexpected punctuation is exactly the risk in question. The “to_tsquery requires its input to already…” option is false; to_tsquery accepts plain text following its expected syntax, not only pre-built tsvector values."
         },
         {
@@ -312,12 +312,12 @@
           "type": "multipleChoice",
           "prompt": "A `search_vector` column is built as `setweight(to_tsvector('english', title), 'A') || setweight(to_tsvector('english', body), 'B')`. Two articles both contain the term 'python' exactly once -- one in its title, the other only in its body. Ranked by ts_rank, which one scores higher, and why?",
           "options": [
-            "Neither -- ts_rank ignores setweight entirely and scores purely on raw term frequency, so both articles receive an identical score.",
-            "The article with 'python' in its title scores higher, because setweight tags title-derived lexemes with a higher weight category ('A') than body-derived lexemes ('B'), and ts_rank factors those weight categories into its computed relevance score.",
+            "Both articles are excluded from the ranked results entirely, because setweight requires the search term to appear in both title and body for a row to qualify at all.",
             "The article with 'python' in its body scores higher, since category 'B' is processed before category 'A' in ts_rank's default evaluation order.",
-            "Both articles are excluded from the ranked results entirely, because setweight requires the search term to appear in both title and body for a row to qualify at all."
+            "The article with 'python' in its title scores higher, because setweight tags title-derived lexemes with a higher weight category ('A') than body-derived lexemes ('B'), and ts_rank factors those weight categories into its computed relevance score.",
+            "Neither -- ts_rank ignores setweight entirely and scores purely on raw term frequency, so both articles receive an identical score."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "The correct answer applies this concept's weighting mechanism: setweight marks which portion of a combined tsvector came from which source field, using a weight category, and ts_rank explicitly uses those categories -- weighted more heavily toward 'A' than 'B' -- when computing its relevance score, so a title match outranks an equivalent body-only match. The “Neither -- ts_rank ignores setweight entirely…” option is false; incorporating weight categories into the score is exactly what setweight and ts_rank are designed to do together. The “The article with 'python' in its body…” option invents an alphabetical evaluation-order rule with no basis in how ts_rank actually works. The “Both articles are excluded from the ranked…” option is fabricated -- setweight has no such all-fields-must-match requirement; it only affects scoring, not whether a row is included as a match at all."
         }
       ]
@@ -422,12 +422,12 @@
           "type": "multipleChoice",
           "prompt": "Why does installing the pg_trgm extension specifically matter for making `WHERE name ILIKE '%phone%'` fast, rather than this being something any sufficiently well-built B-tree index could eventually support?",
           "options": [
+            "ILIKE queries are always slow in PostgreSQL unless pg_trgm is installed, even with an exact prefix match and no wildcards at all.",
             "pg_trgm makes PostgreSQL's existing B-tree index type faster at leading-wildcard searches through internal optimizations.",
             "pg_trgm provides a genuinely different index operator class (gin_trgm_ops) that indexes a column's overlapping three-character sequences, which is a structurally different capability a B-tree's single sorted ordering cannot provide, regardless of how well-built it is.",
-            "ILIKE queries are always slow in PostgreSQL unless pg_trgm is installed, even with an exact prefix match and no wildcards at all.",
             "pg_trgm works by automatically rewriting ILIKE queries into equivalent LIKE queries that a B-tree can handle."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "A leading-wildcard pattern has no corresponding contiguous range in a B-tree's single sorted ordering, no matter how that B-tree is built or tuned -- it's a structural limitation of the data structure itself, not a performance tuning gap. pg_trgm solves this by providing an entirely different kind of index content (trigrams) via its own GIN/GiST operator class, which is a genuinely new capability, not a faster B-tree. The “pg_trgm makes PostgreSQL's existing B-tree index type…” option misattributes the mechanism to the B-tree itself rather than to a different index structure entirely. The “ILIKE queries are always slow in PostgreSQL…” option overstates the claim -- a prefix match with no leading wildcard (LIKE 'phone%') can already use a standard B-tree index without any extension at all. The “pg_trgm works by automatically rewriting ILIKE queries…” option is fabricated; pg_trgm does not rewrite queries into a different operator."
         },
         {
@@ -441,12 +441,12 @@
           "type": "multipleChoice",
           "prompt": "A PostgreSQL server hosts three separate databases: app_db, reporting_db, and test_db. `CREATE EXTENSION pg_trgm;` is run while connected to app_db. What's true about reporting_db and test_db afterward?",
           "options": [
-            "pg_trgm is now automatically available in all three databases, since extensions are installed once at the entire server/cluster level.",
             "pg_trgm is enabled only in app_db -- CREATE EXTENSION is scoped to the specific database it's run against, so reporting_db and test_db would each need their own separate CREATE EXTENSION pg_trgm; statement before its functions and operators are usable there.",
+            "pg_trgm is now automatically available in all three databases, since extensions are installed once at the entire server/cluster level.",
             "Extensions can only ever be installed in a database literally named 'postgres', and every other database must access it remotely.",
             "Running CREATE EXTENSION in app_db permanently prevents that same extension from ever being installed in any other database in the same cluster."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "The correct answer states the scoping rule this concept makes explicit: CREATE EXTENSION applies to one specific database, not the whole cluster, so a multi-database server needs the statement run separately in each database that wants to use that extension's objects. The “pg_trgm is now automatically available in all…” option misdescribes the actual scope -- extensions are per-database, not per-cluster. The “Extensions can only ever be installed…” option invents a restriction with no basis in how PostgreSQL extensions actually work; any database can have CREATE EXTENSION run against it, subject to privilege. The “Running CREATE EXTENSION in app_db permanently prevents…” option is fabricated -- there is no such mutual-exclusion behavior between databases in the same cluster."
         },
         {
@@ -454,12 +454,12 @@
           "type": "multipleChoice",
           "prompt": "A developer using their application's regular database role tries to run `CREATE EXTENSION some_extension;` on a managed cloud PostgreSQL service, and it fails. What is the most likely explanation, per this concept?",
           "options": [
-            "CREATE EXTENSION is deprecated syntax in all modern PostgreSQL versions and has been entirely replaced by ALTER DATABASE.",
-            "CREATE EXTENSION typically requires superuser privilege or a specifically granted privilege, and managed/cloud PostgreSQL providers often further restrict which extensions are allowed at all via an approved allow-list -- either of these, independently, can cause this to fail.",
+            "The extension must first be purchased separately from the PostgreSQL Global Development Group before it can be enabled on any server.",
             "Extensions can only be created by the original author of that specific extension, verified through a license key tied to their account.",
-            "The extension must first be purchased separately from the PostgreSQL Global Development Group before it can be enabled on any server."
+            "CREATE EXTENSION is deprecated syntax in all modern PostgreSQL versions and has been entirely replaced by ALTER DATABASE.",
+            "CREATE EXTENSION typically requires superuser privilege or a specifically granted privilege, and managed/cloud PostgreSQL providers often further restrict which extensions are allowed at all via an approved allow-list -- either of these, independently, can cause this to fail."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "The correct answer names both real-world causes this concept describes: an ordinary application role typically lacks the privilege CREATE EXTENSION requires by default, and separately, managed/cloud providers commonly restrict which extensions are installable at all regardless of privilege, via an approved allow-list. The “CREATE EXTENSION is deprecated syntax in all…” option is false -- CREATE EXTENSION remains standard, current PostgreSQL syntax. The “Extensions can only be created…” option invents an author-verification requirement that doesn't exist; extensions aren't gated by their original author's identity at install time. The “The extension must first be purchased separately…” option is fabricated -- PostgreSQL's bundled and community extensions aren't sold or licensed per-install in this way."
         },
         {
@@ -467,10 +467,10 @@
           "type": "multipleChoice",
           "prompt": "A system merges records generated independently by many offline mobile clients that may not sync with a central server for weeks at a time. Why is a UUID primary key a better fit for these records than a sequential BIGINT GENERATED ALWAYS AS IDENTITY column?",
           "options": [
-            "UUIDs are always faster to index than sequential integers, regardless of insertion pattern or table size.",
-            "A sequential IDENTITY column's values are only guaranteed unique within its own database's sequence -- two offline clients generating ids independently, with no coordination or connectivity between them, could easily produce colliding values; a UUID's effectively unique value space makes independent generation safe without requiring any coordination at all.",
             "UUIDs are mandated by the SQL standard for any table that might eventually be written to by more than one client.",
-            "Sequential IDENTITY columns cannot be used in any table that will later be queried by more than one application."
+            "A sequential IDENTITY column's values are only guaranteed unique within its own database's sequence -- two offline clients generating ids independently, with no coordination or connectivity between them, could easily produce colliding values; a UUID's effectively unique value space makes independent generation safe without requiring any coordination at all.",
+            "Sequential IDENTITY columns cannot be used in any table that will later be queried by more than one application.",
+            "UUIDs are always faster to index than sequential integers, regardless of insertion pattern or table size."
           ],
           "correctOptionIndex": 1,
           "explanation": "The correct answer identifies the actual reason UUIDs fit this scenario: a sequential identity column's uniqueness guarantee depends on one shared sequence, which offline, unsynced clients have no way to coordinate against, making collisions likely when their independently-assigned ids are later merged -- while a UUID's effectively unique value space makes independent, uncoordinated generation across many separate clients safe by construction. The “UUIDs are always faster to index…” option is false in general -- this concept explicitly describes UUID's insertion-locality cost compared to sequential integers; UUIDs aren't unconditionally faster. The “UUIDs are mandated by the SQL standard…” option invents a SQL-standard mandate that doesn't exist. The “Sequential IDENTITY columns cannot be used…” option is fabricated -- sequential IDENTITY columns are used constantly in multi-client, multi-application systems; the actual issue is specifically about independent, uncoordinated generation, not multi-client access in general."

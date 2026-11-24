@@ -104,10 +104,10 @@
           "type": "multipleChoice",
           "prompt": "A test asserts that a model's generated response equals one exact, hand-written string, and it fails intermittently even though the feature appears to work correctly on manual review. What is the most accurate diagnosis?",
           "options": [
-            "The model is broken and needs to be replaced with a more deterministic one.",
+            "Exact-match tests always indicate a prompt that's insufficiently specific, and adding more specificity to the prompt will make outputs converge to the exact expected string.",
             "The test is checking a property -- exact phrasing -- that was never actually a real requirement of correct behavior, since equally correct output can be phrased in many different ways.",
             "This is ordinary test flakiness caused by a race condition, and should be fixed the same way any flaky deterministic test would be.",
-            "Exact-match tests always indicate a prompt that's insufficiently specific, and adding more specificity to the prompt will make outputs converge to the exact expected string."
+            "The model is broken and needs to be replaced with a more deterministic one."
           ],
           "correctOptionIndex": 1,
           "explanation": "The test is asserting a stronger property (one specific exact string) than the feature actually needs to satisfy (a summary/answer with the right content, regardless of exact wording), so failures here often don't indicate any real bug at all -- they indicate a mismatch between what the test checks and what correctness actually means for this task. The “The model is broken and needs…” option misdiagnoses the model as broken when the test itself is asking the wrong question. The “This is ordinary test flakiness caused…” option wrongly treats this as ordinary flakiness with a hidden root cause to hunt down, when the 'flakiness' here is an expected, structural consequence of testing content that can be correctly phrased many different ways, not a bug to fix. The “Exact-match tests always indicate a prompt that's…” option is false -- no realistic amount of prompt specificity makes a generative model converge to one single exact string across repeated calls; specificity narrows the space of plausible outputs, it does not eliminate rephrasing entirely."
@@ -124,11 +124,11 @@
           "prompt": "Per this module, why should the actual model call typically be mocked out when testing the deterministic scaffolding code around it (prompt construction, response parsing, retry logic, error handling)?",
           "options": [
             "Mocking the model call is a requirement most API providers impose in their terms of service for any automated test suite.",
+            "It guarantees the model's response can never contain profanity or unsafe content during a test run.",
             "It makes those tests fast, free, and fully deterministic, so they test only the actual parsing/control-flow logic under test rather than depending on a real, nondeterministic model response that could vary between runs.",
-            "Mocking is the only way to achieve 100% code coverage in a continuous-integration pipeline.",
-            "It guarantees the model's response can never contain profanity or unsafe content during a test run."
+            "Mocking is the only way to achieve 100% code coverage in a continuous-integration pipeline."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "The module frames the deterministic scaffolding code as ordinary, testable code that deserves the same rigor as any other unit-tested function, and mocking the model call is what makes that possible without the test's outcome depending on an actual, variable model response -- the test then genuinely isolates and verifies the parsing/control-flow logic itself. The “Mocking the model call is a requirement…” option invents a policy requirement the module never mentions. The “Mocking is the only way to achieve…” option overstates what mocking accomplishes -- it doesn't guarantee any particular coverage percentage. The “It guarantees the model's response can never…” option is unrelated to why mocking is recommended here; content safety isn't the module's stated reason."
         },
         {
@@ -136,12 +136,12 @@
           "type": "multipleChoice",
           "prompt": "A test suite for a code-generation feature checks that the generated code actually compiles and passes a real unit test suite, rather than comparing the generated source text against one fixed reference implementation. Per this module, which category of check is this, and why does it suit this task well?",
           "options": [
-            "An exact-match check, since compiling and passing tests requires the generated code's text to be identical to a known-correct reference.",
-            "A must-include/must-exclude check, since it verifies that specific required and forbidden substrings appear somewhere in the generated code.",
             "An executable or effect-based check, which sidesteps the exact-text problem entirely by evaluating the outcome the generated output produces rather than the text that produced it.",
-            "Semantic similarity, since compiling code and passing a test suite is fundamentally a measurement of embedding distance between two pieces of text."
+            "An exact-match check, since compiling and passing tests requires the generated code's text to be identical to a known-correct reference.",
+            "Semantic similarity, since compiling code and passing a test suite is fundamentally a measurement of embedding distance between two pieces of text.",
+            "A must-include/must-exclude check, since it verifies that specific required and forbidden substrings appear somewhere in the generated code."
           ],
-          "correctOptionIndex": 2,
+          "correctOptionIndex": 0,
           "explanation": "The module names executable/effect-based checks specifically for tasks like generated code or SQL, where what matters is whether the output actually works when run, not whether its text matches any particular reference -- this lets many different, textually unrelated but equally correct implementations all pass. The “An exact-match check, since compiling and passing…” option is exactly what this approach avoids -- no fixed reference text is required. The “A must-include/must-exclude check, since it verifies…” option mischaracterizes a compile-and-test check as substring matching, which is a different, weaker mechanism. The “Semantic similarity, since compiling code and passing…” option confuses an executable check with a semantic-similarity check, which the module describes as an embedding-based comparison to a reference answer, not a run-and-verify step."
         },
         {
@@ -150,11 +150,11 @@
           "prompt": "Per this module, why might an evaluation of LLM output quality run the same input multiple times and report a pass rate (e.g., 8 out of 10 runs passing) instead of relying on a single pass/fail verdict?",
           "options": [
             "Running the input multiple times is only useful for catching network failures, not for assessing output quality itself.",
-            "Because output genuinely varies across calls at nonzero temperature, a single passing run doesn't establish that the typical output would also pass -- a pass rate treats quality measurement closer to statistical sampling than to a one-shot deterministic assertion.",
+            "Because a model must be run several times consecutively on identical input to warm up its cache before an accurate response can be produced.",
             "Because API providers charge a lower per-call rate when the same request is repeated multiple times in a row.",
-            "Because a model must be run several times consecutively on identical input to warm up its cache before an accurate response can be produced."
+            "Because output genuinely varies across calls at nonzero temperature, a single passing run doesn't establish that the typical output would also pass -- a pass rate treats quality measurement closer to statistical sampling than to a one-shot deterministic assertion."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "The module is explicit that because output genuinely varies even with fixed inputs at nonzero temperature, one lucky (or unlucky) sample proves less about typical behavior than it would for deterministic code, so a pass rate across several runs is a more honest measurement than a single binary verdict. The “Running the input multiple times is only…” option narrows the reason to an unrelated concern (network reliability) not mentioned in the module. The “Because API providers charge a lower per-call…” and “Because a model must be run several…” options invent mechanisms -- billing discounts for repeated calls, or a cache-warming requirement -- that have nothing to do with the actual statistical reasoning the module gives."
         }
       ]
@@ -263,10 +263,10 @@
           "type": "multipleChoice",
           "prompt": "Which grading strategy should be preferred for a given eval example, all else being equal?",
           "options": [
-            "Model-graded (LLM-as-judge) evaluation should always be preferred, since it can assess any output regardless of the task.",
+            "The grading strategy doesn't matter much as long as the eval set is large enough.",
             "Whichever strategy is cheapest and most reliable for that specific example's task shape -- exact-match or rule-based/programmatic checks where the task allows them, reserving model-graded evaluation for genuinely open-ended qualities that can't be reduced to a deterministic check.",
             "Exact-match grading should always be preferred, since it is the simplest to implement.",
-            "The grading strategy doesn't matter much as long as the eval set is large enough."
+            "Model-graded (LLM-as-judge) evaluation should always be preferred, since it can assess any output regardless of the task."
           ],
           "correctOptionIndex": 1,
           "explanation": "The right default is to use the cheapest, most reliable grading mechanism that actually fits each example's task shape -- exact-match for genuinely closed-form answers, programmatic/rule-based checks for properties that can be verified deterministically (schema validity, required fields, executable correctness), and model-graded evaluation only for qualities that are genuinely open-ended and resist a deterministic check, such as tone or faithfulness. The “Model-graded (LLM-as-judge) evaluation should always be preferred…” option overuses model grading even where a cheaper, more reliable deterministic check would work, introducing unnecessary judge-related bias and cost. The “Exact-match grading should always be preferred, since…” option wrongly treats exact-match as universally appropriate, when many realistic tasks (open-ended generation, tasks with multiple valid phrasings) don't have a single correct string to match. The “The grading strategy doesn't matter much…” option is false -- dataset size doesn't compensate for using a grading mechanism that's a poor fit for the task; a large set graded the wrong way still produces a misleading score."
@@ -282,12 +282,12 @@
           "type": "multipleChoice",
           "prompt": "Per this module, why does a golden/eval set built entirely from a handful of easy, hand-picked examples risk giving a misleadingly high score?",
           "options": [
+            "Most eval-running frameworks automatically reject datasets below a certain minimum size.",
             "Small eval sets are always statistically invalid, regardless of what specific examples they contain.",
-            "It systematically overrepresents happy-path cases and misses the actual distribution of real usage -- especially edge cases and known past failures -- so a high score on it doesn't establish good performance on the harder inputs real usage actually surfaces.",
             "Hand-picked examples always require model-graded evaluation, which this module claims is inherently less reliable than every other grading method.",
-            "Most eval-running frameworks automatically reject datasets below a certain minimum size."
+            "It systematically overrepresents happy-path cases and misses the actual distribution of real usage -- especially edge cases and known past failures -- so a high score on it doesn't establish good performance on the harder inputs real usage actually surfaces."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "The module directly compares this to a biased few-shot example set: a small, convenient, hand-picked eval set overrepresents easy cases and never samples the harder, messier inputs -- including edge cases and past regressions -- that real usage includes, so a perfect score on it can coexist with genuinely poor real-world performance. The “Small eval sets are always statistically invalid…” option overgeneralizes about set size rather than composition, which isn't the module's actual point. The “Hand-picked examples always require model-graded evaluation…” option misattributes a grading-method claim to the module that it doesn't make -- the issue here is example selection, not which grading approach is used. The “Most eval-running frameworks automatically reject datasets below…” option invents a technical constraint the module never describes."
         },
         {
@@ -296,11 +296,11 @@
           "prompt": "A team's iteration workflow is: look at which eval cases are currently failing, patch the prompt until those specific cases pass, repeat. Per this module, what risk does this workflow create, and what is a concrete mitigation?",
           "options": [
             "There is no real risk -- making previously-failing cases pass is, by definition, an improvement worth keeping.",
+            "The main risk is that a model provider will flag repeated similar prompt edits as abuse; the fix is to rotate between different model providers during iteration.",
             "The prompt can become narrowly tailored to the exact examples in the eval set without becoming more generally correct on the broader distribution those examples were meant to sample -- the same overfitting risk a fixed validation set faces in machine learning; maintaining a genuine held-out portion never used to shape prompt edits is a concrete mitigation.",
-            "The main risk is that the eval set will run too slowly after repeated patching; the fix is to reduce the total number of eval examples.",
-            "The main risk is that a model provider will flag repeated similar prompt edits as abuse; the fix is to rotate between different model providers during iteration."
+            "The main risk is that the eval set will run too slowly after repeated patching; the fix is to reduce the total number of eval examples."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "The module names this exact workflow as the mechanism behind eval-set overfitting, explicitly drawing the parallel to overfitting a validation set in classical machine learning, and recommends a held-out portion that's never directly used to shape specific edits as a core mitigation, alongside continuously refreshing the set and tracking real-world signals. The “There is no real risk -- making…” option ignores the module's central warning that case-by-case patching can raise the eval score without producing general improvement. The “The main risk is that the eval…” and “The main risk is that a model…” options invent unrelated operational concerns (runtime speed, provider abuse flags) that the module never raises."
         },
         {
@@ -308,12 +308,12 @@
           "type": "multipleChoice",
           "prompt": "Comparing two prompt versions, v2 scores a higher overall pass rate than v1, but the per-category breakdown shows v2 actually regressed specifically on the 'regression' category -- cases built from previously-fixed real production bugs. Per this module, what should this comparison actually conclude?",
           "options": [
-            "v2 should ship immediately, since the aggregate pass rate is the number that matters for a ship decision.",
-            "The aggregate improvement is solid evidence that v2 is strictly better than v1 in every way that matters.",
             "The rising aggregate is hiding a meaningful regression on exactly the category most likely to represent previously-fixed bugs recurring; the per-category breakdown, not the aggregate alone, should drive the decision, and the regression needs investigation before shipping.",
-            "Per-category breakdowns are only meaningful for classification-style tasks and shouldn't influence a general ship decision."
+            "Per-category breakdowns are only meaningful for classification-style tasks and shouldn't influence a general ship decision.",
+            "The aggregate improvement is solid evidence that v2 is strictly better than v1 in every way that matters.",
+            "v2 should ship immediately, since the aggregate pass rate is the number that matters for a ship decision."
           ],
-          "correctOptionIndex": 2,
+          "correctOptionIndex": 0,
           "explanation": "This maps directly onto the module's worked example: an aggregate can rise while a specific, important category gets worse, because gains elsewhere outweigh the regression in the total -- which is exactly why reading only the aggregate number is called out as a way to miss a regression that matters most, since it's the category built from previously-fixed real bugs. The “v2 should ship immediately, since the aggregate…” and “The aggregate improvement is solid evidence…” options both treat the aggregate as sufficient on its own, which the module explicitly warns against. The “Per-category breakdowns are only meaningful for classification-style…” option incorrectly limits when category breakdowns matter, when the module's own example uses a 'regression' category on a general-purpose comparison, not a classification task."
         }
       ]
@@ -422,10 +422,10 @@
           "type": "multipleChoice",
           "prompt": "A team notices their LLM judge consistently rates longer, more elaborate responses higher than shorter ones, even when the shorter response is factually correct and the longer one contains a subtle inaccuracy. Which bias is this, and what is the most direct mitigation?",
           "options": [
-            "Position bias -- mitigated by randomizing which response is presented first.",
             "Self-preference bias -- mitigated by using a different model as the judge.",
+            "Leniency drift -- mitigated by calibrating the score scale against human-graded examples.",
             "Verbosity bias -- mitigated by adding an explicit rubric instruction not to reward length or thoroughness for its own sake, and to penalize unsupported padding.",
-            "Leniency drift -- mitigated by calibrating the score scale against human-graded examples."
+            "Position bias -- mitigated by randomizing which response is presented first."
           ],
           "correctOptionIndex": 2,
           "explanation": "The described symptom -- longer responses scoring higher independent of actual correctness -- is the defining signature of verbosity bias, and the most direct fix is exactly what the explanation describes: an explicit rubric line telling the judge not to treat length or apparent thoroughness as a virtue in itself, and to specifically penalize padding that doesn't add correct, relevant content. The “Position bias -- mitigated by randomizing…” option describes a different bias (favoring whichever response is presented in a specific position in a pairwise comparison), which doesn't match a length-based pattern. The “Self-preference bias -- mitigated by using…” option describes a different bias entirely (favoring outputs from the judge's own model family), unrelated to response length. The “Leniency drift -- mitigated by calibrating…” option's leniency-drift mitigation addresses generally inflated scores across the board, not the specific length-correlated distortion described here."
@@ -441,10 +441,10 @@
           "type": "multipleChoice",
           "prompt": "A team uses the same model family as both the system under test and the judge grading a head-to-head comparison against a competing model's outputs. Per this module, what specific risk does this introduce, and what's the mitigation?",
           "options": [
-            "Position bias -- mitigated by running each comparison twice with the response order swapped.",
+            "Verbosity bias -- mitigated by adding an explicit rubric instruction not to reward length or thoroughness for its own sake.",
             "Self-preference bias -- the judge may rate outputs from its own model family more favorably independent of actual quality -- mitigated by using a genuinely independent judge model, ideally different from any system being compared.",
             "Leniency drift -- mitigated by calibrating the score scale against a set of human-graded examples spanning the full quality range.",
-            "Verbosity bias -- mitigated by adding an explicit rubric instruction not to reward length or thoroughness for its own sake."
+            "Position bias -- mitigated by running each comparison twice with the response order swapped."
           ],
           "correctOptionIndex": 1,
           "explanation": "The module names this exact scenario as self-preference bias -- a documented conflict of interest when a model judges outputs from its own model family -- and its stated mitigation is a genuinely independent judge model, distinct from any system being compared. The “Position bias -- mitigated by running each…” option describes an unrelated bias tied to presentation order, not model identity. The “Leniency drift -- mitigated by calibrating…” option addresses generally inflated scores, not a family-specific favoritism. The “Verbosity bias -- mitigated by adding…” option addresses a length-correlated distortion, unrelated to which model family produced an output."
@@ -454,12 +454,12 @@
           "type": "multipleChoice",
           "prompt": "A judge schema declares a single required field, `score` (an integer from 1 to 5), with no other fields. Per this module's guidance on designing judge prompts, what is the likely downside of this design, and what's the recommended fix?",
           "options": [
-            "There is no real downside -- a bare numeric score is described as the most reliable judge output format in this module.",
             "The judge has no room to work through the rubric before committing to a number, the same scratchpad-loss issue that affects any schema forcing an immediate final answer; adding a `reasoning` field ordered before `score` recovers that space and makes the verdict auditable.",
+            "There is no real downside -- a bare numeric score is described as the most reliable judge output format in this module.",
             "Integer-typed fields cannot be schema-constrained at all, so `score` needs to be changed to a string type before structured output will work.",
             "A single-field schema is actually preferable specifically for judge prompts, since judge models are inherently more reliable than the systems they evaluate."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "The module explicitly recommends ordering a `reasoning` field before `score` in a judge schema, tying this directly back to the structured-output module's point that a schema forcing an immediate final value removes room for the model to work through logic first; a single-field, score-only schema recreates exactly that problem for the judge. The “There is no real downside…” option contradicts the module's explicit recommendation. The “Integer-typed fields cannot be schema-constrained at all…” option is factually wrong about schema-constrained decoding, which handles integer fields normally. The “A single-field schema is actually preferable specifically…” option wrongly claims judges are exempt from the same generation-mechanism limitations the module says apply to them just as much as to any other model output."
         },
         {
@@ -467,12 +467,12 @@
           "type": "multipleChoice",
           "prompt": "Per this module, why might a team prefer pairwise comparison over absolute rubric scoring specifically when deciding which of two concrete prompt versions to ship, even though pairwise comparisons don't produce a single trend-able score over time?",
           "options": [
+            "Absolute scoring cannot be schema-constrained, while pairwise comparison verdicts always can be.",
             "Pairwise comparisons are described as immune to every documented judge bias, unlike absolute scoring.",
-            "Relative judgments ('which of these two is better') tend to be an easier, more internally consistent kind of judgment for a model to make than an absolute one ('is this a 3 or a 4'), which suits a direct, one-off choice between two concrete alternatives better than a standalone score would.",
             "Pairwise comparison always requires strictly fewer total judge calls than absolute scoring, regardless of how many candidates are being compared.",
-            "Absolute scoring cannot be schema-constrained, while pairwise comparison verdicts always can be."
+            "Relative judgments ('which of these two is better') tend to be an easier, more internally consistent kind of judgment for a model to make than an absolute one ('is this a 3 or a 4'), which suits a direct, one-off choice between two concrete alternatives better than a standalone score would."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "The module explains that pairwise comparisons tend to be more internally consistent because relative judgments are generally easier for a model to make than absolute ones, which is exactly why they suit a direct choice between two specific alternatives, even though they trade away a single ongoing trend-able score and scale combinatorially worse as more candidates are added. The “Pairwise comparisons are described as immune…” option overclaims immunity to bias -- pairwise comparisons still suffer from position bias specifically. The “Pairwise comparison always requires strictly fewer total…” option is contradicted by the module's own note that pairwise comparison needs combinatorially more comparisons as candidates grow. The “Absolute scoring cannot be schema-constrained, while pairwise…” option is an invented technical claim the module never makes; either approach can use structured output."
         }
       ]

@@ -104,12 +104,12 @@
           "type": "multipleChoice",
           "prompt": "A package.json lists \"some-lib\": \"^0.4.2\". The registry has versions 0.4.2, 0.4.9, and 0.5.0 published. Which version does npm install resolve to, and why?",
           "options": [
+            "npm refuses to install any 0.x.y version at all without an explicit --allow-prerelease flag.",
             "0.5.0, because caret always allows the highest available version below the next major release.",
-            "0.4.9, because for a version below 1.0.0, npm's caret operator only allows patch-level movement -- it treats the minor version as if it were the major version, since pre-1.0 releases are considered potentially breaking at any point.",
             "0.4.2 exactly, because caret behaves like an exact pin for any version below 1.0.0.",
-            "npm refuses to install any 0.x.y version at all without an explicit --allow-prerelease flag."
+            "0.4.9, because for a version below 1.0.0, npm's caret operator only allows patch-level movement -- it treats the minor version as if it were the major version, since pre-1.0 releases are considered potentially breaking at any point."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "Semver's own convention treats every release below 1.0.0 as potentially breaking at any point, so npm's caret operator special-cases this range: instead of locking the major version and allowing minor/patch movement (its usual behavior for 1.x and above), it locks the *first non-zero* number it encounters -- which for 0.4.2 is the minor number (4) -- and only allows the patch number to move. That's why 0.4.9 is accepted but 0.5.0 is not. The “0.5.0, because caret always allows the highest…” option describes caret's behavior for versions >= 1.0.0, not below it. The “0.4.2 exactly, because caret behaves like…” option is wrong -- some patch movement is still allowed, it's not a full exact pin. The “npm refuses to install any 0.x.y version…” option is wrong -- there's no such flag requirement; 0.x.y versions install completely normally, they're just treated more conservatively by the ^ range operator specifically."
         },
         {
@@ -118,9 +118,9 @@
           "prompt": "According to semantic versioning convention, what is a MINOR version bump (the middle number in major.minor.patch) supposed to signal?",
           "options": [
             "A breaking change that may require consumers to update their own code to keep working.",
-            "A backwards-compatible bug fix only, with no new functionality added.",
+            "A change to the package's license, documentation, or metadata only, with no code changes at all.",
             "New functionality added in a backwards-compatible way -- existing code written against the old API should keep working unchanged, with new capabilities simply available if wanted.",
-            "A change to the package's license, documentation, or metadata only, with no code changes at all."
+            "A backwards-compatible bug fix only, with no new functionality added."
           ],
           "correctOptionIndex": 2,
           "explanation": "Semver assigns each of the three numbers a distinct promise: PATCH means backwards-compatible bug fixes only, MINOR means backwards-compatible new functionality, and MAJOR means a breaking change. The “A breaking change that may require consumers…” option describes what a MAJOR bump is supposed to signal, not minor. The “A backwards-compatible bug fix only…” option describes PATCH. The “A change to the package's license, documentation…” option describes something semver doesn't actually track at all -- metadata-only changes aren't a distinct category in the major.minor.patch scheme, and this isn't what minor is reserved for."
@@ -143,12 +143,12 @@
           "type": "multipleChoice",
           "prompt": "Given the range \"~2.5.3\" in package.json, and these published versions on the registry: 2.5.3, 2.5.9, 2.6.0, and 3.0.0 -- which ones would npm consider acceptable to install under this range?",
           "options": [
-            "All four versions, since tilde allows any newer version regardless of position.",
             "Only 2.5.3 and 2.5.9 -- tilde allows patch-level movement only, keeping both the major and minor numbers fixed at 2 and 5 respectively.",
-            "2.5.3, 2.5.9, and 2.6.0, but not 3.0.0 -- tilde behaves exactly like caret except at the major version boundary.",
-            "Only the exact version 2.5.3, since tilde behaves as a strict, non-moving pin."
+            "Only the exact version 2.5.3, since tilde behaves as a strict, non-moving pin.",
+            "All four versions, since tilde allows any newer version regardless of position.",
+            "2.5.3, 2.5.9, and 2.6.0, but not 3.0.0 -- tilde behaves exactly like caret except at the major version boundary."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "Tilde (~) constrains npm to versions sharing the same major and minor numbers, allowing only the patch number to move upward. 2.5.9 satisfies that (same 2.5, higher patch); 2.6.0 does not, because its minor number changed from 5 to 6, which tilde forbids even though caret would have allowed it; 3.0.0 fails on the major number as well. The “All four versions, since tilde allows any…” option ignores tilde's restriction entirely. The “2.5.3, 2.5.9, and 2.6.0, but not 3.0.0…” option incorrectly conflates tilde's behavior with caret's (caret would indeed allow 2.6.0, but not tilde). The “Only the exact version 2.5.3, since tilde…” option is wrong -- tilde still permits patch-level movement, unlike an exact, unprefixed version string."
         },
         {
@@ -259,12 +259,12 @@
           "type": "multipleChoice",
           "prompt": "An HTTP server's request handler calls fs.readFileSync to read a moderately large file on every single incoming request. Under light traffic (one client at a time) it seems to work fine. What's the actual risk once real concurrent traffic arrives?",
           "options": [
-            "There is no real risk -- fs.readFileSync is just as fast as fs.promises.readFile, it just has a slightly different syntax.",
             "Every concurrent request, including ones for completely unrelated, otherwise-instant routes, has to wait for each fs.readFileSync call to finish before the single JS thread is free to handle anything else, serializing all traffic behind file reads that could have run independently.",
             "fs.readFileSync will throw an error automatically if it detects more than one request is being handled concurrently.",
-            "The risk only applies to POST requests, since GET requests don't process a request body."
+            "The risk only applies to POST requests, since GET requests don't process a request body.",
+            "There is no real risk -- fs.readFileSync is just as fast as fs.promises.readFile, it just has a slightly different syntax."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "fs.readFileSync blocks the single JS thread for the full duration of the read, and since there is only one thread handling every request in a standard Node server, every other concurrent request -- regardless of which route it targets -- is forced to wait in line behind that blocking call, even if that other request had nothing to do with the file being read. The “There is no real risk -- fs.readFileSync…” option is wrong: the sync and async versions differ specifically in whether they block that shared thread, which matters enormously under concurrency even if raw single-call speed is similar. The “fs.readFileSync will throw an error automatically…” option is wrong -- fs.readFileSync has no concept of concurrent requests at all; it just blocks, unconditionally, every time it's called. The “The risk only applies to POST requests…” option is wrong -- this has nothing to do with request bodies or HTTP methods; it's purely about the synchronous nature of the file read itself."
         },
         {
@@ -272,10 +272,10 @@
           "type": "multipleChoice",
           "prompt": "What is the key functional difference between path.join(...) and path.resolve(...)?",
           "options": [
-            "path.join always returns an absolute path, while path.resolve may return a relative one.",
-            "path.resolve always returns an absolute path, processing segments right-to-left against the current working directory (or an earlier absolute segment) as needed; path.join only concatenates and normalizes segments with the platform-correct separator, without guaranteeing an absolute result if the inputs were relative.",
             "They are functionally identical -- path.resolve is simply the newer, preferred name for the exact same behavior.",
-            "path.join only works correctly on POSIX systems, while path.resolve is the cross-platform-safe choice."
+            "path.resolve always returns an absolute path, processing segments right-to-left against the current working directory (or an earlier absolute segment) as needed; path.join only concatenates and normalizes segments with the platform-correct separator, without guaranteeing an absolute result if the inputs were relative.",
+            "path.join only works correctly on POSIX systems, while path.resolve is the cross-platform-safe choice.",
+            "path.join always returns an absolute path, while path.resolve may return a relative one."
           ],
           "correctOptionIndex": 1,
           "explanation": "path.join's job is purely to combine segments with the correct separator and normalize the result (collapsing redundant slashes, resolving '.'/'..'), but it will happily hand back a relative path if every input was relative. path.resolve specifically guarantees an absolute result, working right to left through its arguments as if 'cd-ing' through each one, falling back to process.cwd() if it runs out of segments without hitting an absolute one. The “path.join always returns an absolute path, while…” option has the guarantee backwards. The “They are functionally identical -- path.resolve…” option is wrong -- they are genuinely different operations with different guarantees, not aliases. The “path.join only works correctly on POSIX systems…” option is wrong -- both are equally cross-platform; the platform-correct separator handling is a feature of both functions, not just one."
@@ -285,12 +285,12 @@
           "type": "multipleChoice",
           "prompt": "A raw http.createServer handler computes a response body but the developer forgets to call res.end(). What actually happens when a client requests that route?",
           "options": [
+            "Node sends an empty 200 response automatically after a short built-in default delay.",
             "Node automatically calls res.end() once the handler function returns, so the response still gets sent correctly.",
-            "The client's connection hangs, waiting indefinitely, because a response stream doesn't close itself -- Node has no way to know the handler is 'done' other than being explicitly told via res.end().",
             "The server immediately crashes with an unhandled exception the moment the handler function returns.",
-            "Node sends an empty 200 response automatically after a short built-in default delay."
+            "The client's connection hangs, waiting indefinitely, because a response stream doesn't close itself -- Node has no way to know the handler is 'done' other than being explicitly told via res.end()."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "res is a writable stream, and streams don't close themselves just because the surrounding function returned -- there is no automatic 'the handler finished, so send whatever we have' behavior. Without an explicit res.end() call somewhere on every code path, the client is simply left waiting until its own timeout eventually gives up, exactly like the missing-res.end() bug covered in this concept's debugging exercise. The “Node automatically calls res.end() once the handler…”, “The server immediately crashes with an unhandled…”, and “Node sends an empty 200 response automatically…” options all invent automatic behaviors Node's http module does not actually provide."
         },
         {
@@ -298,12 +298,12 @@
           "type": "multipleChoice",
           "prompt": "In the raw http module's request-body-reading pattern -- accumulating chunks via a 'data' listener and only acting once the 'end' event fires -- what would go wrong if the code instead called JSON.parse on the accumulated data as soon as the FIRST 'data' event fired?",
           "options": [
-            "Nothing would go wrong -- the first chunk always contains a request's complete body for JSON payloads.",
-            "The body may not have fully arrived yet by the time the first chunk lands, since it can be split across multiple chunks -- parsing early would likely throw on incomplete/malformed JSON, or only happen to work for bodies small enough to fit entirely in a single chunk.",
+            "req would throw a TypeError if the 'data' event fires more than once before 'end' is emitted.",
             "JSON.parse internally waits for all remaining chunks to arrive before actually parsing, so there's no real risk either way.",
-            "req would throw a TypeError if the 'data' event fires more than once before 'end' is emitted."
+            "The body may not have fully arrived yet by the time the first chunk lands, since it can be split across multiple chunks -- parsing early would likely throw on incomplete/malformed JSON, or only happen to work for bodies small enough to fit entirely in a single chunk.",
+            "Nothing would go wrong -- the first chunk always contains a request's complete body for JSON payloads."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "A request body arrives over the network in one or more chunks, and there's no guarantee the entire body is present in the very first chunk -- that's exactly why the correct pattern waits for the 'end' event, which specifically signals the client has finished sending, before treating the accumulated data as complete and attempting to parse it. Acting on the first chunk alone would work by accident only for bodies small enough to arrive whole in one chunk, and fail unpredictably for larger ones. The “Nothing would go wrong -- the first…” option wrongly assumes single-chunk delivery is guaranteed. The “JSON.parse internally waits for all remaining chunks…” option invents behavior JSON.parse doesn't have -- it operates on whatever string it's given, synchronously, with no awareness of incoming network data. The “req would throw a TypeError…” option is wrong -- receiving multiple 'data' events for one request is completely normal and doesn't throw."
         },
         {
@@ -414,12 +414,12 @@
           "type": "multipleChoice",
           "prompt": "How does Express decide that a particular middleware function is an error-handling middleware rather than a normal one, and what practical rule follows from that?",
           "options": [
-            "By checking whether the function's name contains the word 'error' -- error middleware must be named accordingly.",
             "By counting the function's declared parameters: exactly four, (err, req, res, next), marks it as error-handling middleware -- and because of this, it should be registered after every normal route/middleware whose errors it's meant to catch.",
+            "Express cannot distinguish error middleware from normal middleware automatically; it must be manually registered via a separate errorHandler config option.",
             "By checking whether the middleware was registered with app.useError() instead of app.use().",
-            "Express cannot distinguish error middleware from normal middleware automatically; it must be manually registered via a separate errorHandler config option."
+            "By checking whether the function's name contains the word 'error' -- error middleware must be named accordingly."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "Express inspects the arity (number of declared parameters) of each middleware function: exactly four -- (err, req, res, next) -- signals an error-handling middleware, versus the normal three-parameter (req, res, next) signature. Because Express only routes to an error middleware once something earlier in the stack calls next(err), and only 'later in the stack' entries are reachable from that point, error middleware must be registered after everything it's expected to catch errors from -- registering it earlier would mean it simply never gets consulted for those routes' errors. The “By checking whether the function's name contains…” option is wrong -- naming has no effect on Express's behavior here. The “By checking whether the middleware was registered…” option is wrong -- there is no app.useError() method; ordinary app.use() is used for error middleware too, arity is what distinguishes it. The “Express cannot distinguish error middleware from normal…” option is wrong -- no separate config option exists or is needed; arity-based detection is automatic."
         },
         {
@@ -427,12 +427,12 @@
           "type": "multipleChoice",
           "prompt": "A middleware function calls res.json({ ok: true }) to send a response, and then also calls next() immediately afterward, without returning first. What actually happens?",
           "options": [
+            "Express automatically converts the extra next() call into a harmless no-op in every case, with a built-in graceful fallback.",
             "Express simply ignores the next() call since a response was already sent, with no ill effect at all.",
-            "This violates Express's one-decision-per-step contract -- calling next() after already sending a response typically produces a runtime error or warning (such as 'headers already sent'), since a middleware is expected to either finish the response itself or hand off via next(), never both.",
             "The client receives two separate, complete responses to the same request, one right after the other.",
-            "Express automatically converts the extra next() call into a harmless no-op in every case, with a built-in graceful fallback."
+            "This violates Express's one-decision-per-step contract -- calling next() after already sending a response typically produces a runtime error or warning (such as 'headers already sent'), since a middleware is expected to either finish the response itself or hand off via next(), never both."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "Each middleware is expected to make exactly one decision: finish the response itself (res.send/res.json/res.end) or hand off to the next middleware with next() -- not both. Calling next() after the response has already been sent typically surfaces as a runtime error or warning, because whatever runs next in the stack may try to touch res again after it's already been finalized. The “Express simply ignores the next() call since…” option is wrong -- there is a real, often-visible consequence, not a silent no-op. The “The client receives two separate, complete responses…” option is wrong -- HTTP doesn't allow sending two separate complete responses to one request this way. The “Express automatically converts the extra next() call…” option is wrong -- there is no such automatic graceful handling built into Express for this specific misuse."
         },
         {
@@ -440,9 +440,9 @@
           "type": "multipleChoice",
           "prompt": "Two middleware are registered in this order: app.use(requireAuth) followed by app.use(express.json()). requireAuth only reads req.headers.authorization, never req.body. Does the registration order between these two specifically matter for requireAuth's own check?",
           "options": [
-            "Yes -- express.json() must always be the very first middleware registered in any Express app, with no exceptions.",
-            "Not for requireAuth's own check, since it only reads req.headers, which is available regardless of body parsing -- but the order WOULD matter for any middleware or route registered after these two that needs req.body, since express.json() (registered second here) only populates req.body for handlers reached afterward.",
             "Yes -- Express always executes body-parsing middleware first internally, regardless of the order it appears in the source code.",
+            "Not for requireAuth's own check, since it only reads req.headers, which is available regardless of body parsing -- but the order WOULD matter for any middleware or route registered after these two that needs req.body, since express.json() (registered second here) only populates req.body for handlers reached afterward.",
+            "Yes -- express.json() must always be the very first middleware registered in any Express app, with no exceptions.",
             "No, registration order never matters in Express as long as every necessary middleware is registered somewhere in the file."
           ],
           "correctOptionIndex": 1,
@@ -453,12 +453,12 @@
           "type": "multipleChoice",
           "prompt": "A middleware is registered as: app.use((req, res, next) => { if (isBlocked(req)) { res.status(403).end(); } else { next(); } });. For a blocked request, what correctly terminates that request with a 403 instead of hanging?",
           "options": [
-            "Since res.status(403).end() is called (not next()), the response is explicitly finished for that request, and Express does not proceed to any later middleware or route handler -- this terminates the request correctly.",
             "The connection will still hang, because next() was never called on this particular request, and Express requires next() to be called for every request no matter what.",
             "The 403 status code specifically requires an explicit next(new Error()) call afterward to actually be delivered to the client.",
+            "Since res.status(403).end() is called (not next()), the response is explicitly finished for that request, and Express does not proceed to any later middleware or route handler -- this terminates the request correctly.",
             "res.status(403).end() only sets a status code internally but doesn't actually send anything until next() is eventually called."
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 2,
           "explanation": "A middleware has exactly two valid ways to conclude its involvement with a request: call next() to hand off, or finish the response itself. res.status(403).end() does the latter -- it sets the status and ends the response stream, which is a complete, valid way to conclude the request without ever calling next(). Express doesn't require next() unconditionally; it only requires that *something* eventually finishes the response or explicitly hands off. The “The connection will still hang, because next()…”, “The 403 status code specifically requires…”, and “res.status(403).end() only sets a status code internally…” options all incorrectly assume next() is mandatory even when the response has already been explicitly completed."
         },
         {

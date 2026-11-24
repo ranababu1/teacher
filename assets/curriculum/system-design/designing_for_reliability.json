@@ -108,12 +108,12 @@
           "type": "multipleChoice",
           "prompt": "A team's disaster-recovery plan for their primary database is a nightly snapshot stored in the same region and availability zone as the primary database itself. What is the main reliability gap in this plan?",
           "options": [
-            "Nightly snapshots take too much CPU to be practical.",
             "The snapshot and the primary database can both be lost together in a single availability-zone-level failure, and the snapshot's age also means up to nearly 24 hours of writes could be lost even if it survives -- the plan hasn't actually established an independently-failing backup.",
-            "Snapshots are only useful for read scaling, not for disaster recovery.",
-            "Databases cannot be restored from snapshots without significant downtime under any circumstances."
+            "Nightly snapshots take too much CPU to be practical.",
+            "Databases cannot be restored from snapshots without significant downtime under any circumstances.",
+            "Snapshots are only useful for read scaling, not for disaster recovery."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "This combines two separate reliability gaps: a shared-fate risk (the snapshot lives in the same AZ as the primary, so whatever takes out the AZ takes out both) and a recovery-point gap (a nightly cadence means, in the worst case, almost a full day of writes are unrecoverable even when the snapshot itself is fine). The “Nightly snapshots take too much CPU to be practical” option is a real but comparatively minor operational cost, not the main reliability issue. The “Snapshots are only useful for read scaling…” option mischaracterizes snapshots -- they're a completely standard and valid disaster-recovery tool, just not sufficient here given where and how often this one is taken. The “Databases cannot be restored from snapshots without…” option overstates the problem -- restore downtime is a real, separate consideration, but it's not the central gap in this specific setup, which is about where and how often the snapshot is taken, not whether snapshots can ever be restored quickly."
         },
         {
@@ -127,12 +127,12 @@
           "type": "multipleChoice",
           "prompt": "A primary database uses active-passive redundancy with a single synchronous standby, while a fleet of stateless web servers uses active-active redundancy. Per the concept, why does the database favor active-passive when active-active is generally described as the stronger reliability posture?",
           "options": [
-            "Because databases are always slower than web servers, so active-passive is required to keep latency low.",
-            "Because keeping multiple simultaneous writers to the same data consistent with each other reintroduces exactly the write-conflict and consistency-coordination problems from multi-leader replication, making a single clear writer (active-passive) the more tractable design for this specific component.",
+            "Because active-passive redundancy is cheaper in every case, regardless of what the component does.",
             "Because active-active redundancy is only supported for components running on Kubernetes, and most databases do not run on Kubernetes.",
-            "Because active-passive redundancy is cheaper in every case, regardless of what the component does."
+            "Because databases are always slower than web servers, so active-passive is required to keep latency low.",
+            "Because keeping multiple simultaneous writers to the same data consistent with each other reintroduces exactly the write-conflict and consistency-coordination problems from multi-leader replication, making a single clear writer (active-passive) the more tractable design for this specific component."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "The concept states this directly: for a primary database, active-passive is \"often the pragmatic choice for components where keeping multiple simultaneous writers consistent is itself the harder problem... precisely to avoid the write-conflict problems multi-leader replication introduces,\" while stateless services are described as \"the easy case\" for active-active since there's no shared writable state to reconcile. The “Because databases are always slower than web…” option invents an unrelated latency claim. The “Because active-active redundancy is only supported…” option fabricates a Kubernetes-specific restriction not discussed anywhere. The “Because active-passive redundancy is cheaper in every…” option overgeneralizes cost as the deciding factor when the concept's actual reasoning is about write-consistency complexity, not price."
         },
         {
@@ -140,12 +140,12 @@
           "type": "multipleChoice",
           "prompt": "Per the concept's discussion of what failover actually requires, why does a stateless service fail over almost instantly compared to a stateful one like a database?",
           "options": [
-            "Because stateless services are always hosted on faster hardware than stateful ones.",
-            "Because a stateless service has no state-recovery step to wait on -- any surviving instance can correctly serve a request with no data to recover or reconcile, whereas a promoted database replica needs to actually be caught up before it can serve correctly.",
+            "Because stateless services always use active-passive redundancy, which fails over faster than active-active.",
             "Because stateless services do not require health checks to detect a failure.",
-            "Because stateless services always use active-passive redundancy, which fails over faster than active-active."
+            "Because a stateless service has no state-recovery step to wait on -- any surviving instance can correctly serve a request with no data to recover or reconcile, whereas a promoted database replica needs to actually be caught up before it can serve correctly.",
+            "Because stateless services are always hosted on faster hardware than stateful ones."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "The concept states this directly: statelessness \"matters so much for making failover fast and clean: a stateless service can fail over almost instantly, because there's no state recovery step to wait on at all,\" while a promoted database replica \"needs to be caught up... before it can serve correctly.\" The “Because stateless services are always hosted…” option invents an unrelated hardware-speed claim. The “Because stateless services do not require health…” option is false -- detection via health checks is still required regardless of statelessness; it's the recovery-of-state step that's skipped, not detection. The “Because stateless services always use active-passive redundancy…” option is backwards -- the concept associates active-active, not active-passive, with stateless services as \"the easy case.\""
         },
         {
@@ -155,8 +155,8 @@
           "options": [
             "\"Do the two components run the exact same version of the software?\"",
             "\"What has to go wrong for BOTH of these to fail at the same time?\" -- traced down through the actual infrastructure (rack, AZ, region, deploy pipeline, shared config) rather than stopping at the first layer that looks redundant.",
-            "\"Which of the two components is more expensive to operate?\"",
-            "\"How many total requests per second can each component handle individually?\""
+            "\"How many total requests per second can each component handle individually?\"",
+            "\"Which of the two components is more expensive to operate?\""
           ],
           "correctOptionIndex": 1,
           "explanation": "The concept states this exact diagnostic: components only reveal shared fate \"once you ask, explicitly, 'what has to go wrong for BOTH of these to fail at the same time?' and keep tracing that question down through the actual infrastructure... rather than stopping at the first layer that looks redundant.\" The “\"Do the two components run the exact…” option asks about software version parity, which is unrelated to the independent-failure question the concept is actually posing. The “\"Which of the two components is more…” and “\"How many total requests per second can…” options ask about cost and raw capacity respectively, neither of which addresses whether the components can fail together."
@@ -268,11 +268,11 @@
           "prompt": "A service's calls to a downstream dependency are wrapped in a circuit breaker that is currently in the open state. What should happen when a new request needs to call that dependency, and why?",
           "options": [
             "The call should be attempted normally, since the circuit breaker only affects logging, not actual call behavior.",
-            "The call should be rejected immediately without attempting the real dependency, using a pre-defined fallback, so the caller doesn't pay the cost (time, threads, connections) of an attempt very likely to fail or hang.",
+            "The circuit breaker should immediately close again to give the dependency a chance to prove it has recovered.",
             "The call should be retried up to 10 times with exponential backoff before giving up.",
-            "The circuit breaker should immediately close again to give the dependency a chance to prove it has recovered."
+            "The call should be rejected immediately without attempting the real dependency, using a pre-defined fallback, so the caller doesn't pay the cost (time, threads, connections) of an attempt very likely to fail or hang."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "This is the defining behavior of the open state: skip the real call entirely and return a fallback immediately, which is what actually protects the caller's own resources and avoids adding further load to an already-struggling dependency. The “The call should be attempted normally, since…” option misunderstands what a circuit breaker actually gates -- it changes real call behavior, not just observability. The “The call should be retried up…” option describes a retry policy, a different and complementary mechanism that operates per-call rather than on the aggregate open/closed decision, and retrying heavily against a dependency behind an open circuit is exactly the pattern the breaker is designed to prevent. The “The circuit breaker should immediately close again…” option is backwards -- the breaker only transitions toward closed via the half-open state's limited trial calls after the cooldown elapses, specifically to avoid immediately re-flooding a dependency that hasn't been confirmed to have recovered."
         },
         {
@@ -286,10 +286,10 @@
           "type": "multipleChoice",
           "prompt": "After a circuit breaker's cooldown period elapses while in the open state, what does the breaker do next, per its state machine?",
           "options": [
-            "It immediately closes and resumes full traffic without any verification that the dependency has recovered.",
+            "It doubles the cooldown period and waits again before allowing any calls.",
             "It transitions to half-open and allows a small number of trial calls through to test whether the dependency has recovered, closing again on success or reopening for another full cooldown on failure.",
-            "It stays open permanently until an engineer manually resets it.",
-            "It doubles the cooldown period and waits again before allowing any calls."
+            "It immediately closes and resumes full traffic without any verification that the dependency has recovered.",
+            "It stays open permanently until an engineer manually resets it."
           ],
           "correctOptionIndex": 1,
           "explanation": "The concept describes this transition precisely: after the cooldown elapses, the breaker \"moves to half-open: it allows a small number of trial calls through to test whether the dependency has recovered. If those succeed, the breaker closes again... if they fail, it reopens and the cooldown starts over.\" The “It immediately closes and resumes full traffic…” option skips the verification step the half-open state exists specifically to provide. The “It stays open permanently until an engineer…” option contradicts the automatic transition the concept describes -- no manual reset is mentioned as required. The “It doubles the cooldown period and waits…” option invents an automatic cooldown-doubling behavior not present in the material."
@@ -299,12 +299,12 @@
           "type": "multipleChoice",
           "prompt": "Per the concept's discussion of choosing a fallback for the open state, why is 'just return something reasonable' described as a mistake when applied uniformly across different dependencies?",
           "options": [
+            "Because only recommendation services are allowed to have fallbacks; financial services must always attempt the real call regardless of circuit state.",
             "Because circuit breakers should never have a fallback at all -- they should simply raise an unhandled exception.",
             "Because what counts as a safe fallback depends on the actual cost of being wrong for that specific feature -- omitting a recommendations section costs little, but fabricating an 'approved' or 'declined' payment result when the real answer is unknown can cause real financial harm.",
-            "Because fallback functions are always slower to execute than the real dependency call, defeating the purpose of failing fast.",
-            "Because only recommendation services are allowed to have fallbacks; financial services must always attempt the real call regardless of circuit state."
+            "Because fallback functions are always slower to execute than the real dependency call, defeating the purpose of failing fast."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "The concept makes this exact point: 'reasonable' fallback content differs completely by feature because the cost of being wrong differs -- for recommendations \"the risk of a wrong fallback\" is \"near zero,\" while for payment authorization there is \"NO safe way to fabricate 'approved' or 'declined'... risk of a wrong fallback: severe.\" The “Because circuit breakers should never have…” option contradicts the concept's emphasis that the breaker \"forces the caller to have decided, up front, what a degraded response actually looks like.\" The “Because fallback functions are always slower…” option is a fabricated, unsupported performance claim. The “Because only recommendation services are allowed…” option invents a blanket rule about financial services that isn't part of the pattern described."
         },
         {
@@ -313,9 +313,9 @@
           "prompt": "Per the concept's explanation of how a downstream failure becomes an upstream outage, why is a degraded, hanging dependency actually more dangerous than one that is cleanly, fully down?",
           "options": [
             "A cleanly down dependency is comparatively easy to detect and route around, whereas a slow/hanging one causes calls to sit and wait until the caller's own timeout fires, consuming threads or connections the whole time.",
+            "There is no meaningful difference -- both failure modes are described as equally dangerous and equally fast to detect.",
             "A degraded dependency always returns incorrect data silently, while a fully down dependency never does.",
-            "A cleanly down dependency causes more total network traffic than a degraded one.",
-            "There is no meaningful difference -- both failure modes are described as equally dangerous and equally fast to detect."
+            "A cleanly down dependency causes more total network traffic than a degraded one."
           ],
           "correctOptionIndex": 0,
           "explanation": "The concept draws this distinction explicitly: a dependency that becomes \"slow or unresponsive -- not cleanly down, which is comparatively easy to detect and route around, but degraded, hanging, or timing out\" is the dangerous case, because \"A's calls to B don't fail instantly; they sit and wait, typically until A's own timeout fires,\" consuming resources the whole time. The “A degraded dependency always returns incorrect data…” option invents a data-correctness claim not discussed in this concept. The “A cleanly down dependency causes more total…” option fabricates a network-traffic comparison not present in the material. The “There is no meaningful difference -- both…” option directly contradicts the concept's explicit distinction between the two failure modes."
@@ -427,11 +427,11 @@
           "prompt": "A team notices that their fixed-window rate limiter (1,000 requests/hour, reset on the hour) allows some clients to send nearly 2,000 requests within a few seconds by timing requests around the window boundary. Which alternative most directly fixes this specific weakness while preserving roughly the same long-run average allowed rate?",
           "options": [
             "Lower the limit to 500 requests per hour.",
-            "Switch to a token bucket (or sliding window) approach, where allowance accumulates continuously over time rather than resetting completely at a fixed clock boundary.",
+            "Increase the window from 1 hour to 24 hours.",
             "Add a circuit breaker in front of the rate limiter.",
-            "Increase the window from 1 hour to 24 hours."
+            "Switch to a token bucket (or sliding window) approach, where allowance accumulates continuously over time rather than resetting completely at a fixed clock boundary."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "The root cause of the boundary-burst weakness is the limiter's memory fully resetting at a fixed clock boundary, letting two windows' worth of allowance be spent back-to-back around that boundary; token bucket (or sliding window) removes that reset entirely, so allowance is tracked continuously and a client can't exploit a seam that no longer exists. The “Lower the limit to 500 requests per hour” option changes the total volume allowed but doesn't fix the underlying boundary-exploit mechanism -- a client could still send ~1,000 near one boundary and another ~1,000 near the next. The “Add a circuit breaker in front…” option addresses a completely different problem (protecting a caller from an unhealthy downstream dependency), not inbound rate limiting. The “Increase the window from 1 hour to 24 hours” option just moves the boundary further apart in time -- the exact same boundary-straddling exploit still works, just once a day instead of once an hour, and now the possible burst size is even larger relative to the intended steady rate."
         },
         {
@@ -445,10 +445,10 @@
           "type": "multipleChoice",
           "prompt": "A bounded queue sits between a fast producer and a slower consumer. Once the queue fills to its maximum size, the producer's next enqueue call blocks until the consumer makes room. What concept does this illustrate, and how does it differ from rate limiting?",
           "options": [
-            "This is rate limiting, since both mechanisms reject excess work once a cap is reached.",
+            "This is load shedding, since the producer's work is being discarded once the queue is full.",
             "This is backpressure -- an internal signal flowing backward from a slower component to a faster one feeding it, forcing the producer to slow down to match the consumer's real throughput, distinct from rate limiting's externally imposed, per-client cap enforced at a system's edge.",
-            "This is a circuit breaker, since the queue is 'tripping open' once full.",
-            "This is load shedding, since the producer's work is being discarded once the queue is full."
+            "This is rate limiting, since both mechanisms reject excess work once a cap is reached.",
+            "This is a circuit breaker, since the queue is 'tripping open' once full."
           ],
           "correctOptionIndex": 1,
           "explanation": "The concept defines this exact scenario as backpressure: \"a bounded queue between a producer and a consumer... once it's full, the producer's next attempt to enqueue work blocks... until the consumer catches up and makes room -- the fullness of the queue itself is the backpressure signal,\" explicitly distinguished from rate limiting, which is \"typically an externally imposed, often somewhat arbitrary cap applied at a system's edge.\" The “This is rate limiting, since both mechanisms…” option conflates the two mechanisms the concept explicitly distinguishes. The “This is a circuit breaker, since…” option misapplies circuit-breaker terminology to a mechanism that has nothing to do with tracking dependency health. The “This is load shedding, since the producer's…” option is wrong -- in this example the producer blocks rather than the work being discarded; nothing here is being shed or dropped."
@@ -458,12 +458,12 @@
           "type": "multipleChoice",
           "prompt": "Per the concept's description of graceful degradation, what specifically distinguishes it from an uncontrolled, undifferentiated collapse under overload?",
           "options": [
-            "Graceful degradation happens automatically in every system without any advance design work.",
             "Graceful degradation deliberately identifies and protects the most important operations in advance, shedding load starting from the least important, rather than letting every request -- critical or not -- degrade by the same uniform amount.",
+            "Graceful degradation happens automatically in every system without any advance design work.",
             "Graceful degradation means the system never rejects any requests, no matter how overloaded it becomes.",
             "Graceful degradation is only possible if the system uses a token-bucket rate limiter instead of a fixed window."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "The concept states this distinction directly: graceful degradation's \"common thread... is that the most important operations are identified and protected explicitly, and the system sheds load starting from the least important, rather than letting every request -- critical or not -- degrade by the same uniform amount as capacity runs out.\" The “Graceful degradation happens automatically in every system…” option contradicts the concept's point that this requires deliberate, advance design work, not automatic behavior. The “Graceful degradation means the system never rejects…” option is false -- graceful degradation explicitly involves rejecting or delaying some (lower-priority) requests. The “Graceful degradation is only possible…” option fabricates a dependency on a specific rate-limiting algorithm that the concept never ties to load shedding."
         },
         {
@@ -471,12 +471,12 @@
           "type": "multipleChoice",
           "prompt": "Per the concept's opening framing, why is rate limiting described as more than just a business or fairness mechanism?",
           "options": [
-            "Because without some cap, a single misbehaving client or an unexpectedly large legitimate burst can consume enough capacity to degrade or take down service for every other caller, making rate limiting a reliability mechanism in its own right.",
+            "Because rate limiting always increases a service's total throughput capacity.",
             "Because rate limiting is required by law in most jurisdictions for any public API.",
-            "Because fairness and business concerns are not real reasons to implement rate limiting at all.",
-            "Because rate limiting always increases a service's total throughput capacity."
+            "Because without some cap, a single misbehaving client or an unexpectedly large legitimate burst can consume enough capacity to degrade or take down service for every other caller, making rate limiting a reliability mechanism in its own right.",
+            "Because fairness and business concerns are not real reasons to implement rate limiting at all."
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 2,
           "explanation": "The concept states this directly: it's easy to mistake rate limiting \"for purely a business or fairness concern... and it is that, but it's just as much a reliability mechanism in its own right: without some cap, a single misbehaving client... or a single legitimate but unexpectedly large burst can consume enough capacity to degrade service for every other caller, or take the service down entirely.\" The “Because rate limiting is required by law…” option invents a legal requirement not discussed anywhere. The “Because fairness and business concerns…” option contradicts the concept, which affirms fairness/business reasons are real, just not the only reason. The “Because rate limiting always increases a service's…” option is false -- rate limiting caps and rejects traffic; it doesn't increase underlying capacity at all."
         },
         {

@@ -108,12 +108,12 @@
           "type": "multipleChoice",
           "prompt": "A team is deciding on a protocol for a brand-new internal service that will be called by three other internal services, all owned by the same engineering org, at a combined rate of about 40,000 requests per second, with no plans to ever expose it outside the company. Which factor most strongly favors choosing gRPC over REST here?",
           "options": [
-            "gRPC APIs are automatically more secure than REST APIs by default.",
             "The high internal call volume and fully internal, tooling-capable caller population make gRPC's binary serialization, HTTP/2 multiplexing, and compiled schema safety worth their codegen cost, with none of REST's browser-accessibility advantages being relevant here.",
             "REST cannot technically support 40,000 requests per second under any circumstances.",
-            "gRPC eliminates the need for API versioning entirely, since the schema is compiled into the code."
+            "gRPC eliminates the need for API versioning entirely, since the schema is compiled into the code.",
+            "gRPC APIs are automatically more secure than REST APIs by default."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "This scenario matches gRPC's sweet spot precisely: every caller is internal, already has modern build tooling, and the combined call volume is high enough that protobuf's smaller payloads and HTTP/2's connection multiplexing produce a real, measurable benefit -- while REST's main selling points (browser/curl accessibility for third parties with minimal tooling) are simply irrelevant, since there are no such callers here. The “gRPC APIs are automatically more secure…” option is false -- security is a property of how an API is authenticated and authorized, not an automatic feature of the protocol. The “REST cannot technically support 40,000 requests per…” option is false -- REST over HTTP can handle very high request volumes; the issue is efficiency and schema safety at that volume, not a hard technical ceiling. The “gRPC eliminates the need for API versioning…” option is false -- gRPC still requires deliberate schema evolution practices (adding fields carefully, deprecating rather than removing, managing field numbers); it reduces certain classes of accidental drift, but doesn't eliminate the need to think about versioning."
         },
         {
@@ -128,11 +128,11 @@
           "prompt": "A backend developer silently renames a JSON field in a REST API response from `total` to `totalAmount`, without bumping any version number. Per the concept's schema-drift example, what is the most likely consequence, and why does gRPC's approach reduce this specific risk?",
           "options": [
             "Nothing changes for existing callers, since JSON field renames are automatically handled by all HTTP clients.",
-            "Existing callers reading response[\"total\"] get a runtime error (a missing/undefined field) whenever that code path next executes, discovered only at runtime -- whereas a breaking change to a .proto field requires editing a shared, reviewable schema file that both client and server code are generated from, giving a natural point to catch and block it before it ships.",
             "gRPC would have the exact same silent-renaming risk, since both protocols use text-based field names.",
-            "REST prevents this specific issue automatically through built-in field versioning that ships with the HTTP specification."
+            "REST prevents this specific issue automatically through built-in field versioning that ships with the HTTP specification.",
+            "Existing callers reading response[\"total\"] get a runtime error (a missing/undefined field) whenever that code path next executes, discovered only at runtime -- whereas a breaking change to a .proto field requires editing a shared, reviewable schema file that both client and server code are generated from, giving a natural point to catch and block it before it ships."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "The concept's schema-drift example states this directly: a renamed REST field means \"every existing caller reading response['total'] now gets a KeyError / undefined at runtime, discovered whenever that code path next executes,\" whereas the same change in a .proto file \"requires touching the shared .proto file, which is the natural place to require review and a compatibility check before it ships.\" The “Nothing changes for existing callers, since JSON…” option is false and contradicts the entire example. The “gRPC would have the exact same silent-renaming…” option is wrong -- gRPC's compiled schema is exactly what the concept says catches this class of change before production, unlike REST's informal convention. The “REST prevents this specific issue automatically through…” option fabricates a built-in HTTP versioning mechanism that doesn't exist."
         },
         {
@@ -140,10 +140,10 @@
           "type": "multipleChoice",
           "prompt": "A feature needs the server to keep pushing live order-status updates to a client as they happen, without the client needing to guess a polling interval. Per the concept's discussion of streaming, why does this favor gRPC over plain REST?",
           "options": [
-            "REST cannot be used over HTTP/2 under any circumstances, so it structurally cannot support any form of real-time updates.",
+            "gRPC eliminates the need for the client to open any network connection at all.",
             "gRPC's `stream` keyword makes server-to-client push a first-class part of the contract, letting the server write multiple responses over one open call as they happen; REST has no equivalent primitive and can only simulate this with polling, forcing a tradeoff between wasted requests and staleness.",
-            "REST is exclusively for reading data and gRPC is exclusively for writing data, so any 'live update' feature must use gRPC.",
-            "gRPC eliminates the need for the client to open any network connection at all."
+            "REST cannot be used over HTTP/2 under any circumstances, so it structurally cannot support any form of real-time updates.",
+            "REST is exclusively for reading data and gRPC is exclusively for writing data, so any 'live update' feature must use gRPC."
           ],
           "correctOptionIndex": 1,
           "explanation": "The concept states this directly: gRPC's stream keyword makes \"server-to-client push a first-class part of the contract... with no polling interval to guess at,\" while REST's polling alternative \"forces an explicit tradeoff between wasted requests (poll too often) and staleness (poll too rarely).\" The “REST cannot be used over HTTP/2 under…” option is false -- the concept never claims REST cannot run over HTTP/2 at all. The “REST is exclusively for reading data…” option invents an arbitrary read/write restriction not present anywhere in the material. The “gRPC eliminates the need for the client…” option is nonsensical -- gRPC calls still require an open network connection; it just keeps one connection open for multiple pushed responses."
@@ -153,12 +153,12 @@
           "type": "multipleChoice",
           "prompt": "Per the concept's closing 'common mistake' section, what specifically goes wrong when a team picks gRPC for a public-facing API purely because benchmarks show it's faster?",
           "options": [
+            "The API automatically becomes less secure because gRPC does not support authentication of any kind.",
             "Nothing goes wrong -- benchmark performance is described as the only factor that should ever matter when choosing a protocol.",
             "A meaningful fraction of prospective integrators can't or won't adopt it -- some can't call it directly from a browser without extra infrastructure, and some don't want a protobuf toolchain in their build for an integration they expected to be a simple HTTP request.",
-            "gRPC services are described as being unable to run on cloud infrastructure at all, making public deployment impossible.",
-            "The API automatically becomes less secure because gRPC does not support authentication of any kind."
+            "gRPC services are described as being unable to run on cloud infrastructure at all, making public deployment impossible."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "The concept states this exact consequence: choosing gRPC for a public API \"because it's faster\" leads to discovering \"that a meaningful fraction of prospective integrators simply can't or won't adopt it -- some can't call it directly from a browser... some don't want a protobuf toolchain in their build for an integration they expected to be a five-minute curl command.\" The “Nothing goes wrong -- benchmark performance…” option contradicts the concept's central argument that caller population, not benchmark speed, should drive the decision. The “gRPC services are described as being unable…” option fabricates a cloud-deployment restriction not discussed anywhere. The “The API automatically becomes less secure…” option invents a false security claim -- gRPC supports authentication mechanisms; the concept never suggests otherwise."
         }
       ]
@@ -267,9 +267,9 @@
           "type": "multipleChoice",
           "prompt": "A team notices that two of their 'independent' microservices almost always need to be deployed together, in a specific order, whenever the message format between them changes. What does this symptom most directly indicate?",
           "options": [
-            "The two services are using the wrong network protocol between them and should switch from REST to gRPC.",
-            "The two services are not actually independently deployable in practice, which is a common symptom of a boundary drawn along the wrong seam -- they may belong in one service, or need a deliberately versioned, backward-compatible contract.",
             "This is normal and expected behavior for any two microservices that communicate with each other.",
+            "The two services are not actually independently deployable in practice, which is a common symptom of a boundary drawn along the wrong seam -- they may belong in one service, or need a deliberately versioned, backward-compatible contract.",
+            "The two services are using the wrong network protocol between them and should switch from REST to gRPC.",
             "The services need a faster network connection between them to reduce deployment coordination time."
           ],
           "correctOptionIndex": 1,
@@ -286,12 +286,12 @@
           "type": "multipleChoice",
           "prompt": "A billing service and a support-ticketing service each have their own internal notion of a 'customer,' with different fields and different invariants for each. Per the concept's discussion of bounded contexts, is this a sign of duplicated, sloppy modeling that should be unified into one shared customer definition?",
           "options": [
-            "Yes -- there should always be exactly one canonical definition of any business term shared across every service in the system.",
-            "No -- this is an example of a bounded context: a boundary drawn around a part of the domain where terms mean one specific thing internally, and a neighboring service using a similar-sounding term differently is expected and fine, not a modeling mistake.",
             "Yes, but only because billing and support-ticketing are both customer-facing features and should therefore share a database table.",
-            "No, but only because billing services are legally required to maintain a separate customer definition from support systems."
+            "Yes -- there should always be exactly one canonical definition of any business term shared across every service in the system.",
+            "No, but only because billing services are legally required to maintain a separate customer definition from support systems.",
+            "No -- this is an example of a bounded context: a boundary drawn around a part of the domain where terms mean one specific thing internally, and a neighboring service using a similar-sounding term differently is expected and fine, not a modeling mistake."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "The concept states this explicitly: \"a customer inside the billing service might carry different fields and invariants than a customer inside the support-ticketing service, and that's fine -- they're different bounded contexts, not the same concept duplicated sloppily.\" The “Yes -- there should always be exactly…” option contradicts this directly by insisting on one canonical definition everywhere. The “Yes, but only because billing and support-ticketing…” option invents a database-sharing requirement not discussed anywhere, and actually reintroduces the shared-table problem the concept warns against elsewhere. The “No, but only because billing services…” option fabricates a legal requirement that isn't part of the bounded-context concept at all."
         },
         {
@@ -299,12 +299,12 @@
           "type": "multipleChoice",
           "prompt": "Per the concept, what specifically makes a 'distributed monolith' worse than either a well-factored monolith or a well-factored set of microservices?",
           "options": [
-            "It has fewer total lines of code than either alternative, making it harder to find bugs.",
             "It carries the full operational overhead of a distributed system (network calls, independent deployments to coordinate, separate logging to correlate, retries and timeouts) while still keeping the monolith's actual coupling problem, since the pieces can't really change or deploy independently -- paying distribution's complexity tax without collecting its benefits.",
-            "It always runs on more expensive cloud infrastructure than either alternative.",
-            "It is only a problem when the number of services exceeds fifty."
+            "It is only a problem when the number of services exceeds fifty.",
+            "It has fewer total lines of code than either alternative, making it harder to find bugs.",
+            "It always runs on more expensive cloud infrastructure than either alternative."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "The concept states this precisely: a distributed monolith \"has all the operational overhead of microservices... while still having the monolith's actual coupling problem, because the pieces can't really change or deploy independently... you pay the complexity tax of distribution without collecting the benefit... it's supposed to buy.\" The “It has fewer total lines of code…” option invents an unrelated code-volume claim. The “It always runs on more expensive cloud…” option fabricates a cost claim not discussed in the concept. The “It is only a problem…” option invents an arbitrary service-count threshold that appears nowhere in the material -- the concept's examples involve as few as two or three services."
         },
         {
@@ -312,12 +312,12 @@
           "type": "multipleChoice",
           "prompt": "Per the concept's recommended incremental process, when should a module actually be extracted out of a well-modularized monolith into its own separately deployed service?",
           "options": [
+            "Whenever the monolith's total codebase exceeds an arbitrary line-of-code threshold.",
             "As soon as the monolith is created, so that the system is 'microservices-native' from day one.",
             "Only once there's a concrete, demonstrated reason -- a genuine scaling need for just that piece, a team that needs to deploy independently, or a distinct technology requirement -- rather than splitting upfront based on guesses about where the domain seams are.",
-            "Whenever the monolith's total codebase exceeds an arbitrary line-of-code threshold.",
             "Never -- the concept argues that services should always remain part of a single monolith regardless of team or scaling needs."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "The concept states this directly: modules should be split out \"only once there's a concrete, demonstrated reason: a genuine scaling need for just that piece, a team that needs to deploy independently of everyone else, or a technology requirement... Splitting too early, before the real domain boundaries are well understood from lived experience with the monolith, tends to reproduce exactly the wrong-boundary symptoms.\" The “As soon as the monolith is created…” option contradicts the concept's explicit recommendation to start with a monolith rather than split immediately. The “Whenever the monolith's total codebase exceeds…” option invents an arbitrary line-count threshold never mentioned in the material. The “Never -- the concept argues that services…” option overstates the concept's position -- it explicitly allows for extraction once a real, demonstrated reason exists; it never argues services should never be split at all."
         }
       ]
@@ -426,10 +426,10 @@
           "type": "multipleChoice",
           "prompt": "A team wants to enforce a rate limit of 1,000 requests per minute per API key, applied across a client's combined usage of order-service, users-service, and inventory-service (not 1,000 per service separately). Where does this rate limit logic best belong, and why?",
           "options": [
-            "Inside each of the three backend services independently, since each service should be responsible for protecting itself.",
+            "It cannot be enforced accurately in a distributed system and should be approximated by tripling each service's individual limit.",
             "At the API gateway, since it is the only component that sees every request from a given API key across all three backend services, making it the only place that can enforce a limit on the client's combined, cross-service usage.",
             "Inside a shared code library that each of the three services imports and calls independently.",
-            "It cannot be enforced accurately in a distributed system and should be approximated by tripling each service's individual limit."
+            "Inside each of the three backend services independently, since each service should be responsible for protecting itself."
           ],
           "correctOptionIndex": 1,
           "explanation": "A combined, cross-service limit requires visibility into a client's total usage across ALL three services, and only the gateway -- sitting in front of every request regardless of destination -- actually has that visibility; any of the three backend services, considered alone, only ever sees its own slice of that client's traffic and has no way to know how many requests the same client just sent to the other two services. The “Inside each of the three backend services…” option would only be able to enforce a per-service limit, not the stated combined limit, no matter how well each service implements it. The “Inside a shared code library that each…” option has the same fundamental problem as the “Inside each of the three backend services…” option -- even with shared code, each service instance only observes its own traffic unless that shared library itself talks to a shared, centralized counter, which is really just reinventing a piece of what the gateway already does naturally. The “It cannot be enforced accurately…” option is a poor approximation that either overshoots or undershoots the actual intended combined limit depending on traffic distribution across the three services, rather than a real solution."
@@ -445,12 +445,12 @@
           "type": "multipleChoice",
           "prompt": "A team wants automatic retries, mutual TLS, and fine-grained canary routing for calls between their own internal services, none of which ever touch an external client directly. Per the concept's distinction between a gateway and a service mesh, which tool is the better fit, and why?",
           "options": [
-            "An API gateway, since gateways and service meshes are two names for the exact same tool applied to different traffic.",
             "A service mesh, since it handles east-west traffic -- service-to-service calls entirely inside the system -- providing exactly these capabilities, whereas the gateway's job is north-south traffic entering the system from outside.",
             "Neither -- these capabilities can only be achieved by routing all internal traffic back out through the edge API gateway.",
-            "An API gateway, since only gateways can perform mutual TLS between two internal services."
+            "An API gateway, since only gateways can perform mutual TLS between two internal services.",
+            "An API gateway, since gateways and service meshes are two names for the exact same tool applied to different traffic."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "The concept draws this distinction explicitly: a service mesh \"handles east-west traffic: service-to-service calls happening entirely inside the system, providing things like automatic retries, mutual TLS between internal services, and fine-grained internal traffic routing (canary releases, circuit breaking)\" while \"the gateway handles north-south traffic: requests entering the system from outside.\" The “An API gateway, since gateways and service…” option directly contradicts the concept's explicit distinction between the two tools. The “Neither -- these capabilities can only…” option describes exactly the mistake the concept warns against -- routing internal traffic back out through the edge gateway \"adds unnecessary latency and turns an internal implementation detail into edge-gateway-configuration churn.\" The “An API gateway, since only gateways can…” option fabricates a technical restriction; nothing in the concept ties mutual TLS capability exclusively to gateways."
         },
         {
@@ -458,12 +458,12 @@
           "type": "multipleChoice",
           "prompt": "A team centralizes authentication and rate limiting entirely at the API gateway and removes all security checks from their backend services, reasoning the gateway already handles it. Per the concept's misconception about this, what risk does this leave open?",
           "options": [
-            "No risk at all -- the concept states that backend services never need any security logic once a gateway is in place.",
-            "If the gateway is ever misconfigured, bypassed (a backend reachable directly due to a network misconfiguration), or has a bug in its enforcement logic, backend services with zero security checks of their own have no fallback protection at all -- defense in depth still matters.",
+            "This is only a risk for services using gRPC, not for services using REST.",
             "The only risk is a minor performance slowdown, since the gateway would simply run the same checks twice.",
-            "This is only a risk for services using gRPC, not for services using REST."
+            "If the gateway is ever misconfigured, bypassed (a backend reachable directly due to a network misconfiguration), or has a bug in its enforcement logic, backend services with zero security checks of their own have no fallback protection at all -- defense in depth still matters.",
+            "No risk at all -- the concept states that backend services never need any security logic once a gateway is in place."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "The concept's misconception addresses this directly: relying on the gateway as the sole line of defense \"creates a single point of security failure\" if it's \"ever misconfigured, bypassed... or has a bug in its enforcement logic,\" and backend services should \"generally still validate that a request carries the identity/authorization context the gateway is supposed to have already attached,\" rather than blindly trusting every request. The “No risk at all -- the concept…” option contradicts the concept's explicit warning against this exact assumption. The “The only risk is a minor performance…” option trivializes a real security gap into a performance concern, which isn't the risk the concept describes. The “This is only a risk for services…” option invents a protocol-specific restriction not present anywhere in the material."
         },
         {
@@ -471,12 +471,12 @@
           "type": "multipleChoice",
           "prompt": "Per the concept's 'Without a Gateway vs. With One' example, what specifically goes wrong when a mobile app calls three backend services directly, each implementing its own authentication check, instead of going through a gateway?",
           "options": [
+            "Each backend service becomes automatically stateful as a result of implementing its own authentication.",
             "Nothing goes wrong functionally -- it is described as a purely stylistic difference with no real consequence.",
-            "There are now three separate auth implementations that all must be correct and kept consistent as requirements change, three services independently exposed to the internet, and the app must track three different hostnames/ports -- multiplying a cross-cutting concern by the number of backends instead of centralizing it.",
             "The mobile app becomes physically incapable of making more than one request per session without a gateway present.",
-            "Each backend service becomes automatically stateful as a result of implementing its own authentication."
+            "There are now three separate auth implementations that all must be correct and kept consistent as requirements change, three services independently exposed to the internet, and the app must track three different hostnames/ports -- multiplying a cross-cutting concern by the number of backends instead of centralizing it."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "The concept's example states this precisely: without a gateway, there are \"3 separate auth implementations that must all be correct and consistent,\" \"3 services, each independently exposed to the internet,\" and the app \"needs to know 3 different hostnames/ports and keep them all in sync\" -- multiplying, rather than centralizing, a cross-cutting concern. The “Nothing goes wrong functionally…” option dismisses a real, named cost the concept treats as significant (a missed auth update becomes 'a real security gap that's easy to introduce silently'). The “The mobile app becomes physically incapable…” option invents a fabricated technical limitation about request counts. The “Each backend service becomes automatically stateful…” option is a non sequitur -- implementing authentication has no described relationship to a service's statelessness."
         }
       ]

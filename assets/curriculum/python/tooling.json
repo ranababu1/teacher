@@ -98,12 +98,12 @@
           "type": "multipleChoice",
           "prompt": "A logger is configured with `logger.setLevel(logging.ERROR)`, and its handler is separately configured with `handler.setLevel(logging.WARNING)`. If the code calls `logger.warning(\"low disk space\")`, what happens?",
           "options": [
-            "It is shown, because the handler's level (WARNING) is low enough to allow it.",
-            "It is not shown, because the logger's own level (ERROR) already filters it out before the handler is ever consulted.",
             "It is shown twice, once for each level check that passes.",
-            "It raises a ValueError because the logger and handler levels don't match."
+            "It is shown, because the handler's level (WARNING) is low enough to allow it.",
+            "It raises a ValueError because the logger and handler levels don't match.",
+            "It is not shown, because the logger's own level (ERROR) already filters it out before the handler is ever consulted."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "A message has to clear the logger's own level first -- that's the first gate. logger.warning() produces a WARNING (30) level record, but the logger's threshold is ERROR (40), so the message is filtered out immediately, before it's ever passed along to any handler. The handler's more permissive WARNING threshold is irrelevant here because the message never reaches the handler at all. This is exactly why 'the handler's level looks low enough, why isn't it showing?' is a common point of confusion -- both the logger's level and the handler's level act as independent filters, and a message must pass both, not just one."
         },
         {
@@ -117,12 +117,12 @@
           "type": "multipleChoice",
           "prompt": "```python\nimport logging\n\nlogging.basicConfig(level=logging.WARNING)\nlogging.basicConfig(level=logging.DEBUG)   # trying to lower the level afterward\n\nlogger = logging.getLogger(__name__)\nlogger.debug(\"checking cache\")\n```\nWhat happens?",
           "options": [
+            "Nothing is printed, but only because logger.debug() requires an explicit handler argument to work at all",
             "Nothing is printed -- the second basicConfig() call is a no-op, since a handler was already configured by the first call, so the effective level remains WARNING",
-            "\"checking cache\" is printed, since the second basicConfig() call successfully lowers the level to DEBUG",
             "It raises an error, since basicConfig() can only ever be called once per program",
-            "Nothing is printed, but only because logger.debug() requires an explicit handler argument to work at all"
+            "\"checking cache\" is printed, since the second basicConfig() call successfully lowers the level to DEBUG"
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 1,
           "explanation": "basicConfig() only has an effect the first time it's called with no handler already configured -- once the first call has set one up, later calls (without passing force=True) are silently ignored, even though they don't raise any error. So the effective level stays WARNING (30) from the first call, and logger.debug() (level 10) is still below that threshold and gets filtered out, printing nothing. This exact behavior is a well-known sharp edge -- it especially trips people up in notebooks or test suites where basicConfig() might already have run once earlier."
         },
         {
@@ -131,9 +131,9 @@
           "prompt": "```python\nimport logging\n\nlogger_a = logging.getLogger(\"myapp.jobs\")\nlogger_a.setLevel(logging.DEBUG)\n\nlogger_b = logging.getLogger(\"myapp.jobs\")   # same name, requested elsewhere in the code\n\nprint(logger_a is logger_b)\nprint(logger_b.level == logging.DEBUG)\n```\nWhat gets printed?",
           "options": [
             "True then True",
+            "False then False",
             "False then True",
-            "True then False",
-            "False then False"
+            "True then False"
           ],
           "correctOptionIndex": 0,
           "explanation": "`logging.getLogger(name)` returns the exact same logger object every time it's called with the same name string -- there's no per-call duplication. So `logger_a` and `logger_b`, despite being obtained from two separate calls (potentially in two different parts of a codebase), are literally the same object in memory: `logger_a is logger_b` is `True`. Since `logger_b` is that same object, the level set via `logger_a.setLevel(logging.DEBUG)` is naturally already reflected on it -- `logger_b.level == logging.DEBUG` is also `True`. This is exactly why `logging.getLogger(__name__)` is a safe, idiomatic pattern to call repeatedly throughout a module without worrying about creating redundant loggers."
@@ -239,11 +239,11 @@
           "prompt": "A test suite has a file named `checkout_tests.py` containing a function named `test_total_with_tax()`. Running plain `pytest` in the project root, what happens?",
           "options": [
             "The test runs normally, since the function name follows the test_* convention.",
+            "The test runs, but pytest issues a warning about the file naming.",
             "The test is not discovered, since the file name doesn't match pytest's default test_*.py or *_test.py discovery pattern.",
-            "pytest raises an ImportError because the file name is invalid.",
-            "The test runs, but pytest issues a warning about the file naming."
+            "pytest raises an ImportError because the file name is invalid."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "pytest's default discovery requires BOTH the file name and the function name to match its conventions. checkout_tests.py matches neither test_*.py nor *_test.py (it would need to be named e.g. test_checkout.py or checkout_test.py), so pytest never even opens this file looking for tests, regardless of what's inside it or how well-named the function is. Renaming the function alone (as in the “The test runs normally, since the function…” option) doesn't help if the containing file itself isn't discovered. There's no ImportError or warning involved (“pytest raises an ImportError because the file…” and “The test runs, but pytest issues…”) -- non-matching files are simply, silently, not considered at all."
         },
         {
@@ -257,12 +257,12 @@
           "type": "multipleChoice",
           "prompt": "```python\nimport pytest\n\n@pytest.fixture\ndef resource():\n    print(\"setup\")\n    yield \"value\"\n    print(\"teardown\")\n\ndef test_uses_resource(resource):\n    print(\"test body\")\n    assert False   # deliberately failing\n```\nWhat gets printed, and does the fixture's teardown still run despite the test failing?",
           "options": [
-            "setup / test body / teardown -- and the test is still reported as failed",
             "setup / test body -- teardown never runs, since the test raised before reaching it",
             "setup / teardown / test body -- pytest runs teardown before the test body for safety",
+            "setup / test body / teardown -- and the test is still reported as failed",
             "setup / test body -- and the process crashes with an unhandled AssertionError before pytest can report anything"
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 2,
           "explanation": "A fixture's teardown code (everything after `yield`) is guaranteed to run once the test using it finishes, regardless of whether that test passed or failed -- this mirrors the same unconditional-cleanup guarantee covered for `finally` and context managers elsewhere. So even though `assert False` causes `test_uses_resource` to fail, pytest still resumes the `resource` fixture after the test concludes, running `print(\"teardown\")` before moving on. The test is correctly reported as a failure -- the guaranteed teardown doesn't change or hide that outcome, it just ensures cleanup code isn't skipped because of it."
         },
         {
@@ -271,8 +271,8 @@
           "prompt": "A test named `test_checkout` asserts five different things in one function: the total is calculated correctly, inventory is decremented, a confirmation email object is created, a discount code is applied correctly, and an invalid discount code raises an error. It fails. Based on this lesson's guidance on what makes a good test, what's the most accurate criticism?",
           "options": [
             "Bundling five distinct behaviors into one test makes it hard to tell, from the failure alone, which of the five things actually broke -- it should be split into several smaller, descriptively-named, focused tests",
-            "Nothing is wrong with it -- as long as every assertion eventually runs, one test function covering many behaviors is always the most efficient structure",
             "The test should be renamed test_1 through test_5 instead of using one descriptive name",
+            "Nothing is wrong with it -- as long as every assertion eventually runs, one test function covering many behaviors is always the most efficient structure",
             "pytest refuses to execute a test function containing more than one assert statement"
           ],
           "correctOptionIndex": 0,
@@ -377,12 +377,12 @@
           "type": "multipleChoice",
           "prompt": "A traceback's bottom-most frame shows a TypeError raised inside a small utility function that adds two numbers together. What is the most accurate description of what that bottom frame tells you?",
           "options": [
-            "It proves the bug is inside the utility function itself, and the fix should always be made there.",
-            "It tells you exactly where the exception was raised, but the root cause -- such as a caller passing the wrong kind of value -- may lie in a different frame further up the stack.",
             "It is irrelevant, since only the top frame of a traceback matters for debugging.",
-            "It means the utility function should be rewritten to catch and silence all exceptions."
+            "It proves the bug is inside the utility function itself, and the fix should always be made there.",
+            "It means the utility function should be rewritten to catch and silence all exceptions.",
+            "It tells you exactly where the exception was raised, but the root cause -- such as a caller passing the wrong kind of value -- may lie in a different frame further up the stack."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "The bottom frame reliably tells you WHERE an exception was raised, but not necessarily WHY the bad value existed in the first place -- that often traces back to a caller further up the stack that supplied an unexpected type or value. The “It proves the bug is inside…” option overstates what the crash site alone proves; a defensive fix inside the utility function might just hide a bug that originates elsewhere. The “It is irrelevant, since only the top…” option has the reading order backwards -- the bottom, not the top, is where the most specific, actionable information lives. The “It means the utility function should…” option describes actively hiding failures rather than debugging them, which tends to convert a loud, traceable crash into a much harder-to-find silent bug later."
         },
         {
@@ -396,12 +396,12 @@
           "type": "multipleChoice",
           "prompt": "While paused at a breakpoint() inside a function called outer(), the very next line calls helper(). Which pdb command steps execution INTO helper() so you can inspect what happens inside it, line by line, rather than running it to completion in one jump?",
           "options": [
+            "l (list)",
             "s (step)",
             "n (next)",
-            "c (continue)",
-            "l (list)"
+            "c (continue)"
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 1,
           "explanation": "`s` (step) follows execution into a function call, pausing again at the very first line inside it -- exactly what's needed to inspect helper()'s internals. `n` (next) deliberately does the opposite for a call on the current line: it runs the entire called function to completion in one jump and pauses again only once control returns to the current function, without stopping anywhere inside the callee. `c` (continue) runs until the next breakpoint or program end, skipping far more than just one function call. `l` (list) only shows the surrounding source code -- it doesn't affect execution at all."
         }
       ]
@@ -504,12 +504,12 @@
           "type": "multipleChoice",
           "prompt": "What is the most accurate description of what a git branch actually is?",
           "options": [
+            "A remote-only concept that doesn't exist until you push to GitHub.",
             "A full, separate copy of every file in the project at the time the branch was created.",
-            "A lightweight, movable pointer to a specific commit, which moves forward as new commits are made while that branch is checked out.",
             "A folder inside the .git directory containing a duplicate of the project's entire history.",
-            "A remote-only concept that doesn't exist until you push to GitHub."
+            "A lightweight, movable pointer to a specific commit, which moves forward as new commits are made while that branch is checked out."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "A branch is a small reference -- essentially a name pointing at a commit's hash -- not a copy of files or history. Creating one is cheap specifically because it involves no duplication: it just adds a new pointer, initially aimed at the same commit as whatever branch you created it from. As you commit while that branch is checked out, only its pointer advances to follow the new commits. The “A full, separate copy of every file…” and “A folder inside the .git directory containing…” options describe a copying behavior that git specifically avoids for performance and simplicity. The “A remote-only concept that doesn't exist until…” option is wrong because branches are a core local git concept -- they exist and work fully offline, entirely independent of GitHub or any remote."
         },
         {
@@ -523,12 +523,12 @@
           "type": "multipleChoice",
           "prompt": "Developer A makes three commits locally but never runs git push. Developer B clones the project from GitHub right now. Which of A's three local commits will B's clone contain?",
           "options": [
-            "None of them -- since A never pushed, GitHub's copy (and therefore B's fresh clone, which comes from GitHub) has no knowledge of any of A's three local commits",
-            "All three, since git automatically syncs local commits to GitHub in the background as they're made",
             "Only the first of the three, since git automatically pushes the earliest unpushed commit after a period of inactivity",
+            "All three, since git automatically syncs local commits to GitHub in the background as they're made",
+            "None of them -- since A never pushed, GitHub's copy (and therefore B's fresh clone, which comes from GitHub) has no knowledge of any of A's three local commits",
             "It depends on whether B's clone command includes a special synchronization flag"
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 2,
           "explanation": "A local repository and its GitHub remote only synchronize through explicit commands -- push and pull (or fetch) -- never automatically or in the background. A's three commits exist only in A's local repository until A explicitly pushes them. Since that push never happened, GitHub's copy of the repository is completely unaware any of those commits exist, and B's clone -- which copies directly from GitHub -- naturally contains none of them either. There's no partial or automatic syncing behavior of any kind; the commits simply don't exist anywhere outside A's own machine yet."
         }
       ]

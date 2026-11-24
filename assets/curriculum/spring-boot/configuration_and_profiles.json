@@ -106,11 +106,11 @@
           "prompt": "A property is defined in both an OS environment variable and application.properties, with different values. Which value does Spring Boot's Environment resolve to?",
           "options": [
             "application.properties always wins, because it's explicitly part of the application's own packaged configuration.",
-            "The environment variable's value wins, because OS environment variables rank above application.properties in Spring Boot's property source precedence order.",
+            "Whichever source was read first at startup wins, which is effectively random.",
             "Spring Boot throws a startup exception because the same property is defined in two conflicting places.",
-            "Whichever source was read first at startup wins, which is effectively random."
+            "The environment variable's value wins, because OS environment variables rank above application.properties in Spring Boot's property source precedence order."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "OS environment variables sit above application.properties in Spring Boot's precedence order specifically because they represent deployment-time, environment-specific configuration meant to be able to override generic, build-time defaults -- so the Environment resolves to the environment variable's value. The “application.properties always wins, because it's explicitly part…” option inverts the actual precedence. The “Spring Boot throws a startup exception…” option is wrong -- having the same key defined in multiple sources is completely normal and expected, precisely because overriding is the intended use case, not an error condition. The “Whichever source was read first at startup…” option is wrong -- resolution follows a fixed, documented, deterministic precedence order, not source-read timing."
         },
         {
@@ -132,9 +132,9 @@
           "prompt": "A property key is written as `app.feature-flags.new-checkout` in application.properties. Which of the following would actually work as a real OS environment variable, recognized via relaxed binding as satisfying that same key?",
           "options": [
             "APP_FEATURE_FLAGS_NEW_CHECKOUT",
-            "app.feature-flags.new-checkout, set verbatim as the environment variable's literal name",
+            "APP.FEATURE-FLAGS.NEW-CHECKOUT, uppercased but keeping the original dots and hyphens",
             "appFeatureFlagsNewCheckout, written in camelCase with no separators at all",
-            "APP.FEATURE-FLAGS.NEW-CHECKOUT, uppercased but keeping the original dots and hyphens"
+            "app.feature-flags.new-checkout, set verbatim as the environment variable's literal name"
           ],
           "correctOptionIndex": 0,
           "explanation": "Relaxed binding normalizes case, hyphens, underscores, and the dot/underscore boundary, which is exactly what lets UPPER_SNAKE_CASE -- the one naming format virtually every shell and container runtime handles predictably -- satisfy a dotted, kebab-case property key. The “app.feature-flags.new-checkout, set verbatim as the environment variable's literal name” and “APP.FEATURE-FLAGS.NEW-CHECKOUT, uppercased but keeping the original dots and hyphens” options keep dots and/or hyphens, which most shells either forbid outright or handle inconsistently in an environment variable's actual name, making them impractical to set as real env vars in the first place, which is exactly the practical problem relaxed binding exists to solve. The “appFeatureFlagsNewCheckout, written in camelCase with no separators at all” option uses camelCase with no word-boundary markers at all, which relaxed binding's normalization rules don't recognize as equivalent to the dotted/hyphenated key."
@@ -144,12 +144,12 @@
           "type": "multipleChoice",
           "prompt": "spring.profiles.active=prod is set, and both application.properties and application-prod.properties define a value for app.max-connections, with different numbers. Which value does the Environment resolve to, and why?",
           "options": [
-            "application.properties's value, because the base file is always treated as authoritative regardless of which profile is active.",
-            "application-prod.properties's value, because profile-specific files rank above the base application.properties in Spring Boot's property source precedence order.",
+            "Neither -- defining the same key in both the base file and a profile-specific file triggers a startup error.",
             "Whichever file happens to load last during startup, which is effectively non-deterministic run to run.",
-            "Neither -- defining the same key in both the base file and a profile-specific file triggers a startup error."
+            "application-prod.properties's value, because profile-specific files rank above the base application.properties in Spring Boot's property source precedence order.",
+            "application.properties's value, because the base file is always treated as authoritative regardless of which profile is active."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "The precedence list this concept lays out places profile-specific files above the base application.properties/.yml specifically because a profile-specific file represents a more deployment-specific override than the generic, build-time default in the base file -- so for a key both files define, the profile-specific file's value wins. The “application.properties's value, because the base file…” option inverts this relationship. The “Whichever file happens to load last during…” option is wrong -- resolution follows a fixed, deterministic order, not load timing. The “Neither -- defining the same key…” option is wrong -- a key appearing in both the base file and a profile overlay is completely normal and is exactly the mechanism profile-specific overrides rely on."
         },
         {
@@ -261,9 +261,9 @@
           "type": "multipleChoice",
           "prompt": "A team has six related properties, all under the prefix app.email.*, currently injected individually with six separate @Value fields scattered across three different classes. What is the most accurate reason to consolidate them into one @ConfigurationProperties class instead?",
           "options": [
-            "@Value is being deprecated in favor of @ConfigurationProperties and will eventually stop working.",
-            "Grouping related properties into one typed, optionally validated class keeps them together, makes the relationship between them visible in one place, and can fail fast at startup on missing or invalid values in a way six scattered @Value fields don't provide by default.",
             "@ConfigurationProperties resolves properties faster at runtime than @Value does.",
+            "Grouping related properties into one typed, optionally validated class keeps them together, makes the relationship between them visible in one place, and can fail fast at startup on missing or invalid values in a way six scattered @Value fields don't provide by default.",
+            "@Value is being deprecated in favor of @ConfigurationProperties and will eventually stop working.",
             "@Value can only inject String values, so numeric or boolean configuration requires @ConfigurationProperties."
           ],
           "correctOptionIndex": 1,
@@ -275,11 +275,11 @@
           "prompt": "A field is declared `@Value(\"${app.reports.cron-expression}\")`, with no default value written into the placeholder at all. The property app.reports.cron-expression does not appear in any registered property source. What happens at application startup?",
           "options": [
             "The field is silently left null, and the application starts normally.",
-            "Spring throws IllegalArgumentException: Could not resolve placeholder 'app.reports.cron-expression', and the application fails to start.",
+            "The application starts successfully, and a NullPointerException is thrown the first time application code reads the field.",
             "Spring automatically substitutes an empty string \"\" for the unresolved property.",
-            "The application starts successfully, and a NullPointerException is thrown the first time application code reads the field."
+            "Spring throws IllegalArgumentException: Could not resolve placeholder 'app.reports.cron-expression', and the application fails to start."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "A @Value placeholder with no colon-separated default has nothing to fall back on if the referenced property is missing everywhere -- Spring does not inject null in that case, it throws IllegalArgumentException while resolving the placeholder, which fails the whole application startup immediately, before the bean is even fully constructed. This fail-fast behavior is exactly why @Value is a reasonable choice for a required property with no sensible default. The “The field is silently left null…”, “Spring automatically substitutes an empty string \"\"…”, and “The application starts successfully, and a NullPointerException…” options all describe a silent or deferred failure that this specific, default-less placeholder does not exhibit -- those behaviors only resemble what happens when a default IS supplied and the real key is later typo'd."
         },
         {
@@ -287,12 +287,12 @@
           "type": "multipleChoice",
           "prompt": "A class is annotated `@ConfigurationProperties(prefix = \"app.mail\")` only -- no @Component, no @EnableConfigurationProperties on any @Configuration class, and it isn't covered by any @ConfigurationPropertiesScan. What happens to its fields at runtime?",
           "options": [
+            "The application fails to start, because @ConfigurationProperties always requires an explicit registration mechanism to be present.",
             "Spring Boot automatically detects and binds any @ConfigurationProperties class found anywhere on the classpath, similar to how @Entity classes are discovered.",
             "The class is never registered as a Spring bean at all, so nothing ever binds real configuration values onto it -- every field simply keeps whatever default was hardcoded directly in the Java class.",
-            "The application fails to start, because @ConfigurationProperties always requires an explicit registration mechanism to be present.",
             "Spring falls back to binding its fields the same way @Value placeholders are resolved, without requiring bean registration."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "@ConfigurationProperties is metadata describing a binding target's prefix and shape -- it is not a stereotype annotation, and on its own it does nothing to make Spring register the class as a bean. Without @Component, @EnableConfigurationProperties, or @ConfigurationPropertiesScan making it a bean through some route, the class is simply never constructed by the container in a way that triggers binding, so its fields stay at their Java-level defaults indefinitely, with no error to reveal the gap. The “Spring Boot automatically detects and binds any…” option invents an automatic discovery mechanism @ConfigurationProperties doesn't have on its own. The “The application fails to start, because @ConfigurationProperties…” option is wrong -- there's no startup failure, just silent non-binding. The “Spring falls back to binding its fields…” option describes a fallback that doesn't exist."
         },
         {
@@ -300,12 +300,12 @@
           "type": "multipleChoice",
           "prompt": "A constructor-bound, @Validated @ConfigurationProperties class has a field annotated @Min(0) for retryCount. A deployment sets app.notifications.retry-count=-1. What happens when the application starts?",
           "options": [
-            "The class binds successfully with retryCount set to -1; @Min(0) is documentation only, with no actual enforcement at binding time.",
             "The application fails to start, because Spring Boot validates the fully-bound object against its declared constraints immediately after binding and refuses to start if any constraint fails.",
+            "The class binds successfully with retryCount set to -1; @Min(0) is documentation only, with no actual enforcement at binding time.",
             "retryCount is silently clamped to the nearest valid value, 0, with no error or log message.",
             "The @Min(0) constraint is only checked the first time application code actually reads retryCount, not during startup."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "@Validated on a @ConfigurationProperties class triggers Bean Validation against the fully-bound object at application startup, using the same JSR-380 constraint annotations already familiar from validating request DTOs -- a violated constraint refuses application startup entirely, printing exactly which field failed and why, rather than letting a misconfigured value silently exist. The “The class binds successfully with retryCount set…” and “retryCount is silently clamped to the nearest…” options both describe the constraint having no real effect or a silent auto-correction, neither of which validated @ConfigurationProperties classes exhibit. The “The @Min(0) constraint is only checked…” option incorrectly defers validation to first use, when it actually runs once, eagerly, right after the object is bound at startup."
         },
         {
@@ -422,11 +422,11 @@
           "prompt": "spring.profiles.active=staging is set, and both application.properties and application-staging.properties exist, each defining a value for app.log-level (among other keys). What best describes how the final configuration is assembled?",
           "options": [
             "application-staging.properties completely replaces application.properties -- only its values are used at all.",
+            "Having the same key in both files causes a startup error, since profile-specific files must not duplicate base-file keys.",
             "application-staging.properties is loaded as an overlay on top of application.properties; for app.log-level specifically the staging file's value wins, but any key defined only in the base file remains in effect.",
-            "Spring Boot merges the two files by keeping whichever value appears first alphabetically by key.",
-            "Having the same key in both files causes a startup error, since profile-specific files must not duplicate base-file keys."
+            "Spring Boot merges the two files by keeping whichever value appears first alphabetically by key."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "Profile-specific files layer on top of the base application.properties rather than replacing it outright -- keys defined only in the base file remain fully in effect, and for keys defined in both, the profile-specific file's value takes precedence because it ranks higher in Spring Boot's property source precedence order. The “application-staging.properties completely replaces application.properties -- only…” option is wrong because it describes full replacement, not layering. The “Spring Boot merges the two files…” option describes behavior Spring Boot does not implement at all -- there's no alphabetical merge rule. The “Having the same key in both files…” option is wrong -- defining the same key in both a base and profile-specific file is completely normal and is, in fact, the entire mechanism by which profile-specific overrides work; it causes no error whatsoever."
         },
         {
@@ -434,12 +434,12 @@
           "type": "multipleChoice",
           "prompt": "Two beans implement Notifier: one annotated @Profile(\"dev\"), the other @Profile(\"prod\"). The application starts with spring.profiles.active=staging -- a third profile matching neither bean. What happens when something requires a Notifier bean?",
           "options": [
-            "Spring picks whichever bean happens to be declared first in the source code as a reasonable fallback.",
             "The application fails to start with NoSuchBeanDefinitionException, because neither bean is eligible under the active staging profile, so no bean of type Notifier is available to inject at all.",
             "Both beans are registered anyway, since @Profile only affects startup log output, not actual bean registration.",
+            "Spring picks whichever bean happens to be declared first in the source code as a reasonable fallback.",
             "Spring Boot automatically constructs a default, no-op Notifier implementation whenever no profile-guarded bean matches the active profile."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "@Profile genuinely excludes a bean from registration when its guarding profile isn't active -- it's not merely a logging annotation. With staging active, neither LoggingNotifier's dev guard nor SesNotifier's prod guard matches, so neither bean is registered, and the moment something needs a Notifier, Spring finds none available and fails startup with NoSuchBeanDefinitionException -- the same fail-fast unresolved-dependency behavior already familiar from ordinary IoC with no profiles involved at all. The “Spring picks whichever bean happens…”, “Both beans are registered anyway, since @Profile…”, and “Spring Boot automatically constructs a default, no-op…” options each invent a fallback mechanism Spring Boot's profile-based conditional bean registration does not provide."
         },
         {
@@ -447,10 +447,10 @@
           "type": "multipleChoice",
           "prompt": "spring.profiles.active=prod,metrics is set, and both application-prod.properties and application-metrics.properties define a value for management.endpoint.health.show-details, with different values. Which value wins?",
           "options": [
-            "application-prod.properties's value, because prod is listed first in spring.profiles.active.",
+            "The base application.properties's value, since Spring Boot discards both conflicting overlays and falls back to the base file.",
             "application-metrics.properties's value, because when two active profiles' overlay files define the same key, the LATER profile listed in spring.profiles.active takes precedence over an earlier one.",
-            "Neither -- defining the same key across two simultaneously active profiles' files causes a startup error.",
-            "The base application.properties's value, since Spring Boot discards both conflicting overlays and falls back to the base file."
+            "application-prod.properties's value, because prod is listed first in spring.profiles.active.",
+            "Neither -- defining the same key across two simultaneously active profiles' files causes a startup error."
           ],
           "correctOptionIndex": 1,
           "explanation": "The module states this ordering rule explicitly: for multiple active profiles listed together, where two profiles' overlay files define the same key, the later profile in the list takes precedence over the earlier one -- meaning profile order within spring.profiles.active is not purely cosmetic. Here, metrics is listed after prod, so application-metrics.properties's value for the shared key wins. The “application-prod.properties's value, because prod is listed first in spring.profiles.active” option reverses this rule. The “Neither -- defining the same key across…” option invents a startup error that doesn't occur; overlapping keys across active profile files are resolved deterministically, not treated as a conflict. The “The base application.properties's value, since Spring Boot…” option is wrong -- the winning overlay's value is used, not a fallback to the base file."
@@ -460,12 +460,12 @@
           "type": "multipleChoice",
           "prompt": "A team externalizes their database password using `spring.datasource.password=${DB_PASSWORD:changeme}` (with a default of 'changeme'), rather than `${DB_PASSWORD}` with no default at all. What specific risk does adding that default introduce?",
           "options": [
-            "The application will always fail to start, since placeholders in application.properties are not permitted to have defaults.",
-            "If DB_PASSWORD is ever missing at deploy time (a misconfigured container, a forgotten secret), the application starts successfully anyway, silently connecting with the well-known fallback password 'changeme' instead of failing fast with a clear, loud startup error.",
+            "Placeholder defaults are resolved at build time, so 'changeme' would already be permanently baked into the compiled artifact regardless of which environment it runs in.",
             "The default value only applies during local development and is automatically stripped out whenever spring.profiles.active=prod is set.",
-            "Placeholder defaults are resolved at build time, so 'changeme' would already be permanently baked into the compiled artifact regardless of which environment it runs in."
+            "The application will always fail to start, since placeholders in application.properties are not permitted to have defaults.",
+            "If DB_PASSWORD is ever missing at deploy time (a misconfigured container, a forgotten secret), the application starts successfully anyway, silently connecting with the well-known fallback password 'changeme' instead of failing fast with a clear, loud startup error."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "A default on a secret placeholder reintroduces exactly the silent-fallback danger this module warns about for @Value earlier: without a default, a missing DB_PASSWORD fails startup immediately and loudly, exactly like an unresolved @Value placeholder; with a default of 'changeme', a deployment that forgets to supply the real secret starts up looking completely healthy while actually connecting with a well-known, effectively public password -- a much more dangerous failure mode than an obvious crash. The “The application will always fail to start…” option is false -- placeholders can have defaults; that's exactly the mechanism being misused here. The “The default value only applies during local…” option invents automatic, profile-aware default-stripping that doesn't exist. The “Placeholder defaults are resolved at build time…” option misunderstands property resolution as a build-time step; it happens at runtime, against the actual running Environment."
         },
         {

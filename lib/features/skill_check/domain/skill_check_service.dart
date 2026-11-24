@@ -44,7 +44,7 @@ class SkillCheckService {
             moduleId: module.id,
             moduleTitle: module.title,
             conceptId: pick.conceptId,
-            assessment: pick.assessment,
+            assessment: pick.assessment.withShuffledOptions(_random),
           ),
         );
       }

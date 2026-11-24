@@ -103,11 +103,11 @@
           "prompt": "```jsx\nfunction handleClick() {\n  setCount(count + 1);\n  setCount(count + 1);\n  setCount(count + 1);\n}\n```\nIf count starts at 0, what is count after handleClick runs once and the component re-renders?",
           "options": [
             "3, because setCount was called three times, each adding one.",
-            "1, because all three calls close over the same render's count value (0), so each one independently evaluates to 'set state to 1.'",
             "0, because calling setCount with a plain value never actually updates state.",
+            "1, because all three calls close over the same render's count value (0), so each one independently evaluates to 'set state to 1.'",
             "It depends on network latency, since setCount is an asynchronous network call."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "All three calls happen within the same execution of handleClick, so all three read the identical count value captured in this render's closure -- 0. Each call evaluates count + 1 using that same 0, producing 1 every time; React doesn't chain these into a running total, so the net result after all three is 1, not 3. The “3, because setCount was called three times…” option assumes each call builds on the previous call's result, which is exactly what plain-value setState calls do not do (that chaining behavior is what functional updates are for). The “0, because calling setCount with a plain…” option is false -- setCount(count + 1) does update state, just not three times additively. The “It depends on network latency, since setCount…” option is a distractor; setCount is a synchronous scheduling call, not a network request."
         },
         {
@@ -121,12 +121,12 @@
           "type": "multipleChoice",
           "prompt": "A developer wants a setTimeout callback to log the truly latest count, several seconds later, without setting any new state. They consider wrapping the read in a functional update, like `setCount(c => { console.log(\"count is\", c); return c; })`, hoping that fixes the staleness the same way it fixes the double-increment bug. Does this actually solve the read-only staleness problem, and why?",
           "options": [
-            "Yes -- functional updates always give you the live, current value no matter where or how they're used, so this pattern is a universal fix for stale closures of any kind.",
             "Not really the intended tool for this -- a functional update's callback only runs internally, as part of applying a state update; it's designed to compute a new value to store, not to hand a live, always-current value to arbitrary code (like a console.log) at a point where nothing is actually being set. A ref kept in sync with the state is the standard tool for that read-only case instead.",
             "No -- functional updates only work when called synchronously, in the same tick as the state was declared, so they can never be used inside a setTimeout at all.",
-            "No -- useState only accepts one functional update per component for its entire lifetime, so this would throw on the second call."
+            "No -- useState only accepts one functional update per component for its entire lifetime, so this would throw on the second call.",
+            "Yes -- functional updates always give you the live, current value no matter where or how they're used, so this pattern is a universal fix for stale closures of any kind."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "Functional updates fix staleness specifically when a callback is computing a new state value from whatever the latest queued value turns out to be -- that's the exact 'concept' behind setCount(c => c + 1) chaining correctly. Reading the latest value purely to log it or compare it, with no new state actually being produced, is a different problem: doing it by calling setCount just to piggyback console.log inside the updater technically works, but it's calling the state setter (scheduling a re-render) purely as a side-effect delivery mechanism, which is not what functional updates exist for. The concept explicitly calls out that the standard tool for 'I just need the latest value, read-only, inside an already-stale callback' is a ref kept manually in sync with the state, since a ref's .current is always read fresh through the same persistent object rather than a value captured at closure-creation time."
         }
       ]
@@ -229,9 +229,9 @@
           "type": "multipleChoice",
           "prompt": "A teammate says: \"I left `userId` out of this effect's dependency array on purpose, since I only want it to run once, and it's a minor performance tweak either way.\" The effect reads `userId` inside its body. What's the accurate assessment?",
           "options": [
-            "That's correct -- dependency arrays are purely a performance optimization, so leaving one out just means the effect might run slightly more or less often than ideal.",
-            "That's incorrect -- omitting a dependency the effect actually reads means the effect's closure keeps using the userId value from whichever render it last ran on; if userId later changes, the effect won't notice and will keep operating on stale data. This is a correctness bug, not a performance tradeoff.",
             "That's incorrect -- effects with any dependency array shorter than the number of props the component receives will throw a runtime error.",
+            "That's incorrect -- omitting a dependency the effect actually reads means the effect's closure keeps using the userId value from whichever render it last ran on; if userId later changes, the effect won't notice and will keep operating on stale data. This is a correctness bug, not a performance tradeoff.",
+            "That's correct -- dependency arrays are purely a performance optimization, so leaving one out just means the effect might run slightly more or less often than ideal.",
             "That's correct, but only because useEffect automatically reruns for every prop change regardless of what's listed in the dependency array."
           ],
           "correctOptionIndex": 1,
@@ -248,12 +248,12 @@
           "type": "multipleChoice",
           "prompt": "```jsx\nuseEffect(() => {\n  const id = setInterval(() => {\n    console.log(\"tick for\", label);\n  }, 1000);\n\n  return () => clearInterval(id);\n}, [label]);\n```\nIf `label` changes from \"A\" to \"B\" while this component stays mounted, what happens, in order?",
           "options": [
-            "The old interval (ticking \"A\") is cleared first, and only then does a brand-new interval (ticking \"B\") start -- there's never a moment where both are running at once.",
-            "The new interval (ticking \"B\") starts first, and the old interval (ticking \"A\") is cleared afterward, so both briefly run at the same time.",
             "Both intervals keep running side by side indefinitely, since useEffect never automatically cleans up a timer.",
-            "Nothing happens until the component unmounts entirely -- the cleanup function only ever runs then, never in response to label changing."
+            "The new interval (ticking \"B\") starts first, and the old interval (ticking \"A\") is cleared afterward, so both briefly run at the same time.",
+            "Nothing happens until the component unmounts entirely -- the cleanup function only ever runs then, never in response to label changing.",
+            "The old interval (ticking \"A\") is cleared first, and only then does a brand-new interval (ticking \"B\") start -- there's never a moment where both are running at once."
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 3,
           "explanation": "The returned cleanup function runs right before the effect runs again for a new set of dependency values, not only on unmount. So when label changes to \"B\", React first calls the cleanup from the PREVIOUS run -- clearInterval(id) for the \"A\" interval -- and only after that does it run the effect body again, creating a fresh interval that ticks \"B\". This ordering guarantees there's never a moment with two overlapping intervals both firing, which is exactly the leak/duplication problem the cleanup function exists to prevent. The “Nothing happens until the component unmounts entirely…” option describes only half of when cleanup runs -- it also runs on unmount, but that's not the only trigger."
         }
       ]
@@ -340,11 +340,11 @@
           "prompt": "Which of these changes, by itself, causes a component to re-render?",
           "options": [
             "Mutating a ref's .current property.",
-            "Calling a state setter function returned by useState.",
             "Reading a prop's current value inside the component body.",
-            "Declaring a new local variable with let inside the component function."
+            "Declaring a new local variable with let inside the component function.",
+            "Calling a state setter function returned by useState."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "Calling a state setter is one of React's actual triggers for scheduling a re-render -- it's the mechanism specifically designed to say 'something changed, please run this component again.' Mutating a ref's .current (“Mutating a ref's .current property”) is explicitly the opposite case: React has no way of knowing, and schedules nothing. Reading a prop (“Reading a prop's current value inside the component body”) doesn't change anything by itself -- it's just accessing a value already provided; a prop only changes because the parent re-rendered and passed something new, not because the child read it. Declaring a local variable (“Declaring a new local variable with let…”) has no effect on React's rendering system at all -- it's just an ordinary piece of JavaScript scoped to that one function call."
         },
         {
@@ -352,12 +352,12 @@
           "type": "multipleChoice",
           "prompt": "```jsx\nfunction VideoPlayer() {\n  const videoRef = useRef(null);\n\n  function handlePlayClick() {\n    videoRef.current.play();\n  }\n\n  return (\n    <div>\n      <video ref={videoRef} src=\"clip.mp4\" />\n      <button onClick={handlePlayClick}>Play</button>\n    </div>\n  );\n}\n```\nWhy is it safe for handlePlayClick to call `videoRef.current.play()` directly, with no null check, even though videoRef starts out as null?",
           "options": [
-            "videoRef.current is guaranteed to be null only on the very first render, and guaranteed to already be the real <video> DOM node by the time a user could actually click the button, since React attaches the ref once the element has mounted -- well before any click on that same rendered button could occur.",
-            "useRef never actually returns null as its current value, no matter what argument is passed to useRef(...).",
             "handlePlayClick secretly runs inside an implicit useEffect, so React automatically delays calling it until videoRef.current is non-null.",
-            "React automatically calls .play() itself as soon as the ref attaches, making handlePlayClick's own call redundant but harmless."
+            "React automatically calls .play() itself as soon as the ref attaches, making handlePlayClick's own call redundant but harmless.",
+            "videoRef.current is guaranteed to be null only on the very first render, and guaranteed to already be the real <video> DOM node by the time a user could actually click the button, since React attaches the ref once the element has mounted -- well before any click on that same rendered button could occur.",
+            "useRef never actually returns null as its current value, no matter what argument is passed to useRef(...)."
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 2,
           "explanation": "videoRef.current starts as null and becomes the real DOM node only once React has mounted the <video> element -- but that happens as part of committing the very first render, before the user has any opportunity to interact with anything on the page at all. Since handlePlayClick can only run in response to an actual click on an already-rendered button, the <video> element (and thus videoRef.current) is guaranteed to already exist by the time that's possible. The “useRef never actually returns null…” option is false -- useRef(null) does start as null, that's the whole point of passing null as its initial value; it's the timing of when the ref later gets updated that makes checking for null unnecessary here specifically."
         }
       ]
@@ -447,12 +447,12 @@
           "type": "multipleChoice",
           "prompt": "A component computes `const total = items.reduce((sum, i) => sum + i.price, 0);` from a small array of 5 items, on every render, and this value isn't passed to any other hook's dependency array or to a React.memo'd child. Should this be wrapped in useMemo?",
           "options": [
-            "Yes, always -- any computed value should be memoized as a general best practice.",
             "No -- summing 5 items is cheap, and since the result isn't used anywhere that cares about referential identity or expensive recomputation, useMemo would add the cost of a dependency check and cached-value bookkeeping for no real benefit.",
             "Yes, but only because reduce() is always considered an expensive operation in React.",
-            "No -- useMemo cannot be used with array methods like reduce()."
+            "No -- useMemo cannot be used with array methods like reduce().",
+            "Yes, always -- any computed value should be memoized as a general best practice."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "useMemo earns its cost when either the computation itself is genuinely expensive, or the resulting value's reference identity matters downstream (as a dependency of another hook, or a prop into a React.memo'd child). Neither applies here: summing 5 numbers is trivial, and nothing downstream compares this value by reference. Wrapping it in useMemo would mean paying for a dependency comparison and cached-value storage every render, in exchange for skipping a computation that was already essentially free -- a net loss, not a win. The “Yes, always -- any computed value should…” option describes the 'memoize everything just in case' anti-pattern directly. The “Yes, but only because reduce() is always…” option is false -- reduce() over a small array is not inherently expensive; cost depends on what's actually being computed and over how much data. The “No -- useMemo cannot be used…” option is false -- useMemo works with any computation, reduce() included."
         },
         {
@@ -460,10 +460,10 @@
           "type": "multipleChoice",
           "prompt": "```jsx\nfunction SearchBox({ onSearch }) {\n  const [query, setQuery] = useState(\"\");\n\n  const handleSubmit = useCallback(() => {\n    onSearch(query);\n  }, []);\n\n  return (\n    <input\n      value={query}\n      onChange={(e) => setQuery(e.target.value)}\n      onKeyDown={(e) => e.key === \"Enter\" && handleSubmit()}\n    />\n  );\n}\n```\nWith an empty dependency array, what's wrong with handleSubmit here?",
           "options": [
-            "Nothing -- an empty dependency array is always the correct choice for an event handler wrapped in useCallback.",
-            "handleSubmit is memoized once, on the first render, and its closure over query is frozen at that render's value (the empty string) forever -- since query isn't listed as a dependency, handleSubmit keeps calling onSearch with the stale, original query no matter how much the user has typed since.",
             "This throws a runtime error immediately, since useCallback requires at least one dependency to be listed in its array.",
-            "handleSubmit automatically re-creates itself whenever query changes regardless of the dependency array, since useCallback always tracks every piece of state referenced in its function body."
+            "handleSubmit is memoized once, on the first render, and its closure over query is frozen at that render's value (the empty string) forever -- since query isn't listed as a dependency, handleSubmit keeps calling onSearch with the stale, original query no matter how much the user has typed since.",
+            "handleSubmit automatically re-creates itself whenever query changes regardless of the dependency array, since useCallback always tracks every piece of state referenced in its function body.",
+            "Nothing -- an empty dependency array is always the correct choice for an event handler wrapped in useCallback."
           ],
           "correctOptionIndex": 1,
           "explanation": "useCallback(fn, deps) behaves identically to useMemo(() => fn, deps) -- it's genuinely just useMemo specialized for functions, which means it's subject to exactly the same dependency rules and the same stale-closure risk as any other memoized value or effect. handleSubmit reads query in its body but query isn't listed in the dependency array, so handleSubmit is created once (closing over query as it was on that first render, an empty string) and never recreated -- every later call to handleSubmit still calls onSearch with that original, stale query, regardless of what the user has since typed. This is the exact same 'omitting a dependency you actually read is a correctness bug' rule covered for useEffect, just showing up through useCallback instead."
@@ -551,11 +551,11 @@
           "prompt": "Why does calling a hook conditionally (e.g. inside an if statement) risk corrupting a component's state, rather than simply skipping that piece of state entirely on some renders?",
           "options": [
             "Because React identifies each hook call by the variable name it's assigned to, and conditional calls confuse that name-matching process.",
+            "Because hooks can only be called a fixed maximum number of times per component, and a conditional call risks exceeding that limit.",
             "Because React matches each hook call to its stored state purely by the order hooks are called in during a render; skipping a call on some renders shifts every subsequent hook call's position relative to React's internally tracked list, causing later calls to read or write the wrong stored value.",
-            "Because conditionally calling a hook causes a JavaScript syntax error that only appears at runtime under specific conditions.",
-            "Because hooks can only be called a fixed maximum number of times per component, and a conditional call risks exceeding that limit."
+            "Because conditionally calling a hook causes a JavaScript syntax error that only appears at runtime under specific conditions."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "React has no name-based lookup for hooks (ruling out the “Because React identifies each hook call…” option) -- it relies entirely on call order/position within a given render, matched against the previous render's sequence of calls for that component instance. Skipping a hook call on some renders but not others shifts the position of every hook call that follows it, so React ends up handing back state (or a ref) intended for a different hook call -- silently, with no thrown error, which rules out the “Because conditionally calling a hook causes…” option. The “Because hooks can only be called…” option describes a limit that doesn't exist; the actual issue is purely about consistent ordering across renders, not a call-count ceiling."
         },
         {
@@ -564,11 +564,11 @@
           "prompt": "```jsx\nfunction useCounter(initial) {\n  const [count, setCount] = useState(initial);\n  const increment = () => setCount((c) => c + 1);\n  return [count, increment];\n}\n\nfunction CounterA() {\n  const [count, increment] = useCounter(0);\n  return <button onClick={increment}>A: {count}</button>;\n}\n\nfunction CounterB() {\n  const [count, increment] = useCounter(100);\n  return <button onClick={increment}>B: {count}</button>;\n}\n```\nBoth components call the same useCounter function. If a user clicks CounterA's button three times, what happens to CounterB's displayed count?",
           "options": [
             "It also increases by 3, since both components are calling the same useCounter function and therefore share the same underlying count.",
-            "It stays exactly at 100, completely unaffected -- each component instance that calls useCounter gets its own independent count state, even though both calls run the exact same function body.",
             "It resets back to 0, since a second component calling useCounter overwrites whatever state the first component's call had set up.",
-            "It becomes undefined, since a custom hook can only be safely called from a single component at a time."
+            "It becomes undefined, since a custom hook can only be safely called from a single component at a time.",
+            "It stays exactly at 100, completely unaffected -- each component instance that calls useCounter gets its own independent count state, even though both calls run the exact same function body."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "A custom hook is just a regular function whose body happens to call other hooks -- and React tracks the resulting state per component instance, not per shared function definition. CounterA and CounterB each make their own independent call to useCounter, and each of those calls gets its own useState slot, entirely separate from the other's, purely because they're invoked from two different component instances. Sharing the same useCounter implementation is exactly like two different components each independently calling useState directly -- it bundles up the pattern for reuse, but it does not create any shared state between the callers. CounterB's count, never having had its own increment clicked, simply stays at its own initial value of 100."
         }
       ]
@@ -653,10 +653,10 @@
           "type": "multipleChoice",
           "prompt": "A context's value is an object like { cartItems, cartTotal, wishlist, currentUser }, consumed via useContext by dozens of components across a large app, including a MiniCartIcon that only ever reads cartItems.length. What happens to MiniCartIcon when wishlist changes?",
           "options": [
-            "Nothing -- useContext only re-renders a component when the specific field it destructures out of the value actually changes.",
+            "It depends on whether MiniCartIcon is wrapped in React.memo -- with React.memo, it would never re-render for any reason.",
             "MiniCartIcon re-renders anyway, because useContext subscribes it to the context's value as a whole object; a new value reference (caused by wishlist changing) re-renders every consumer, regardless of which specific field each one reads.",
-            "MiniCartIcon throws a runtime error, since it isn't supposed to be affected by a field it doesn't read.",
-            "It depends on whether MiniCartIcon is wrapped in React.memo -- with React.memo, it would never re-render for any reason."
+            "Nothing -- useContext only re-renders a component when the specific field it destructures out of the value actually changes.",
+            "MiniCartIcon throws a runtime error, since it isn't supposed to be affected by a field it doesn't read."
           ],
           "correctOptionIndex": 1,
           "explanation": "useContext subscribes to the context's value as a single unit -- React only tracks whether that value's reference changed overall, not which specific fields a given consumer happens to read from it. Since wishlist changing produces a new value object reference (assuming, as is typical, the value is rebuilt fresh whenever any of its constituent state changes), every consumer of that context re-renders, MiniCartIcon included, even though cartItems.length is unaffected. The “MiniCartIcon throws a runtime error, since…” option is false -- this doesn't throw; it's a real but silent performance cost, not an error. The “It depends on whether MiniCartIcon is wrapped…” option is a partial distractor: wrapping the component receiving the context value in React.memo doesn't change how useContext itself behaves inside that component -- the re-render is triggered by the subscription itself, not by a prop comparison React.memo could intercept."
@@ -666,12 +666,12 @@
           "type": "multipleChoice",
           "prompt": "```jsx\nconst ThemeContext = createContext(\"light\");\n\nfunction App() {\n  return (\n    <ThemeContext.Provider value=\"dark\">\n      <Outer />\n    </ThemeContext.Provider>\n  );\n}\n\nfunction Outer() {\n  return (\n    <ThemeContext.Provider value=\"blue\">\n      <Inner />\n    </ThemeContext.Provider>\n  );\n}\n\nfunction Inner() {\n  const theme = useContext(ThemeContext);\n  return <p>{theme}</p>;\n}\n```\nWhat does Inner actually display?",
           "options": [
-            "\"dark\" -- the outermost Provider in the tree always takes priority.",
             "\"blue\" -- useContext resolves to the value from the nearest enclosing Provider above the calling component, and Outer's Provider is closer to Inner than App's.",
             "\"light\" -- createContext's own default value always takes priority whenever a component is wrapped by more than one Provider for the same context.",
+            "\"dark\" -- the outermost Provider in the tree always takes priority.",
             "An error -- a given context can only be supplied by one Provider per component tree."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "useContext walks up from the calling component and resolves to whichever Provider for that context is nearest, ignoring any Provider further out. Here, Inner sits inside Outer's <ThemeContext.Provider value=\"blue\">, which is nested inside App's <ThemeContext.Provider value=\"dark\">; the inner one is the nearest enclosing Provider relative to Inner, so it wins, and Inner displays \"blue\". App's \"dark\" value only matters for consumers that sit between App's Provider and Outer's Provider (if any existed) -- it's shadowed for anything inside Outer's own Provider. createContext's default value (\"light\") is only ever used as a last resort, when a consumer has no enclosing Provider at all -- it never overrides an actual Provider, ruling out the “\"light\" -- createContext's own default value always…” option. Nesting multiple Providers for the same context is completely valid, ruling out the “An error -- a given context can…” option."
         }
       ]

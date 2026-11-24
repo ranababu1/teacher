@@ -105,11 +105,11 @@
           "prompt": "A team scales its web tier from 4 to 40 servers behind a load balancer, but observes that peak-load latency barely improves. What is the most likely explanation?",
           "options": [
             "The load balancer is misconfigured and cannot handle more than 4 backend servers.",
-            "Some shared downstream resource (a database, a cache, a lock, a third-party API) is saturated, so extra app servers just queue up in front of the same bottleneck instead of doing more useful work.",
             "Horizontal scaling has a fundamental hard limit of about 4-10x, regardless of workload.",
+            "Some shared downstream resource (a database, a cache, a lock, a third-party API) is saturated, so extra app servers just queue up in front of the same bottleneck instead of doing more useful work.",
             "Adding more servers to a load balancer always increases network latency proportionally, canceling out the extra capacity."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "This is the classic \"you scaled the wrong layer\" pattern: the app tier can now accept far more concurrent requests, but if all of them ultimately have to wait on one saturated shared resource downstream, extra app servers just create a longer queue in front of that same resource rather than increasing real throughput. The “The load balancer is misconfigured and cannot…” option is wrong -- load balancers routinely handle far more than 40 backends; that's not an inherent limitation. The “Horizontal scaling has a fundamental hard limit…” option is wrong -- there's no universal hard limit like this; the actual limit depends entirely on where the real bottleneck sits. The “Adding more servers to a load balancer…” option is wrong -- a well-configured load balancer adds negligible, roughly constant latency per hop; it doesn't scale up proportionally with backend count."
         },
         {
@@ -137,11 +137,11 @@
           "prompt": "A team says: \"We upgraded from 10 to 40 app servers, so we now have exactly 4x the throughput capacity.\" Based on the concept's second misconception about server count and capacity, when is this claim actually true?",
           "options": [
             "Always, as long as the load balancer is configured correctly.",
-            "Only if each unit of work is fully independent and never needs to touch shared state such as a common database, cache, or lock -- otherwise some of the added capacity is consumed by contention and coordination overhead rather than useful work.",
+            "Never -- horizontal scaling capacity gains are always sublinear regardless of workload.",
             "Only if all 40 servers are the exact same instance size as the original 10.",
-            "Never -- horizontal scaling capacity gains are always sublinear regardless of workload."
+            "Only if each unit of work is fully independent and never needs to touch shared state such as a common database, cache, or lock -- otherwise some of the added capacity is consumed by contention and coordination overhead rather than useful work."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "The concept's second misconception addresses this directly: \"N times the servers gives N times the capacity\" only holds for embarrassingly parallel workloads with no shared state. The moment servers share a database, cache, or lock, some capacity is consumed by contention rather than useful work -- in the extreme, if a shared bottleneck is already saturated, adding more servers in front of it buys no additional throughput at all. The “Always, as long as the load balancer…” option ignores this entirely. The “Only if all 40 servers…” option is irrelevant -- the concept never conditions the claim on instance size matching. The “Never -- horizontal scaling capacity gains…” option overstates the point -- linear scaling is achievable for genuinely independent workloads, it isn't universally sublinear."
         },
         {
@@ -149,12 +149,12 @@
           "type": "multipleChoice",
           "prompt": "Per the \"Choosing Between Them: Sequencing, Not Ideology\" section, which of the following is a valid, independent reason to move from vertical to horizontal scaling, distinct from simply having hit a capacity ceiling?",
           "options": [
-            "The engineering team finds distributed systems more technically interesting to work on.",
             "An availability requirement (e.g., a 99.99% uptime SLA) that no single machine can satisfy on its own, because one machine -- however large -- is always exactly one fault domain.",
+            "The application was originally written in a language that doesn't support multithreading.",
             "The current cloud provider's largest instance type became slightly cheaper this quarter.",
-            "The application was originally written in a language that doesn't support multithreading."
+            "The engineering team finds distributed systems more technically interesting to work on."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "The concept names two distinct forces that justify moving to horizontal scaling: hitting the vertical ceiling (capacity or cost), or -- the one people most often miss -- an availability requirement that no single machine can meet regardless of size, since a single machine is always exactly one fault domain. The “The engineering team finds distributed systems more…” option is a preference, not an architectural justification given anywhere in the material. The “The current cloud provider's largest instance type…” option would, if anything, reduce pressure to move off vertical scaling. The “The application was originally written…” option describes a language limitation unrelated to the fault-domain argument the concept actually makes."
         }
       ]
@@ -263,12 +263,12 @@
           "type": "multipleChoice",
           "prompt": "A team enables sticky sessions on their load balancer to fix a bug where users' shopping carts kept disappearing after scaling to multiple servers. What is the main long-term downside of this fix compared to externalizing session state to a shared store?",
           "options": [
-            "Sticky sessions are slower for every single request, even when nothing goes wrong.",
             "Sticky sessions pin each user to one specific backend instance, so if that instance goes down, that user's session/cart is lost anyway, and load can become uneven if some pinned users generate much more traffic than others.",
-            "Sticky sessions require rewriting the entire application in a different programming language.",
-            "Sticky sessions only work with round-robin load balancing and cannot be combined with health checks."
+            "Sticky sessions only work with round-robin load balancing and cannot be combined with health checks.",
+            "Sticky sessions are slower for every single request, even when nothing goes wrong.",
+            "Sticky sessions require rewriting the entire application in a different programming language."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "Sticky sessions fix the immediate symptom (routing) but not the underlying fragility: the user's data still lives on exactly one instance, so that instance becomes, in effect, a single point of failure for every user pinned to it, and the load balancer loses some of its freedom to spread load evenly since it must keep sending certain users to certain backends regardless of current load. The “Sticky sessions are slower for every single…” option is wrong -- sticky sessions add negligible per-request overhead (just a cookie or header check), not a fundamental slowdown. The “Sticky sessions require rewriting the entire application…” option is absurd -- no language rewrite is implied. The “Sticky sessions only work with round-robin load…” option is wrong -- sticky sessions can be layered on top of most balancing strategies and don't conflict with health checks, though a health check failure on a pinned backend does still strand that backend's sessions, reinforcing the correct answer's point."
         },
         {
@@ -296,11 +296,11 @@
           "prompt": "A system uses consistent hashing to route requests to a pool of backend servers that each maintain a local cache. Why is consistent hashing specifically well-suited to this setup, compared to round robin?",
           "options": [
             "Consistent hashing guarantees perfectly equal request counts across all backends at all times, which round robin cannot do.",
+            "Consistent hashing is simply faster to compute than round robin, which is the concept's stated reason it's chosen for caching workloads.",
             "Consistent hashing routes the same key to the same backend repeatedly, letting that backend build a useful local cache for that key, and when the pool resizes, only a small fraction of keys get remapped rather than a wholesale reshuffle.",
-            "Consistent hashing eliminates the need for health checks because it never routes to an unhealthy backend.",
-            "Consistent hashing is simply faster to compute than round robin, which is the concept's stated reason it's chosen for caching workloads."
+            "Consistent hashing eliminates the need for health checks because it never routes to an unhealthy backend."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "The concept explains that consistent hashing routes based on a hash of a key so the same key tends to reach the same backend, which lets that backend build a useful local cache -- and crucially, when the backend pool changes size, only a small fraction of keys get reassigned rather than the wholesale reshuffling a naive hash-and-mod approach would cause. The “Consistent hashing guarantees perfectly equal request counts…” option is false -- round robin, not consistent hashing, is the one that guarantees equal request counts; consistent hashing can produce uneven distribution across backends. The “Consistent hashing eliminates the need for health…” option is fabricated -- consistent hashing doesn't replace health checks anywhere in the material. The “Consistent hashing is simply faster to compute…” option mischaracterizes the tradeoff -- the concept never claims consistent hashing is chosen for raw computational speed."
         },
         {
@@ -309,11 +309,11 @@
           "prompt": "A backend's health check endpoint simply returns HTTP 200 OK unconditionally, without checking whether it can reach its database. What failure mode does this create, per the concept's discussion of health checks?",
           "options": [
             "It has no downside, since the load balancer only cares that the process is running at all.",
-            "It creates a false-positive health check: the load balancer keeps routing real traffic to an instance that reports healthy but cannot actually serve requests correctly because a real dependency it needs is down.",
             "It causes a thundering herd, where all instances receive traffic simultaneously right after a deploy.",
-            "It forces the load balancer to fall back to sticky sessions for that backend."
+            "It forces the load balancer to fall back to sticky sessions for that backend.",
+            "It creates a false-positive health check: the load balancer keeps routing real traffic to an instance that reports healthy but cannot actually serve requests correctly because a real dependency it needs is down."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "The concept warns specifically that a health endpoint returning \"200 OK\" without exercising real dependencies like database connectivity can report healthy while the actual request path is broken -- a false positive that defeats the whole point of health checking. The “It has no downside, since the load…” option ignores this explicitly named failure mode. The “It causes a thundering herd, where all…” option describes a different, separate issue (recovery flooding) covered in the same section but not the one caused by this scenario. The “It forces the load balancer to fall…” option is fabricated -- health check quality has no described relationship to sticky sessions in the concept."
         }
       ]
@@ -422,10 +422,10 @@
           "type": "multipleChoice",
           "prompt": "Which of the following best describes what the CAP theorem actually forces a distributed system to choose between?",
           "options": [
-            "Whether the system uses SQL or NoSQL as its data model.",
+            "Whether the system can have more than one replica of its data at all.",
             "Whether the system prioritizes returning a response at all (availability) or refusing to respond rather than risk staleness (consistency), specifically during an actual network partition.",
-            "Whether the system runs on-premises or in the cloud.",
-            "Whether the system can have more than one replica of its data at all."
+            "Whether the system uses SQL or NoSQL as its data model.",
+            "Whether the system runs on-premises or in the cloud."
           ],
           "correctOptionIndex": 1,
           "explanation": "CAP is specifically about the forced tradeoff that appears once a network partition actually occurs between nodes holding replicated data: a node cut off from its peers must either answer anyway with data it cannot guarantee is current (favoring availability) or refuse to answer until it can confirm correctness (favoring consistency) -- it cannot do both at once for the same request. The “Whether the system uses SQL or NoSQL…” option confuses CAP with a data-modeling choice unrelated to the theorem. The “Whether the system runs on-premises or in the cloud” option confuses it with a deployment/infrastructure choice. The “Whether the system can have more…” option is backwards -- CAP only becomes relevant once you DO have multiple replicas that can become partitioned from each other; a single-node system isn't making a CAP tradeoff at all."
@@ -441,12 +441,12 @@
           "type": "multipleChoice",
           "prompt": "A node passes its own internal check that no foreign-key constraint or application invariant has been violated by a transaction, but it disagrees with another replica about the current value of a key during a network partition. What does this scenario illustrate?",
           "options": [
+            "This is impossible -- ACID consistency and CAP consistency are the same guarantee, so one cannot hold without the other.",
             "The node has violated ACID consistency, which automatically means it has also violated CAP consistency.",
             "The node can be perfectly ACID-consistent (its own internal invariants hold) while the system as a whole fails CAP consistency, because CAP consistency is about agreement between multiple nodes, not a single node's internal correctness.",
-            "This is impossible -- ACID consistency and CAP consistency are the same guarantee, so one cannot hold without the other.",
             "The node's disagreement proves the system is not partition tolerant."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "The concept is explicit that CAP's \"Consistency\" is not the same word as ACID's \"C\" -- a system can be perfectly ACID-consistent on every individual node while still failing CAP consistency if nodes disagree with each other during a partition. The “The node has violated ACID consistency…” option conflates the two distinct guarantees the concept works hard to separate. The “This is impossible -- ACID consistency…” option directly contradicts the concept's central clarifying point about the two terms. The “The node's disagreement proves the system…” option confuses partition tolerance (continuing to operate despite the network dropping messages) with the consistency guarantee actually being discussed here."
         },
         {
@@ -454,12 +454,12 @@
           "type": "multipleChoice",
           "prompt": "Coordination services like ZooKeeper and etcd are typically built to lean CP rather than AP. Based on the concept's reasoning about mapping real systems to the tradeoff, why?",
           "options": [
-            "Because leader-election and configuration data changes so rarely that availability doesn't matter for them.",
             "Because two nodes simultaneously believing they are the leader (\"split brain\") is a far more damaging outcome than briefly refusing to answer a request, so these systems favor correctness over responsiveness.",
-            "Because ZooKeeper and etcd are older technologies that predate AP-style design.",
-            "Because CP systems are always faster than AP systems under normal operation."
+            "Because leader-election and configuration data changes so rarely that availability doesn't matter for them.",
+            "Because CP systems are always faster than AP systems under normal operation.",
+            "Because ZooKeeper and etcd are older technologies that predate AP-style design."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "The concept explains that coordination services lean CP specifically because a wrong answer (electing two leaders at once) is far more damaging than temporary unavailability -- it's a judgment about which failure mode is more tolerable for that particular data, not a general ranking of technologies. The “Because leader-election and configuration data changes…” option is not the stated reasoning and mischaracterizes how much this data changing matters. The “Because ZooKeeper and etcd are older technologies…” option is an appeal to age the concept never makes -- CAP-based design choices aren't framed as being about a technology's era. The “Because CP systems are always faster…” option is false and unsupported; CP vs. AP is about behavior during partitions, not baseline speed under normal conditions."
         },
         {
@@ -467,12 +467,12 @@
           "type": "multipleChoice",
           "prompt": "A system serves requests that are both fully consistent and always available during normal operation. A partition then occurs, and for its duration the system starts rejecting some requests rather than risk stale answers. Per the concept's discussion of common misreadings of CAP, does this contradict the system being \"CP\"?",
           "options": [
-            "Yes -- a true CP system must sacrifice availability at all times, not just during partitions.",
-            "No -- CAP is specifically a statement about tradeoffs during an actual partition; outside of a partition, a well-designed system can serve both consistent and available responses simultaneously, and this doesn't make it any less \"CP\" in how it behaves once a partition actually occurs.",
+            "No, but only because the system must secretly be AP during normal operation and only switches to CP during partitions, which the concept describes as a design flaw.",
             "Yes -- if the system was ever available and consistent at the same time, it was never really CP in the first place.",
-            "No, but only because the system must secretly be AP during normal operation and only switches to CP during partitions, which the concept describes as a design flaw."
+            "Yes -- a true CP system must sacrifice availability at all times, not just during partitions.",
+            "No -- CAP is specifically a statement about tradeoffs during an actual partition; outside of a partition, a well-designed system can serve both consistent and available responses simultaneously, and this doesn't make it any less \"CP\" in how it behaves once a partition actually occurs."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "The concept directly addresses this misreading: CAP does not mean a system is always sacrificing one property at every moment -- under normal, healthy network conditions, a well-designed system can serve both simultaneously, and the theorem only forces the choice specifically during an actual partition. The “Yes -- a true CP system must…” and “Yes -- if the system was ever…” options both wrongly assume CP requires constant sacrifice rather than partition-specific behavior. The “No, but only because the system must…” option invents a \"design flaw\" framing that isn't supported by the material -- behaving both-and during normal operation, then choosing C over A during a partition, is exactly correct CP behavior, not a flaw."
         }
       ]

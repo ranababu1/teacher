@@ -104,12 +104,12 @@
           "type": "multipleChoice",
           "prompt": "A company runs a single EC2 instance in us-east-1a serving production traffic. Which change most directly improves its resilience against an Availability-Zone-level failure?",
           "options": [
-            "Launch a second, identical EC2 instance also in us-east-1a and register both with a target group.",
             "Resize the existing EC2 instance to a larger instance type, still in us-east-1a.",
             "Launch a second EC2 instance in a different Availability Zone, such as us-east-1b, and place both instances behind a load balancer spanning both AZs.",
+            "Launch a second, identical EC2 instance also in us-east-1a and register both with a target group.",
             "Migrate the instance to an entirely different AWS Region."
           ],
-          "correctOptionIndex": 2,
+          "correctOptionIndex": 1,
           "explanation": "AZ-level fault tolerance requires diversifying across independent failure domains -- adding a second instance in the same AZ (“Launch a second, identical EC2 instance also…”) doesn't achieve that, since both instances still share the same power, cooling, and network infrastructure and would fail together. Resizing to a bigger instance (“Resize the existing EC2 instance…”) addresses capacity or performance, not AZ-level failure, and doesn't touch the underlying single-point-of-failure at all. Migrating Regions entirely (“Migrate the instance to an entirely different AWS Region”) is a disproportionate, much more expensive response to an AZ-level concern, and doesn't by itself provide any redundancy either -- it just relocates the same single point of failure elsewhere. The correct answer is the direct, standard fix: a second instance in a genuinely different AZ, with a load balancer spanning both, means the failure of either AZ alone leaves the other fully able to serve traffic."
         },
         {
@@ -118,11 +118,11 @@
           "prompt": "The AWS CLI's `describe-availability-zones` output shows both a Zone Name (like `us-east-1a`) and a Zone ID (like `use1-az1`) for each Availability Zone. Why does AWS recommend using the Zone ID rather than the Zone Name for cross-account AZ coordination?",
           "options": [
             "Zone IDs are simply a shorter, more convenient alias for Zone Names with no functional difference between accounts.",
-            "AWS deliberately maps the letter suffixes in Zone Names to different physical AZs for different accounts, to spread customer load evenly -- so 'us-east-1a' in one account may not be the same physical data center as 'us-east-1a' in another, while the Zone ID stays a stable identifier for the physical AZ.",
+            "Zone IDs are required because Zone Names only work within the AWS Management Console, not the CLI.",
             "Zone Names are deprecated and will stop working in a future API version.",
-            "Zone IDs are required because Zone Names only work within the AWS Management Console, not the CLI."
+            "AWS deliberately maps the letter suffixes in Zone Names to different physical AZs for different accounts, to spread customer load evenly -- so 'us-east-1a' in one account may not be the same physical data center as 'us-east-1a' in another, while the Zone ID stays a stable identifier for the physical AZ."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "AWS intentionally randomizes which physical AZ gets labeled 'a', 'b', 'c' and so on per account specifically to avoid everyone's first-launched resources piling into the same physical location -- this means the human-readable Zone Name is account-relative, not a stable physical identifier. The Zone ID (e.g. `use1-az1`) is the stable identifier that does correspond to the same physical AZ across every account, which is exactly why it's the right thing to use when two separate accounts need to confirm their subnets truly sit in the same physical AZ (for example, to guarantee low-latency, same-AZ networking across an account boundary). The “Zone IDs are simply a shorter, more…”, “Zone Names are deprecated and will stop…”, and “Zone IDs are required because Zone Names…” options all invent reasons that don't reflect how AWS actually assigns these labels; Zone Names remain fully functional everywhere, they're simply not physically stable across accounts."
         },
         {
@@ -130,12 +130,12 @@
           "type": "multipleChoice",
           "prompt": "Which statement most accurately describes how the Shared Responsibility Model's dividing line shifts across EC2, RDS, and Lambda?",
           "options": [
-            "The dividing line never shifts -- AWS always secures only the physical hardware and hypervisor, and the customer is always responsible for everything above that, regardless of which service is used.",
             "With EC2, the customer patches and secures the guest operating system and everything above it; with RDS, AWS additionally takes over OS and database-engine patching while the customer still owns access control and data; with Lambda, AWS manages nearly the entire stack and the customer is mainly responsible for their code and how they configure access to it.",
-            "With Lambda, the customer must still patch the underlying operating system themselves, since AWS never manages OS patching for serverless compute.",
-            "With RDS, the customer is responsible for the hypervisor layer, since databases require lower-level hardware access than plain EC2 instances."
+            "The dividing line never shifts -- AWS always secures only the physical hardware and hypervisor, and the customer is always responsible for everything above that, regardless of which service is used.",
+            "With RDS, the customer is responsible for the hypervisor layer, since databases require lower-level hardware access than plain EC2 instances.",
+            "With Lambda, the customer must still patch the underlying operating system themselves, since AWS never manages OS patching for serverless compute."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "The Shared Responsibility line moves based on how much of the stack a given service manages on your behalf: EC2 is infrastructure-as-a-service, so AWS only guarantees the physical host and hypervisor while the customer owns the guest OS and up; RDS is a managed service, so AWS additionally absorbs OS and database-engine patching, leaving the customer responsible mainly for access control and their own data and queries; Lambda abstracts away nearly everything, leaving the customer responsible chiefly for their application code and how they've configured access to it. The “The dividing line never shifts -- AWS…” option ignores that this line demonstrably does shift between service categories, and the “With Lambda, the customer must still patch…” and “With RDS, the customer is responsible…” options both invert the actual responsibility split for their respective services."
         },
         {
@@ -250,10 +250,10 @@
           "type": "multipleChoice",
           "prompt": "An engineer attaches two policies to the same IAM role: Policy A allows `s3:*` on `Resource: *`. Policy B explicitly denies `s3:DeleteObject` on `Resource: *`. What can the role actually do?",
           "options": [
+            "Only DeleteObject is blocked temporarily until an administrator manually resolves the conflict between the two policies.",
             "Everything s3:* allows, including DeleteObject, because Policy A was attached first.",
-            "Nothing at all, because the two conflicting policies cancel each other out entirely.",
             "Everything s3:* allows except DeleteObject, because an explicit Deny always overrides an Allow regardless of attachment order.",
-            "Only DeleteObject is blocked temporarily until an administrator manually resolves the conflict between the two policies."
+            "Nothing at all, because the two conflicting policies cancel each other out entirely."
           ],
           "correctOptionIndex": 2,
           "explanation": "IAM policy evaluation always applies the rule that an explicit Deny overrides any Allow for the same action and resource, regardless of which policy document it's written in or the order policies were attached -- there's no such concept as attachment order mattering (“Everything s3:* allows, including DeleteObject, because Policy…”), no concept of policies 'canceling out' into total denial (the “Nothing at all, because the two conflicting…” option, which would incorrectly also block every other s3 action the role needs), and no manual resolution step required at evaluation time (the “Only DeleteObject is blocked temporarily until…” option -- the Deny simply always wins immediately, automatically, on every request). The correct outcome is that the role retains every permission s3:* grants except specifically DeleteObject, which the explicit Deny blocks unconditionally."
@@ -276,9 +276,9 @@
           "type": "multipleChoice",
           "prompt": "A team wants an IAM user (used by a developer) and an IAM role (assumed by an EC2 instance) to share an identical set of permissions, and considers creating an IAM group that both the user and the role could join. What is the problem with this plan?",
           "options": [
-            "Nothing -- IAM groups can contain both users and roles, so adding both to the same group is a standard way to share permissions.",
-            "A group is not itself a principal and cannot be assumed or referenced as a Principal, and a role cannot be placed into a group at all -- the correct approach is to attach the same policy document directly to both the user and the role.",
             "The plan works, but only for roles attached to EC2 instances specifically, not Lambda functions.",
+            "A group is not itself a principal and cannot be assumed or referenced as a Principal, and a role cannot be placed into a group at all -- the correct approach is to attach the same policy document directly to both the user and the role.",
+            "Nothing -- IAM groups can contain both users and roles, so adding both to the same group is a standard way to share permissions.",
             "Groups can only be used with resource-based policies, not identity-based policies, so this plan would need a bucket policy instead."
           ],
           "correctOptionIndex": 1,
@@ -402,12 +402,12 @@
           "type": "multipleChoice",
           "prompt": "A nightly batch job compresses large video files and finishes faster with more CPU cores available, but its memory usage stays low and predictable throughout. Which instance family is the most appropriate choice?",
           "options": [
+            "A c-family (compute optimized) instance, to maximize CPU throughput per dollar for this CPU-bound workload.",
             "An r-family (memory optimized) instance, to comfortably hold each file in memory during processing.",
             "A t-family (burstable) instance, since the job only runs briefly once per night.",
-            "A c-family (compute optimized) instance, to maximize CPU throughput per dollar for this CPU-bound workload.",
             "The cheapest available instance type regardless of family, since batch jobs are not latency-sensitive."
           ],
-          "correctOptionIndex": 2,
+          "correctOptionIndex": 0,
           "explanation": "The workload is explicitly described as CPU-bound (finishes faster with more cores) with low, predictable memory usage -- that's precisely the profile a compute-optimized c-family instance targets, maximizing CPU per dollar rather than paying for memory headroom the job doesn't use (which rules out the “An r-family (memory optimized) instance, to comfortably…” option). The “A t-family (burstable) instance, since the job…” option is a trap: 'runs briefly once per night' sounds like it matches burstable instances' occasional-use pricing model, but a nightly batch job sustaining high CPU for its entire duration is exactly the sustained-load pattern that exhausts t-family CPU credits and triggers throttling -- brief-but-sustained-at-full-intensity is not the same as brief-but-idle-most-of-the-time. The “The cheapest available instance type regardless…” option ignores the workload profile entirely; the cheapest instance type is only a good choice if it also happens to match the actual bottleneck, which for a CPU-bound job is what the c-family is specifically built for."
         },
         {
@@ -415,12 +415,12 @@
           "type": "multipleChoice",
           "prompt": "A team is considering switching their fleet from c6i.2xlarge to c6g.2xlarge to reduce cost. What must be true for this migration to work correctly?",
           "options": [
-            "Nothing needs to change -- the letters after the generation number are purely cosmetic and never affect compatibility.",
-            "Their application (or its container images) must support the ARM architecture, since the 'g' flag indicates AWS's Graviton (ARM-based) processor, while the 'i' flag indicates an Intel x86 chip.",
+            "Graviton instances only run Windows Server, so this migration only matters if the fleet currently runs Windows.",
             "They must move up to a larger size, such as 4xlarge, to compensate for a slower clock speed on Graviton hardware.",
-            "Graviton instances only run Windows Server, so this migration only matters if the fleet currently runs Windows."
+            "Nothing needs to change -- the letters after the generation number are purely cosmetic and never affect compatibility.",
+            "Their application (or its container images) must support the ARM architecture, since the 'g' flag indicates AWS's Graviton (ARM-based) processor, while the 'i' flag indicates an Intel x86 chip."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "The lowercase letters after the generation number are capability flags, not decoration -- 'g' specifically means the instance runs on AWS's Graviton (ARM) processor rather than an x86 chip like the 'i' (Intel) variant. Since ARM and x86 are different instruction set architectures, software (or container images) built only for x86 will not run unmodified on Graviton; the migration is only safe once the application is confirmed to run on ARM, whether natively or via multi-architecture images. The “Nothing needs to change -- the letters…” option misreads capability flags as meaningless, the “They must move up to a larger…” option invents a clock-speed compensation requirement that isn't how instance sizing works, and the “Graviton instances only run Windows Server…” option fabricates an OS restriction that doesn't exist -- Graviton instances run Linux (and increasingly Windows) just as x86 instances do, the real constraint is architecture compatibility, not OS."
         },
         {
@@ -428,12 +428,12 @@
           "type": "multipleChoice",
           "prompt": "Two teams each run a t3.medium instance that occasionally exceeds its baseline CPU performance. Team A's instance uses 'standard' credit mode; Team B's uses 'unlimited' credit mode. Both instances exhaust their CPU credit balance during a sustained traffic spike. What happens to each?",
           "options": [
-            "Both instances are throttled identically back to baseline performance, since credit mode only changes how fast credits are earned, not what happens when they run out.",
             "Team A's instance is throttled down to its baseline performance level; Team B's instance keeps performing above baseline but starts incurring additional charges for the extra CPU usage beyond what its credits covered.",
-            "Team A's instance is automatically terminated when its credit balance reaches zero; Team B's instance is throttled instead.",
-            "Both instances continue performing above baseline indefinitely at no extra charge, because credit balances regenerate instantly once they hit zero."
+            "Both instances are throttled identically back to baseline performance, since credit mode only changes how fast credits are earned, not what happens when they run out.",
+            "Both instances continue performing above baseline indefinitely at no extra charge, because credit balances regenerate instantly once they hit zero.",
+            "Team A's instance is automatically terminated when its credit balance reaches zero; Team B's instance is throttled instead."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "Credit mode specifically governs what happens once the credit balance is exhausted, not just how credits accumulate. In standard mode, once credits run out, CPU performance is hard-throttled back down to the baseline level -- Team A's instance visibly slows down regardless of how much demand remains. In unlimited mode, the instance is allowed to keep bursting above baseline even with a zero or negative credit balance, but AWS bills for that additional usage instead of throttling it -- Team B's instance keeps performing but the bill reflects the overage. The “Both instances are throttled identically back…” option collapses this real distinction, the “Team A's instance is automatically terminated…” option invents an automatic-termination behavior that doesn't happen from credit exhaustion alone, and the “Both instances continue performing above baseline indefinitely…” option ignores that credits are a finite, gradually-replenished resource, not something that resets instantly."
         },
         {
@@ -550,8 +550,8 @@
           "options": [
             "This should be impossible; S3's eleven-nines durability guarantee means requests essentially never fail.",
             "Durability (data not being lost) and availability (the service successfully responding to a given request) are different guarantees; S3's availability target is lower than its durability figure, so occasional transient request failures are expected and should be handled with retry logic.",
-            "This indicates the object was stored in a One Zone-IA storage class, which is the only class where transient failures can occur.",
-            "This is only possible if the bucket's lifecycle policy has an error in it."
+            "This is only possible if the bucket's lifecycle policy has an error in it.",
+            "This indicates the object was stored in a One Zone-IA storage class, which is the only class where transient failures can occur."
           ],
           "correctOptionIndex": 1,
           "explanation": "Durability and availability are genuinely separate published guarantees -- durability is about not losing the underlying data over time (S3 Standard's famous eleven nines), while availability is about the service reliably responding to any single request right now (published around 99.99% for S3 Standard, a much smaller number of nines). A brief, occasional request failure is consistent with the availability figure and doesn't contradict the durability guarantee at all, which is exactly why the premise of the “This should be impossible; S3's eleven-nines durability…” option -- treating durability as if it also covered request success -- is the misconception being tested. The “This indicates the object was stored…” option incorrectly ties this to a specific storage class (transient request failures aren't a One Zone-IA-specific phenomenon), and the “This is only possible if the bucket's…” option introduces an unrelated cause (lifecycle policies affect storage class transitions and expiration, not the success rate of GET requests)."
@@ -561,12 +561,12 @@
           "type": "multipleChoice",
           "prompt": "A developer expects `aws s3 mv s3://bucket/old-prefix/ s3://bucket/new-prefix/ --recursive` on a prefix containing 500,000 objects to complete almost instantly, the way renaming a folder does on a local filesystem. Why is that expectation wrong?",
           "options": [
+            "The command will in fact complete instantly, because S3 secretly maintains a hidden directory tree beneath what the console displays.",
             "The AWS CLI doesn't actually support recursive moves, so this specific command will fail outright.",
             "S3 has no atomic rename operation for a prefix; because S3 is a flat key-value namespace rather than a real directory tree, the CLI must issue an individual CopyObject followed by a DeleteObject for every one of the 500,000 objects -- hundreds of thousands of separate API calls, not one instant metadata change.",
-            "The command will in fact complete instantly, because S3 secretly maintains a hidden directory tree beneath what the console displays.",
             "The delay only occurs if Block Public Access happens to be enabled on the bucket."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "S3's object model is a flat namespace of keys within a bucket -- what looks like a folder is only a shared key prefix, with no underlying directory object that could be renamed as a single operation. The CLI's recursive move is implemented as a copy-then-delete loop over every matching key, so a 500,000-object prefix genuinely becomes roughly a million individual API calls, each with its own latency and cost -- this is real, not a CLI inefficiency that could be optimized away while keeping the same underlying model. The “The AWS CLI doesn't actually support recursive…” option is factually wrong (recursive move is supported and will run, just slowly and at real cost), the “The command will in fact complete instantly…” option invents a hidden directory structure that doesn't exist, and the “The delay only occurs if Block Public…” option introduces Block Public Access, which governs public access grants and has nothing to do with copy/delete latency."
         },
         {
@@ -575,11 +575,11 @@
           "prompt": "While reviewing an older codebase, you find application code that, after every S3 PUT, sleeps briefly and retries a GET in a loop until the new data appears, with a comment saying 'S3 needs a moment to catch up.' What's the most accurate assessment of this code today?",
           "options": [
             "It's still necessary -- S3 has always been eventually consistent for all operations and always will be.",
-            "It was a legitimate workaround for S3's pre-December-2020 weaker consistency model for overwrite PUTs and deletes, but on modern S3 -- which provides strong read-after-write consistency for all operations -- it's no longer needed for consistency reasons, though general retry logic for transient request failures can still be worthwhile.",
+            "It's actually a workaround for IAM policy propagation delay, unrelated to S3's own consistency model.",
             "It indicates the bucket must be using the One Zone-IA storage class, the only class with eventual consistency.",
-            "It's actually a workaround for IAM policy propagation delay, unrelated to S3's own consistency model."
+            "It was a legitimate workaround for S3's pre-December-2020 weaker consistency model for overwrite PUTs and deletes, but on modern S3 -- which provides strong read-after-write consistency for all operations -- it's no longer needed for consistency reasons, though general retry logic for transient request failures can still be worthwhile."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "Before a change AWS shipped in December 2020, S3 offered a weaker consistency model where overwrite PUTs and deletes could, for a brief window, leave a read returning stale or missing data -- exactly the behavior this defensive sleep-and-retry code was written to paper over. Since that change, S3 provides strong read-after-write consistency for all operations, meaning a GET immediately after a successful PUT always reflects the latest write, so the specific consistency concern this code guards against no longer exists. The “It's still necessary -- S3 has always…” option misstates S3's current guarantee, the “It indicates the bucket must be using…” option ties the behavior to a storage class that has nothing to do with read-after-write consistency, and the “It's actually a workaround for IAM policy…” option introduces IAM propagation, an unrelated AWS behavior entirely separate from S3's own object consistency model. Note that generic retry logic for transient request failures, governed by availability rather than consistency, can still be reasonable to keep -- just not for this stated reason."
         },
         {

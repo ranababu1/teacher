@@ -104,12 +104,12 @@
           "type": "multipleChoice",
           "prompt": "Which statement correctly distinguishes a container from a virtual machine?",
           "options": [
-            "A container includes its own kernel, just a smaller one than a full VM's kernel.",
-            "A container is a set of processes isolated by kernel namespaces and metered by cgroups, all running on the one kernel the host is already running; a VM runs a separate kernel under hardware-assisted virtualization.",
+            "The only real difference is that VMs are for Windows workloads and containers are for Linux workloads.",
             "A VM and a container both share the host's kernel, but a VM additionally encrypts its filesystem.",
-            "The only real difference is that VMs are for Windows workloads and containers are for Linux workloads."
+            "A container is a set of processes isolated by kernel namespaces and metered by cgroups, all running on the one kernel the host is already running; a VM runs a separate kernel under hardware-assisted virtualization.",
+            "A container includes its own kernel, just a smaller one than a full VM's kernel."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "The correct answer is the accurate technical distinction: containers achieve isolation and resource limits entirely within a single shared kernel via namespaces and cgroups, while VMs virtualize hardware itself so each guest boots and runs its own independent kernel. The “A container includes its own kernel, just…” option is wrong -- container images ship userspace files only, never a kernel. The “A VM and a container both share…” option is wrong on its first clause (VMs do NOT share the host kernel -- that's precisely what containers do) and invents an unrelated encryption claim. The “The only real difference is that VMs…” option is wrong -- the kernel-sharing distinction is the real difference, and it has nothing to do with which guest OS family happens to be running (Linux containers requiring a Linux host kernel is a consequence of the mechanism, not an OS-branding choice)."
         },
         {
@@ -117,12 +117,12 @@
           "type": "multipleChoice",
           "prompt": "A process inside a container binds to port 5432. A completely unrelated process on the host is already using port 5432 for something else. Which namespace explains why this doesn't cause a conflict?",
           "options": [
-            "The pid namespace, since it isolates process IDs, not ports.",
             "The net namespace, which gives the container its own network interfaces, IP addresses, and port space, independent of the host's.",
+            "The pid namespace, since it isolates process IDs, not ports.",
             "The mnt namespace, since ports are represented as files under /proc.",
             "The uts namespace, which isolates hostname and therefore also isolates ports bound under that hostname."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "The net namespace gives a container its own network interfaces, IP addresses, routing table, and port space, so a process inside it binding to port 5432 has no automatic relationship to port 5432 on the host or in any other namespace -- they're simply independent port spaces. The “The pid namespace, since it isolates process…” option is wrong -- the pid namespace isolates process ID numbering, not networking. The “The mnt namespace, since ports are represented…” option is wrong -- the mnt namespace isolates the filesystem mount table, which is unrelated to port binding even though /proc happens to expose some network state as files. The “The uts namespace, which isolates hostname…” option is wrong -- the uts namespace only isolates the hostname string, with no relationship to port allocation at all."
         },
         {
@@ -131,11 +131,11 @@
           "prompt": "A container is started with `docker run --memory=100m`, and the process inside attempts to allocate 500MB. What actually happens, and what is the scope of the resulting action?",
           "options": [
             "The entire host immediately reboots to reclaim memory.",
-            "The kernel's cgroup-aware OOM killer terminates a process inside that specific container's cgroup with SIGKILL; other containers and the host itself are unaffected.",
             "Docker silently raises the memory limit to whatever the process actually requested.",
-            "The allocation attempt is queued and retried indefinitely until memory becomes available."
+            "The allocation attempt is queued and retried indefinitely until memory becomes available.",
+            "The kernel's cgroup-aware OOM killer terminates a process inside that specific container's cgroup with SIGKILL; other containers and the host itself are unaffected."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "The correct answer matches the mechanism described for cgroup memory limits: exceeding the limit triggers the kernel's OOM killer, but scoped specifically to that container's own cgroup, terminating a process within it (commonly surfacing as exit code 137, 128+9 for SIGKILL) without touching any other container or the host. The “The entire host immediately reboots to reclaim memory” option wildly overstates the blast radius -- cgroups exist precisely to contain this kind of failure to one container. The “Docker silently raises the memory limit…” option is wrong -- Docker enforces the limit rather than adjusting it on demand. The “The allocation attempt is queued and retried…” option is wrong -- there's no retry-and-wait behavior; the kernel acts immediately once the limit is exceeded."
         },
         {
@@ -143,10 +143,10 @@
           "type": "multipleChoice",
           "prompt": "Why might a security-sensitive, multi-tenant platform run containers inside an additional VM-level boundary (gVisor, Kata Containers, or Firecracker) instead of relying on namespaces and cgroups alone?",
           "options": [
-            "Because namespaces and cgroups only function correctly on a single-tenant host.",
+            "Because namespaces are deprecated in modern Linux kernels and require a compatibility shim to keep working.",
             "Because every container on a shared-kernel host is still exposed to the same kernel, so a kernel vulnerability or misconfigured capability could let a process cross its namespace boundary and affect sibling containers; a separate guest kernel offers a stronger backstop against exactly that.",
             "Because cgroups cannot enforce memory limits on multi-tenant hosts, only on single-tenant ones.",
-            "Because namespaces are deprecated in modern Linux kernels and require a compatibility shim to keep working."
+            "Because namespaces and cgroups only function correctly on a single-tenant host."
           ],
           "correctOptionIndex": 1,
           "explanation": "The correct answer matches the concept's core point: namespaces and cgroups are real isolation, but they all sit on top of one shared kernel, so any gap in that shared attack surface can potentially cross container boundaries -- a risk a genuinely separate guest kernel doesn't share. The “Because namespaces and cgroups only function correctly…” option is false -- namespaces and cgroups work identically regardless of tenancy model; the concern is about isolation strength, not functionality. The “Because cgroups cannot enforce memory limits…” option is false -- cgroup memory enforcement has nothing to do with how many tenants a host serves. The “Because namespaces are deprecated in modern Linux…” option is false and invents a deprecation that hasn't happened -- namespaces remain the core mechanism containers rely on today."
@@ -259,12 +259,12 @@
           "type": "multipleChoice",
           "prompt": "A container modifies a file that currently exists only in one of its image's lower, read-only layers. What actually happens at the filesystem level?",
           "options": [
+            "The modification is written directly to the writable layer with no relation to the original file, effectively creating a brand-new, unrelated file at the same path.",
             "Docker rejects the write, since read-only layers cannot be modified.",
-            "The file is copied from the read-only layer into the container's own writable layer first, and the modification is applied to that copy; the original in the read-only layer is left untouched.",
             "The read-only layer is temporarily unlocked, modified in place, and re-locked when the container stops.",
-            "The modification is written directly to the writable layer with no relation to the original file, effectively creating a brand-new, unrelated file at the same path."
+            "The file is copied from the read-only layer into the container's own writable layer first, and the modification is applied to that copy; the original in the read-only layer is left untouched."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "The correct answer describes copy-on-write accurately: a copy-up moves the file into the writable layer first, and only that copy is modified -- the original stays exactly as it was in the shared, read-only layer, which is exactly why other containers sharing that same base layer never see the change. The “Docker rejects the write, since read-only layers…” option is wrong: the write succeeds from the container's point of view; it just doesn't happen where you might assume. The “The read-only layer is temporarily unlocked, modified…” option is wrong -- read-only layers are never unlocked or edited in place; that would break every other container/image sharing them. The “The modification is written directly…” option is subtly wrong: the copy-up preserves the file's original content as the starting point before the modification is applied -- it's not an unrelated blank file, it genuinely starts as a copy."
         },
         {
@@ -272,12 +272,12 @@
           "type": "multipleChoice",
           "prompt": "A running container deletes a file that exists in one of its image's lower, read-only layers. What actually happens at the filesystem level?",
           "options": [
-            "The file is physically erased from the read-only layer immediately.",
             "A lightweight whiteout marker is written into the container's own writable layer that hides the path from view, while the file's bytes remain physically present, untouched, in the lower layer underneath.",
             "Docker rejects the deletion, since files in read-only layers cannot be removed by a running container.",
-            "The file is moved into a separate, hidden \"deleted files\" layer that other containers can still browse."
+            "The file is moved into a separate, hidden \"deleted files\" layer that other containers can still browse.",
+            "The file is physically erased from the read-only layer immediately."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "The correct answer describes the whiteout mechanism: a delete inside a container never touches the shared, read-only layer beneath it -- it writes a marker into the container's own writable layer telling the union filesystem to hide that path for this container specifically, while the original bytes stay exactly where they were in the lower layer, still visible to any other container or image sharing that same layer. The “The file is physically erased…” option is wrong -- nothing in a lower, shared, read-only layer is ever physically erased by a container-level delete. The “Docker rejects the deletion, since files…” option is wrong -- the delete visibly succeeds from the container's own point of view; it just doesn't work the way a delete on an ordinary single-layer filesystem would. The “The file is moved into a separate…” option invents a mechanism ('deleted files layer') that doesn't exist."
         },
         {
@@ -285,12 +285,12 @@
           "type": "multipleChoice",
           "prompt": "Why is `docker commit` considered a poor substitute for fixing a Dockerfile and rebuilding, even though both approaches can produce \"an image with the fix in it\"?",
           "options": [
+            "docker commit requires the container to be stopped first, while a Dockerfile rebuild can be done on a live container.",
             "docker commit always produces a strictly larger image than an equivalent Dockerfile rebuild.",
             "docker commit freezes whatever the container's writable layer currently contains into an opaque blob with no readable, diffable record of what changed or why, and it silently diverges from the actual Dockerfile, so the fix quietly disappears the next time someone does a normal rebuild.",
-            "docker commit requires the container to be stopped first, while a Dockerfile rebuild can be done on a live container.",
             "docker commit is only available on Docker Desktop, not on Linux hosts running the Docker daemon directly."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "The correct answer is the real reason this concept argues against docker commit as a workflow: it captures a point-in-time snapshot with no record of the specific actions that produced it, and because it never touches the Dockerfile, the next legitimate rebuild from that Dockerfile silently omits the fix, often resurfacing the exact same bug for someone with no idea it was 'already fixed' once. The “docker commit always produces a strictly larger…” option makes an unsupported size claim that isn't the actual argument made. The “docker commit requires the container…” option is false -- docker commit works on running or stopped containers, and neither approach has a live-editing requirement in the way described. The “docker commit is only available on Docker…” option is false -- docker commit is a standard Docker CLI command available anywhere the Docker daemon runs."
         },
         {
@@ -401,12 +401,12 @@
           "type": "multipleChoice",
           "prompt": "Two hosts pull and run the exact same image, referenced by its immutable digest, not just a tag. Which of the following can still legitimately cause the container to behave differently on the two hosts?",
           "options": [
-            "The version of the language runtime installed inside the image.",
             "The versions of OS packages installed via apt-get during the image build.",
             "The host machine's CPU architecture and kernel version.",
-            "The environment variables set with fixed values via ENV in the Dockerfile."
+            "The environment variables set with fixed values via ENV in the Dockerfile.",
+            "The version of the language runtime installed inside the image."
           ],
-          "correctOptionIndex": 2,
+          "correctOptionIndex": 1,
           "explanation": "CPU architecture and kernel version belong to the host, not the image -- pinning the image by digest guarantees identical file contents, but says nothing about what hardware or kernel is actually running underneath it, and a mismatch there, such as an arm64 image on an amd64 host or a kernel too old for a feature the app needs, can absolutely cause different behavior or an outright failure to run. The “The version of the language runtime installed…”, “The versions of OS packages installed via…”, and “The environment variables set with fixed values…” options are all things the image itself fixes -- the runtime version, the installed package versions, and Dockerfile-set environment variables are all baked into the image's layers and its manifest, so pulling the identical digest gives you the identical values for all three on every host, with no room for drift."
         },
         {
@@ -415,11 +415,11 @@
           "prompt": "An image built and tested on an Apple Silicon (arm64) laptop is pushed to a registry and pulled onto a standard x86-64 production server, where it immediately fails with \"exec format error.\" What does this demonstrate?",
           "options": [
             "The Dockerfile has a syntax error that only manifests on x86-64 hosts.",
-            "CPU architecture is a property of the host, not the image -- binaries compiled for one instruction set cannot execute on a different one, regardless of how identical every file in the image otherwise is.",
             "The image was corrupted in transit during the registry push or pull.",
+            "CPU architecture is a property of the host, not the image -- binaries compiled for one instruction set cannot execute on a different one, regardless of how identical every file in the image otherwise is.",
             "The production server's Docker Engine version is too old to run images built on newer hardware."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "This is a hardware-level incompatibility, not a bug in the Dockerfile or application code -- the image's compiled binaries were built for arm64, and an amd64 kernel simply cannot execute arm64 machine code. The “The Dockerfile has a syntax error…” option is wrong -- nothing about a Dockerfile's syntax is architecture-dependent; the failure is about compiled binary compatibility, not build instructions. The “The image was corrupted in transit during…” option is wrong -- registry transfers are content-addressed and checksummed; a truncated or corrupted transfer would fail differently, not with this specific, well-known architecture-mismatch error. The “The production server's Docker Engine version…” option is wrong -- Docker Engine version has nothing to do with which CPU instruction sets a given binary was compiled for."
         },
         {
@@ -427,10 +427,10 @@
           "type": "multipleChoice",
           "prompt": "A Dockerfile includes `RUN apt-get install -y nginx` with no version pinned. Why can this line undermine build reproducibility even though the Dockerfile's own text never changes between builds?",
           "options": [
-            "apt-get always installs the latest major version available anywhere, ignoring the currently configured repository entirely.",
-            "With no version specified, apt-get resolves \"nginx\" to whatever version the configured package repository currently serves at build time, which can differ across builds run on different dates even from an identical Dockerfile line.",
             "apt-get caches the first version it ever installed and is therefore guaranteed to install that exact version on every subsequent build, forever.",
-            "This has no real effect on reproducibility, since nginx has no meaningful version differences that could cause a behavioral change."
+            "With no version specified, apt-get resolves \"nginx\" to whatever version the configured package repository currently serves at build time, which can differ across builds run on different dates even from an identical Dockerfile line.",
+            "This has no real effect on reproducibility, since nginx has no meaningful version differences that could cause a behavioral change.",
+            "apt-get always installs the latest major version available anywhere, ignoring the currently configured repository entirely."
           ],
           "correctOptionIndex": 1,
           "explanation": "The correct answer identifies the drift mechanism: an unpinned apt-get install resolves against whatever the package repository currently serves, and that content changes over time as upstream publishes updates -- so the identical Dockerfile line can silently produce a different installed version on a later date. The “apt-get always installs the latest major version…” option overstates and misdescribes the mechanism -- it's about resolving against a moving repository state, not some rule about always taking the newest major version specifically. The “apt-get caches the first version it ever…” option is the opposite of what actually happens -- there's no such caching guarantee across separate build invocations. The “This has no real effect on reproducibility…” option is wrong -- nginx, like most real packages, does have version-to-version behavioral differences that can matter, and the whole point of pinning is to not leave that to chance."

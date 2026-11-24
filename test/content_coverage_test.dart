@@ -52,7 +52,7 @@ void main() {
 
   test('multiple-choice text never refers to an option by position', () {
     final position = RegExp(
-      r'\b[Oo]ptions? ([A-D]|[1-4])\b|\b(first|last) option\b|of the above\b',
+      r'\b[Oo]ptions? ([A-D]|[1-4])\b|\b(first|last|previous) option\b|of the above\b',
     );
     for (final course in courses) {
       for (final c in conceptsOf(course)) {
@@ -64,6 +64,28 @@ void main() {
           ]) {
             expect(position.hasMatch(text), isFalse, reason: '${a['id']}: $text');
           }
+        }
+      }
+    }
+  });
+
+  test('no answer position dominates any topic', () {
+    for (final course in courses) {
+      for (final f in course.listSync().whereType<File>()) {
+        if (!f.path.endsWith('.json')) continue;
+        final module = jsonDecode(f.readAsStringSync()) as Map<String, dynamic>;
+        final counts = <int, int>{};
+        var total = 0;
+        for (final c in module['concepts'] as List) {
+          for (final a in c['assessments'] as List) {
+            if (a['type'] != 'multipleChoice') continue;
+            final i = a['correctOptionIndex'] as int;
+            counts[i] = (counts[i] ?? 0) + 1;
+            total++;
+          }
+        }
+        for (final n in counts.values) {
+          expect(n / total, lessThan(0.4), reason: '${f.path} $counts');
         }
       }
     }

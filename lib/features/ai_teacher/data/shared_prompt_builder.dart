@@ -137,7 +137,9 @@ AiPrompt buildModuleTestPrompt(
       'Spread the questions across the concepts rather than clustering '
       'them all on just one. Each question must have exactly one '
       'unambiguously correct option among 3-4 plausible options, and must '
-      'not be a verbatim copy of any example already shown.',
+      'not be a verbatim copy of any example already shown. Vary the '
+      'position of the correct option, and never refer to options by '
+      'letter, number or position, because the app reorders them.',
     );
 
   return (systemInstruction: system, userContent: buffer.toString());

@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -50,6 +52,7 @@ class _ModuleTestScreenState extends ConsumerState<ModuleTestScreen> {
   int _currentIndex = 0;
   int _correctCount = 0;
   int? _selectedOptionIndex;
+  final _random = Random();
   bool _questionSubmitted = false;
   bool _isPracticeRound = false;
   bool _practiceLoading = false;
@@ -60,6 +63,7 @@ class _ModuleTestScreenState extends ConsumerState<ModuleTestScreen> {
         module.concepts
             .expand((c) => c.assessments)
             .where((a) => a.type == ItemType.multipleChoice)
+            .map((a) => a.withShuffledOptions(_random))
             .toList()
           ..shuffle();
 
@@ -104,7 +108,9 @@ class _ModuleTestScreenState extends ConsumerState<ModuleTestScreen> {
 
       if (!mounted) return;
       setState(() {
-        _questions = questions;
+        _questions = [
+          for (final q in questions) q.withShuffledOptions(_random),
+        ];
         _currentIndex = 0;
         _correctCount = 0;
         _selectedOptionIndex = null;

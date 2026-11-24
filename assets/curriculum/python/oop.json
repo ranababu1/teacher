@@ -101,12 +101,12 @@
           "type": "multipleChoice",
           "prompt": "Which statement most accurately describes what __init__ does?",
           "options": [
-            "__init__ allocates and creates the new object, then returns it to the caller.",
-            "__init__ initializes an already-created object's state; the object itself was created moments earlier by __new__.",
+            "__init__ only runs if you don't define your own __new__ method.",
             "__init__ and __new__ are two names for the exact same step in object creation.",
-            "__init__ only runs if you don't define your own __new__ method."
+            "__init__ initializes an already-created object's state; the object itself was created moments earlier by __new__.",
+            "__init__ allocates and creates the new object, then returns it to the caller."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "Object creation happens in two steps: `__new__` allocates and returns a brand-new object, and only after that does Python call `__init__` on that already-existing object, passing it in as `self`, so it can set up the object's initial attributes. The “__init__ allocates and creates the new object…” option describes what `__new__` does, not `__init__` (and is also why __init__ never returns a value -- it isn't responsible for producing the object). The “__init__ and __new__ are two names…” option is wrong -- they're distinct methods with distinct responsibilities. The “__init__ only runs if you don't define…” option is backwards: `__init__` runs regardless of whether you've overridden `__new__`; both are normally called automatically as part of `ClassName(...)`."
         },
         {
@@ -114,10 +114,10 @@
           "type": "multipleChoice",
           "prompt": "```python\nclass Bag:\n    contents = []\n\n    def add(self, item):\n        self.contents.append(item)\n\nb1 = Bag()\nb2 = Bag()\nb1.add(\"rock\")\nprint(b2.contents)\n```\nWhat does this print, and why?",
           "options": [
-            "[] -- b2 never called add(), so its contents should still be empty.",
+            "['rock', 'rock'] -- appending through either instance appends twice to the shared list.",
             "['rock'] -- contents is a class attribute, so b1 and b2 share the exact same list object.",
             "It raises an AttributeError, because b2 has no contents attribute of its own.",
-            "['rock', 'rock'] -- appending through either instance appends twice to the shared list."
+            "[] -- b2 never called add(), so its contents should still be empty."
           ],
           "correctOptionIndex": 1,
           "explanation": "`contents = []` is defined in the class body, making it a class attribute: one single list shared by every Bag instance that hasn't created its own instance attribute of that name. `b1.add(\"rock\")` calls `self.contents.append(\"rock\")`, which mutates that one shared list in place. Since b2.contents resolves to that exact same shared object (b2 has no instance attribute shadowing it), printing b2.contents shows the mutation made through b1. The “[] -- b2 never called add()…” option assumes each instance got its own independent list, which is the exact misconception this pattern causes. The “It raises an AttributeError, because b2 has…” option is wrong because attribute lookup successfully falls back to the class attribute. The “['rock', 'rock'] -- appending through either instance…” option misunderstands append as somehow running twice."
@@ -133,12 +133,12 @@
           "type": "multipleChoice",
           "prompt": "```python\nclass Robot:\n    def __init__(self, name):\n        self.name = name\n\n    def greet(self, other):\n        return f\"{self.name} beeps at {other}\"\n\nr = Robot(\"R2\")\nprint(r.greet(\"C3PO\"))\nprint(Robot.greet(r, \"C3PO\"))\nprint(Robot.greet(\"C3PO\"))\n```\nWhat happens, in order?",
           "options": [
-            "The first two lines both print \"R2 beeps at C3PO\"; the third raises TypeError: greet() missing 1 required positional argument: 'other'",
+            "The third line prints \"C3PO beeps at C3PO\", treating \"C3PO\" as self and reusing its own value for other",
             "All three lines print \"R2 beeps at C3PO\"",
             "The first two lines raise TypeError, because Robot.greet always requires self to be passed explicitly even through r.greet",
-            "The third line prints \"C3PO beeps at C3PO\", treating \"C3PO\" as self and reusing its own value for other"
+            "The first two lines both print \"R2 beeps at C3PO\"; the third raises TypeError: greet() missing 1 required positional argument: 'other'"
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 3,
           "explanation": "`r.greet(\"C3PO\")` is sugar for `Robot.greet(r, \"C3PO\")` -- both supply `r` as `self` and `\"C3PO\"` as `other`, producing identical output. Calling `Robot.greet(\"C3PO\")` directly through the class, though, supplies only one argument -- `\"C3PO\"` fills the required `self` parameter, and there's nothing left over for `other`, which has no default. Python doesn't infer a missing argument from context; it raises `TypeError: greet() missing 1 required positional argument: 'other'`. Calling through the class this way requires you to supply every parameter explicitly, including `self` -- Python only auto-supplies `self` when you call through an instance."
         },
         {
@@ -148,8 +148,8 @@
           "options": [
             "2 0 0",
             "2 2 0",
-            "0 0 0",
-            "2 0 2"
+            "2 0 2",
+            "0 0 0"
           ],
           "correctOptionIndex": 0,
           "explanation": "`self.count = self.count + 1` is an assignment, not a mutation -- and assignment through `self` always creates (or updates) an *instance* attribute, never the shared class attribute, even though the read on the right-hand side (`self.count`) does fall back to the class attribute the first time. So c1's first `increment()` reads the class attribute (0), computes 1, and creates a brand-new instance attribute `count` on c1 holding 1. The second call now finds c1's own instance attribute (1), computes 2, and updates it to 2. `c2` never called `increment()`, so it has no instance attribute of its own and still falls back to the untouched class attribute, 0. `Counter.count` itself was also never directly reassigned, so it remains 0. This is the opposite of the shared-mutable-class-attribute bug: because `+=`/`=` on `self.count` creates a new instance attribute rather than mutating anything shared, each instance's count genuinely diverges."
@@ -267,12 +267,12 @@
           "type": "multipleChoice",
           "prompt": "Which of these best explains why 'favor composition over inheritance' is common advice?",
           "options": [
-            "Inheritance is deprecated in modern Python and will eventually be removed from the language.",
-            "Composition ties two classes together across their entire interface permanently, while inheritance only exposes what you explicitly delegate.",
             "Inheritance couples a subclass to its parent's entire interface and makes it automatically ripple-affected by parent changes, whereas composition exposes only what's explicitly delegated and is easier to swap out.",
-            "Composition is required in order to use duck typing at all."
+            "Composition is required in order to use duck typing at all.",
+            "Inheritance is deprecated in modern Python and will eventually be removed from the language.",
+            "Composition ties two classes together across their entire interface permanently, while inheritance only exposes what you explicitly delegate."
           ],
-          "correctOptionIndex": 2,
+          "correctOptionIndex": 0,
           "explanation": "Inheritance creates a tight, permanent coupling: a subclass automatically inherits its parent's entire interface (appropriate or not), and changes to the parent can silently ripple into every subclass (the 'fragile base class' problem). Composition only exposes exactly what's deliberately delegated, and swapping in a different implementation of the composed object requires no change to the class hierarchy at all. The “Inheritance is deprecated in modern Python…” option is false -- inheritance is a core, actively-used language feature. The “Composition ties two classes together across their…” option has the description of inheritance's downside backwards and attributes it to composition. The “Composition is required in order to use…” option is false -- duck typing works with or without composition; they're unrelated concerns."
         },
         {
@@ -280,10 +280,10 @@
           "type": "multipleChoice",
           "prompt": "A class defines __repr__ but does not define __str__. What happens when you call print(obj) on an instance of it?",
           "options": [
-            "Python raises an AttributeError, since __str__ is required for print() to work.",
+            "print(obj) raises a TypeError because __str__ and __repr__ must both be defined together.",
             "print(obj) falls back to using __repr__'s output, since str() defaults to __repr__ when __str__ isn't defined.",
             "print(obj) shows the generic default like <__main__.ClassName object at 0x...>, ignoring __repr__ entirely.",
-            "print(obj) raises a TypeError because __str__ and __repr__ must both be defined together."
+            "Python raises an AttributeError, since __str__ is required for print() to work."
           ],
           "correctOptionIndex": 1,
           "explanation": "print() calls str() on its argument, and str()'s default behavior, when a class hasn't defined its own __str__, is to fall back to that class's __repr__. So defining only __repr__ is a reasonable, common shortcut -- print(obj) and str(obj) will both show the __repr__ output. The fallback only goes one direction: a class that defines __str__ but not __repr__ would still get the generic <ClassName object at 0x...> for repr()/the REPL/list printing, since __repr__ does not fall back to __str__. The “Python raises an AttributeError, since __str__…”, “print(obj) shows the generic default like <__main__.ClassName…”, and “print(obj) raises a TypeError because __str__…” options all describe behavior Python doesn't actually have here."
@@ -299,12 +299,12 @@
           "type": "multipleChoice",
           "prompt": "```python\nclass Account:\n    def __init__(self, balance):\n        self.__balance = balance\n\na = Account(100)\nprint(a.__balance)\n```\nWhat happens on the last line?",
           "options": [
-            "AttributeError: 'Account' object has no attribute '__balance' -- the attribute was actually stored, via name mangling, as _Account__balance",
-            "100 -- double-underscore attributes are just a naming convention and remain accessible by the exact same name from outside",
             "100 -- Python grants outside access to double-underscore attributes automatically within the same module",
-            "SyntaxError -- referencing a double-underscore attribute from outside its class is invalid syntax"
+            "SyntaxError -- referencing a double-underscore attribute from outside its class is invalid syntax",
+            "100 -- double-underscore attributes are just a naming convention and remain accessible by the exact same name from outside",
+            "AttributeError: 'Account' object has no attribute '__balance' -- the attribute was actually stored, via name mangling, as _Account__balance"
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 3,
           "explanation": "`self.__balance` inside the class body triggers name mangling: Python actually stores the attribute as `_Account__balance`, not literally `__balance`. Trying to access `a.__balance` from outside the class looks for an attribute literally named `__balance`, which doesn't exist -- only `_Account__balance` does -- so it raises `AttributeError`. This is exactly why name mangling is described as Python's closest thing to privacy, not true privacy: the data is still reachable via `a._Account__balance` if you know (or look up) the mangled name, it's just no longer accessible by accident using the name written inside the class."
         },
         {
@@ -312,12 +312,12 @@
           "type": "multipleChoice",
           "prompt": "```python\nclass Square:\n    def __init__(self, side):\n        self.side = side\n    def area(self):\n        return self.side ** 2\n\nclass Circle:\n    def __init__(self, radius):\n        self.radius = radius\n    # no area() method defined\n\ndef total_area(shapes):\n    return sum(shape.area() for shape in shapes)\n\nprint(total_area([Square(4), Circle(2)]))\n```\nWhat happens?",
           "options": [
-            "AttributeError: 'Circle' object has no attribute 'area'",
+            "It computes Circle's area automatically using math.pi, since duck typing infers intent from the class name",
             "16, because Circle is silently skipped when it lacks an area() method",
-            "16 + 0, treating Circle's missing area() as contributing 0",
-            "It computes Circle's area automatically using math.pi, since duck typing infers intent from the class name"
+            "AttributeError: 'Circle' object has no attribute 'area'",
+            "16 + 0, treating Circle's missing area() as contributing 0"
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 2,
           "explanation": "Duck typing means `total_area` doesn't check what class each `shape` belongs to -- it just calls `.area()` and trusts the object supports it. That trust cuts both ways: there's no automatic fallback, skipping, or inference when an object *doesn't* have the expected method. Since `Circle` was never given an `area()` method, calling `shape.area()` on a `Circle` instance raises a perfectly ordinary `AttributeError: 'Circle' object has no attribute 'area'` -- duck typing provides no safety net here; it simply defers the check from 'is this the right type' (which Python never asks) to 'does this object actually support the call' (which fails loudly and immediately if not)."
         }
       ]
@@ -423,12 +423,12 @@
           "type": "multipleChoice",
           "prompt": "```python\nfrom dataclasses import dataclass\n\n@dataclass\nclass Item:\n    label: str\n    tags: list = []\n```\nWhat happens when this class is defined?",
           "options": [
-            "It defines successfully, and every Item instance that doesn't supply tags shares one list.",
-            "It raises a ValueError at class-definition time, because @dataclass forbids a bare mutable literal as a field default.",
             "It defines successfully, and each Item instance gets its own fresh empty list automatically.",
-            "It raises a TypeError only when the first Item() is actually constructed, not when the class is defined."
+            "It raises a TypeError only when the first Item() is actually constructed, not when the class is defined.",
+            "It defines successfully, and every Item instance that doesn't supply tags shares one list.",
+            "It raises a ValueError at class-definition time, because @dataclass forbids a bare mutable literal as a field default."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "@dataclass specifically inspects field defaults and raises ValueError immediately, at class-definition time, if it detects a mutable literal (list, dict, or set) as the default -- precisely to prevent the shared-mutable-object bug described in the “It defines successfully, and every Item instance…” option from ever silently happening. The “It defines successfully, and each Item instance…” option describes what field(default_factory=list) would actually achieve, but that's not what this code uses. The “It raises a TypeError only…” option is wrong about timing -- the error fires when the class itself is defined, before any instance is ever created."
         },
         {
@@ -442,12 +442,12 @@
           "type": "multipleChoice",
           "prompt": "```python\nfrom dataclasses import dataclass\n\n@dataclass\nclass Point:\n    x: int\n    y: int\n\np = Point(\"five\", 2)\nprint(p)\nprint(p.x + 1)\n```\nWhat happens?",
           "options": [
+            "ValueError is raised when the class Point itself is defined, because of the eventual type mismatch",
             "Point(x='five', y=2) prints first, then TypeError is raised evaluating p.x + 1, since @dataclass never enforces type annotations at runtime",
             "TypeError is raised immediately at Point(\"five\", 2), since x is annotated as int",
-            "Point(x=5, y=2) prints, with \"five\" silently coerced to a fallback integer",
-            "ValueError is raised when the class Point itself is defined, because of the eventual type mismatch"
+            "Point(x=5, y=2) prints, with \"five\" silently coerced to a fallback integer"
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 1,
           "explanation": "Field type annotations like `x: int` are read by `@dataclass` purely to know which names are fields and what order to generate `__init__`'s parameters in -- they are never checked against the actual values passed in, exactly like ordinary function type hints elsewhere in Python. So `Point(\"five\", 2)` constructs successfully with `x` holding the string `\"five\"`, and `print(p)` shows the generated repr, `Point(x='five', y=2)`, without any error. The error only shows up later, and for an unrelated reason: `p.x + 1` tries to add a `str` and an `int` with `+`, which Python's strong typing refuses, raising `TypeError`. Nothing about `@dataclass` itself performs any type coercion or validation."
         },
         {
@@ -455,12 +455,12 @@
           "type": "multipleChoice",
           "prompt": "```python\nfrom dataclasses import dataclass\n\n@dataclass\nclass Tag:\n    name: str\n\nt = Tag(\"python\")\ncache = {}\ncache[t] = \"found me\"\n```\nWhat happens on the last line?",
           "options": [
-            "TypeError: unhashable type: 'Tag'",
-            "It works fine -- dataclass instances are always hashable, regardless of frozen",
             "It works, but the dict key compares equal to everything due to the auto-generated __eq__",
-            "ValueError: dataclass fields must be declared frozen to be used as dict values"
+            "ValueError: dataclass fields must be declared frozen to be used as dict values",
+            "TypeError: unhashable type: 'Tag'",
+            "It works fine -- dataclass instances are always hashable, regardless of frozen"
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 2,
           "explanation": "`Tag` was defined as an ordinary, mutable dataclass (no `frozen=True`), and by default a mutable dataclass instance is not hashable -- allowing it to be hashable while still mutable would risk its hash changing after being inserted into a dict or set, which would corrupt that data structure's internal lookup. So `cache[t] = ...` raises `TypeError: unhashable type: 'Tag'` immediately. Only `@dataclass(frozen=True)` instances gain hashability automatically, precisely because their fields can never change after construction, so their hash is guaranteed to stay valid for the object's whole lifetime."
         },
         {
@@ -469,9 +469,9 @@
           "prompt": "```python\nfrom dataclasses import dataclass, field\n\ndef default_id():\n    return \"unassigned\"\n\n@dataclass\nclass Ticket:\n    title: str\n    assignee: str = field(default_factory=default_id)\n\nt1 = Ticket(\"Fix bug\")\nt2 = Ticket(\"Add feature\")\nt1.assignee = \"Amy\"\nprint(t1.assignee, t2.assignee)\n```\nWhat gets printed?",
           "options": [
             "Amy unassigned",
+            "unassigned unassigned",
             "Amy Amy",
-            "TypeError: default_factory must be a built-in constructor like list, dict, or set",
-            "unassigned unassigned"
+            "TypeError: default_factory must be a built-in constructor like list, dict, or set"
           ],
           "correctOptionIndex": 0,
           "explanation": "`field(default_factory=...)` accepts any zero-argument callable, not just `list`/`dict`/`set` -- a custom function like `default_id` works exactly the same way: it's called fresh, once, for every instance that doesn't supply its own `assignee` explicitly. So `t1` and `t2` each independently start with `assignee = \"unassigned\"`, as two separate string assignments (not one shared object). Reassigning `t1.assignee = \"Amy\"` afterward is an ordinary attribute assignment on `t1` alone (this dataclass isn't frozen, so mutation is allowed) and has no effect on `t2`, which still holds its own independently-created `\"unassigned\"`."

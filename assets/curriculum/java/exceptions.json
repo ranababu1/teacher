@@ -99,12 +99,12 @@
           "type": "multipleChoice",
           "prompt": "Which statement correctly describes what determines whether an exception class is 'checked' or 'unchecked' in Java?",
           "options": [
-            "Checked exceptions represent more severe failures than unchecked exceptions.",
-            "An exception is unchecked if it extends RuntimeException (or is an Error); every other subclass of Exception is checked, and the compiler enforces handling only for the checked ones.",
+            "Checked exceptions are checked by the JVM at run time, while unchecked exceptions are only checked by the compiler.",
             "Any exception you create yourself with a custom class is automatically unchecked, while only exceptions from the standard library can be checked.",
-            "Checked exceptions are checked by the JVM at run time, while unchecked exceptions are only checked by the compiler."
+            "Checked exceptions represent more severe failures than unchecked exceptions.",
+            "An exception is unchecked if it extends RuntimeException (or is an Error); every other subclass of Exception is checked, and the compiler enforces handling only for the checked ones."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "The correct answer states the actual rule precisely: the checked/unchecked label is determined entirely by where a class sits in the Throwable hierarchy -- specifically whether it descends from RuntimeException (or is an Error), not by severity. The “Checked exceptions represent more severe failures than unchecked exceptions” option is the classic misconception this concept directly addresses; Error, which is unchecked, covers some of the most severe failures in the JVM. The “Any exception you create yourself…” option is wrong -- a custom exception class is checked or unchecked based purely on which class it extends (Exception vs RuntimeException), regardless of who wrote it. The “Checked exceptions are checked by the JVM…” option has the terminology backwards: it's precisely the OPPOSITE of what 'checked' means here -- checked exceptions are checked by the COMPILER (at compile time, via javac), while unchecked exceptions receive no such compile-time enforcement at all, though both kinds are of course still capable of being thrown and caught at run time."
         },
         {
@@ -118,12 +118,12 @@
           "type": "multipleChoice",
           "prompt": "A library method is declared as public void loadConfig(String path) throws IOException. A later release changes it to public void loadConfig(String path) throws IOException, SQLException. What is the consequence for existing callers?",
           "options": [
-            "None -- adding a new checked exception to a throws clause is always fully backward compatible with existing code.",
-            "Every existing caller that doesn't already catch or declare SQLException now fails to compile, because throws is part of a method's public contract, and adding a new checked exception is a breaking change for code compiled against the old signature.",
+            "This change is illegal, and javac refuses to compile the library itself, since a throws clause can never be modified once a method has been published.",
             "Existing already-compiled .class files calling the old version will start throwing SQLException automatically at run time, without needing to recompile at all.",
-            "This change is illegal, and javac refuses to compile the library itself, since a throws clause can never be modified once a method has been published."
+            "Every existing caller that doesn't already catch or declare SQLException now fails to compile, because throws is part of a method's public contract, and adding a new checked exception is a breaking change for code compiled against the old signature.",
+            "None -- adding a new checked exception to a throws clause is always fully backward compatible with existing code."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "A throws clause is part of a method's public contract, exactly like its parameter types and return type -- callers compiled against the old signature only ever acknowledged IOException, and adding SQLException to the signature means those callers now have an unacknowledged checked exception their code doesn't handle, which javac flags as a compile error the next time they're rebuilt against the new signature. The “None -- adding a new checked exception…” option ignores this real, common source of breaking API changes. The “Existing already-compiled .class files calling the old…” option misunderstands how already-compiled bytecode works -- it isn't retroactively altered by a signature change elsewhere. The “This change is illegal, and javac refuses…” option is wrong because changing a throws clause is completely legal from the compiler's point of view; the cost falls on callers, not on the library itself."
         },
         {
@@ -131,9 +131,9 @@
           "type": "multipleChoice",
           "prompt": "try { loadConfig(\"app.config\"); } catch (IOException e) { } What is the most accurate critique of this code?",
           "options": [
-            "It's a fully safe way to satisfy the compiler when a method can't recover from a checked exception -- there's no real downside, since the exception type is at least named in the catch clause.",
-            "It compiles and technically satisfies javac's requirement, but it silently discards the entire reason the checked exception existed -- the program continues in a broken state (config never actually loaded) with no trace of why, which is exactly the anti-pattern checked exceptions are meant to prevent.",
             "It fails to compile, because a catch block handling a checked exception must contain at least one executable statement.",
+            "It compiles and technically satisfies javac's requirement, but it silently discards the entire reason the checked exception existed -- the program continues in a broken state (config never actually loaded) with no trace of why, which is exactly the anti-pattern checked exceptions are meant to prevent.",
+            "It's a fully safe way to satisfy the compiler when a method can't recover from a checked exception -- there's no real downside, since the exception type is at least named in the catch clause.",
             "It's functionally equivalent to declaring throws IOException on the enclosing method, since both approaches satisfy the compiler in the same way."
           ],
           "correctOptionIndex": 1,
@@ -144,12 +144,12 @@
           "type": "multipleChoice",
           "prompt": "Two methods might each fail: (1) one calls Integer.parseInt(text), which can throw NumberFormatException; (2) one calls new FileInputStream(path), which can throw FileNotFoundException. Which of these, if either, would the compiler actually require to be caught or declared with throws?",
           "options": [
-            "Only (1), because NumberFormatException is checked while FileNotFoundException is unchecked.",
             "Only (2), because FileNotFoundException extends IOException, which does not extend RuntimeException and is therefore checked; NumberFormatException extends IllegalArgumentException, which extends RuntimeException, making it unchecked and requiring no such declaration.",
-            "Both (1) and (2), since any exception that can realistically occur in a method's body must be declared or caught.",
-            "Neither (1) nor (2), since the compiler only enforces this rule for exceptions raised directly with a throw statement, not ones thrown from inside library methods."
+            "Only (1), because NumberFormatException is checked while FileNotFoundException is unchecked.",
+            "Neither (1) nor (2), since the compiler only enforces this rule for exceptions raised directly with a throw statement, not ones thrown from inside library methods.",
+            "Both (1) and (2), since any exception that can realistically occur in a method's body must be declared or caught."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "The checked/unchecked distinction depends entirely on where a class sits in the Throwable hierarchy. FileNotFoundException is a subclass of IOException, which is a subclass of Exception that does not extend RuntimeException -- so it's checked, and a method whose body might produce it must catch or declare it. NumberFormatException, by contrast, is a subclass of IllegalArgumentException, which extends RuntimeException -- so it's unchecked, and the compiler enforces nothing about it regardless of how likely it is to actually occur. The “Only (1), because NumberFormatException is checked while…” option has the two exactly backwards. The “Both (1) and (2), since any exception…” option is wrong because unchecked exceptions never require this regardless of likelihood. The “Neither (1) nor (2), since the compiler…” option is wrong -- the compiler's enforcement applies to any checked exception a method's body might produce, whether via a direct throw or by calling another method (including a library method) that's declared to throw one."
         },
         {
@@ -261,11 +261,11 @@
           "prompt": "static int f() {\n    try {\n        return 10;\n    } finally {\n        return 20;\n    }\n}\nWhat does f() return, and why?",
           "options": [
             "10, because the try block's return statement executes and completes the method before finally ever runs.",
-            "20, because finally always runs before the method actually completes, and its own return statement overrides the try block's pending return.",
+            "It throws an exception at runtime because two return statements conflict.",
             "This fails to compile, because a method cannot have return statements in both try and finally.",
-            "It throws an exception at runtime because two return statements conflict."
+            "20, because finally always runs before the method actually completes, and its own return statement overrides the try block's pending return."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "The correct answer describes the mechanism: finally always runs after the try block, before the method's completion is finalized -- even when that completion would have been a return statement. Since the finally block here itself contains a return statement, that return executes and completes the method, discarding the try block's pending return 10 entirely, so f() returns 20. The “10, because the try block's return statement…” option is the natural but incorrect assumption that a return statement in try immediately and unconditionally exits the method -- it doesn't, when a finally block is present. The “This fails to compile, because a method…” option is wrong because this code compiles perfectly fine; having return statements in both try and finally is legal Java, just widely considered poor practice. The “It throws an exception at runtime…” option is wrong because there is no runtime conflict or exception here at all -- the behavior is fully deterministic and specified by the language, just frequently surprising to newcomers."
         },
         {
@@ -279,12 +279,12 @@
           "type": "multipleChoice",
           "prompt": "Which of these two multi-catch declarations fails to compile, and why? (A) catch (SQLException | IOException e) { ... } (B) catch (FileNotFoundException | IOException e) { ... }",
           "options": [
-            "(A) fails to compile, because SQLException and IOException share no common supertype other than Exception itself.",
-            "(B) fails to compile, because FileNotFoundException is itself a subtype of IOException -- the second alternative in the pair can never add anything the first doesn't already cover, and Java specifically disallows multi-catching a type alongside one of its own subtypes.",
+            "Neither fails to compile; both are completely valid multi-catch declarations as written.",
             "Both (A) and (B) fail to compile, since multi-catch can only ever combine two unrelated subtypes of RuntimeException specifically.",
-            "Neither fails to compile; both are completely valid multi-catch declarations as written."
+            "(B) fails to compile, because FileNotFoundException is itself a subtype of IOException -- the second alternative in the pair can never add anything the first doesn't already cover, and Java specifically disallows multi-catching a type alongside one of its own subtypes.",
+            "(A) fails to compile, because SQLException and IOException share no common supertype other than Exception itself."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "Multi-catch requires that neither listed type be a subtype of the other, since that would make one alternative entirely redundant -- (B) violates this directly, because FileNotFoundException extends IOException, so every exception the first alternative could match is already covered by the second. (A) is perfectly legal multi-catch: SQLException and IOException have no subtype relationship to each other, which is exactly the situation multi-catch exists for. The “(A) fails to compile, because SQLException…” option is wrong about which pair is actually the problem. The “Both (A) and (B) fail to compile…” option invents a restriction to RuntimeException subtypes that doesn't exist -- multi-catch works with checked exception types too, as (A) demonstrates. The “Neither fails to compile; both are completely…” option is wrong because (B) is a genuine compile error."
         },
         {
@@ -292,12 +292,12 @@
           "type": "multipleChoice",
           "prompt": "try { Object[] items = new String[3]; items[0] = 42; } catch (ArrayStoreException e) { System.out.println(\"store error\"); } catch (RuntimeException e) { System.out.println(\"runtime error\"); } catch (Exception e) { System.out.println(\"general error\"); } Given that ArrayStoreException extends RuntimeException, what happens when this is compiled and run?",
           "options": [
-            "It compiles fine and prints \"store error\", because ArrayStoreException is listed first and is the most specific type matching the exception actually thrown by storing an int into a String array.",
-            "It fails to compile, because listing ArrayStoreException before RuntimeException before Exception, in that order, makes the later clauses unreachable.",
             "It compiles fine but prints \"runtime error\" instead, because RuntimeException is always checked before any of its subtypes at run time, regardless of catch order.",
-            "It throws an uncaught exception at run time, since none of the three catch clauses can actually match a store error."
+            "It compiles fine and prints \"store error\", because ArrayStoreException is listed first and is the most specific type matching the exception actually thrown by storing an int into a String array.",
+            "It throws an uncaught exception at run time, since none of the three catch clauses can actually match a store error.",
+            "It fails to compile, because listing ArrayStoreException before RuntimeException before Exception, in that order, makes the later clauses unreachable."
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 1,
           "explanation": "items is declared as Object[] but actually refers to a String[] at run time; assigning items[0] = 42 (autoboxed to Integer) attempts to store an Integer into an array whose real element type is String, which throws ArrayStoreException. The catch clauses here are ordered correctly -- most specific (ArrayStoreException) first, then its broader supertype RuntimeException, then the broadest, Exception -- so this compiles fine, and since ArrayStoreException is thrown, the first, most specific matching clause runs, printing \"store error\". The “It fails to compile, because listing ArrayStoreException…” option misapplies the unreachable-catch rule, which only flags a narrower clause placed AFTER a broader one already covering it -- the order here is the reverse, and correct. The “It compiles fine but prints \"runtime error\"…” option invents a run-time matching mechanism Java doesn't have; catch matching always respects the written top-to-bottom order. The “It throws an uncaught exception at run…” option is wrong because the first clause matches exactly."
         },
         {
@@ -305,12 +305,12 @@
           "type": "multipleChoice",
           "prompt": "A class is designed to signal that a withdrawal amount exceeds an account's balance -- a normal, anticipated business condition callers should be able to handle. Which custom exception design is most appropriate?",
           "options": [
-            "class InsufficientFundsException extends RuntimeException { ... } -- since callers should never be forced by the compiler to acknowledge an ordinary business condition.",
             "class InsufficientFundsException extends Exception { ... }, with constructors accepting a message and, separately, a message plus a Throwable cause -- since this is an anticipated, recoverable external condition, making a checked exception appropriate, with both constructors delegating to super(...) for proper messages and cause-chaining.",
             "class InsufficientFundsException extends Error { ... } -- since running out of funds is a serious problem for the account holder.",
+            "class InsufficientFundsException extends RuntimeException { ... } -- since callers should never be forced by the compiler to acknowledge an ordinary business condition.",
             "class InsufficientFundsException extends Throwable { ... } directly, bypassing both Exception and Error entirely for maximum design flexibility."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "Insufficient funds is exactly the kind of anticipated, recoverable, external-to-the-code condition checked exceptions are meant for -- it's not a bug, and a caller (a UI showing an error, a batch job logging and skipping the transaction) can reasonably be expected to handle it. Extending Exception directly makes it checked, and providing both a message-only and a message-plus-cause constructor is the standard, low-cost convention that supports clear error messages now and cause-chaining if a future implementation needs to wrap a lower-level failure. The “class InsufficientFundsException extends RuntimeException { ... }…” option would let callers silently ignore a condition the design intends them to consider. The “class InsufficientFundsException extends Error { ... }…” option is wrong -- Error is reserved for serious JVM-level problems the application isn't expected to recover from, not ordinary business rule violations. The “class InsufficientFundsException extends Throwable { ... }…” option needlessly discards the well-understood Exception/Error distinction the rest of the language and ecosystem rely on."
         }
       ]
@@ -415,12 +415,12 @@
           "type": "multipleChoice",
           "prompt": "Inside a try-with-resources block, the body throws a RuntimeException, and the automatic close() call on the resource also throws an exception while cleaning up. What actually happens?",
           "options": [
-            "The exception from close() replaces the original RuntimeException entirely, and only the close() exception is ever visible to the caller.",
-            "The original RuntimeException from the body propagates as the primary exception, with the exception from close() attached to it as a suppressed exception, retrievable via getSuppressed().",
+            "The program deadlocks, because two exceptions cannot be resolved during the same try-with-resources statement.",
             "Both exceptions are silently discarded, and the try-with-resources statement simply completes as if nothing had gone wrong.",
-            "The program deadlocks, because two exceptions cannot be resolved during the same try-with-resources statement."
+            "The original RuntimeException from the body propagates as the primary exception, with the exception from close() attached to it as a suppressed exception, retrievable via getSuppressed().",
+            "The exception from close() replaces the original RuntimeException entirely, and only the close() exception is ever visible to the caller."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "The correct answer describes the actual, specified behavior: try-with-resources treats the body's exception as primary and propagates it, attaching any exception from the automatic close() call as a suppressed exception rather than losing it -- this is precisely the improvement over manual finally-based cleanup, where a failing close() inside finally really could silently replace an exception already propagating from the try block. The “The exception from close() replaces the original…” option describes exactly that older, manual-cleanup failure mode, which try-with-resources specifically fixes. The “Both exceptions are silently discarded…” option is wrong -- neither exception is discarded; the primary one propagates and the second is preserved as suppressed information on it. The “The program deadlocks, because two exceptions cannot…” option is fabricated -- there's no deadlock mechanism involved in exception handling here at all."
         },
         {
@@ -434,12 +434,12 @@
           "type": "multipleChoice",
           "prompt": "class Widget { public void close() { System.out.println(\"closing\"); } } -- Widget does NOT implement AutoCloseable. try (Widget w = new Widget()) { } What happens when this is compiled?",
           "options": [
-            "It compiles fine, because Widget has a method literally named close(), and that alone is all try-with-resources actually requires.",
             "It fails to compile, because the compiler requires the resource's declared type to actually implement java.lang.AutoCloseable (or Closeable) -- merely having a same-named close() method, without formally implementing that interface, does not satisfy the requirement.",
+            "It fails to compile, but only because Widget's close() method fails to declare throws Exception.",
             "It compiles fine but never actually calls close() at run time, since Widget isn't a recognized built-in resource type.",
-            "It fails to compile, but only because Widget's close() method fails to declare throws Exception."
+            "It compiles fine, because Widget has a method literally named close(), and that alone is all try-with-resources actually requires."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "try-with-resources is a structural, interface-based mechanism -- the compiler checks that the declared type of the resource actually implements AutoCloseable (or its subinterface Closeable), not merely that it happens to have a method spelled close(). Widget has the right method name but no formal implements clause, so the compiler rejects this with an incompatible-types error. The “It compiles fine, because Widget has…” option describes a naming-convention check the compiler does not perform. The “It compiles fine but never actually calls…” option is wrong because this code doesn't compile at all, so nothing about it ever reaches run time. The “It fails to compile, but only…” option is wrong -- AutoCloseable's close() is declared to throw Exception, but an implementing class is always free to narrow that to no declared exception at all, which is exactly what Widget's close() does; that's not the actual problem here."
         },
         {
@@ -447,9 +447,9 @@
           "type": "multipleChoice",
           "prompt": "class CleanResource implements AutoCloseable { void doWork() { System.out.println(\"working\"); } public void close() { throw new IllegalStateException(\"close failed\"); } } try (CleanResource r = new CleanResource()) { r.doWork(); } What happens?",
           "options": [
-            "The try statement completes with no visible effect at all, since the body itself never threw anything.",
-            "IllegalStateException(\"close failed\") propagates out of the try statement as an ordinary, unsuppressed exception -- since the body completed normally, there's no earlier exception for close()'s failure to be attached to as suppressed; it simply is the exception that propagates.",
             "The exception from close() is automatically suppressed and discarded, since suppression applies to any exception thrown by an automatic close() call.",
+            "IllegalStateException(\"close failed\") propagates out of the try statement as an ordinary, unsuppressed exception -- since the body completed normally, there's no earlier exception for close()'s failure to be attached to as suppressed; it simply is the exception that propagates.",
+            "The try statement completes with no visible effect at all, since the body itself never threw anything.",
             "This throws a NullPointerException, because a resource cannot be closed unless something in the try body already failed first."
           ],
           "correctOptionIndex": 1,

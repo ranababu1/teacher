@@ -109,11 +109,11 @@
           "prompt": "A notification service normally handles 200 emails/sec comfortably, but once a day a scheduled digest job needs to send 2 million emails within a short window, and the synchronous send-email endpoint times out and drops requests during that window. What is the most appropriate fix?",
           "options": [
             "Rewrite the send-email endpoint using async/await so it doesn't block a thread while the email provider's API call is in flight.",
-            "Enqueue each email as a message to be sent, return immediately from the digest job once all 2 million are queued, and let a pool of worker consumers send them at whatever steady rate the email provider and infrastructure can sustain.",
             "Permanently provision enough servers to handle 2 million emails per second so the daily digest never has to wait.",
-            "Reduce the digest job's timeout so it fails fast instead of hanging."
+            "Reduce the digest job's timeout so it fails fast instead of hanging.",
+            "Enqueue each email as a message to be sent, return immediately from the digest job once all 2 million are queued, and let a pool of worker consumers send them at whatever steady rate the email provider and infrastructure can sustain."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "This is a textbook bursty-workload problem: enormous, predictable spikes in arrival rate against a system whose ability to fully process work in real time is far smaller. Queuing the emails durably lets the digest job's 'arrival' step finish quickly and safely, while the actual sending happens afterward at a sustainable rate -- exactly the decoupling this concept describes. The “Rewrite the send-email endpoint using async/await…” option addresses per-request thread efficiency, not the fact that 2 million requests still can't all be synchronously completed in a short window; it doesn't fix the core mismatch. The “Permanently provision enough servers to handle 2…” option solves the problem by permanently overprovisioning for a burst that only happens once a day, which is enormously wasteful compared to a queue that absorbs the burst cheaply. The “Reduce the digest job's timeout…” option just turns timeouts into faster, more numerous failures -- it discards work rather than deferring it."
         },
         {
@@ -127,12 +127,12 @@
           "type": "multipleChoice",
           "prompt": "A team rewrites a slow endpoint to use async/await internally, so the process no longer parks an OS thread while waiting on a downstream API. They claim this converts the endpoint into 'asynchronous processing' in the message-queue sense. Per the concept's first misconception, is this claim accurate?",
           "options": [
-            "Yes -- async/await and message-queue-based decoupling solve the exact same problem, just with different syntax.",
             "No -- async/await changes how efficiently a process waits for I/O, but the caller of the HTTP request is still logically blocked, waiting for a response before it can consider the operation done; that is a different axis from the queue-based pattern, where the caller gets an immediate 'accepted' response.",
+            "Yes, but only if the async/await code also uses a connection pool.",
             "No -- async/await is strictly slower than a queue-based approach and should never be used for I/O-bound code.",
-            "Yes, but only if the async/await code also uses a connection pool."
+            "Yes -- async/await and message-queue-based decoupling solve the exact same problem, just with different syntax."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "The concept's first misconception addresses this directly: async/await is about how a single process waits for I/O (letting one thread juggle many operations instead of parking a thread per request), but \"the caller on the other end of an async/await-based HTTP call is still, logically, blocked... That's a completely different axis from the queue-based pattern... where the caller gets an immediate 'accepted' response.\" The “Yes -- async/await and message-queue-based decoupling solve…” option conflates two genuinely different problems the concept explicitly distinguishes. The “No -- async/await is strictly slower…” option makes an unsupported blanket performance claim not present in the material. The “Yes, but only if the async/await code…” option invents an unrelated requirement about connection pools."
         },
         {
@@ -140,10 +140,10 @@
           "type": "multipleChoice",
           "prompt": "Per the 'Failure Pattern One: Slow, Long-Tail Work' section, why can a single slow synchronous dependency degrade throughput on completely unrelated, normally-fast endpoints on the same service?",
           "options": [
-            "Because the slow dependency corrupts the service's database, which every endpoint reads from.",
+            "Because synchronous calls always run on a single global thread shared by the entire process, regardless of endpoint.",
             "Because threads (or connections) are a shared, finite resource across the whole service, so requests pinned waiting on the slow dependency can consume the entire pool, leaving no threads available to even begin handling requests on unrelated endpoints.",
-            "Because the load balancer automatically routes all traffic away from a service once any single endpoint becomes slow.",
-            "Because synchronous calls always run on a single global thread shared by the entire process, regardless of endpoint."
+            "Because the slow dependency corrupts the service's database, which every endpoint reads from.",
+            "Because the load balancer automatically routes all traffic away from a service once any single endpoint becomes slow."
           ],
           "correctOptionIndex": 1,
           "explanation": "The concept's thread-pool-exhaustion example shows exactly this mechanism: a slow dependency fills the shared thread pool with requests waiting on it, and \"now completely unrelated, normally-fast endpoints on the same service can't get a thread either, because the pool is exhausted.\" The “Because the slow dependency corrupts the service's…” option invents an unrelated database-corruption explanation not discussed. The “Because the load balancer automatically routes all…” option mischaracterizes load balancer behavior -- nothing in the concept describes automatic traffic rerouting triggered by one slow endpoint. The “Because synchronous calls always run…” option is a factually wrong generalization about threading models; the concept discusses a finite pool of many threads, not a single global one."
@@ -154,11 +154,11 @@
           "prompt": "Per the concept's closing diagnostic question, which scenario is the strongest candidate for keeping synchronous request/response rather than introducing a queue?",
           "options": [
             "A video transcoding job that takes several minutes to complete.",
-            "An authentication check that the very next line of code depends on, where the caller genuinely cannot proceed without the answer right now.",
             "A marketing email blast sent to ten thousand recipients at once.",
+            "An authentication check that the very next line of code depends on, where the caller genuinely cannot proceed without the answer right now.",
             "Recalculating a recommendation model across a user's entire historical purchase data."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "The concept states synchronous request/response \"is still the right default whenever the caller genuinely cannot proceed without the answer right now -- an authentication check, a read that the very next line of code depends on... 'come back later' isn't a valid response.\" The “A video transcoding job that takes several…”, “A marketing email blast sent to ten…”, and “Recalculating a recommendation model across a user's…” options all describe slow or bursty work explicitly identified elsewhere in the concept as good candidates for asynchronous, queue-based processing precisely because the caller can proceed, or doesn't need an immediate answer, while that work happens."
         }
       ]
@@ -267,12 +267,12 @@
           "type": "multipleChoice",
           "prompt": "An `order_placed` event needs to trigger three independent reactions: charging the customer, creating a shipping label, and updating a real-time analytics dashboard. Each of these three concerns is owned by a separate service. Which messaging pattern correctly satisfies this requirement?",
           "options": [
-            "A single point-to-point queue, with all three services competing as consumers, so the work is divided evenly across them.",
-            "Pub/sub: publish the event to a topic, with each of the three services maintaining its own independent subscription so each receives a full copy of every event.",
             "Have the billing service call the shipping and analytics services synchronously after charging the customer.",
-            "Use a point-to-point queue, but have each service read every message and then immediately re-publish it back onto the same queue for the next service to also read."
+            "A single point-to-point queue, with all three services competing as consumers, so the work is divided evenly across them.",
+            "Use a point-to-point queue, but have each service read every message and then immediately re-publish it back onto the same queue for the next service to also read.",
+            "Pub/sub: publish the event to a topic, with each of the three services maintaining its own independent subscription so each receives a full copy of every event."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "This is exactly the situation pub/sub is designed for: three genuinely independent parties each need to react to every single occurrence of the same event, with none of them competing with or depending on the others. The “A single point-to-point queue, with all three…” option is the classic point-to-point-instead-of-pub/sub mistake -- it would cause each order to be randomly handled by only one of the three services, silently dropping two-thirds of the required work. The “Have the billing service call the shipping…” option reintroduces the synchronous coupling problem from the previous concept -- the billing service's request now waits on shipping and analytics, and a failure in either one can block or fail the whole chain. The “Use a point-to-point queue, but have each…” option is a fragile, unnecessary workaround that still doesn't guarantee each service reliably sees every message and adds needless re-publishing complexity where a topic with independent subscriptions solves the problem directly."
         },
         {
@@ -286,9 +286,9 @@
           "type": "multipleChoice",
           "prompt": "A team scales out image-resize workers by having each of 5 new worker instances independently subscribe to a pub/sub topic of upload events, expecting the workload to be divided 5 ways. What actually happens, per the concept's second classic mistake?",
           "options": [
-            "The 5 workers correctly divide the images among themselves, resizing roughly 1/5 each.",
-            "Each of the 5 workers receives its own full copy of every upload event, so each one resizes every single image -- producing 5x the total work for zero throughput gain, rather than dividing the workload.",
             "The broker rejects the 5th subscription because pub/sub topics have a maximum of 4 subscribers.",
+            "Each of the 5 workers receives its own full copy of every upload event, so each one resizes every single image -- producing 5x the total work for zero throughput gain, rather than dividing the workload.",
+            "The 5 workers correctly divide the images among themselves, resizing roughly 1/5 each.",
             "The workers automatically negotiate among themselves to split the workload evenly, the same way point-to-point consumers do."
           ],
           "correctOptionIndex": 1,
@@ -300,11 +300,11 @@
           "prompt": "Per the concept's description of consumer groups (using Kafka as the canonical example), how does a broker support both point-to-point work division and pub/sub fan-out at the same time?",
           "options": [
             "By running two entirely separate broker clusters, one for each pattern.",
+            "By requiring producers to explicitly tag each message as either 'point-to-point' or 'pub/sub' before publishing.",
             "Within a single consumer group, members compete for partitions like point-to-point consumers; across different consumer groups, each group independently receives its own full copy of every message, like pub/sub fan-out.",
-            "By converting every pub/sub subscription into a point-to-point queue automatically after 24 hours.",
-            "By requiring producers to explicitly tag each message as either 'point-to-point' or 'pub/sub' before publishing."
+            "By converting every pub/sub subscription into a point-to-point queue automatically after 24 hours."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "The concept describes this directly: \"Within a single consumer group, partitions are distributed across the group's members -- so members of the same group compete for work exactly like a point-to-point queue... Across different consumer groups, each group independently receives its own full copy of every message on the topic -- exactly like pub/sub fan-out.\" The “By running two entirely separate broker clusters…” option invents a two-cluster architecture not described anywhere in the material. The “By converting every pub/sub subscription into…” option fabricates a time-based conversion mechanism that doesn't exist in the concept. The “By requiring producers to explicitly tag each…” option is false -- the pattern emerges from group membership, not per-message tagging by the producer."
         },
         {
@@ -312,12 +312,12 @@
           "type": "multipleChoice",
           "prompt": "Per the concept, why is the 'analytics service silently stealing orders from billing' bug (both reading from the same point-to-point queue) especially dangerous in practice, compared to an obvious hard failure?",
           "options": [
-            "Because it causes the entire service to crash immediately, making it trivial to notice and roll back.",
             "Because in light testing a single test order is likely to land on whichever consumer happens to be free, so the bug passes casual testing and shows up in production only as a slow, confusing trickle of 'missing' orders rather than an obvious failure.",
+            "Because point-to-point queues log an explicit warning that is easy to miss in production dashboards.",
             "Because it only occurs on weekends when analytics jobs are scheduled to run.",
-            "Because point-to-point queues log an explicit warning that is easy to miss in production dashboards."
+            "Because it causes the entire service to crash immediately, making it trivial to notice and roll back."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "The concept states this danger explicitly: the mistake \"is genuinely dangerous because it's easy to miss in testing (a single test order is very likely to land on whichever consumer happens to be free) and shows up in production as a slow, confusing trickle of 'missing' orders rather than an obvious hard failure.\" The “Because it causes the entire service…” option contradicts the concept, which describes a subtle, silent partial failure, not a crash. The “Because it only occurs on weekends…” option invents a scheduling detail not present anywhere in the material. The “Because point-to-point queues log an explicit warning…” option fabricates a logging/warning mechanism not described in the concept."
         }
       ]
@@ -427,11 +427,11 @@
           "prompt": "A topic is partitioned by `customer_id`. Two events for the same customer -- `AddressUpdated` then `OrderPlaced` (using the new address) -- are published moments apart. What ordering guarantee, if any, applies to how a consumer sees these two events relative to each other?",
           "options": [
             "No guarantee at all -- brokers never provide ordering guarantees of any kind.",
-            "Because both events share the same partition key (customer_id), they land in the same partition and are guaranteed to be delivered to a consumer in the order they were produced -- AddressUpdated before OrderPlaced.",
             "The events are guaranteed to be delivered in order only if there is exactly one consumer for the entire topic, regardless of partition key.",
-            "Ordering is guaranteed globally across the whole topic by default, for every event regardless of key."
+            "Ordering is guaranteed globally across the whole topic by default, for every event regardless of key.",
+            "Because both events share the same partition key (customer_id), they land in the same partition and are guaranteed to be delivered to a consumer in the order they were produced -- AddressUpdated before OrderPlaced."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "Because both events use the same partition key, they're routed to the same partition, and within a single partition most brokers (Kafka included) guarantee delivery order matches production order -- so a consumer reading that partition sees AddressUpdated before OrderPlaced, correctly reflecting what actually happened. The “No guarantee at all -- brokers never…” option is wrong -- partition/key-scoped ordering guarantees are a standard, real feature, just not a global one. The “The events are guaranteed to be delivered…” option confuses consumer count with the actual mechanism -- ordering here is a property of the partition and how events are keyed, not of how many consumers happen to be reading it (though within a single consumer group, exactly one consumer instance handles a given partition at a time, which is part of how the guarantee is upheld). The “Ordering is guaranteed globally across the whole…” option is exactly the common misconception this concept warns against -- ordering is scoped to the partition/key, not the whole topic, and events with different keys have no ordering relationship."
         },
         {
@@ -445,10 +445,10 @@
           "type": "multipleChoice",
           "prompt": "A service inserts a new order into its own database, then, as a separate subsequent step, calls the broker to publish an OrderPlaced event. The process is killed by the orchestrator between those two steps. Per the concept's discussion of the dual-write problem, what is the standard mitigation?",
           "options": [
-            "Increase the process's retry count for the publish call so it eventually succeeds no matter what.",
+            "Have the broker poll the service's database directly instead of receiving explicit publish calls.",
             "Write the event into an outbox table as part of the SAME database transaction as the order itself, so both commit together or neither does, and have a separate relay process read the outbox and publish to the broker afterward.",
-            "Switch from at-least-once to at-most-once delivery, so the broker never redelivers a message.",
-            "Have the broker poll the service's database directly instead of receiving explicit publish calls."
+            "Increase the process's retry count for the publish call so it eventually succeeds no matter what.",
+            "Switch from at-least-once to at-most-once delivery, so the broker never redelivers a message."
           ],
           "correctOptionIndex": 1,
           "explanation": "The concept names this exact mitigation: \"the transactional outbox pattern... the service writes the event into an 'outbox' table in the SAME database transaction as the actual state change, guaranteeing both succeed or both fail together; a separate relay process then reads the outbox and publishes to the broker.\" The “Increase the process's retry count…” option doesn't address the actual gap -- if the process was already killed before the publish call ran at all, retrying a call that never happened doesn't help. The “Switch from at-least-once to at-most-once delivery…” option is unrelated and would make message loss more likely, not solve the atomicity gap between the two writes. The “Have the broker poll the service's database…” option fabricates a broker capability (directly polling an arbitrary service's database) that isn't part of any pattern described in the concept."
@@ -458,12 +458,12 @@
           "type": "multipleChoice",
           "prompt": "Per the concept, in what two specific senses is a producer in an event-driven architecture decoupled from its consumers, beyond simply 'not calling them synchronously'?",
           "options": [
-            "Decoupled in geography and in currency, since producers and consumers are usually billed separately.",
-            "Decoupled in time (a consumer doesn't need to be running or even deployed yet when the event is produced) and in knowledge (the producer's code contains no reference to who consumes its events or what they do with them).",
             "Decoupled in programming language and in database vendor.",
-            "Decoupled in security permissions and in encryption algorithm."
+            "Decoupled in security permissions and in encryption algorithm.",
+            "Decoupled in time (a consumer doesn't need to be running or even deployed yet when the event is produced) and in knowledge (the producer's code contains no reference to who consumes its events or what they do with them).",
+            "Decoupled in geography and in currency, since producers and consumers are usually billed separately."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "The concept states this precisely: the producer \"is decoupled from its consumers in time (a consumer doesn't need to be running, healthy, or even deployed yet at the moment the event is produced...) and in knowledge (the producer's code contains no reference to who consumes its events, how many consumers exist, or what they do with them).\" The other options invent decoupling dimensions -- geography/currency, language/database vendor, security/encryption -- that are never discussed in the concept as defining properties of event-driven decoupling."
         },
         {
@@ -471,12 +471,12 @@
           "type": "multipleChoice",
           "prompt": "Per the concept's explanation of delivery guarantees, why do most practical systems build 'effectively-once' behavior on top of at-least-once delivery rather than relying on a broker's literal exactly-once guarantee?",
           "options": [
-            "Because at-least-once delivery is always faster than exactly-once delivery under every possible network condition.",
             "Because guaranteeing literal exactly-once delivery to a remote, independently-failing process across an unreliable network is not something any real distributed system can honestly promise end-to-end, so systems instead combine at-least-once delivery with consumer-side idempotency to achieve the same practical outcome.",
             "Because exactly-once delivery is only supported by brokers that don't support ordering guarantees.",
-            "Because at-most-once delivery is a legal requirement for financial transactions, making at-least-once the only remaining option."
+            "Because at-most-once delivery is a legal requirement for financial transactions, making at-least-once the only remaining option.",
+            "Because at-least-once delivery is always faster than exactly-once delivery under every possible network condition."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "The concept states this directly: \"delivering a message to a remote, independently-failing process exactly one time, guaranteed, across an unreliable network and possible crashes on either end, is not something any real distributed system can honestly promise end-to-end -- what most systems that advertise 'exactly-once' are actually providing is at-least-once delivery plus idempotent processing.\" The “Because at-least-once delivery is always faster…” option makes an unsupported performance claim not discussed anywhere in the concept. The “Because exactly-once delivery is only supported…” option fabricates a nonexistent relationship between ordering support and exactly-once delivery. The “Because at-most-once delivery is a legal requirement…” option invents a legal-requirement claim not present in the material, and additionally misidentifies which guarantee is described as the practical default (at-least-once, not at-most-once)."
         }
       ]

@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-11-24 (Answer options are shuffled)
+
+### Fixed
+- **The correct answer is no longer usually the second option.** It was in
+  75% of the 1,339 multiple-choice questions. Stored positions are now
+  balanced within every topic, which covers lessons and exercises.
+- **Topic tests, AI practice rounds and skill checks also reshuffle the
+  options each time,** so a retake cannot be passed from memory of
+  positions. A question whose text names a position keeps its order.
+
+### Verification
+- `test/assessment_shuffle_test.dart`, and a position-balance check in
+  `test/content_coverage_test.dart`. `flutter analyze`, `flutter test`.
+
 ## 2026-11-24 (Answer explanations name options by their text)
 
 ### Fixed

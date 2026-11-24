@@ -101,12 +101,12 @@
           "type": "multipleChoice",
           "prompt": "A component fetches a list of comments, and before the fetch resolves, its initial state is `comments = null`. Which statement about handling this correctly is true?",
           "options": [
-            "It's fine to render comments.map(...) directly -- React will wait for the fetch to resolve before running that line.",
             "The component must explicitly branch on a loading state (and handle a null/undefined value) before attempting to render the list, otherwise it will throw trying to call .map on null during the first render(s).",
+            "Only the error state needs explicit handling; loading and empty states render correctly by default without any special-casing.",
             "This only matters in production, so it's safe to skip explicit handling during local development.",
-            "Only the error state needs explicit handling; loading and empty states render correctly by default without any special-casing."
+            "It's fine to render comments.map(...) directly -- React will wait for the fetch to resolve before running that line."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "React does not pause rendering to wait for a fetch -- the component renders immediately with whatever its initial state is, which here is null, and calling .map on null throws right away, on every single load, before the fetch has any chance to resolve. This is why an explicit loading check (or at minimum a null/undefined guard) has to come before the code that assumes comments is a populated array. The “This only matters in production, so it's…” option is backwards -- this crashes locally exactly as much as in production, immediately, on first render. The “Only the error state needs explicit handling…” option is wrong because loading and empty states require their own explicit handling just as much as error does; none of the four states render sensibly 'by default' without being deliberately handled."
         },
         {
@@ -120,12 +120,12 @@
           "type": "multipleChoice",
           "prompt": "```jsx\nfunction SearchResults({ results, isLoading, error }) {\n  if (isLoading) return <Spinner />;\n  if (error) return <p>Something went wrong.</p>;\n  return (\n    <ul>\n      {results.map((r) => <li key={r.id}>{r.name}</li>)}\n    </ul>\n  );\n}\n```\nA search that legitimately returns zero results (not an error, not still loading) renders as what with this code, and what does the concept recommend instead?",
           "options": [
+            "It throws a runtime error, since .map cannot be called on an array that has zero elements.",
             "This already handles the empty case correctly, since results.map on an empty array simply produces no extra list items, which is exactly the intended behavior.",
             "It renders an empty <ul> with no visible content at all, which looks indistinguishable from a bug (or a component that forgot to render anything) rather than clearly communicating \"no results found\" -- the fix is an explicit branch for the empty case with its own message.",
-            "It throws a runtime error, since .map cannot be called on an array that has zero elements.",
             "It automatically falls through to the error branch, since an empty array is treated as a falsy value."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "Calling .map on an empty array is perfectly legal and simply produces no <li> elements -- it doesn't throw, ruling out the “It throws a runtime error, since .map…” option, and an array (empty or not) is still a truthy reference type, ruling out the “It automatically falls through to the error…” option. The real problem is that a genuinely empty, successful result renders as a bare, content-free <ul>, which looks exactly like something broke or like nothing has loaded yet -- indistinguishable from the loading or error states it's supposed to be different from. The concept is explicit that empty deserves its own deliberate branch and message ('No results found', for instance) rather than silently falling through to whatever the success branch happens to produce for zero items."
         }
       ]
@@ -221,12 +221,12 @@
           "type": "multipleChoice",
           "prompt": "Which statement best captures the tradeoff between storing an auth token in localStorage versus in an httpOnly cookie?",
           "options": [
-            "localStorage is strictly more secure because it's easier to use from JavaScript.",
             "httpOnly cookies can't be used for authentication at all, only localStorage can.",
             "localStorage is readable by any JavaScript running on the page (a real risk if the app has an XSS vulnerability), while an httpOnly cookie can't be read by JavaScript at all but is attached to requests automatically by the browser and introduces its own CSRF considerations.",
+            "localStorage is strictly more secure because it's easier to use from JavaScript.",
             "There's no real difference; both are equally invisible to JavaScript and equally safe."
           ],
-          "correctOptionIndex": 2,
+          "correctOptionIndex": 1,
           "explanation": "This is a genuine, two-sided tradeoff: localStorage's convenience comes with the cost that any script running on the page (including an attacker's, via an XSS hole) can read it, while an httpOnly cookie closes off that specific read vector but requires separate CSRF protections since the browser attaches it automatically to matching requests, including ones triggered from elsewhere. The “localStorage is strictly more secure because it's…” and “There's no real difference; both are equally…” options understate or invert the actual tradeoff, and the “httpOnly cookies can't be used for authentication…” option is simply false -- httpOnly cookies are a common, valid way to hold an auth token."
         },
         {
@@ -241,11 +241,11 @@
           "prompt": "```jsx\nfunction ProtectedRoute({ children }) {\n  const { currentUser } = useCurrentUser(); // isLoading isn't tracked or checked at all\n\n  if (!currentUser) return <Navigate to=\"/login\" replace />;\n  return children;\n}\n```\nuseCurrentUser() takes a brief moment on app startup to determine whether a previously-stored token is still valid. What's the practical bug with ProtectedRoute as written here?",
           "options": [
             "There is no bug -- currentUser is null precisely when, and only when, there's no valid session at all.",
-            "While the validity check is still in progress, currentUser is momentarily null (since it hasn't resolved one way or the other yet), so this redirects every single user -- including ones with a perfectly valid session -- to /login before the check has had a chance to finish.",
             "Navigate can only be rendered inside a component wrapped in React.memo, so this throws a runtime error immediately.",
-            "children is always undefined until currentUser is confirmed, so this crashes before the redirect check can even run."
+            "children is always undefined until currentUser is confirmed, so this crashes before the redirect check can even run.",
+            "While the validity check is still in progress, currentUser is momentarily null (since it hasn't resolved one way or the other yet), so this redirects every single user -- including ones with a perfectly valid session -- to /login before the check has had a chance to finish."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "currentUser starts out null before the validity check has resolved, for exactly the same reason any state does before an async operation finishes -- and this component treats 'null right now' as identical to 'definitely not authenticated,' which isn't true during that brief startup window. Every user, including ones whose session is completely valid, gets bounced to /login the instant the app loads, only to (at best) bounce back once the check actually resolves -- a jarring, incorrect redirect. The concept's fix is exactly what's missing here: track and check an isLoading state from useCurrentUser too, and render a loading indicator while that check is still in flight, only deciding to redirect once it has actually completed."
         }
       ]
@@ -342,11 +342,11 @@
           "prompt": "What's the main problem with typing a prop as any instead of giving it its actual type?",
           "options": [
             "any makes the code run slower at runtime.",
-            "any disables type checking for that value entirely, including everywhere it's subsequently passed, stored, or returned -- so the underlying bug you were routing around becomes invisible to the compiler rather than actually fixed.",
             "any is only permitted for props, not for state, so it causes a compile error elsewhere in the file.",
-            "any automatically converts the value to a string at runtime, which usually breaks rendering."
+            "any automatically converts the value to a string at runtime, which usually breaks rendering.",
+            "any disables type checking for that value entirely, including everywhere it's subsequently passed, stored, or returned -- so the underlying bug you were routing around becomes invisible to the compiler rather than actually fixed."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "any's real cost is a total loss of type checking for that value, propagating to anywhere it flows afterward -- not a runtime performance cost, a restriction to certain declaration types, or an automatic string conversion, none of which is how any actually behaves. The “any makes the code run slower at runtime”, “any is only permitted for props…”, and “any automatically converts the value…” options describe behaviors any simply doesn't have."
         },
         {
@@ -360,10 +360,10 @@
           "type": "multipleChoice",
           "prompt": "```tsx\ninterface AlertProps {\n  message: string;\n  duration?: number;\n}\n\nfunction Alert({ message, duration }: AlertProps) {\n  return <div>{message} (visible for {duration}ms)</div>;\n}\n\n<Alert message=\"Saved!\" />\n```\nduration is marked optional and no default is supplied in the destructuring. What is duration inside Alert for this usage, and does TypeScript flag anything here?",
           "options": [
-            "duration is 0, and TypeScript flags nothing, since an optional numeric prop automatically defaults to its type's zero value.",
+            "duration automatically becomes the string \"undefined\" cast to a number, which avoids any rendering issue.",
             "duration is undefined, and TypeScript does not flag this as an error -- marking a prop optional with ? only means callers may omit it; it does not supply a runtime fallback value, so \"(visible for undefinedms)\" would actually render.",
-            "TypeScript throws a compile-time error here, since every prop declared in an interface must always be explicitly passed by every caller, optional or not.",
-            "duration automatically becomes the string \"undefined\" cast to a number, which avoids any rendering issue."
+            "duration is 0, and TypeScript flags nothing, since an optional numeric prop automatically defaults to its type's zero value.",
+            "TypeScript throws a compile-time error here, since every prop declared in an interface must always be explicitly passed by every caller, optional or not."
           ],
           "correctOptionIndex": 1,
           "explanation": "The ? in duration?: number only tells TypeScript that a caller is allowed to omit this prop -- <Alert message=\"Saved!\" /> is valid, with no compile error, because duration is optional. But marking something optional doesn't magically produce a sensible fallback value at runtime; without an explicit default in the destructuring (like duration = 3000), duration is genuinely undefined inside Alert, and the JSX would render the literal, unhelpful text \"(visible for undefinedms)\". TypeScript only catches shape mismatches -- passing the wrong type, or omitting a required prop -- not missing runtime defaults for props you've already told it are allowed to be absent."
@@ -461,12 +461,12 @@
           "type": "multipleChoice",
           "prompt": "Why does React Testing Library encourage querying by role and accessible text/label instead of by CSS class name?",
           "options": [
+            "Role and label queries are simply an alias for querySelector with identical behavior under the hood.",
             "CSS-class-based queries are slower to execute in the test runner.",
             "Querying by role/label matches how a real user (including one using assistive technology) actually finds things on screen, so tests track real behavior and stay valid across purely visual refactors that change classes without changing what's rendered semantically.",
-            "CSS classes are not supported by the DOM APIs that Testing Library depends on.",
-            "Role and label queries are simply an alias for querySelector with identical behavior under the hood."
+            "CSS classes are not supported by the DOM APIs that Testing Library depends on."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "The actual reasoning is about what a query represents, not raw execution speed or DOM API support (both of which are non-issues -- the “CSS-class-based queries are slower to execute…” and “CSS classes are not supported…” options describe problems that don't exist). Role/label queries track the same accessible structure a real user (or their assistive technology) relies on, so they stay valid through refactors that only change styling classes, while a className-based query breaks the moment that class is renamed for purely visual reasons. The “Role and label queries are simply…” option is false -- role/label queries actively check accessible semantics, which querySelector has no concept of at all."
         },
         {
@@ -480,12 +480,12 @@
           "type": "multipleChoice",
           "prompt": "A test wants to assert that \"Apple\" is NOT present in the rendered output after a list has been filtered. Using `screen.getByText(\"Apple\")` directly for this assertion (e.g. wrapped in a `.not.toBeInTheDocument()` expectation) would be a mistake. Why?",
           "options": [
-            "getByText only works for headings, not for list items like \"Apple\".",
             "getByText throws an error immediately if no matching element is found, so the test would fail with a thrown error before ever reaching the intended \"not present\" assertion -- queryByText, which returns null instead of throwing, is the correct tool for asserting something is absent.",
+            "getByText and queryByText behave identically in every situation, so there's no meaningful difference to worry about here.",
             "getByText is case-sensitive in a way that would fail to match \"Apple\" for unrelated reasons.",
-            "getByText and queryByText behave identically in every situation, so there's no meaningful difference to worry about here."
+            "getByText only works for headings, not for list items like \"Apple\"."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "getByText is designed for the case where you expect a match to exist -- if nothing matches, it throws immediately, which would crash the test right there rather than letting an assertion about absence run at all. queryByText exists specifically for the opposite case: it returns null when nothing matches (instead of throwing), which is exactly what a `.not.toBeInTheDocument()`-style assertion needs to check against. This is precisely why Testing Library provides both variants -- get* for 'this should exist, fail loudly if it doesn't,' and query* for 'this might legitimately not exist, and that's fine to check for.'"
         }
       ]
@@ -587,10 +587,10 @@
           "type": "multipleChoice",
           "prompt": "A component is wrapped in React.memo, but profiling shows it still re-renders every time its parent re-renders, even though nothing about what it looks like on screen ever changes. What's the most likely cause?",
           "options": [
-            "React.memo doesn't work on function components, only class components.",
-            "One or more props passed to it are new object, array, or function references on every parent render (such as an inline arrow function or object literal), which defeats memo's shallow reference comparison even though their actual content is unchanged.",
             "The component has too many hooks for memo to track correctly.",
-            "memo only works if the component has no children."
+            "One or more props passed to it are new object, array, or function references on every parent render (such as an inline arrow function or object literal), which defeats memo's shallow reference comparison even though their actual content is unchanged.",
+            "memo only works if the component has no children.",
+            "React.memo doesn't work on function components, only class components."
           ],
           "correctOptionIndex": 1,
           "explanation": "This is precisely the memo-plus-inline-prop gotcha: a new function or object literal created fresh on every parent render is a different reference every time, and memo's shallow comparison treats that as changed props, regardless of whether the content or behavior is identical. React.memo works perfectly well on function components (the “React.memo doesn't work on function components, only class components” option is false), has no limit related to hook count (the “The component has too many hooks…” option is false), and has no restriction related to children (the “memo only works if the component has no children” option is false) -- none of those describe real constraints of memo."
@@ -607,11 +607,11 @@
           "prompt": "A teammate says: \"Since AnalyticsPage loads a 2MB charting library and feels slow to first show anything, let's wrap the chart component in React.memo to fix it.\" Why is React.memo the wrong tool for the specific problem being described?",
           "options": [
             "React.memo would actually make the initial load slower, since wrapping a component in it triggers an extra network request of its own.",
-            "React.memo only affects whether an already-loaded component skips re-rendering on subsequent updates -- it does nothing about how much JavaScript has to be downloaded and parsed before the app becomes interactive in the first place, which is what's actually causing the slow initial load. Code splitting/lazy loading (React.lazy plus Suspense) is the tool built for that.",
             "React.memo cannot be applied to any component that internally uses a third-party charting library.",
+            "React.memo only affects whether an already-loaded component skips re-rendering on subsequent updates -- it does nothing about how much JavaScript has to be downloaded and parsed before the app becomes interactive in the first place, which is what's actually causing the slow initial load. Code splitting/lazy loading (React.lazy plus Suspense) is the tool built for that.",
             "React.memo and code splitting are two different names for the exact same underlying mechanism, so either one would fix this equally well."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "The problem described -- a slow initial load caused by a large library's JS having to be downloaded and parsed -- is a bundle-size problem, not a re-render problem, and memo has nothing to say about bundle size at all; it only ever decides whether to skip re-rendering a component that's already loaded and mounted. Reaching for memo here wouldn't reduce the amount of JS shipped or fetched on first load by even one byte. Code splitting via React.lazy and Suspense is the concept's actual tool for this specific problem, since it defers fetching that heavy component's code until it's genuinely needed, rather than bundling it into what every visitor downloads upfront regardless of whether they ever use it."
         }
       ]
@@ -706,8 +706,8 @@
           "prompt": "A React app's production build makes a request to the wrong API URL because a build-time environment variable held the wrong value. Which statement correctly explains why this can't be fixed by just editing a config file on the already-deployed server?",
           "options": [
             "Build-time environment variables like this are substituted directly into the JS bundle's literal source at build time, so the wrong value is already baked into the deployed files -- fixing it requires rebuilding with the correct value and redeploying the new build, not editing a file after the fact.",
-            "Frontend apps don't actually support environment-specific configuration at all.",
             "The fix just requires restarting the static file server, which re-reads environment variables automatically on restart.",
+            "Frontend apps don't actually support environment-specific configuration at all.",
             "Environment variables in frontend builds are read fresh from the browser's own environment on every page load, so simply refreshing the page would fix it."
           ],
           "correctOptionIndex": 0,
@@ -725,11 +725,11 @@
           "prompt": "An SSR page's initial HTML response already shows a fully-rendered product list. The instant the page appears, a user clicks \"Add to Cart\" on the first visible item -- but for a brief moment, nothing visibly happens. What's the most likely explanation?",
           "options": [
             "SSR pages never support click handlers at all; only purely client-side-rendered apps can ever respond to click events.",
-            "The JS bundle needed to hydrate the page (attaching real event handlers to the already-rendered markup) may not have finished downloading and running yet -- the HTML looks complete and interactive, but nothing actually responds to events until hydration finishes.",
             "The server has to fully re-render the entire page from scratch in response to every click, which explains the brief delay.",
-            "This indicates a bug specific to this app; a correctly built SSR page is otherwise always fully interactive the instant any content becomes visible."
+            "This indicates a bug specific to this app; a correctly built SSR page is otherwise always fully interactive the instant any content becomes visible.",
+            "The JS bundle needed to hydrate the page (attaching real event handlers to the already-rendered markup) may not have finished downloading and running yet -- the HTML looks complete and interactive, but nothing actually responds to events until hydration finishes."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "SSR's server-rendered HTML gives the page real, visible content immediately, but that markup has no attached event handlers until the JS bundle sent alongside it actually finishes downloading and running -- the hydration step that attaches interactivity to already-rendered content. Until hydration completes, the page can look completely ready while still not responding to clicks, exactly the brief window described here; this is a normal, expected characteristic of SSR (sometimes felt as visible-but-not-yet-interactive), not evidence of a broken click handler or a per-click round trip to re-render the whole page server-side."
         }
       ]

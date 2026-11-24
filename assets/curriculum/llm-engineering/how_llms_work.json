@@ -108,12 +108,12 @@
           "type": "multipleChoice",
           "prompt": "A context window is described as '128,000 tokens.' What does that number actually limit?",
           "options": [
-            "Only the text you send as input; the model's response doesn't count against it.",
-            "Only the model's response length; you can send as much input as you want.",
             "The combined total of input tokens and output tokens for that single request.",
+            "Only the model's response length; you can send as much input as you want.",
+            "Only the text you send as input; the model's response doesn't count against it.",
             "The number of separate messages you can include in a conversation, regardless of their length."
           ],
-          "correctOptionIndex": 2,
+          "correctOptionIndex": 0,
           "explanation": "The context window is one shared budget covering everything involved in a single call: system prompt, conversation history, any retrieved or pasted content, the user's message, and the tokens the model generates in response. The “Only the text you send as input…” and “Only the model's response length; you can…” options each wrongly assume input and output are tracked separately with independent limits -- they aren't; consuming more on one side directly leaves less room on the other. The “The number of separate messages you can…” option is wrong because the limit is fundamentally about total token count, not message count -- a single very long message can exceed the window on its own, and many short messages can too, once their tokens add up."
         },
         {
@@ -127,12 +127,12 @@
           "type": "multipleChoice",
           "prompt": "A BPE-style tokenizer's vocabulary is built by starting with individual bytes and repeatedly merging pairs of tokens. Which pairs get merged, and why does that make a random hex string like 'a3f9c2e1' split into far more tokens than a common English phrase of similar length?",
           "options": [
-            "The most frequently co-occurring adjacent pairs in the training corpus get merged into new tokens; random hex characters rarely repeat the same substring, so no large merged token was ever created for them.",
-            "Pairs are merged in alphabetical order until the vocabulary reaches its target size, which happens to favor letters over digits.",
             "The tokenizer merges pairs based on a hand-written list of common English morphemes, and hex digits were never added to that list.",
-            "Every character is merged with its immediate neighbor exactly once, regardless of frequency, so token count only depends on string length."
+            "Every character is merged with its immediate neighbor exactly once, regardless of frequency, so token count only depends on string length.",
+            "Pairs are merged in alphabetical order until the vocabulary reaches its target size, which happens to favor letters over digits.",
+            "The most frequently co-occurring adjacent pairs in the training corpus get merged into new tokens; random hex characters rarely repeat the same substring, so no large merged token was ever created for them."
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 3,
           "explanation": "BPE vocabularies are learned, not designed: the training process repeatedly finds the most frequent adjacent pair of existing tokens across a large corpus and merges it into one new token, thousands of times over. Common English words and fragments earn big merged tokens because they recur constantly. A random-looking hex string almost never repeats the exact same substring anywhere in the corpus, so the merge process never had a statistical reason to build a larger token for it, leaving it to fall back to small, near-byte-level pieces. The “Pairs are merged in alphabetical order until…”, “The tokenizer merges pairs based…”, and “Every character is merged with its immediate…” options all describe mechanisms BPE does not use -- it is purely frequency-driven, with no alphabetical ordering, no hand-curated morpheme list, and no fixed one-merge-per-character rule."
         },
         {
@@ -140,8 +140,8 @@
           "type": "multipleChoice",
           "prompt": "You're assembling a prompt that includes several retrieved facts and a final user question, and only one fact can be flagged as the single most important one. Based on the 'lost in the middle' effect described in this module, where should that critical fact be placed to give the model the best chance of using it correctly?",
           "options": [
-            "Anywhere is equally fine, since a large enough context window guarantees uniform attention across all positions.",
             "Buried in the exact middle of the context, since models focus attention on the center of long inputs.",
+            "Anywhere is equally fine, since a large enough context window guarantees uniform attention across all positions.",
             "Near the very start or the very end of the context, since models empirically attend less reliably to information placed deep in the middle of a long input.",
             "Repeated ten times evenly spaced throughout the context, so at least one occurrence lands in an attended position."
           ],
@@ -153,12 +153,12 @@
           "type": "multipleChoice",
           "prompt": "A production system needs to answer questions against a knowledge base of 50,000 support articles -- far larger than any model's context window could ever hold at once. Per the strategies discussed in this module, which approach is the best default fit for this specific situation, and why?",
           "options": [
-            "Truncation: send as many articles as fit and cut off the rest, since the model can usually infer the missing parts.",
             "Chunking and map-reduce: split all 50,000 articles into pieces, summarize every piece for every question, then combine the summaries.",
             "Retrieval: index the articles ahead of time and, for each question, select only the subset of articles actually relevant to it.",
+            "Truncation: send as many articles as fit and cut off the rest, since the model can usually infer the missing parts.",
             "Summarization: compress all 50,000 articles into one dense summary once, and reuse that same summary for every future question."
           ],
-          "correctOptionIndex": 2,
+          "correctOptionIndex": 1,
           "explanation": "The module explicitly distinguishes these strategies by scenario: retrieval is the default answer when the overall knowledge base is bigger than the context window, because it selects only the relevant subset per query rather than trying to process everything every time. Truncation risks silently cutting relevant articles with no way to know what was lost. Running full map-reduce summarization across all 50,000 articles for every single question is enormously wasteful compared to retrieving the handful of relevant ones. A single static summary of the entire knowledge base would lose the specific detail needed to answer most individual questions accurately -- summarization is better suited to compressing one specific oversized input, not standing in for a whole knowledge base."
         }
       ]
@@ -263,12 +263,12 @@
           "type": "multipleChoice",
           "prompt": "Which of the following best describes how an LLM decides the very next token to output at a given point in generation?",
           "options": [
-            "It looks up the most grammatically correct next word using a rule-based grammar engine trained alongside the model.",
-            "It computes a probability distribution over its entire vocabulary, conditioned on all tokens generated so far (prompt plus its own prior output), and selects a token from that distribution.",
+            "It first generates a short outline of the intended response, then fills in each token to match that outline.",
             "It retrieves the most similar sentence from its training data and copies the next word from that sentence.",
-            "It first generates a short outline of the intended response, then fills in each token to match that outline."
+            "It looks up the most grammatically correct next word using a rule-based grammar engine trained alongside the model.",
+            "It computes a probability distribution over its entire vocabulary, conditioned on all tokens generated so far (prompt plus its own prior output), and selects a token from that distribution."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "This is the core autoregressive mechanism: a forward pass produces one logit per vocabulary entry, softmax converts those into a probability distribution, and a token is selected from it -- with the entire process conditioned on every token that already exists in the sequence, including tokens the model itself generated earlier in the same response. The “It looks up the most grammatically correct…” option is wrong because there's no separate symbolic grammar engine involved; grammatical patterns are represented implicitly in the learned probability distribution. The “It retrieves the most similar sentence…” option is wrong because the model doesn't perform a literal lookup or retrieval against stored training sentences at generation time -- it generates from learned parameters, not a searchable copy of its training data. The “It first generates a short outline…” option is wrong because there's no distinct planning/outlining phase in the base mechanism; any apparent structure emerges from token-by-token prediction alone, unless an explicit intermediate-reasoning step is added through prompting."
         },
         {
@@ -282,12 +282,12 @@
           "type": "multipleChoice",
           "prompt": "At each step of the generation loop, what exactly does the model's final layer compute before a next token is chosen?",
           "options": [
-            "One logit per vocabulary entry, which softmax then converts into a probability distribution over the entire vocabulary that sums to 1.",
-            "A single probability value representing how confident the model is in its overall response so far.",
             "A ranked shortlist of the five most likely next words, computed by comparing against stored training sentences.",
-            "A binary flag for every vocabulary entry indicating whether that token is grammatically valid at this position."
+            "One logit per vocabulary entry, which softmax then converts into a probability distribution over the entire vocabulary that sums to 1.",
+            "A binary flag for every vocabulary entry indicating whether that token is grammatically valid at this position.",
+            "A single probability value representing how confident the model is in its overall response so far."
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 1,
           "explanation": "The model produces one real-valued logit per vocabulary entry -- tens of thousands of numbers -- and softmax converts that full set of logits into a probability distribution over the whole vocabulary that sums to exactly 1. The “A single probability value representing how confident…” option is wrong because there is no single scalar 'overall confidence' computed at each step, only a distribution over the next token. The “A ranked shortlist of the five most…” option is wrong because generation doesn't work by comparing against stored training sentences at inference time. The “A binary flag for every vocabulary entry…” option is wrong because there's no separate binary grammar-validity check; grammaticality is implicitly reflected in the learned logit values themselves, not a distinct pass/fail flag."
         },
         {
@@ -295,12 +295,12 @@
           "type": "multipleChoice",
           "prompt": "Which of the following is NOT one of the ways the basic autoregressive generation loop actually terminates, according to this module?",
           "options": [
-            "The model generates a special end-of-sequence token it has learned marks the response as complete.",
-            "The response reaches a configured maximum-length limit.",
             "The generated text matches a configured stop sequence.",
-            "The model internally recognizes it has 'sufficiently answered' the question and raises a distinct completion signal separate from any generated token."
+            "The response reaches a configured maximum-length limit.",
+            "The model internally recognizes it has 'sufficiently answered' the question and raises a distinct completion signal separate from any generated token.",
+            "The model generates a special end-of-sequence token it has learned marks the response as complete."
           ],
-          "correctOptionIndex": 3,
+          "correctOptionIndex": 2,
           "explanation": "The module lists exactly three termination conditions: an end-of-sequence token, a max-length limit, and a matched stop sequence -- all of which are either tokens the model generates or external configuration you set. The correct answer describes a mechanism that does not exist in the base loop: there is no separate internal 'I'm done' signal distinct from the actual tokens produced -- the loop only ever stops because of one of the three concrete, token-or-config-based conditions."
         },
         {
@@ -308,12 +308,12 @@
           "type": "multipleChoice",
           "prompt": "Two prompts are identical except that one early word differs ('sunny' vs. 'stormy'), yet their multi-sentence completions end up completely different, not just different in that one spot. What mechanism explains why the difference cascades rather than staying local?",
           "options": [
-            "The model re-plans and rewrites the entire response from scratch whenever any single input word changes.",
             "Each generated token is conditioned on every token that precedes it, including the model's own prior output, so a shifted choice at one step alters the input to every later step, and those differences compound across the response.",
+            "The tokenizer assigns a different total token budget depending on which adjective is used, changing how much room is left for the response.",
             "Different adjectives route the prompt to different hard-coded response templates stored in the model's weights.",
-            "The tokenizer assigns a different total token budget depending on which adjective is used, changing how much room is left for the response."
+            "The model re-plans and rewrites the entire response from scratch whenever any single input word changes."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "Autoregressive generation conditions every new token on the entire sequence so far, including tokens the model itself already generated in this response. A different early word shifts the probability distribution at the very next step; whichever token actually gets picked then becomes part of the context for the step after that, and so on -- so a small initial difference compounds rather than staying isolated. There's no re-planning phase (“The model re-plans and rewrites the entire…”), no template-routing mechanism (“Different adjectives route the prompt to different…”), and adjective choice doesn't change the token budget in the way the “The tokenizer assigns a different total token…” option describes."
         }
       ]
@@ -422,12 +422,12 @@
           "type": "multipleChoice",
           "prompt": "Setting a model's temperature parameter to 0 primarily has which effect?",
           "options": [
+            "It reduces the model's vocabulary to only the most common, 'safe' words.",
             "It makes the model check its answer against external sources before responding.",
             "It forces the model to always select the single highest-probability token at each step (greedy decoding), removing sampling randomness but not changing which token is most probable.",
-            "It reduces the model's vocabulary to only the most common, 'safe' words.",
             "It guarantees the model will express uncertainty whenever it is unsure of an answer."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "Temperature 0 is the special-cased limit where sampling is replaced entirely by always picking the argmax (highest-probability) token, making output deterministic across repeated identical calls -- but it does nothing to the underlying probabilities the model computed, so an incorrect highest-probability answer stays incorrect and is simply reproduced consistently. The “It makes the model check its answer…” option describes a feature no temperature setting provides on its own -- verification requires a separate, explicit step like retrieval or a check pass. The “It reduces the model's vocabulary to only…” option is wrong because temperature reshapes the probability distribution over the existing vocabulary; it doesn't remove or restrict which words exist in that vocabulary. The “It guarantees the model will express uncertainty…” option is wrong because expressing uncertainty is not an automatic behavior triggered by any sampling setting -- it only happens if the model has actually learned to produce hedging language in that situation, which temperature has no influence over."
         },
         {
@@ -441,12 +441,12 @@
           "type": "multipleChoice",
           "prompt": "How does top-p (nucleus) sampling decide which tokens are eligible for selection, and how does that differ from top-k sampling?",
           "options": [
-            "Top-p includes the smallest set of highest-probability tokens whose cumulative probability exceeds a threshold, so the pool size adapts to how peaked or flat the distribution is at each step; top-k always uses a fixed candidate count regardless of the distribution's shape.",
-            "Top-p and top-k are two names for the exact same mechanism, differing only in which APIs expose which name.",
             "Top-p selects tokens alphabetically from among the top-k highest-probability candidates.",
-            "Top-p is only applied when temperature is set to 0, while top-k is only applied at nonzero temperature."
+            "Top-p includes the smallest set of highest-probability tokens whose cumulative probability exceeds a threshold, so the pool size adapts to how peaked or flat the distribution is at each step; top-k always uses a fixed candidate count regardless of the distribution's shape.",
+            "Top-p is only applied when temperature is set to 0, while top-k is only applied at nonzero temperature.",
+            "Top-p and top-k are two names for the exact same mechanism, differing only in which APIs expose which name."
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 1,
           "explanation": "Top-p's pool boundary is defined by cumulative probability crossing a threshold p, so a sharply peaked distribution yields a tiny nucleus and a flat distribution yields a larger one -- it adapts per step. Top-k, by contrast, always considers exactly k candidates no matter how peaked or flat the actual distribution is, which is precisely the limitation top-p was designed to fix. The “Top-p and top-k are two names…”, “Top-p selects tokens alphabetically from among…”, and “Top-p is only applied when temperature…” options all misstate the mechanisms: they are distinct techniques, neither is alphabetical, and neither is gated on a specific temperature value."
         },
         {
@@ -454,12 +454,12 @@
           "type": "multipleChoice",
           "prompt": "Which statement about hallucination mitigation strategies best matches this module's discussion of their real limits?",
           "options": [
-            "Grounding via retrieval eliminates hallucination entirely, since a grounded model can only ever repeat the retrieved text verbatim.",
             "Asking the model to provide citations is sufficient on its own, since a model that fabricates facts will not also fabricate a citation.",
-            "Retrieval meaningfully reduces hallucination risk by narrowing the space of plausible continuations, but no purely generative technique drives that risk to zero, so verification remains necessary for high-stakes use cases.",
-            "Setting temperature to 0 is the most effective mitigation, since it removes the sampling randomness that causes hallucination."
+            "Grounding via retrieval eliminates hallucination entirely, since a grounded model can only ever repeat the retrieved text verbatim.",
+            "Setting temperature to 0 is the most effective mitigation, since it removes the sampling randomness that causes hallucination.",
+            "Retrieval meaningfully reduces hallucination risk by narrowing the space of plausible continuations, but no purely generative technique drives that risk to zero, so verification remains necessary for high-stakes use cases."
           ],
-          "correctOptionIndex": 2,
+          "correctOptionIndex": 3,
           "explanation": "The module is explicit that grounding via retrieval is the most effective lever available but does not make hallucination structurally impossible, because it doesn't change the underlying probabilistic generation mechanism -- some form of external verification remains non-optional wherever being wrong is costly. The “Grounding via retrieval eliminates hallucination entirely, since…” option overstates retrieval's guarantee. The “Asking the model to provide citations…” option is directly contradicted by the module's point that a model can hallucinate a fake citation just as fluently as any other claim. The “Setting temperature to 0 is the most…” option is wrong because temperature only affects sampling variance, not which answer the model considers most probable, so it doesn't reduce hallucination rate."
         },
         {
@@ -467,12 +467,12 @@
           "type": "multipleChoice",
           "prompt": "Why do hallucinated statements typically come out just as fluent and confident-sounding as accurate ones, rather than hedged or tentative?",
           "options": [
-            "A dedicated confidence-estimation module miscalibrates specifically on false statements, making them sound artificially confident.",
             "Both correct and fabricated tokens are produced by the identical next-token-prediction mechanism optimizing for locally plausible continuation, and there is no internal signal at generation time distinguishing a verified fact from a plausible-sounding fabrication.",
-            "Models are explicitly trained with a reward signal that punishes hedging language regardless of correctness.",
-            "Hedging phrases are removed from the vocabulary by default and must be manually re-enabled through a configuration flag."
+            "Hedging phrases are removed from the vocabulary by default and must be manually re-enabled through a configuration flag.",
+            "A dedicated confidence-estimation module miscalibrates specifically on false statements, making them sound artificially confident.",
+            "Models are explicitly trained with a reward signal that punishes hedging language regardless of correctness."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "The module's core reframing is that hallucination is the generation mechanism working as designed, not a distinct malfunction: every token, true or fabricated, is produced by the same probability distribution optimizing for plausible continuation, with no separate 'this is verified' marker anywhere in the process. Hedging only appears when training data or prompting conditions the model to produce it in that specific situation -- it isn't a default reaction to low confidence. The “A dedicated confidence-estimation module miscalibrates specifically…”, “Models are explicitly trained with a reward…”, and “Hedging phrases are removed from the vocabulary…” options each invent a mechanism (a confidence estimator, an anti-hedging reward, a disabled vocabulary subset) that the module never describes as part of how these models actually work."
         }
       ]

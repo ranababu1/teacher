@@ -110,11 +110,11 @@
           "prompt": "Two handler methods in the same controller are both mapped with @PostMapping(\"/items/{id}\") -- identical path pattern and identical HTTP method, but different parameter types. What happens when the application starts?",
           "options": [
             "Spring disambiguates the two methods based on their different parameter types, similar to Java method overload resolution.",
-            "The application fails to start with an ambiguous mapping error, because request mapping matches only on path pattern and HTTP method, not on Java method signatures.",
             "The first-defined method silently wins and the second is ignored at runtime.",
-            "Both methods run in sequence for every matching request, and their return values are merged."
+            "Both methods run in sequence for every matching request, and their return values are merged.",
+            "The application fails to start with an ambiguous mapping error, because request mapping matches only on path pattern and HTTP method, not on Java method signatures."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "Spring's request mapping matches based on path pattern shape, HTTP method, and any explicitly declared conditions like headers/params/consumes/produces -- it has no concept of Java method overload resolution and does not consider parameter types or names when deciding whether two mappings conflict. Because both mappings here are identical in every dimension Spring actually checks, this is detected as a genuine conflict while the handler index is built at startup, and the application fails to start with an Ambiguous mapping error. The “Spring disambiguates the two methods based…”, “The first-defined method silently wins…”, and “Both methods run in sequence for every…” options each describe behavior Spring MVC does not implement -- there's no overload-style disambiguation, no silent 'first one wins,' and no fan-out to multiple handlers for one request."
         },
         {
@@ -122,12 +122,12 @@
           "type": "multipleChoice",
           "prompt": "A handler is declared `@GetMapping(\"/orders\") public List<Order> listOrders(@RequestParam String status)`, with no `required` attribute set and no `defaultValue` given. A client sends `GET /orders` with no query string at all. What happens?",
           "options": [
-            "status is bound to null, and listOrders executes normally.",
-            "status is bound to an empty string \"\", and listOrders executes normally.",
             "The request is rejected with a 400 Bad Request, because @RequestParam defaults to required = true and no defaultValue was supplied to cover the omitted case.",
+            "status is bound to an empty string \"\", and listOrders executes normally.",
+            "status is bound to null, and listOrders executes normally.",
             "Spring treats the missing parameter as a routing mismatch and returns 404 Not Found instead of invoking listOrders."
           ],
-          "correctOptionIndex": 2,
+          "correctOptionIndex": 0,
           "explanation": "@RequestParam's `required` attribute defaults to true, and when a required parameter with no defaultValue is missing from the request entirely, Spring rejects the request with 400 Bad Request before the handler method ever runs -- this is the opposite of the @PathVariable(required = false) pattern shown in the module's examples, where required is explicitly set to false specifically to allow omission. The “status is bound to null, and listOrders executes normally” and “status is bound to an empty string…” options describe what would happen if required were explicitly false (null) -- but the “status is bound to an empty string…” option's empty-string claim is wrong even then, since an absent parameter binds to null, not \"\". The “Spring treats the missing parameter…” option is wrong because the path itself still matches perfectly; the failure is in parameter resolution, not routing."
         },
         {
@@ -149,11 +149,11 @@
           "prompt": "Which statement most accurately describes the relationship between @RestController and @Controller?",
           "options": [
             "@RestController is a completely separate mechanism unrelated to @Controller, built specifically for microservice architectures.",
-            "@RestController is a meta-annotation combining @Controller with @ResponseBody, so every handler method's return value is written directly to the HTTP response body through the HttpMessageConverter chain, instead of being resolved as a logical view name.",
             "@RestController disables Spring's HandlerMapping-based routing entirely, requiring requests to be dispatched manually.",
+            "@RestController is a meta-annotation combining @Controller with @ResponseBody, so every handler method's return value is written directly to the HTTP response body through the HttpMessageConverter chain, instead of being resolved as a logical view name.",
             "@RestController is only necessary when a controller class declares more than one handler method."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "@RestController exists purely to remove the repetition of writing @Controller plus @ResponseBody on every single handler method in a class where every method is meant to produce a body rather than a view -- it is literally built as a combination of the two, not an unrelated mechanism. The “@RestController is a completely separate mechanism unrelated…” option is false because the meta-annotation relationship is real and direct. The “@RestController disables Spring's HandlerMapping-based routing entirely, requiring…” option is false -- routing through DispatcherServlet and its HandlerMapping index works identically regardless of which of the two stereotypes is used. The “@RestController is only necessary when a controller…” option is false -- the choice between @Controller and @RestController has nothing to do with how many handler methods a class happens to declare."
         },
         {
@@ -269,12 +269,12 @@
           "type": "multipleChoice",
           "prompt": "A POST request's JSON body contains \"quantity\": \"abc\" for a field declared as `private int quantity;` on the target @RequestBody class. What is the most accurate description of what happens?",
           "options": [
-            "The request fails with a 400 Bad Request via HttpMessageNotReadableException, and the controller method body never executes.",
+            "The server returns a 500 Internal Server Error because this is an unhandled server-side bug.",
             "quantity is set to 0 (int's default value), and the controller method runs normally.",
-            "A NumberFormatException is thrown inside the controller method when quantity is first used.",
-            "The server returns a 500 Internal Server Error because this is an unhandled server-side bug."
+            "The request fails with a 400 Bad Request via HttpMessageNotReadableException, and the controller method body never executes.",
+            "A NumberFormatException is thrown inside the controller method when quantity is first used."
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 2,
           "explanation": "Jackson cannot coerce the JSON string \"abc\" into an int -- there's no valid numeric interpretation -- so it throws a mapping exception during deserialization, which Spring MVC wraps as HttpMessageNotReadableException and automatically translates into a 400 Bad Request. This happens during argument resolution, before the controller method's body ever runs, so the “A NumberFormatException is thrown inside the controller…” option is wrong (the method body never gets a chance to touch quantity at all) and the “quantity is set to 0…” option is wrong (there's no silent fallback to a default value for a type mismatch like this -- that only happens for OMITTED fields, not mismatched ones). The “The server returns a 500 Internal Server…” option is wrong because this is a client input problem, correctly surfaced as a 4xx client error, not a 5xx server fault."
         },
         {
@@ -282,12 +282,12 @@
           "type": "multipleChoice",
           "prompt": "Plain, vanilla Jackson (used outside of Spring Boot) has FAIL_ON_UNKNOWN_PROPERTIES enabled by default, meaning an unrecognized JSON key throws an exception during deserialization. What does Spring Boot's own Jackson autoconfiguration do differently, and why does that matter in practice?",
           "options": [
-            "Spring Boot leaves the setting exactly as vanilla Jackson has it, so unknown JSON keys still throw an exception inside a Spring Boot application.",
             "Spring Boot explicitly disables FAIL_ON_UNKNOWN_PROPERTIES, so unrecognized keys are silently ignored -- convenient for API evolution across client versions, but it also means a typo'd JSON key produces a silently incomplete object rather than a clear, immediate error.",
+            "Spring Boot only disables this check when running under a test profile, leaving it enabled in production.",
             "Spring Boot replaces Jackson entirely with its own JSON parser that has no concept of unknown-key detection at all.",
-            "Spring Boot only disables this check when running under a test profile, leaving it enabled in production."
+            "Spring Boot leaves the setting exactly as vanilla Jackson has it, so unknown JSON keys still throw an exception inside a Spring Boot application."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "Spring Boot's Jackson autoconfiguration deliberately turns off FAIL_ON_UNKNOWN_PROPERTIES, one of several leniency defaults it layers on top of vanilla Jackson's stricter behavior. The upside is real -- older or newer API clients sending slightly different field sets don't break -- but the downside is just as real: a typo'd key like \"custName\" instead of \"customerName\" deserializes successfully with no exception, silently leaving the intended field at its default (null), rather than surfacing the mistake. The “Spring Boot leaves the setting exactly…” option describes vanilla Jackson's behavior, not Spring Boot's. The “Spring Boot replaces Jackson entirely…” and “Spring Boot only disables this check…” options invent behaviors that don't reflect how this configuration actually works -- it's a single feature flag, applied consistently regardless of profile."
         },
         {
@@ -296,11 +296,11 @@
           "prompt": "A mapping is declared `@PostMapping(value = \"/orders\", consumes = \"application/json\")`. A client sends a request to that path with header `Content-Type: application/xml` and an XML body. What happens?",
           "options": [
             "Spring attempts to parse the XML body as if it were JSON, and the request likely fails with a deserialization error inside the handler.",
-            "The request is rejected with 415 Unsupported Media Type before any deserialization is attempted, because the request's declared Content-Type doesn't match the mapping's declared consumes value.",
             "Spring automatically transcodes the XML body into an equivalent JSON structure before continuing to the handler.",
-            "The request proceeds normally, since `consumes` only restricts what a mapping can produce as a response, not what it can accept as a request body."
+            "The request proceeds normally, since `consumes` only restricts what a mapping can produce as a response, not what it can accept as a request body.",
+            "The request is rejected with 415 Unsupported Media Type before any deserialization is attempted, because the request's declared Content-Type doesn't match the mapping's declared consumes value."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "The `consumes` attribute on a mapping restricts which request Content-Types that handler will accept at all -- a mismatch is detected before Spring even attempts to select an HttpMessageConverter to read the body, and the client gets 415 Unsupported Media Type. The “Spring attempts to parse the XML body…” option is wrong because Spring never blindly attempts cross-format parsing; the content-type check happens first and short-circuits that entirely. The “Spring automatically transcodes the XML body into…” option describes automatic transcoding that Spring MVC does not perform. The “The request proceeds normally, since `consumes` only…” option inverts the actual roles of `consumes` (governs acceptable request bodies) and `produces` (governs response representation)."
         },
         {
@@ -309,11 +309,11 @@
           "prompt": "A Java field is declared `@JsonProperty(\"customer_name\") private String customerName;`. Which statement about this annotation's effect is correct?",
           "options": [
             "It only affects serialization when writing a response; incoming JSON must still use the key `customerName` to populate the field.",
-            "It only affects deserialization of incoming JSON; outgoing responses still emit the key `customerName`.",
             "It affects both directions at once: incoming JSON must use the key `customer_name` to populate the field, and outgoing JSON serializes the field back out under the key `customer_name` as well.",
-            "It has no effect at all unless FAIL_ON_UNKNOWN_PROPERTIES is also disabled on the same class."
+            "It has no effect at all unless FAIL_ON_UNKNOWN_PROPERTIES is also disabled on the same class.",
+            "It only affects deserialization of incoming JSON; outgoing responses still emit the key `customerName`."
           ],
-          "correctOptionIndex": 2,
+          "correctOptionIndex": 1,
           "explanation": "@JsonProperty configures the logical wire-format name for a property in both directions simultaneously -- deserialization recognizes `customer_name` as the key that populates `customerName`, and serialization emits `customer_name` (not the Java field's own name) when writing the object back out as a response. This bidirectional decoupling is exactly what lets the Java field name change internally without touching the API's public contract. The “It only affects serialization when writing…” and “It only affects deserialization of incoming JSON…” options each describe only one direction, which understates what the annotation actually does. The “It has no effect at all unless…” option incorrectly ties @JsonProperty's effect to an unrelated Jackson feature flag."
         },
         {
@@ -442,12 +442,12 @@
           "type": "multipleChoice",
           "prompt": "A field is annotated @NotEmpty (not @NotBlank). A request supplies the value \"   \" (three whitespace characters) for that field. What happens?",
           "options": [
-            "Validation fails, because @NotEmpty rejects whitespace-only strings the exact same way @NotBlank does.",
-            "Validation passes, because @NotEmpty only requires a length greater than zero, and a whitespace-only string has non-zero length even though its trimmed content is empty.",
             "Validation fails, but only because the string exceeds some implicit default maximum length.",
-            "@NotEmpty cannot be applied to a String field at all -- it only applies to collections."
+            "@NotEmpty cannot be applied to a String field at all -- it only applies to collections.",
+            "Validation passes, because @NotEmpty only requires a length greater than zero, and a whitespace-only string has non-zero length even though its trimmed content is empty.",
+            "Validation fails, because @NotEmpty rejects whitespace-only strings the exact same way @NotBlank does."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "The module is explicit about the progressively stricter relationship among these three: @NotNull rejects only an actual null reference, @NotEmpty additionally requires a size/length greater than zero (so null and \"\" fail, but \"   \" passes, since it technically has non-zero length), and @NotBlank alone requires a trimmed length greater than zero, which is the only one of the three that would reject \"   \". Since this field uses @NotEmpty specifically, the whitespace-only value passes. The “Validation fails, because @NotEmpty rejects whitespace-only strings…” option wrongly conflates @NotEmpty with the stricter @NotBlank. The “Validation fails, but only because the string…” option invents a length ceiling that doesn't exist in the constraint's actual semantics. The “@NotEmpty cannot be applied to a String…” option is wrong -- @NotEmpty is explicitly used on a String field in the module's own example."
         },
         {
@@ -455,9 +455,9 @@
           "type": "multipleChoice",
           "prompt": "A Spring Boot 3 application adds @Valid and @NotBlank annotations to a request DTO, relying only on spring-boot-starter-web with no other validation-related dependency added. What is the most likely outcome?",
           "options": [
-            "Validation works exactly as intended, since spring-boot-starter-web transitively includes Hibernate Validator in every Spring Boot version.",
-            "The constraint annotations have nothing to actually execute against, because since Spring Boot 2.3, Bean Validation support is no longer pulled in transitively by spring-boot-starter-web -- spring-boot-starter-validation must be added explicitly.",
             "The application fails to compile, because @NotBlank requires a dedicated annotation processor that must be configured manually.",
+            "The constraint annotations have nothing to actually execute against, because since Spring Boot 2.3, Bean Validation support is no longer pulled in transitively by spring-boot-starter-web -- spring-boot-starter-validation must be added explicitly.",
+            "Validation works exactly as intended, since spring-boot-starter-web transitively includes Hibernate Validator in every Spring Boot version.",
             "Spring silently substitutes its own internal validation engine that ignores Jakarta Bean Validation annotations like @NotBlank entirely."
           ],
           "correctOptionIndex": 1,
@@ -468,12 +468,12 @@
           "type": "multipleChoice",
           "prompt": "An @ExceptionHandler(OrderNotFoundException.class) method is declared directly inside OrderController itself, not inside a @ControllerAdvice class. A completely different controller, PaymentController, also throws OrderNotFoundException from one of its own handler methods. What happens when that exception is thrown from PaymentController?",
           "options": [
+            "PaymentController automatically inherits OrderController's exception handlers, as long as both classes live in the same package.",
             "OrderController's handler catches it there too, because @ExceptionHandler methods apply application-wide by default, regardless of where they're declared.",
-            "The exception is NOT caught by OrderController's handler -- a controller-level @ExceptionHandler only applies to handler methods within that same controller class, so it instead propagates to Spring Boot's default error handling (or a matching @ControllerAdvice, if one exists).",
             "The application fails to start, because the same exception type cannot legally be handled in more than one place across the codebase.",
-            "PaymentController automatically inherits OrderController's exception handlers, as long as both classes live in the same package."
+            "The exception is NOT caught by OrderController's handler -- a controller-level @ExceptionHandler only applies to handler methods within that same controller class, so it instead propagates to Spring Boot's default error handling (or a matching @ControllerAdvice, if one exists)."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "A controller-level @ExceptionHandler's scope is exactly that controller class -- it covers every handler method within it, but nothing declared in a completely separate controller. PaymentController's thrown OrderNotFoundException never reaches OrderController's handler at all; it propagates upward to whatever broader handling exists (a @ControllerAdvice, if one is registered, or otherwise Spring Boot's own default error handling). The “OrderController's handler catches it there too…” option directly contradicts the controller-scoped nature of a plain @ExceptionHandler. The “The application fails to start…” option is false -- there's no such startup restriction, and multiple classes can legitimately declare handlers for the same exception type at different scopes. The “PaymentController automatically inherits OrderController's exception handlers…” option invents an inheritance mechanism based on package co-location that Spring does not provide."
         },
         {

@@ -104,12 +104,12 @@
           "type": "multipleChoice",
           "prompt": "A test function has three independent checks in a row. Using t.Fatalf for the first check instead of t.Errorf would most likely cause which problem, assuming the first check happens to fail?",
           "options": [
-            "No difference at all -- Fatalf and Errorf always produce identical test output.",
-            "The entire test binary stops immediately, and no other TestXxx functions in the package run afterward.",
             "The test function returns immediately after the first failure, so the second and third checks never run and never get a chance to report their own pass/fail status in this run.",
-            "Fatalf causes the test to be silently skipped rather than reported as failed."
+            "Fatalf causes the test to be silently skipped rather than reported as failed.",
+            "No difference at all -- Fatalf and Errorf always produce identical test output.",
+            "The entire test binary stops immediately, and no other TestXxx functions in the package run afterward."
           ],
-          "correctOptionIndex": 2,
+          "correctOptionIndex": 0,
           "explanation": "t.Fatalf logs the failure and then stops executing the rest of that specific test function (via runtime.Goexit), so any checks written after it in the same function body never run during that test execution -- you'd only find out whether the second and third checks pass or fail on a later run, after fixing the first one. The “No difference at all -- Fatalf…” option is wrong because the whole point of Fatalf versus Errorf is that they behave differently in exactly this way. The “The entire test binary stops immediately…” option is wrong -- Fatalf only affects the current test function, not the rest of the test binary or other TestXxx functions in the package. The “Fatalf causes the test to be silently…” option is wrong -- Fatalf clearly marks the test as FAILED, not skipped; a skip is a distinct outcome produced by calling t.Skip, unrelated to Fatalf."
         },
         {
@@ -117,12 +117,12 @@
           "type": "multipleChoice",
           "prompt": "A _test.go file contains `func Testadd(t *testing.T) { ... }` -- note the lowercase 'a' immediately after 'Test'. What happens when `go test` runs?",
           "options": [
+            "go test automatically renames Testadd to TestAdd internally at compile time and runs it as a normal test.",
             "go test fails to compile, reporting that Testadd is not a valid test function name.",
             "Testadd is silently never discovered or run as a test at all -- it compiles fine as an ordinary, never-called function, and go test itself gives no error; only go vet might separately flag a possible malformed test function name.",
-            "go test automatically renames Testadd to TestAdd internally at compile time and runs it as a normal test.",
             "Testadd runs normally, but any of its failures are reported without an associated test name, as an anonymous failure."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "go test's discovery rule requires the character immediately after 'Test' to not begin with a lowercase letter; Testadd's lowercase 'a' means it simply doesn't match that shape, so it's treated as an ordinary function and never invoked by the test binary at all -- with zero error or warning from go build or go test themselves. go vet is a separate tool that can catch this specific case with a 'possible malformed name for test function' warning, but running go test alone gives no signal that an entire test was skipped. The “go test fails to compile, reporting…” option is wrong -- this compiles without any error. The “go test automatically renames Testadd to TestAdd…” option invents an auto-correction mechanism Go doesn't have. The “Testadd runs normally, but any…” option is wrong because the function never runs at all, so there's no failure of any kind to report, named or anonymous."
         },
         {
@@ -132,8 +132,8 @@
           "options": [
             "There is no issue -- t.Fatalf works correctly no matter which goroutine calls it.",
             "t.Fatal/t.Fatalf (and the FailNow method they call) are documented to work correctly only when called from the goroutine that is actually running the test function itself; calling them from a separately spawned goroutine is a documented misuse that tends to hang the test or produce a confusing panic instead of a clean, reported failure.",
-            "t.Fatalf can only be called once per test function in total, regardless of which goroutine calls it, so this would fail on the second call.",
-            "This works correctly as long as the spawned goroutine is created before any t.Errorf call elsewhere in the same test function."
+            "This works correctly as long as the spawned goroutine is created before any t.Errorf call elsewhere in the same test function.",
+            "t.Fatalf can only be called once per test function in total, regardless of which goroutine calls it, so this would fail on the second call."
           ],
           "correctOptionIndex": 1,
           "explanation": "t.Fatal/t.Fatalf work by calling runtime.Goexit on the calling goroutine to unwind it -- but that mechanism can only correctly stop the specific goroutine that's actually running the test function. Called from a different, spawned goroutine, it cannot unwind the real test goroutine the way it's meant to, and in practice this tends to hang (if something is waiting on that spawned goroutine to signal completion, and Goexit prevents it from doing so as expected) or produce a confusing panic, rather than a clean, correctly-reported failure. The “There is no issue -- t.Fatalf works…” option directly contradicts the documented restriction. The “t.Fatalf can only be called once per…” option invents a call-count limit that doesn't exist. The “This works correctly as long…” option is a red herring -- ordering relative to other Errorf calls has no bearing on this specific restriction."
@@ -143,12 +143,12 @@
           "type": "multipleChoice",
           "prompt": "A shared helper function `checkStatus(t *testing.T, got, want int)` is called from several different lines across multiple test functions in a package, and it does NOT call t.Helper(). When one particular call site triggers a failure via t.Errorf inside checkStatus, what line number does the test output report?",
           "options": [
-            "The line inside checkStatus itself where t.Errorf was called -- the same line number every time, regardless of which call site actually triggered it.",
             "The exact call-site line that triggered the failure, since Go always attributes a failure to the original caller by default, with or without t.Helper().",
             "No line number at all -- omitting t.Helper() suppresses line-number reporting entirely for any failure that flows through that helper.",
-            "A line number chosen arbitrarily among all the call sites that use this helper, to encourage developers to add t.Helper()."
+            "A line number chosen arbitrarily among all the call sites that use this helper, to encourage developers to add t.Helper().",
+            "The line inside checkStatus itself where t.Errorf was called -- the same line number every time, regardless of which call site actually triggered it."
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 3,
           "explanation": "Without t.Helper() marking the helper function, a failure reported from inside it points at the line inside the helper where t.Errorf/t.Fatalf was actually called -- the same generic line number no matter which of the many call sites across the package actually triggered that particular failure. This is precisely the problem t.Helper() exists to fix: calling it makes the testing package instead attribute the failure to the nearest calling line that isn't itself marked as a helper, which is the actual, specific call site a developer needs to look at. The “The exact call-site line that triggered…” option describes t.Helper()'s effect, not the default behavior without it. The “No line number at all -- omitting…” and “A line number chosen arbitrarily among all…” options both invent behaviors -- suppressed reporting, or arbitrary attribution -- that aren't how this actually works; the default behavior is simply to always report the helper's own internal line."
         },
         {
@@ -260,11 +260,11 @@
           "prompt": "What is the primary benefit t.Run provides over simply looping through a table of cases and calling t.Errorf directly inside the loop, with no t.Run at all?",
           "options": [
             "t.Run makes each case's checks run measurably faster than a plain loop, even without calling t.Parallel().",
-            "t.Run gives each case its own independent *testing.T, so a case's name appears in -v output, a t.Fatalf in one case only stops that case (not the whole table), and individual cases become selectable via go test -run.",
             "t.Run is required by the Go compiler -- a for loop calling t.Errorf directly without t.Run does not compile.",
-            "t.Run automatically deduplicates table entries that happen to have identical input values."
+            "t.Run automatically deduplicates table entries that happen to have identical input values.",
+            "t.Run gives each case its own independent *testing.T, so a case's name appears in -v output, a t.Fatalf in one case only stops that case (not the whole table), and individual cases become selectable via go test -run."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "t.Run's real value is isolation, naming, and selectability: each call gets its own *testing.T (so a Fatalf in one case doesn't abort the rest of the table), each case's name becomes part of the subtest's identity in -v output and in go test -run patterns, and cases can be run individually while debugging. The “t.Run makes each case's checks run measurably…” option is wrong -- t.Run alone provides no speed benefit; concurrency only happens if you additionally call t.Parallel() inside the callback. The “t.Run is required by the Go compiler…” option is wrong -- a plain loop with t.Errorf and no t.Run compiles and runs fine; it just loses the isolation/naming/selection benefits, and a Fatalf in it would abort the entire remaining table rather than just one case. The “t.Run automatically deduplicates table entries that happen…” option is wrong -- there's no deduplication behavior in t.Run at all; duplicate-content cases simply both run and both report under their own (or, if truly identical, disambiguated) names."
         },
         {
@@ -272,9 +272,9 @@
           "type": "multipleChoice",
           "prompt": "A table-driven test uses `cases := map[string]struct{ input string; want bool }{...}` instead of a slice, with each map key doubling as the case's name. Which of these is a genuine consequence of this choice, according to this concept?",
           "options": [
-            "Case names must be numeric, since Go always converts map keys used as test names into their index position within the map.",
-            "Iterating the map to drive t.Run executes the cases in a randomized order on every run (Go's map iteration order is intentionally randomized), and if two entries accidentally share the same key, the later one silently overwrites the earlier one rather than producing two distinct cases.",
             "Map-based tables run measurably faster overall than slice-based tables, because maps provide O(1) lookup for each case during the loop.",
+            "Iterating the map to drive t.Run executes the cases in a randomized order on every run (Go's map iteration order is intentionally randomized), and if two entries accidentally share the same key, the later one silently overwrites the earlier one rather than producing two distinct cases.",
+            "Case names must be numeric, since Go always converts map keys used as test names into their index position within the map.",
             "t.Run cannot accept a case name derived from a map key -- its name argument only accepts string literals known at compile time."
           ],
           "correctOptionIndex": 1,
@@ -285,12 +285,12 @@
           "type": "multipleChoice",
           "prompt": "A table-driven test loops over cases and calls `t.Run(tc.name, func(t *testing.T) {...})` for each one, but never calls t.Parallel() inside the callback, on a Go version before 1.22. Is this specific test vulnerable to the classic loop-variable-capture bug, where every subtest ends up seeing the same, final tc?",
           "options": [
-            "Yes -- any closure created inside a for loop, parallel or not, has always been vulnerable to this bug on every Go version before 1.22.",
             "No -- without t.Parallel(), t.Run is synchronous and blocks until the subtest's callback fully returns before the loop advances to the next tc, so the closure always reads the correct, current-iteration tc; the bug only appears once t.Parallel() causes the subtest's body to be deferred until after the loop has already moved on.",
             "Yes, but only once the table grows past a certain number of cases.",
+            "Yes -- any closure created inside a for loop, parallel or not, has always been vulnerable to this bug on every Go version before 1.22.",
             "No, but only because table-driven tests are required to declare `tc := tc` by the Go compiler whenever t.Run is used."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "t.Run without a subsequent t.Parallel() call runs its callback synchronously -- the loop does not advance to the next case until the current subtest's entire callback has finished executing, which means the closure inside it always observes the correct tc for that specific iteration, entirely independent of which Go version is in use. The bug is specifically introduced by t.Parallel(), which pauses the subtest and returns control to the loop immediately, deferring the actual body until later, which is when the pre-1.22 shared-loop-variable problem can actually manifest. The “Yes -- any closure created inside…” option overstates the vulnerability -- synchronous t.Run was never affected, on any Go version. The “Yes, but only once the table grows…” option invents a scale-dependent threshold that doesn't exist. The “No, but only because table-driven tests…” option invents a compiler-enforced requirement; `tc := tc` is a manual convention, never something the compiler mandates."
         },
         {
@@ -298,12 +298,12 @@
           "type": "multipleChoice",
           "prompt": "TestParsePort has four named subtests: \"valid port\", \"empty string\", \"non-numeric\", and \"negative number\". Which command runs only the \"non-numeric\" subtest, skipping the other three?",
           "options": [
-            "go test -run 'TestParsePort/non-numeric'",
+            "It isn't possible to select a single named subtest in isolation -- go test -run only ever matches against top-level TestXxx function names, never individual subtests.",
             "go test -subtest 'non-numeric'",
-            "go test -bench 'TestParsePort/non-numeric'",
-            "It isn't possible to select a single named subtest in isolation -- go test -run only ever matches against top-level TestXxx function names, never individual subtests."
+            "go test -run 'TestParsePort/non-numeric'",
+            "go test -bench 'TestParsePort/non-numeric'"
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 2,
           "explanation": "go test -run takes a regular expression matched against the full subtest path, where a slash separates the parent test's name from each subtest's name -- 'TestParsePort/non-numeric' selects exactly that one subtest, leaving the other three in the table unrun for this invocation. This is precisely the selective-execution benefit t.Run provides over a plain loop with no subtests at all. The “go test -subtest 'non-numeric'” option invents a flag (-subtest) that doesn't exist in the standard toolchain. The “go test -bench 'TestParsePort/non-numeric'” option is wrong -- -bench is for running BenchmarkXxx functions, an entirely separate mechanism from ordinary tests. The “It isn't possible to select a single…” option is incorrect -- -run's pattern matching explicitly supports the slash-separated subtest-path syntax used in the correct answer."
         },
         {
@@ -414,12 +414,12 @@
           "type": "multipleChoice",
           "prompt": "Why does a benchmark function write its own loop as `for i := 0; i < b.N; i++` instead of the testing package simply calling the benchmark function b.N separate times itself?",
           "options": [
-            "Writing the loop yourself lets you include one-time setup code (outside the loop) that shouldn't be repeated on every iteration, while still letting the framework control exactly how many timed iterations of the actual operation occur.",
             "It is purely a stylistic convention with no functional difference from the framework calling the function N times directly.",
+            "Writing your own loop is necessary only when using -benchmem; plain timing benchmarks never need an explicit loop.",
             "b.N loops are required because Go does not support passing a function as an argument to be called multiple times.",
-            "Writing your own loop is necessary only when using -benchmem; plain timing benchmarks never need an explicit loop."
+            "Writing the loop yourself lets you include one-time setup code (outside the loop) that shouldn't be repeated on every iteration, while still letting the framework control exactly how many timed iterations of the actual operation occur."
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 3,
           "explanation": "Writing the loop inside your own function is what lets you place expensive one-time setup (building test data, opening a resource) before the loop, where it happens exactly once per calibration attempt, while the loop itself repeats only the specific operation you actually want measured, exactly b.N times, whatever the runner decides that should be for this run. If the framework instead called your function N separate times, any setup code inside it would also run N times, making it effectively impossible to separate one-time cost from per-operation cost within a single benchmark function. The “It is purely a stylistic convention…” option undersells a real functional distinction. The “b.N loops are required because Go does…” option is incorrect -- Go fully supports passing and calling functions as values, unrelated to why benchmarks are structured this way. The “Writing your own loop is necessary only…” option is incorrect -- the b.N loop is required for every benchmark regardless of whether -benchmem is used; -benchmem simply adds allocation-tracking columns to output that already depends on the same loop structure."
         },
         {
@@ -440,12 +440,12 @@
           "type": "multipleChoice",
           "prompt": "Why does the idiomatic benchmarking command use `go test -bench=. -run=^$` rather than just `go test -bench=.` on its own?",
           "options": [
-            "-bench=. is invalid syntax on its own and always fails to run without an accompanying -run flag.",
             "go test by default also runs every regular TestXxx function in the package even when only benchmarks were requested; -run=^$ is a regular expression matching no test name at all, which skips running the tests so only the requested benchmarks actually execute.",
             "-run=^$ tells go test to run the matched benchmarks in a randomized order instead of their declared source order.",
-            "-run=^$ is required to enable the -benchmem flag; without it, allocation statistics are never reported, regardless of -bench."
+            "-run=^$ is required to enable the -benchmem flag; without it, allocation statistics are never reported, regardless of -bench.",
+            "-bench=. is invalid syntax on its own and always fails to run without an accompanying -run flag."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "go test -bench=. alone still runs the package's ordinary TestXxx functions in addition to the matched benchmarks, which is often unwanted noise and extra time while specifically iterating on performance. -run takes a regular expression matched against test names, and ^$ (anchored start immediately followed by anchored end) matches no actual test name at all, effectively skipping every TestXxx function while leaving -bench's own matching untouched. The “-bench=. is invalid syntax on its own…” option is wrong -- -bench=. is valid and runs fine on its own; the issue is what else runs alongside it, not a syntax failure. The “-run=^$ tells go test to run…” option invents an ordering effect -run=^$ doesn't have. The “-run=^$ is required to enable the -benchmem…” option is wrong -- -benchmem is independent of -run and works whether or not tests are also being run."
         },
         {
@@ -453,12 +453,12 @@
           "type": "multipleChoice",
           "prompt": "A benchmark runs expensive setup, then calls b.ResetTimer(), then runs its `for i := 0; i < b.N; i++` loop. The runner's calibration process re-runs this entire function multiple times with successively larger b.N values before settling on a final measurement. Does the expensive setup's cost get correctly excluded from the reported measurement on every one of those re-runs, or only the first?",
           "options": [
+            "Never -- b.ResetTimer only affects the allocation counters (B/op, allocs/op) reported under -benchmem, not elapsed time, so setup time is always folded into ns/op regardless.",
             "Only the first re-run -- b.ResetTimer's effect doesn't persist or reapply on later calibration attempts, so subsequent re-runs incorrectly fold setup cost back into the measurement.",
             "On every re-run -- b.ResetTimer() is simply an ordinary line inside the function body, so it executes fresh (immediately after that same setup call) every single time the whole function runs again during calibration, correctly zeroing out that specific run's accumulated setup cost each time.",
-            "Never -- b.ResetTimer only affects the allocation counters (B/op, allocs/op) reported under -benchmem, not elapsed time, so setup time is always folded into ns/op regardless.",
             "Only if b.ResetTimer() is instead called once, before the benchmark function is invoked at all, from a separate TestMain function."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "Because b.ResetTimer() is just an ordinary statement inside the benchmark function's own body, it runs again, in full, every single time the entire function is re-executed during the runner's calibration process -- there's no separate persistent state to \"wear off\" between re-runs; each re-run's setup cost gets freshly zeroed out by that same line, right after that re-run's own setup call completes. The “Only the first re-run -- b.ResetTimer's effect…” option invents a one-time-only limitation the mechanism doesn't have. The “Never -- b.ResetTimer only affects the allocation…” option is wrong -- ResetTimer zeroes both elapsed time and allocation counters, not just the -benchmem-specific ones. The “Only if b.ResetTimer() is instead called once…” option describes an approach (a separate TestMain) that isn't how ResetTimer is meant to be used or how it actually works; it's called directly inside the benchmark function itself, not externally."
         },
         {

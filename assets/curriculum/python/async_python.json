@@ -101,10 +101,10 @@
           "type": "multipleChoice",
           "prompt": "A Python program spawns four threads, each running a tight numeric loop that does heavy computation with no I/O at all, on a machine with four free CPU cores. What should you expect?",
           "options": [
-            "Roughly a 4x speedup, since there are four threads and four free cores available.",
+            "A speedup proportional to the number of cores, but only for numeric code specifically, since numeric operations are exempt from the GIL.",
             "No meaningful speedup over running the same work in a single thread, because the GIL only allows one thread to execute Python bytecode at a time, regardless of how many cores are free.",
             "The program will raise a runtime error, since CPython does not allow multiple threads to run CPU-bound code at all.",
-            "A speedup proportional to the number of cores, but only for numeric code specifically, since numeric operations are exempt from the GIL."
+            "Roughly a 4x speedup, since there are four threads and four free cores available."
           ],
           "correctOptionIndex": 1,
           "explanation": "The GIL ensures that only one thread executes Python bytecode at any given instant, no matter how many CPU cores are idle and available -- so four threads doing CPU-bound work don't run four-way in parallel; they take turns on a single core's worth of actual execution, with some added overhead from switching the GIL between them. The “Roughly a 4x speedup, since there…” option describes what would happen with true parallelism (e.g. via separate processes), which threading does not provide for CPU-bound work in CPython. The “The program will raise a runtime error…” option is wrong -- this code runs fine, just without the parallel speedup someone might expect. The “A speedup proportional to the number…” option is a fabricated exemption; there is no general carve-out for numeric code specifically (certain C-extension libraries can release the GIL internally during specific operations, but that's a property of those specific libraries' implementation, not a blanket rule about 'numeric code')."
@@ -133,12 +133,12 @@
           "type": "multipleChoice",
           "prompt": "What is the primary reason CPython's GIL exists?",
           "options": [
-            "To protect CPython's internal memory management (reference counting for garbage collection) from race conditions, without requiring much more complex, fine-grained locking throughout the interpreter",
+            "It's a requirement imposed by Python's open-source license terms",
             "To make Python code run faster on multi-core machines by automatically coordinating work across cores",
             "To prevent programmers from accidentally writing infinite loops in threaded code",
-            "It's a requirement imposed by Python's open-source license terms"
+            "To protect CPython's internal memory management (reference counting for garbage collection) from race conditions, without requiring much more complex, fine-grained locking throughout the interpreter"
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 3,
           "explanation": "The GIL exists mainly for implementation simplicity and safety: it protects CPython's internal reference-counting garbage collector from race conditions using one single, simple lock, rather than requiring much finer-grained locking scattered throughout the interpreter's internals. It has nothing to do with license terms (“It's a requirement imposed by Python's open-source license terms”), doesn't prevent infinite loops (“To prevent programmers from accidentally writing infinite…”), and -- notably -- actively works against multi-core speedups for CPU-bound code rather than coordinating or enabling them (the “To make Python code run faster…” option is exactly backwards)."
         },
         {
@@ -146,12 +146,12 @@
           "type": "multipleChoice",
           "prompt": "A program creates 10 threads, each making a blocking network request expected to take about 2 seconds, all starting at roughly the same time. Approximately how long should the whole batch take, and why?",
           "options": [
-            "About 2 seconds total -- each thread releases the GIL while blocked waiting on its network response, letting the others proceed concurrently, so the waiting overlaps rather than stacking up",
             "About 20 seconds total, since the GIL forces the threads to run strictly one at a time even while they're blocked waiting on I/O",
             "About 2 seconds, but only because the GIL is entirely disabled for the whole program the moment any network operation begins",
+            "About 2 seconds total -- each thread releases the GIL while blocked waiting on its network response, letting the others proceed concurrently, so the waiting overlaps rather than stacking up",
             "It depends entirely on the number of CPU cores available, since each thread needs its own dedicated core to make any progress at all"
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 2,
           "explanation": "This is exactly the case where threads genuinely help despite the GIL: a thread blocked on I/O (waiting for a network response) releases the GIL for the duration of that wait, letting other threads run Python code -- or start their own blocking calls -- during that idle time. Since all 10 requests are waiting on their own independent ~2-second network responses at roughly the same time, that waiting overlaps, and the whole batch finishes in roughly 2 seconds, not 20. This doesn't require multiple CPU cores (“It depends entirely on the number…”) -- releasing the GIL during I/O wait is what makes the overlap possible, not simultaneous execution on separate cores."
         },
         {
@@ -159,12 +159,12 @@
           "type": "multipleChoice",
           "prompt": "Which of these is a genuine cost or tradeoff of using multiprocessing instead of threading, according to this lesson?",
           "options": [
-            "Starting a new process carries more overhead than starting a new thread, and since processes don't share memory by default, data passed between them must be explicitly serialized, which has its own cost",
             "Processes are fundamentally unable to run on more than one CPU core at the same time, unlike threads",
             "multiprocessing is not part of the Python standard library and must be installed separately",
+            "Starting a new process carries more overhead than starting a new thread, and since processes don't share memory by default, data passed between them must be explicitly serialized, which has its own cost",
             "Processes all share the exact same GIL, so there's no actual benefit over threading for CPU-bound work"
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 2,
           "explanation": "Each process gets its own separate Python interpreter and its own GIL, and starting one is heavier than starting a thread, plus there's no shared memory by default -- any data that needs to move between processes has to be explicitly serialized and passed across, which costs real time and effort. This is genuinely the tradeoff multiprocessing accepts in exchange for true CPU parallelism. The “Processes are fundamentally unable to run…” and “Processes all share the exact same GIL…” options describe the opposite of what actually happens (multiple GILs, one per process, is precisely what enables real parallelism), and multiprocessing is a standard library module, not a third-party dependency (“multiprocessing is not part of the Python…”)."
         },
         {
@@ -172,12 +172,12 @@
           "type": "multipleChoice",
           "prompt": "```python\nimport asyncio\n\nasync def worker(name, delay):\n    print(f\"{name} start\")\n    await asyncio.sleep(delay)\n    print(f\"{name} end\")\n\nasync def main():\n    await asyncio.gather(worker(\"X\", 2), worker(\"Y\", 2), worker(\"Z\", 1))\n\nasyncio.run(main())\n```\nWhat's the order of printed output, and roughly how long does main() take?",
           "options": [
+            "X start / Y start / Z start / Z end / X end / Y end -- total time about 5 seconds",
             "X start / Y start / Z start / Z end / X end / Y end -- total time about 2 seconds",
-            "X start / Y start / Z start / X end / Y end / Z end -- total time about 5 seconds",
             "Z start / Z end / X start / X end / Y start / Y end -- total time about 5 seconds",
-            "X start / Y start / Z start / Z end / X end / Y end -- total time about 5 seconds"
+            "X start / Y start / Z start / X end / Y end / Z end -- total time about 5 seconds"
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 1,
           "explanation": "asyncio.gather() starts all three coroutines together; each prints its 'start' message and immediately hits await asyncio.sleep(...), yielding control back to the event loop. All three sleeps then run concurrently rather than sequentially: Z's 1-second timer finishes first, printing 'Z end' around the 1-second mark, and X's and Y's 2-second timers finish together afterward, around the 2-second mark, in the order they were scheduled. The whole thing takes roughly 2 seconds total -- governed by the *longest* delay among concurrently-running tasks, not the sum of all three delays (which would be 5 seconds if they ran one after another sequentially)."
         },
         {
@@ -198,12 +198,12 @@
           "type": "multipleChoice",
           "prompt": "According to this lesson, what is the correct fix for a genuinely CPU-bound function that's currently slowing down an otherwise-fast asyncio application?",
           "options": [
-            "Run the CPU-bound work in a separate process (e.g. via multiprocessing, or loop.run_in_executor with a ProcessPoolExecutor), so it executes in true parallel on another core instead of blocking the event loop's single thread",
-            "Add extra await statements inside the CPU-bound function, even where there's nothing to actually wait on, so the event loop can interleave it more often",
             "Increase the number of internal threads the asyncio event loop itself uses",
-            "Just await the function directly -- async def functions are automatically scheduled onto a separate CPU core by the interpreter"
+            "Just await the function directly -- async def functions are automatically scheduled onto a separate CPU core by the interpreter",
+            "Add extra await statements inside the CPU-bound function, even where there's nothing to actually wait on, so the event loop can interleave it more often",
+            "Run the CPU-bound work in a separate process (e.g. via multiprocessing, or loop.run_in_executor with a ProcessPoolExecutor), so it executes in true parallel on another core instead of blocking the event loop's single thread"
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 3,
           "explanation": "Since the whole problem is that CPU-bound work has no idle waiting time for the event loop to fill with other tasks, the fix has to come from outside the event loop entirely: running the work in a separate OS process gives it a genuinely separate GIL and, potentially, a separate CPU core, achieving real parallelism instead of trying to force cooperative scheduling onto work that was never waiting on anything. Adding fake await points (“Add extra await statements inside the CPU-bound…”) doesn't create any genuine idle time to exploit. The event loop is fundamentally single-threaded by design (the “Increase the number of internal threads…” option misunderstands this), and async def alone never causes automatic multi-core scheduling (“Just await the function directly -- async…”) -- that's precisely the misconception this lesson corrects."
         },
         {
@@ -211,12 +211,12 @@
           "type": "multipleChoice",
           "prompt": "Can a program achieve genuine parallelism on a machine with only one CPU core?",
           "options": [
-            "No -- parallelism specifically requires multiple execution units (such as multiple cores) doing work at the exact same instant; a single core can only run one instruction at a time, so at most it can achieve concurrency, never true parallelism",
             "Yes, as long as the program creates enough threads",
-            "Yes, as long as the program uses asyncio's event loop, since the event loop itself runs in parallel with the tasks it schedules",
-            "Yes, but only specifically for I/O-bound workloads"
+            "No -- parallelism specifically requires multiple execution units (such as multiple cores) doing work at the exact same instant; a single core can only run one instruction at a time, so at most it can achieve concurrency, never true parallelism",
+            "Yes, but only specifically for I/O-bound workloads",
+            "Yes, as long as the program uses asyncio's event loop, since the event loop itself runs in parallel with the tasks it schedules"
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 1,
           "explanation": "Parallelism is fundamentally a hardware property: it requires more than one execution unit genuinely doing work at the same literal moment. A single CPU core, no matter how many threads or coroutines a program creates on top of it, can only ever execute one instruction at a time -- more threads just mean more things taking turns, which is concurrency, not parallelism. Neither threading (“Yes, as long as the program creates enough threads”) nor asyncio (“Yes, as long as the program uses…”) creates additional cores out of nothing, and this limitation is about the underlying hardware, not about whether the workload happens to be I/O-bound or CPU-bound (“Yes, but only specifically for I/O-bound workloads”)."
         },
         {
@@ -224,12 +224,12 @@
           "type": "multipleChoice",
           "prompt": "A service needs to maintain roughly 10,000 simultaneous open network connections, each mostly idle, occasionally receiving a message. Which approach does this lesson describe as the best fit, and why?",
           "options": [
-            "asyncio -- a single thread can efficiently track thousands of waiting tasks, whereas dedicating one OS thread to each connection would carry prohibitive overhead at that scale",
+            "None of Python's concurrency tools can realistically handle more than a few hundred simultaneous connections",
             "threading -- one dedicated thread per connection is always the simplest and most efficient choice, at any scale",
             "multiprocessing -- one process per connection ensures each connection gets genuine, dedicated CPU parallelism",
-            "None of Python's concurrency tools can realistically handle more than a few hundred simultaneous connections"
+            "asyncio -- a single thread can efficiently track thousands of waiting tasks, whereas dedicating one OS thread to each connection would carry prohibitive overhead at that scale"
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 3,
           "explanation": "This is exactly the scenario the lesson identifies as asyncio's strongest fit: a very large number of concurrent, mostly-idle I/O-bound operations, where the overhead of one OS thread (or, far worse, one OS process) per connection would be prohibitive at scale. A single event loop can track thousands of waiting connections efficiently, switching to whichever one actually has a message ready, without needing anywhere near 10,000 separate OS-level threads or processes -- each of which carries real memory and scheduling overhead that would make the “threading -- one dedicated thread per connection…” and “multiprocessing -- one process per connection ensures…” options impractical at this scale."
         }
       ]

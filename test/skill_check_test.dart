@@ -74,7 +74,13 @@ LearningPath _path(int modules, {int mcqs = 3}) => LearningPath(
 Map<String, int> _answerAll(
   List<SkillCheckQuestion> qs,
   bool Function(SkillCheckQuestion) right,
-) => {for (final q in qs) q.id: right(q) ? 0 : 1};
+) => {
+  for (final q in qs)
+    q.id: right(q)
+        ? q.assessment.correctOptionIndex!
+        : (q.assessment.correctOptionIndex! + 1) %
+              q.assessment.options!.length,
+};
 
 void main() {
   final service = SkillCheckService(random: Random(1));

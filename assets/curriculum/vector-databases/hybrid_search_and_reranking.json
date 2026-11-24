@@ -115,11 +115,11 @@
           "prompt": "\"Invoices over $10,000\" and \"invoices over $1,000\" share nearly all their wording and describe the same general kind of filtering task. Why can't a typical dense embedding model be relied upon to treat these two thresholds as sharply, reliably distinct?",
           "options": [
             "Embedding models cannot process numbers at all; numeric characters are silently stripped out before tokenization.",
-            "Nothing about a typical embedding training objective specifically rewards treating two different numeric thresholds as sharply distinct, since topically -- in the sense the training process actually optimizes for -- the two queries are extremely similar.",
             "This only happens with dollar amounts specifically; embeddings reliably distinguish other kinds of precise numbers, like dates or percentages.",
+            "Nothing about a typical embedding training objective specifically rewards treating two different numeric thresholds as sharply distinct, since topically -- in the sense the training process actually optimizes for -- the two queries are extremely similar.",
             "The two queries would only be confused with each other if they were embedded using two different embedding models rather than the same one."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "The explanation draws a direct parallel to the negation blind spot: the training objective rewards semantic/topical closeness, and 'invoices over $X' for two different values of X are topically almost identical tasks, so nothing in a typical training process specifically pushes the model to treat the two thresholds as sharply separated in vector space, even though a person filtering invoices cares enormously about which threshold is actually meant. The “Embedding models cannot process numbers at all…” option is factually wrong -- embedding models do tokenize and process numeric characters, they just don't necessarily represent precise numeric distinctions reliably. The “This only happens with dollar amounts specifically…” option fabricates a distinction between dollar amounts and other numeric types that the explanation doesn't support -- the underlying mechanism (topical similarity swamping numeric precision) isn't specific to currency. The “The two queries would only be confused…” option misdiagnoses this as a cross-model comparison problem, when the issue occurs even within a single, consistently-used model."
         },
         {
@@ -127,12 +127,12 @@
           "type": "multipleChoice",
           "prompt": "A user needs to find the one document containing the exact phrase \"material adverse change.\" A passage using that literal phrase and a separate passage merely paraphrasing the same clause in different words can end up close together in vector space. Why is this an expected, structural outcome rather than a fixable bug in one specific embedding model?",
           "options": [
-            "A pooled embedding vector represents a passage's overall meaning and structurally discards the specific information of whether an exact substring appears anywhere inside the text, so a literal phrase and its paraphrase can legitimately look similar to it.",
+            "It only happens for phrases longer than some fixed number of words; short exact phrases are always matched reliably.",
             "It only happens because the embedding model in question was never fine-tuned specifically on legal documents.",
             "This is a bug specific to mean pooling; encoders that use a dedicated summary token instead of averaging do not have this limitation.",
-            "It only happens for phrases longer than some fixed number of words; short exact phrases are always matched reliably."
+            "A pooled embedding vector represents a passage's overall meaning and structurally discards the specific information of whether an exact substring appears anywhere inside the text, so a literal phrase and its paraphrase can legitimately look similar to it."
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 3,
           "explanation": "This is a structural consequence of what a pooled vector even represents: it's built to capture overall meaning, not to preserve whether one specific exact substring occurs verbatim, so a paraphrase that preserves meaning but changes wording can end up just as close (or closer) as the literal phrase itself -- no version of the embedding model can guarantee otherwise without fundamentally changing what pooling is for. The “It only happens because the embedding model…” option proposes domain-specific fine-tuning as a fix for something that isn't a domain-knowledge gap at all. The “This is a bug specific to mean…” option invents a distinction between pooling strategies that doesn't address the underlying issue -- any fixed-length vector built to represent overall meaning has this same structural limitation, regardless of which specific pooling mechanism produced it. The “It only happens for phrases longer…” option fabricates a length-based exception with no basis in the actual mechanism."
         },
         {
@@ -140,12 +140,12 @@
           "type": "multipleChoice",
           "prompt": "Why does classical sparse retrieval, like BM25, not share dense vector search's specific weakness with rare identifiers such as ticket numbers or product SKUs?",
           "options": [
-            "Sparse retrieval methods are trained on larger datasets that happen to specifically cover more rare identifiers.",
             "Sparse methods treat term rarity as evidence of specificity rather than as a lack of training signal -- a rare identifier appearing in only one document produces a strong, unambiguous match precisely because it's rare, the opposite of how a dense embedding model's lack of training signal on that same rare token plays out.",
+            "Sparse retrieval doesn't actually handle rare identifiers any better than dense search does; it simply fails less visibly when it gets them wrong.",
             "Sparse methods convert every identifier into a numeric hash before comparison, a technique that dense embeddings are structurally unable to use.",
-            "Sparse retrieval doesn't actually handle rare identifiers any better than dense search does; it simply fails less visibly when it gets them wrong."
+            "Sparse retrieval methods are trained on larger datasets that happen to specifically cover more rare identifiers."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "This is the exact contrast the explanation draws: dense embeddings struggle with rare tokens because there's little training signal to anchor a reliable position to, while sparse methods like BM25 use inverse document frequency to reward exactly that same rarity as a strong positive signal of specificity -- one method's blind spot is close to the other's core strength. The “Sparse retrieval methods are trained on larger…” option is unsupported -- sparse methods like BM25 don't require any training on a corpus of identifiers at all; they work from term statistics computed directly on whatever corpus is being searched. The “Sparse methods convert every identifier into…” option invents a hashing mechanism that isn't how BM25 or TF-IDF actually work. The “Sparse retrieval doesn't actually handle rare identifiers…” option denies the real, demonstrated advantage the worked BM25 example shows (correctly ranking the right SKU's document first, with a wide margin) in favor of an unsupported claim that the improvement is illusory."
         },
         {
@@ -264,11 +264,11 @@
           "prompt": "Why is reciprocal rank fusion (RRF) generally preferred over directly summing raw BM25 and vector similarity scores when combining hybrid search results?",
           "options": [
             "RRF is faster to compute than a simple sum.",
-            "RRF operates only on each document's rank within each result list, which sidesteps the fact that BM25 scores and vector similarity scores are on different, incompatible numeric scales -- summing the raw scores directly lets whichever scale is larger dominate the combined ranking.",
+            "RRF always produces a higher-quality ranking than any other possible fusion method, for any dataset.",
             "Summing raw scores is mathematically invalid and will raise an error in most programming languages.",
-            "RRF always produces a higher-quality ranking than any other possible fusion method, for any dataset."
+            "RRF operates only on each document's rank within each result list, which sidesteps the fact that BM25 scores and vector similarity scores are on different, incompatible numeric scales -- summing the raw scores directly lets whichever scale is larger dominate the combined ranking."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "The core issue with summing raw scores is a scale mismatch: BM25 scores are unbounded and corpus-dependent while cosine similarity is bounded to [-1, 1], so a direct sum ends up dominated by whichever system's typical score magnitude happens to be larger, independent of which one is actually more informative for a given query. RRF avoids this by construction, since it only ever looks at rank position, which is on the same 1st/2nd/3rd... scale no matter what the underlying score distributions look like. The “RRF is faster to compute than a simple sum” option is not the actual motivation -- both approaches are computationally cheap; speed isn't the deciding factor. The “Summing raw scores is mathematically invalid…” option is false -- summing two floats is valid code in every mainstream language, it's just semantically misleading, not an error. The “RRF always produces a higher-quality ranking…” option overclaims -- RRF is a sound, general default, not a proof of optimality for every dataset and every fusion goal."
         },
         {
@@ -276,12 +276,12 @@
           "type": "multipleChoice",
           "prompt": "In the BM25 worked example, doc3 repeats the term \"python\" three times but never mentions \"programming\" or \"language\" at all, while doc1 mentions each of the three query terms exactly once. doc1 still scores far higher than doc3 (1.41 versus 0.7833). What does this illustrate about BM25?",
           "options": [
-            "BM25 ignores term frequency entirely and scores documents purely on how many distinct query terms appear at least once.",
             "BM25 rewards term frequency with diminishing returns, so repeating one already-matched term many times cannot come close to compensating for missing most of the query's other distinct terms entirely.",
+            "BM25 ignores term frequency entirely and scores documents purely on how many distinct query terms appear at least once.",
             "doc3 scores lower purely because it is a longer document than doc1, triggering excessive length normalization unrelated to term matching.",
             "This is a bug in the specific implementation shown; a mathematically correct BM25 implementation would rank doc3 above doc1."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "The explanation is explicit that BM25 rewards term frequency, but with diminishing returns -- additional repeats of an already-matched term add progressively less to the score, so three occurrences of 'python' can't come close to making up for doc3 missing 'programming' and 'language' entirely, which is exactly why doc1 (which matches all three distinct terms once each) wins decisively. The “BM25 ignores term frequency entirely and scores…” option overstates the point -- BM25 does use term frequency, it just doesn't reward raw repetition proportionally. The “doc3 scores lower purely…” option misattributes the gap to length normalization; the dominant effect here is coverage of distinct query terms, not document length. The “This is a bug in the specific…” option is wrong -- this is standard, correctly-implemented BM25 behavior, not a defect."
         },
         {
@@ -289,10 +289,10 @@
           "type": "multipleChoice",
           "prompt": "docE appears only in the BM25-ranked list, never in the vector-ranked list at all, yet it still shows up in the final RRF-fused result. What does this demonstrate about the actual value of hybrid search?",
           "options": [
-            "It demonstrates that vector search and BM25 mostly agree with each other, and hybrid search's value comes from reinforcing that shared consensus.",
+            "It demonstrates that BM25 alone would have been just as good, making the extra cost of running vector search unnecessary.",
             "It demonstrates recall union: because the two systems tend to fail in largely uncorrelated ways, a document one system misses entirely can still be recovered because the other system found it -- which is the real benefit of running both rather than relying on just one.",
             "It demonstrates a bug in RRF -- a document with zero vector-search signal at all should logically be excluded from any fused result.",
-            "It demonstrates that BM25 alone would have been just as good, making the extra cost of running vector search unnecessary."
+            "It demonstrates that vector search and BM25 mostly agree with each other, and hybrid search's value comes from reinforcing that shared consensus."
           ],
           "correctOptionIndex": 1,
           "explanation": "The explanation is direct about this: hybrid search's real value is recall union, not agreement -- vector search and BM25 have largely uncorrelated blind spots, so documents that one system drops from its own top-k entirely (docE never appeared in the vector list at all) can still be pulled back into the final ranking by the other. The “It demonstrates that vector search and BM25…” option describes the opposite dynamic from what's actually happening here -- docE is a case of disagreement (one system found it, one didn't), not agreement. The “It demonstrates a bug in RRF…” option misreads RRF's design as a flaw; contributing 0 from a list a document doesn't appear in, while still counting its contribution from lists it does appear in, is precisely the intended mechanism. The “It demonstrates that BM25 alone would have…” option draws an unsupported general conclusion from one document's fate; other cases in the same example (like docB, found only by vector search) show the reverse is just as true."
@@ -302,12 +302,12 @@
           "type": "multipleChoice",
           "prompt": "A team implements 'hybrid search' by first guessing whether a query looks like it contains an exact code or identifier -- if so, running only BM25 for that query; otherwise, running only vector search. What problem does this design have?",
           "options": [
+            "This design is strictly more computationally expensive than running both retrievers on every query and fusing them with RRF.",
             "None -- this is exactly the recommended hybrid search approach, since it saves compute by only running the retriever suited to each query's type.",
             "It requires correctly guessing in advance which single system a given query actually needs, which is exactly the judgment call that running both retrievers and fusing their results is meant to avoid having to make -- and a misclassified query gets no benefit at all from whichever system it skipped.",
-            "This design works correctly for BM25-only queries but is guaranteed to fail for every vector-only query.",
-            "This design is strictly more computationally expensive than running both retrievers on every query and fusing them with RRF."
+            "This design works correctly for BM25-only queries but is guaranteed to fail for every vector-only query."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "The explanation calls this out directly as a common mistake: routing each query to only one retrieval path based on a guess about query type defeats the actual purpose of hybrid search, because it requires knowing in advance which system a given query needs -- exactly the judgment call running both systems and fusing the results exists to avoid, and any misclassified query loses all benefit from the system it never ran. The “None -- this is exactly the recommended…” option endorses the exact mistake being described. The “This design works correctly for BM25-only queries…” option invents an absolute failure guarantee that overstates the actual problem, which is about lost recall on misclassified queries, not guaranteed failure on an entire category. The “This design is strictly more computationally expensive…” option is backwards -- running only one retriever per query is cheaper, not more expensive, than running both; the problem with the design is reduced recall, not increased cost."
         },
         {
@@ -438,9 +438,9 @@
           "type": "multipleChoice",
           "prompt": "Cross-encoders generally produce more accurate relevance judgments than bi-encoders (the embedding models used for vector search). Why aren't cross-encoders used as the sole, first-stage retriever over an entire large collection?",
           "options": [
-            "Cross-encoders are a newer technology and current vector databases simply haven't added support for them yet.",
-            "A cross-encoder has no fixed, precomputable representation of a document independent of the query -- every score requires a full model forward pass over that specific (query, document) pair at query time, making it computationally infeasible to run against every document in a large collection for every incoming query.",
             "Cross-encoders can only process numerical vectors, not raw text, so they cannot be used for retrieval at all.",
+            "A cross-encoder has no fixed, precomputable representation of a document independent of the query -- every score requires a full model forward pass over that specific (query, document) pair at query time, making it computationally infeasible to run against every document in a large collection for every incoming query.",
+            "Cross-encoders are a newer technology and current vector databases simply haven't added support for them yet.",
             "Cross-encoders are less accurate than bi-encoders for the first-stage retrieval task specifically, even though they're more accurate for reranking."
           ],
           "correctOptionIndex": 1,
@@ -451,12 +451,12 @@
           "type": "multipleChoice",
           "prompt": "A bi-encoder rates two candidate documents as nearly tied against a query (cosine similarity 0.9923 versus 0.99), while a cross-encoder run on the same query and the same two documents produces a decisive 0.91 versus 0.55. What structurally explains the cross-encoder's greater resolving power here?",
           "options": [
-            "The cross-encoder simply uses a larger, more powerful underlying model architecture than any bi-encoder could possibly use.",
             "The cross-encoder jointly encodes the query and one specific document together, letting attention directly relate specific query tokens to specific document tokens, whereas a bi-encoder's two vectors were each finalized independently before either one knew what it would eventually be compared against.",
             "The bi-encoder's near-tie is evidence of a bug; a correctly implemented bi-encoder would necessarily have produced the same decisive scores as the cross-encoder.",
-            "Cross-encoder scores are always reported on a 0-to-1 scale while bi-encoder scores are on a -1-to-1 scale, and that scale difference alone accounts for the more decisive-looking numbers."
+            "Cross-encoder scores are always reported on a 0-to-1 scale while bi-encoder scores are on a -1-to-1 scale, and that scale difference alone accounts for the more decisive-looking numbers.",
+            "The cross-encoder simply uses a larger, more powerful underlying model architecture than any bi-encoder could possibly use."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "The explanation attributes the difference directly to joint versus independent encoding: a cross-encoder processes the query and one candidate as a single joint input, letting its attention mechanism directly relate specific tokens across the two, while a bi-encoder must finalize each vector before it ever knows what it will eventually be compared against -- a structural limitation on how much fine-grained interaction it can represent, not a matter of raw model size. The “The cross-encoder simply uses a larger, more…” option isn't the actual mechanism described -- the explanation attributes the gap to joint versus independent processing, not to model scale. The “The bi-encoder's near-tie is evidence…” option mischaracterizes normal, expected bi-encoder behavior (a genuine near-tie in its compressed representation) as a defect. The “Cross-encoder scores are always reported…” option correctly notes the two systems' score ranges differ, but that's incidental to this example's actual point, and doesn't explain why the RELATIVE gap between the two documents' scores is so much wider under the cross-encoder specifically."
         },
         {
@@ -464,12 +464,12 @@
           "type": "multipleChoice",
           "prompt": "Reranking 20 candidates costs about 100ms (at 5ms per pair), but reranking a 1,000,000-document collection directly would cost about 5,000,000ms -- over 83 minutes -- for a single query. What does this cost comparison actually demonstrate?",
           "options": [
-            "Cross-encoder cost scales linearly with the number of (query, candidate) pairs scored, which is exactly why cross-encoders are layered on top of a fast first-stage retriever that narrows the field first, rather than being run directly over an entire collection.",
+            "This particular cost model applies only to cross-encoders; bi-encoder-based vector search has no comparable per-item cost at all, at any collection size.",
             "Reranking is only expensive for collections larger than exactly one million documents; below that specific threshold it is always fast enough for any use case.",
-            "The cost difference shown here is caused by network latency to a remote cross-encoder API, not by the number of comparisons actually being performed.",
-            "This particular cost model applies only to cross-encoders; bi-encoder-based vector search has no comparable per-item cost at all, at any collection size."
+            "Cross-encoder cost scales linearly with the number of (query, candidate) pairs scored, which is exactly why cross-encoders are layered on top of a fast first-stage retriever that narrows the field first, rather than being run directly over an entire collection.",
+            "The cost difference shown here is caused by network latency to a remote cross-encoder API, not by the number of comparisons actually being performed."
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 2,
           "explanation": "rerank_cost is literally n multiplied by a fixed per-pair cost, so the total grows linearly with however many candidates are scored -- exactly why the explanation frames reranking as viable only over a small, already-narrowed candidate set, with the expensive model applied where it's affordable rather than everywhere. The “Reranking is only expensive for collections larger…” option invents an arbitrary fixed threshold; the actual relationship is continuous and linear in n, not a step function at one million. The “The cost difference shown here is caused…” option misattributes a computational scaling property to network latency, which isn't part of this cost model at all. The “This particular cost model applies only…” option is false -- bi-encoder-based vector search (brute-force kNN, specifically) has its own well-established O(n*d) per-query cost from earlier in this subject; it's just a much cheaper per-item operation than a full cross-encoder forward pass, not a cost-free one."
         },
         {
@@ -477,12 +477,12 @@
           "type": "multipleChoice",
           "prompt": "A team doubles the candidate-set size N handed from stage 1 to their reranker, assuming this is always a safe way to improve final result quality. What consideration does this assumption overlook?",
           "options": [
-            "Doubling N has no effect on reranking cost at all, since cross-encoder cost depends only on query length, not on how many candidates are scored.",
-            "A larger N directly increases reranking latency and cost, since cross-encoder cost scales with candidate count -- and N only helps up to the point where stage 1's own recall is the limiting factor; if the true best match was excluded from stage 1's candidate set entirely, no value of N that still excludes it can recover it.",
+            "N cannot be changed once a first-stage retriever has already been deployed to production.",
             "Increasing N always decreases reranking quality, since cross-encoders become measurably less accurate as the candidate-set size grows.",
-            "N cannot be changed once a first-stage retriever has already been deployed to production."
+            "Doubling N has no effect on reranking cost at all, since cross-encoder cost depends only on query length, not on how many candidates are scored.",
+            "A larger N directly increases reranking latency and cost, since cross-encoder cost scales with candidate count -- and N only helps up to the point where stage 1's own recall is the limiting factor; if the true best match was excluded from stage 1's candidate set entirely, no value of N that still excludes it can recover it."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "The explanation is explicit about both halves of this: a larger N is a real, ongoing latency and compute cost, not a free improvement, since cross-encoder cost scales with however many candidates it's asked to score; and more importantly, N only helps while stage 1's own recall is the bottleneck -- once the true best match is excluded from the candidate set outright, widening N without actually including that document changes nothing, and no amount of reranking sophistication can substitute for fixing stage 1's recall directly. The “Doubling N has no effect on reranking…” option denies a cost relationship the explanation states directly. The “Increasing N always decreases reranking quality, since…” option fabricates an accuracy-degradation effect that isn't part of how cross-encoders behave with larger candidate sets. The “N cannot be changed once a first-stage…” option is an operational fabrication -- N is exactly the kind of tunable dial (like nprobe or ef_search) that's meant to be adjusted after deployment, not fixed permanently."
         },
         {

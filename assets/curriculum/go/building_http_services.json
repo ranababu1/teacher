@@ -117,12 +117,12 @@
           "type": "multipleChoice",
           "prompt": "Calling `http.ListenAndServe(\":8080\", nil)` starts a server using which handler, and what's a concrete risk of relying on this in a real service, according to this concept?",
           "options": [
-            "It uses http.DefaultServeMux, a single shared, package-level ServeMux that any package -- including third-party ones -- might register routes onto via the package-level http.HandleFunc, creating a real risk of unrelated code silently colliding on route registration.",
+            "It requires that http.NewServeMux() has already been called at least once elsewhere in the program, or the call panics immediately.",
             "It starts the server with no handler at all, so every request receives a 404, since nil is never a valid second argument in practice.",
-            "It automatically creates and uses a brand-new, private http.NewServeMux() dedicated to that one ListenAndServe call, with no sharing risk of any kind.",
-            "It requires that http.NewServeMux() has already been called at least once elsewhere in the program, or the call panics immediately."
+            "It uses http.DefaultServeMux, a single shared, package-level ServeMux that any package -- including third-party ones -- might register routes onto via the package-level http.HandleFunc, creating a real risk of unrelated code silently colliding on route registration.",
+            "It automatically creates and uses a brand-new, private http.NewServeMux() dedicated to that one ListenAndServe call, with no sharing risk of any kind."
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 2,
           "explanation": "Passing nil as the handler argument to ListenAndServe falls back to http.DefaultServeMux, a single mux shared at the package level -- the same instance that the package-level http.HandleFunc function (as opposed to a method on your own mux) registers routes onto. Because this mux is genuinely shared and globally accessible, any other code in the program, including a third-party dependency that itself calls http.HandleFunc, could register onto the exact same mux and silently collide with your own routes. The “It starts the server with no handler…” option is wrong -- nil is a valid and meaningful argument specifically triggering the default-mux fallback, not an error. The “It automatically creates and uses a brand-new…” option is wrong -- nothing new and private is created; DefaultServeMux is a pre-existing, shared package-level value. The “It requires that http.NewServeMux() has already been…” option is wrong -- DefaultServeMux always exists as soon as the net/http package is imported; there's no such precondition."
         },
         {
@@ -130,12 +130,12 @@
           "type": "multipleChoice",
           "prompt": "Given `mux.HandleFunc(\"GET /articles/{slug}\", articleHandler)` and an incoming request to `/articles/go-basics?slug=other`, what does `r.PathValue(\"slug\")` return inside articleHandler?",
           "options": [
-            "\"go-basics\" -- PathValue reads from the matched URL path segment, entirely independent of anything present in the query string.",
             "\"other\" -- PathValue and query parameters both read from the same underlying \"slug\" key, with the query string value taking precedence.",
             "\"go-basics?slug=other\" -- PathValue returns the entire remainder of the URL, including the query string, as one combined value.",
-            "An error -- having a query parameter and a path wildcard both named \"slug\" on the same request is disallowed and rejected by net/http."
+            "An error -- having a query parameter and a path wildcard both named \"slug\" on the same request is disallowed and rejected by net/http.",
+            "\"go-basics\" -- PathValue reads from the matched URL path segment, entirely independent of anything present in the query string."
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 3,
           "explanation": "r.PathValue(\"slug\") retrieves whatever the named {slug} wildcard in the registered pattern actually matched against the request's URL path -- here, the path segment \"go-basics\" -- which is an entirely separate mechanism from query string parameters, retrieved instead via r.URL.Query(). There's no interaction, precedence rule, or naming conflict between the two just because they happen to share the name \"slug\"; they're read through completely different methods reading from completely different parts of the URL. The “\"other\" -- PathValue and query parameters both…” option invents a precedence rule that doesn't exist. The “\"go-basics?slug=other\" -- PathValue returns the entire remainder…” option misdescribes what PathValue returns -- it's just the one matched segment, not any larger portion of the URL. The “An error -- having a query parameter…” option invents a restriction net/http doesn't impose."
         },
         {
@@ -259,12 +259,12 @@
           "type": "multipleChoice",
           "prompt": "A struct field is declared as `Count int` with no json tag at all. What happens when a value of that struct is marshaled to JSON?",
           "options": [
+            "The field is included, but only if its value is non-zero -- untagged fields behave as if they had an implicit omitempty.",
             "The field is silently omitted, since only tagged fields are ever included in JSON output.",
             "Marshaling fails with an error, since encoding/json requires every field to have an explicit tag.",
-            "The field is included in the output using the exact Go field name, \"Count\", as the JSON key, since exported fields are included by default with no tag required.",
-            "The field is included, but only if its value is non-zero -- untagged fields behave as if they had an implicit omitempty."
+            "The field is included in the output using the exact Go field name, \"Count\", as the JSON key, since exported fields are included by default with no tag required."
           ],
-          "correctOptionIndex": 2,
+          "correctOptionIndex": 3,
           "explanation": "Exported fields (capitalized, like Count) are included in marshaled JSON by default, using the field's own Go name verbatim as the JSON key, with absolutely no tag required to achieve this -- a tag is only needed to change that default behavior (rename the key, add omitempty, or exclude the field with \"-\"). The “The field is silently omitted, since only…” and “Marshaling fails with an error, since encoding/json…” options are both wrong because they assume a tag is required for inclusion at all, which is backwards -- untagged exported fields are included, not excluded or erroring. The “The field is included, but only…” option is wrong -- there is no implicit omitempty behavior for untagged fields; a zero-value untagged field is still included in the output (e.g. \"Count\":0), which is precisely why omitempty has to be added explicitly whenever that default inclusion-of-zero-values isn't wanted."
         },
         {
@@ -272,12 +272,12 @@
           "type": "multipleChoice",
           "prompt": "What is the concrete practical difference between calling json.Unmarshal(data, &v) and calling json.NewDecoder(r.Body).Decode(&v) when handling an HTTP request body?",
           "options": [
-            "Unmarshal requires the entire JSON payload already buffered in memory as a []byte (typically obtained via io.ReadAll(r.Body) first), while Decode reads and parses directly from r.Body as an io.Reader, streaming through the input incrementally rather than requiring it all up front.",
             "Unmarshal is strictly faster in every situation, since Decode carries extra overhead purely from satisfying the io.Reader interface.",
-            "Decode can only ever be used with an *http.Request's body specifically, while Unmarshal works with byte slices from any source at all.",
-            "There is no real functional difference between the two -- both necessarily read the entire body into memory before any parsing can begin."
+            "Unmarshal requires the entire JSON payload already buffered in memory as a []byte (typically obtained via io.ReadAll(r.Body) first), while Decode reads and parses directly from r.Body as an io.Reader, streaming through the input incrementally rather than requiring it all up front.",
+            "There is no real functional difference between the two -- both necessarily read the entire body into memory before any parsing can begin.",
+            "Decode can only ever be used with an *http.Request's body specifically, while Unmarshal works with byte slices from any source at all."
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 1,
           "explanation": "Unmarshal's signature demands a []byte already fully in hand, which for an HTTP body means an extra io.ReadAll call and an extra full read pass before Unmarshal even starts; Decode instead reads directly from any io.Reader -- and r.Body satisfies that interface -- parsing incrementally as bytes actually arrive, without requiring the whole payload buffered up front. The “Unmarshal is strictly faster in every situation…” option invents a performance claim the material never makes; if anything, avoiding the extra buffering step is the practical advantage described. The “Decode can only ever be used…” option is wrong -- Decode works with any io.Reader, not exclusively request bodies; r.Body is simply a common, convenient example. The “There is no real functional difference between…” option is wrong -- this is precisely the distinction the concept draws; Decode's whole advantage is not needing the full body in memory first."
         },
         {
@@ -285,12 +285,12 @@
           "type": "multipleChoice",
           "prompt": "A struct declares an exported field: `InternalNotes string` tagged `json:\"-\"`. What happens to this field when a value of the struct is marshaled to JSON?",
           "options": [
-            "It's included in the output under the literal JSON key \"-\", since that's exactly what the tag specifies.",
             "It's unconditionally excluded from the encoded JSON regardless of its value -- json:\"-\" is the standard way to mark an otherwise-exported field as deliberately internal-only.",
+            "It's included in the output under the literal JSON key \"-\", since that's exactly what the tag specifies.",
             "It's included using the Go field name \"InternalNotes\" as the key, because a tag value of \"-\" is invalid and therefore silently ignored.",
             "json.Marshal returns an error for this struct, since \"-\" can never be used as a JSON key."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "The json:\"-\" tag is a specific, recognized instruction meaning 'exclude this field from encoding and decoding entirely,' regardless of whatever value it holds -- it's the standard way to mark a field that is exported (and would otherwise be included by default) as deliberately excluded anyway. The “It's included in the output under…” option misreads \"-\" as an ordinary literal key name rather than the special exclusion marker it actually is. The “It's included using the Go field name…” option wrongly assumes the tag is invalid syntax; it's a valid and specifically meaningful tag value. The “json.Marshal returns an error for this struct…” option is wrong -- this doesn't produce a marshal error; the field is simply, silently omitted from the result."
         },
         {
@@ -298,12 +298,12 @@
           "type": "multipleChoice",
           "prompt": "A client sends `{\"name\": \"Amy\", \"age\": 30, \"extra_field\": \"surprise\"}` to an endpoint whose target struct only defines Name and Age fields -- nothing corresponding to extra_field exists anywhere on the struct. What happens by default when this is decoded with json.NewDecoder(r.Body).Decode(&req)?",
           "options": [
+            "Decode succeeds, and Go automatically adds a new field to the struct at runtime to hold extra_field's value.",
             "Decode returns an error immediately, because extra_field has no corresponding field on the target struct.",
             "Decode succeeds with no error at all; extra_field is silently ignored and dropped, since by default encoding/json only rejects unknown fields if the decoder has been explicitly configured with DisallowUnknownFields().",
-            "Decode succeeds, and Go automatically adds a new field to the struct at runtime to hold extra_field's value.",
             "Decode succeeds only if the struct happens to have a field literally named ExtraField somewhere, matched case-insensitively."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "By default, JSON fields with no matching struct field are matched (case-insensitively, against field names or tags) and simply dropped if nothing matches -- this does not, by itself, cause Decode to fail. Rejecting unrecognized fields is an opt-in behavior, enabled specifically by calling DisallowUnknownFields() on the decoder before calling Decode; without that call, an unexpected extra field like extra_field is silently ignored. The “Decode returns an error immediately, because extra_field…” and “Decode succeeds only if the struct happens…” options both wrongly assume rejection or a matching requirement is the default behavior. The “Decode succeeds, and Go automatically adds…” option invents a runtime struct-mutation capability Go does not have -- struct shape is fixed at compile time."
         },
         {
@@ -418,10 +418,10 @@
           "type": "multipleChoice",
           "prompt": "Given `handler := LoggingMiddleware(AuthMiddleware(finalHandler))`, which statement correctly describes the order requests and responses flow through these three pieces?",
           "options": [
-            "Requests flow finalHandler -> AuthMiddleware -> LoggingMiddleware, and responses flow back in the same order.",
+            "LoggingMiddleware and AuthMiddleware both run before the request even reaches finalHandler, but which of the two runs first is undefined and decided randomly by the Go runtime.",
             "Requests flow LoggingMiddleware -> AuthMiddleware -> finalHandler; the response then unwinds back through AuthMiddleware and LoggingMiddleware in reverse, so LoggingMiddleware's own post-call code (such as a timing log) runs last, after everything else has completed.",
             "All three run simultaneously in separate goroutines, so there is no defined ordering between them.",
-            "LoggingMiddleware and AuthMiddleware both run before the request even reaches finalHandler, but which of the two runs first is undefined and decided randomly by the Go runtime."
+            "Requests flow finalHandler -> AuthMiddleware -> LoggingMiddleware, and responses flow back in the same order."
           ],
           "correctOptionIndex": 1,
           "explanation": "LoggingMiddleware is the outermost wrapper (it's the function call surrounding everything else), so its body starts executing first when a request arrives -- it then calls into AuthMiddleware, which in turn calls into finalHandler if authentication succeeds. Once finalHandler returns, control unwinds back through AuthMiddleware's remaining code (if any), and finally back through LoggingMiddleware's remaining code (its timing log, typically), which is why that log line reflects the total time including everything nested inside it. The “Requests flow finalHandler -> AuthMiddleware -> LoggingMiddleware…” option describes the reverse order, which is wrong. The “All three run simultaneously in separate goroutines…” option is wrong -- middleware wrapping is synchronous, sequential function calls, not concurrent goroutines, unless a middleware explicitly spawns one itself. The “LoggingMiddleware and AuthMiddleware both run before…” option is wrong -- the order is entirely deterministic and directly determined by the nesting shown in the wrapping expression itself, not randomized."
@@ -431,12 +431,12 @@
           "type": "multipleChoice",
           "prompt": "Two independently-developed middleware functions both call context.WithValue using the plain string \"user\" as the key. What's the concrete risk this creates, and what's the idiomatic fix?",
           "options": [
-            "No real risk -- context.Context automatically namespaces stored values by which package called WithValue, so identical string keys from different packages can never actually collide.",
             "The two middleware's stored values can silently collide -- one overwrites or is misread as the other's, with no compile-time warning -- because context distinguishes values only by key type and value together, and two identical strings are indistinguishable; the idiomatic fix is for each package to define its own small, unexported named type and use a constant of that type as its key, since no other package can construct a colliding value of a type it doesn't define.",
+            "This is only a risk if both middleware happen to run in the same goroutine; running them in separate goroutines eliminates the collision risk entirely.",
             "This triggers a runtime panic the moment the second WithValue call executes, since context.Context enforces globally unique string keys across the whole program.",
-            "This is only a risk if both middleware happen to run in the same goroutine; running them in separate goroutines eliminates the collision risk entirely."
+            "No real risk -- context.Context automatically namespaces stored values by which package called WithValue, so identical string keys from different packages can never actually collide."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "context.Context has no built-in per-package namespacing -- two calls to WithValue using the identical string \"user\" as the key are genuinely indistinguishable from context's own point of view, so the second call's value can silently replace what the first stored, or a later Value(\"user\") lookup can retrieve the wrong package's data, with nothing surfaced at compile time to warn about it. The idiomatic fix is exactly the unexported-type-as-key idiom: since no other package can construct a value of a type it doesn't itself define, a key built from such a type can never collide with any other package's key, regardless of what underlying value either uses. The “No real risk -- context.Context automatically namespaces…” option invents an automatic namespacing mechanism context.Context doesn't have. The “This triggers a runtime panic the moment…” option invents a uniqueness-enforcement panic that doesn't exist. The “This is only a risk if both…” option is wrong -- this is a data-collision issue tied to the key's identity, entirely unrelated to which goroutine either call happens to run in."
         },
         {
@@ -444,12 +444,12 @@
           "type": "multipleChoice",
           "prompt": "The Chain helper function iterates over its middlewares slice in reverse (`for i := len(mws) - 1; i >= 0; i--`) while building the wrapped handler. Why, according to this concept?",
           "options": [
-            "Iterating in reverse is purely an arbitrary implementation detail with no effect on the resulting handler's actual behavior.",
-            "It's specifically so the resulting call order matches the order middlewares are listed at the call site -- applying the last-listed middleware first (making it the innermost wrap) and the first-listed middleware last (making it the outermost wrap) ensures the first middleware named in the list is the first one to actually run when a request arrives.",
             "Reverse iteration is required because Go slices cannot be safely traversed forward inside a for loop when their contents are being reassigned.",
-            "It causes every middleware in the slice to run concurrently instead of sequentially, one per goroutine."
+            "It causes every middleware in the slice to run concurrently instead of sequentially, one per goroutine.",
+            "Iterating in reverse is purely an arbitrary implementation detail with no effect on the resulting handler's actual behavior.",
+            "It's specifically so the resulting call order matches the order middlewares are listed at the call site -- applying the last-listed middleware first (making it the innermost wrap) and the first-listed middleware last (making it the outermost wrap) ensures the first middleware named in the list is the first one to actually run when a request arrives."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "Wrapping happens from the inside out: the middleware applied last (during the loop) ends up as the outermost layer, since each subsequent wrap sits around everything built so far. By processing the slice from its last element backward, Chain ensures that mws[0] -- the first middleware written in the caller's list -- is the very last one wrapped, making it the outermost layer and therefore the first one to actually execute on an incoming request, which is exactly what lets the call-site listing order (Chain(finalHandler, LoggingMiddleware, AuthMiddleware)) read naturally as the actual execution order. The “Iterating in reverse is purely an arbitrary…” option understates a genuine, deliberate mechanism. The “Reverse iteration is required because Go slices…” option invents a slice-safety constraint that doesn't apply here. The “It causes every middleware in the slice…” option misdescribes what the loop does -- it's ordinary sequential wrapping, not concurrent execution."
         },
         {
@@ -457,12 +457,12 @@
           "type": "multipleChoice",
           "prompt": "In `Chain(mux, RecoverMiddleware, LoggingMiddleware, AuthMiddleware)`, RecoverMiddleware is deliberately listed first, making it the outermost wrapper around everything else. Why, according to this concept?",
           "options": [
-            "Only the outermost layer, wrapping everything beneath it, can reliably catch a panic occurring anywhere in the inner layers or the final handler via a deferred recover() call, turning it into a clean response instead of crashing the entire server process.",
             "Placement within the list has no real effect on what RecoverMiddleware is able to catch -- any position in the chain would behave identically.",
-            "RecoverMiddleware is required by net/http itself to run innermost, immediately wrapping the final handler, or the program fails to compile.",
-            "Placing RecoverMiddleware outermost causes it to run in a separate goroutine from the rest of the chain, isolating any panics automatically without an explicit recover() call."
+            "Placing RecoverMiddleware outermost causes it to run in a separate goroutine from the rest of the chain, isolating any panics automatically without an explicit recover() call.",
+            "Only the outermost layer, wrapping everything beneath it, can reliably catch a panic occurring anywhere in the inner layers or the final handler via a deferred recover() call, turning it into a clean response instead of crashing the entire server process.",
+            "RecoverMiddleware is required by net/http itself to run innermost, immediately wrapping the final handler, or the program fails to compile."
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 2,
           "explanation": "A deferred recover() inside a given middleware layer can only catch a panic that occurs during execution nested inside that same call -- which, for RecoverMiddleware, means everything it wraps. Placed outermost, that includes every other middleware layer and the final handler itself, so a panic anywhere in that entire chain gets caught and converted into a clean response rather than crashing the whole server process. If RecoverMiddleware were placed anywhere further in, a panic in a layer wrapping it from the outside (like LoggingMiddleware, if it were outside instead) would propagate past RecoverMiddleware's own recover and still crash the server. The “Placement within the list has no real…” option directly contradicts this positional dependency. The “RecoverMiddleware is required by net/http itself…” option invents a net/http-level requirement that doesn't exist -- middleware ordering is entirely up to the developer. The “Placing RecoverMiddleware outermost causes it to run…” option invents a goroutine-isolation behavior that recover()/middleware wrapping doesn't provide on its own."
         },
         {

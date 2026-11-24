@@ -110,12 +110,12 @@
           "type": "multipleChoice",
           "prompt": "A script needs to add new entries to an existing log file every time it runs, without ever losing previously logged entries. Which open() mode should it use?",
           "options": [
-            "\"w\", since it opens the file for writing.",
-            "\"r\", since the file already exists.",
+            "\"x\", since it's meant for adding new content safely.",
             "\"a\", since it appends new writes after existing content instead of erasing it.",
-            "\"x\", since it's meant for adding new content safely."
+            "\"r\", since the file already exists.",
+            "\"w\", since it opens the file for writing."
           ],
-          "correctOptionIndex": 2,
+          "correctOptionIndex": 1,
           "explanation": "\"a\" (append) is specifically designed for this exact case: it opens the file for writing while preserving everything already in it, adding new writes strictly after the existing content. \"w\" (“\"w\", since it opens the file for writing”) would truncate the file to empty every single run, destroying all previously logged entries -- the opposite of what's needed here. \"r\" (“\"r\", since the file already exists”) opens for reading only; writing to a file opened in \"r\" mode raises an error. \"x\" (“\"x\", since it's meant for adding new content safely”) is for exclusive creation and specifically raises FileExistsError if the file already exists, which is the wrong behavior for a log file meant to be reused and added to across many runs."
         },
         {
@@ -129,12 +129,12 @@
           "type": "multipleChoice",
           "prompt": "```python\n# Assume draft.txt already exists on disk\ntry:\n    with open(\"draft.txt\", \"x\", encoding=\"utf-8\") as f:\n        f.write(\"new content\")\nexcept FileExistsError:\n    print(\"already exists, not overwritten\")\n```\nWhat happens?",
           "options": [
-            "\"already exists, not overwritten\" is printed -- \"x\" mode raises FileExistsError immediately when the target already exists, instead of silently overwriting it",
             "draft.txt's content is silently overwritten with \"new content\", exactly like \"w\" mode would do",
             "\"x\" mode silently does nothing if the file already exists, leaving the original content untouched and never raising anything",
+            "\"already exists, not overwritten\" is printed -- \"x\" mode raises FileExistsError immediately when the target already exists, instead of silently overwriting it",
             "It raises FileNotFoundError, since \"x\" mode requires the target file to already exist"
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 2,
           "explanation": "\"x\" (exclusive creation) is specifically designed to protect against accidentally clobbering an existing file -- unlike \"w\", which truncates an existing file without complaint, \"x\" raises `FileExistsError` the moment `open()` is called if the target already exists, and never gets as far as writing anything. The `try`/`except FileExistsError` here catches exactly that, printing the message instead of letting the error propagate. \"x\" is the right choice specifically when overwriting would be a mistake you want to be forced to notice."
         },
         {
@@ -144,8 +144,8 @@
           "options": [
             "abc / def / g",
             "abc / def / g / (one extra blank line printed for the final empty read)",
-            "abc / def -- the remaining single character is silently dropped since it doesn't fill a full chunk",
-            "abcdefg -- read(3) is ignored on the first call and the whole file is read at once"
+            "abcdefg -- read(3) is ignored on the first call and the whole file is read at once",
+            "abc / def -- the remaining single character is silently dropped since it doesn't fill a full chunk"
           ],
           "correctOptionIndex": 0,
           "explanation": "`f.read(3)` reads up to 3 characters each call, returning fewer only when less remains. \"abcdefg\" is 7 characters: the first call returns \"abc\", the second \"def\", and the third returns just \"g\" -- the leftover single character, still a non-empty (truthy) string, so the loop prints it and continues. Only the fourth call, with nothing left to read, returns the empty string `\"\"`, which is falsy, triggering `break` before anything is printed for it. Partial chunks at the end of a file are returned normally, never silently dropped -- only a genuinely empty read signals end of file."
@@ -250,11 +250,11 @@
           "prompt": "```python\nimport json\ndata = {\"ids\": {1, 2, 3}}\njson.dumps(data)\n```\nWhat happens when this runs?",
           "options": [
             "It succeeds, producing '{\"ids\": [1, 2, 3]}', silently converting the set to a JSON array.",
-            "It raises TypeError, because sets are not JSON serializable and json.dumps does not automatically convert them.",
+            "It succeeds but silently drops the 'ids' key entirely, since JSON has no matching type for it.",
             "It succeeds, producing '{\"ids\": {1, 2, 3}}', preserving set-like syntax in the JSON text.",
-            "It succeeds but silently drops the 'ids' key entirely, since JSON has no matching type for it."
+            "It raises TypeError, because sets are not JSON serializable and json.dumps does not automatically convert them."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "Unlike tuples (which json.dumps happily serializes as JSON arrays without complaint), sets have no automatic conversion at all -- json.dumps raises TypeError: Object of type set is not JSON serializable immediately. To serialize set data, you must explicitly convert it first, typically with list(my_set), before passing it to json.dumps. The “It succeeds, producing '{\"ids\": [1, 2, 3]}'…” option describes what WOULD happen if you converted the set to a list yourself first, but that conversion doesn't happen automatically the way it does for tuples. The “It succeeds, producing '{\"ids\": {1, 2, 3}}'…” option is invalid -- JSON has no set/curly-brace-for-a-collection-of-values syntax at all. The “It succeeds but silently drops the 'ids'…” option is not how json.dumps behaves -- it raises an error rather than silently dropping data."
         },
         {
@@ -268,12 +268,12 @@
           "type": "multipleChoice",
           "prompt": "```python\nimport json\ndata = {\"points\": [(1, 2), (3, 4)]}\ntext = json.dumps(data)\nrestored = json.loads(text)\nprint(restored)\nprint(type(restored[\"points\"][0]))\n```\nWhat gets printed?",
           "options": [
-            "{'points': [[1, 2], [3, 4]]} then <class 'list'>",
             "{'points': [(1, 2), (3, 4)]} then <class 'tuple'>",
             "TypeError, because tuples nested inside a list aren't JSON serializable",
-            "{'points': [[1, 2], [3, 4]]} then <class 'tuple'>"
+            "{'points': [[1, 2], [3, 4]]} then <class 'tuple'>",
+            "{'points': [[1, 2], [3, 4]]} then <class 'list'>"
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 3,
           "explanation": "The tuple-becomes-list transformation applies uniformly no matter how deeply a tuple is nested inside other JSON-serializable structures -- each tuple, wherever it appears, gets serialized as a JSON array indistinguishable from a list, and every JSON array comes back from json.loads as a Python list, never a tuple. So both `(1, 2)` and `(3, 4)` inside the outer list become plain lists after the round trip, and `restored` prints as `{'points': [[1, 2], [3, 4]]}`, with `type(restored[\"points\"][0])` reporting `list`. Nothing about nesting a tuple inside a list causes any serialization error -- lists themselves are fully supported."
         },
         {
@@ -281,12 +281,12 @@
           "type": "multipleChoice",
           "prompt": "```python\nimport csv\n# ages.csv contains:\n# name,age\n# Amy,9\n# Ben,10\n\nwith open(\"ages.csv\", encoding=\"utf-8\") as f:\n    reader = csv.DictReader(f)\n    kids = [row for row in reader if row[\"age\"] > \"5\"]\n\nprint(len(kids))\n```\nWhat gets printed?",
           "options": [
-            "1 -- because \"10\" > \"5\" evaluates to False under plain string comparison, even though 10 is numerically greater than 5",
             "2 -- because both 9 and 10 are numerically greater than 5",
-            "0 -- comparing csv.DictReader values with > always raises a TypeError",
-            "1 -- but because Amy's row is the one dropped, and Ben's is the one kept"
+            "1 -- but because Amy's row is the one dropped, and Ben's is the one kept",
+            "1 -- because \"10\" > \"5\" evaluates to False under plain string comparison, even though 10 is numerically greater than 5",
+            "0 -- comparing csv.DictReader values with > always raises a TypeError"
           ],
-          "correctOptionIndex": 0,
+          "correctOptionIndex": 2,
           "explanation": "csv.DictReader gives every field back as a plain `str` -- there's no numeric type in CSV at all. `row[\"age\"] > \"5\"` is therefore a *string* (lexicographic) comparison, not a numeric one: `\"9\" > \"5\"` is `True` (comparing the single characters '9' and '5' directly), but `\"10\" > \"5\"` is `False`, because lexicographic comparison looks at the first character first -- '1' comes before '5' -- and never gets to the numerically-relevant second digit. So only Amy's row (`\"9\"`) survives the filter, giving `len(kids) == 1`. This is exactly the kind of bug the lesson warns about: forgetting that CSV values need explicit conversion (`int(row[\"age\"])`) before doing anything numeric with them, including comparisons."
         }
       ]
@@ -392,11 +392,11 @@
           "prompt": "What happens when you compare a naive datetime and a timezone-aware datetime using < or ==?",
           "options": [
             "Python assumes the naive datetime is in the local system timezone and compares them correctly.",
-            "Python assumes the naive datetime is in UTC and compares them correctly.",
             "Python raises TypeError, refusing to guess what timezone the naive datetime represents.",
-            "Python treats the aware datetime as naive by silently discarding its timezone before comparing."
+            "Python treats the aware datetime as naive by silently discarding its timezone before comparing.",
+            "Python assumes the naive datetime is in UTC and compares them correctly."
           ],
-          "correctOptionIndex": 2,
+          "correctOptionIndex": 1,
           "explanation": "Python deliberately raises TypeError when comparing a naive and an aware datetime, rather than guessing which timezone the naive one represents -- any such guess (local time, UTC, or anything else) could easily be wrong, and a wrong guess would produce a plausible-looking but silently incorrect comparison result, which is worse than an explicit, catchable error. The “Python assumes the naive datetime is in the…”, “Python assumes the naive datetime is in UTC…”, and “Python treats the aware datetime as naive…” options all describe some form of silent guessing or coercion that Python specifically does not perform -- resolving the mismatch (typically by making both datetimes aware, in a consistent timezone) is left entirely to the developer."
         },
         {
@@ -411,9 +411,9 @@
           "prompt": "```python\nfrom datetime import datetime\n\n# The string was written in US month/day/year order: March 4, 2026\namerican_date = \"03/04/2026\"\nparsed = datetime.strptime(american_date, \"%d/%m/%Y\")   # wrong format string: day/month/year\nprint(parsed.month, parsed.day)\n```\nWhat happens?",
           "options": [
             "4 3 -- no error is raised; the day and month values are simply swapped, since both 03 and 04 happen to be valid values for either field",
-            "ValueError, since the string's actual order doesn't match the format string given",
             "3 4 -- strptime detects the American month/day convention automatically, regardless of the format string supplied",
-            "TypeError, because \"%d/%m/%Y\" is not a recognized strptime format string"
+            "TypeError, because \"%d/%m/%Y\" is not a recognized strptime format string",
+            "ValueError, since the string's actual order doesn't match the format string given"
           ],
           "correctOptionIndex": 0,
           "explanation": "`strptime` doesn't know or care what order a date string was 'meant' to be in -- it purely follows the format string's positions, character for character. `\"%d/%m/%Y\"` tells it to read the first number as the day, the second as the month, and the third as the year. Both `03` and `04` happen to be structurally valid for either a day or a month, so parsing succeeds without any error -- it's just that `parsed.day` ends up as `3` and `parsed.month` ends up as `4`, the reverse of what was intended (March 4th). This is a genuinely dangerous failure mode: strptime is unforgiving about *structural* mismatches (raising ValueError when the string's punctuation or digit-count doesn't fit the format), but it has no way to catch a *semantic* mismatch like this one, where the format string is structurally compatible but assigns the wrong meaning to each field."
@@ -521,12 +521,12 @@
           "type": "multipleChoice",
           "prompt": "```python\nimport re\ntext = \"Reference number: ABC123\"\nresult = re.match(r\"ABC\\d+\", text)\nprint(result)\n```\nWhat does this print, and why?",
           "options": [
-            "A Match object for 'ABC123', because the pattern appears in the string.",
-            "None, because re.match only succeeds when the pattern matches starting at position 0, and text does not start with 'ABC'.",
+            "A SyntaxError, because ABC123 contains both letters and digits.",
             "None, because \\d needs to be written inside a raw string to work at all.",
-            "A SyntaxError, because ABC123 contains both letters and digits."
+            "None, because re.match only succeeds when the pattern matches starting at position 0, and text does not start with 'ABC'.",
+            "A Match object for 'ABC123', because the pattern appears in the string."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "re.match only ever checks for a match beginning at index 0 of the string. text begins with 'Reference number: ...', not 'ABC', so even though the pattern ABC\\d+ clearly appears later in the string, match returns None because it never looks anywhere except the very start. The “A Match object for 'ABC123'…” option incorrectly assumes match behaves like search. The “None, because \\d needs to be written…” option is wrong -- the pattern IS already written as a raw string here (note the r prefix), and even without it, \\d specifically happens to work fine in a non-raw string since it isn't a recognized Python escape sequence; that's not the reason for the None result regardless. The “A SyntaxError, because ABC123 contains both letters and digits” option is nonsensical -- there's no syntax error involved in matching mixed letters and digits."
         },
         {
@@ -541,8 +541,8 @@
           "prompt": "```python\nimport re\n\ntext = \"file_final_v2.txt\"\nresult = re.search(r\"v\\d+\\.txt$\", text)\nprint(result.group() if result else None)\n\ntext2 = \"file_final_v2.txt.bak\"\nresult2 = re.search(r\"v\\d+\\.txt$\", text2)\nprint(result2.group() if result2 else None)\n```\nWhat gets printed?",
           "options": [
             "v2.txt then None",
-            "v2.txt then v2.txt",
             "None then v2.txt",
+            "v2.txt then v2.txt",
             "v2.txt.bak then v2.txt.bak"
           ],
           "correctOptionIndex": 0,

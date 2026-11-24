@@ -104,12 +104,12 @@
           "type": "multipleChoice",
           "prompt": "A prompt asks a model to 'return the extracted fields as JSON.' Which statement about the reliability of this instruction is most accurate?",
           "options": [
-            "It's a hard guarantee -- the API will refuse to return anything other than valid JSON once JSON is explicitly requested in the instructions.",
             "It's just additional conditioning text like any other instruction; the model can still return malformed JSON, extra prose, or markdown fences unless a genuine structured-output feature or defensive parsing is also used.",
+            "It's a hard guarantee -- the API will refuse to return anything other than valid JSON once JSON is explicitly requested in the instructions.",
             "It only works if the prompt also includes at least five few-shot examples of valid JSON output.",
             "JSON requests are handled by a separate, non-generative subsystem that validates syntax before the response is returned to you."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 0,
           "explanation": "A plain-text instruction to return JSON influences generation the same way any other instruction does -- by conditioning the probability distribution -- but it doesn't hard-constrain which tokens can be produced, so malformed output, wrapping prose, or markdown fences remain possible. Reliability comes from combining this with a real constrained-decoding feature (JSON mode / structured outputs / function calling) and defensive parsing on the calling side. The “It's a hard guarantee -- the API…” option overstates what plain instructions guarantee. The “It only works if the prompt also…” option is false -- while examples can help, there's no fixed minimum count required, and examples alone still don't hard-constrain output. The “JSON requests are handled by a separate…” option is wrong because there is no separate validating subsystem sitting between generation and the response by default; any validation has to be added explicitly, either via a provider's structured-output feature or your own code."
         },
         {
@@ -136,12 +136,12 @@
           "type": "multipleChoice",
           "prompt": "A few-shot sentiment classifier is given three example reviews, all of which happen to be positive or neutral -- none negative. Per this module, what's the most likely consequence when a clearly negative new review is classified?",
           "options": [
-            "The model will still classify it correctly as negative every time, since sentiment categories are well-known independent of which examples happen to be shown.",
-            "The model may misclassify the negative review or handle it inconsistently across calls, because few-shot prompting works by pattern completion from the specific examples shown, and none of these examples demonstrate what a negative classification looks like in this prompt's pattern.",
+            "The model will refuse to produce any label outside the exact three categories demonstrated, including refusing to say 'negative.'",
             "The API call will fail with an error, because at least one example of every possible output label is required for few-shot prompting to function at all.",
-            "The model will refuse to produce any label outside the exact three categories demonstrated, including refusing to say 'negative.'"
+            "The model may misclassify the negative review or handle it inconsistently across calls, because few-shot prompting works by pattern completion from the specific examples shown, and none of these examples demonstrate what a negative classification looks like in this prompt's pattern.",
+            "The model will still classify it correctly as negative every time, since sentiment categories are well-known independent of which examples happen to be shown."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "Few-shot prompting conditions the model on the specific in-context pattern the examples establish, not on an independent, guaranteed understanding of the task; when every example skews toward positive or neutral, the demonstrated pattern is skewed too, and the model has no in-context precedent for what a negative classification looks like here. The “The model will still classify it correctly…” option wrongly assumes general world knowledge always overrides a biased demonstrated pattern. The “The API call will fail…” and “The model will refuse to produce any…” options describe failure modes -- a hard error, or an outright refusal -- that the module never associates with unrepresentative few-shot examples; the actual risk is silent misclassification or inconsistency, not a crash or a refusal."
         },
         {
@@ -149,12 +149,12 @@
           "type": "multipleChoice",
           "prompt": "A layered prompt's system message instructs 'always respond in formal English,' but a few-shot example included lower in that same prompt is written in a casual tone. Per this module, what's the likely result?",
           "options": [
+            "The model detects the contradiction explicitly and pauses generation to ask the user which instruction should take priority.",
             "The system-level instruction always wins outright, since it appears earlier in the prompt, so the casual example has no effect on the output.",
             "The few-shot example always overrides the system instruction, since content closer to the point of generation always wins entirely.",
-            "The two layers hand the model genuinely conflicting conditioning signals, and the result is often an unpredictable blend of both or an inconsistent choice between them across different calls.",
-            "The model detects the contradiction explicitly and pauses generation to ask the user which instruction should take priority."
+            "The two layers hand the model genuinely conflicting conditioning signals, and the result is often an unpredictable blend of both or an inconsistent choice between them across different calls."
           ],
-          "correctOptionIndex": 2,
+          "correctOptionIndex": 3,
           "explanation": "The module describes internal contradictions across prompt layers as a common bug precisely because each layer looks fine in isolation, but together they leave the model with conflicting signals about which pattern to follow, typically producing an unpredictable blend or inconsistent choice rather than either layer cleanly winning. The “The system-level instruction always wins outright, since…” and “The few-shot example always overrides the system…” options both assume one layer deterministically and completely overrides the other, which the module doesn't support -- position alone doesn't guarantee dominance. The “The model detects the contradiction explicitly…” option describes a clarifying-question behavior that isn't part of the base generation mechanism; the model doesn't pause to resolve conflicting instructions on its own."
         }
       ]
@@ -264,11 +264,11 @@
           "prompt": "A support bot using RAG confidently answers a question with information that sounds plausible but is actually about an unrelated product from the indexed documents. Retrieval logs show the top-k chunks it was given were all genuinely about that unrelated product. Which stage of the pipeline is the most likely root cause?",
           "options": [
             "The generation model, which should be replaced with a larger model.",
-            "The retrieval stage -- the query embedding matched chunks that were not actually relevant to the user's question.",
+            "The tokenizer, which likely mis-split the user's question.",
             "The augmentation stage, because grounding instructions can't fix irrelevant retrieved content in the first place.",
-            "The tokenizer, which likely mis-split the user's question."
+            "The retrieval stage -- the query embedding matched chunks that were not actually relevant to the user's question."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "Given that the logs confirm the retrieved chunks themselves were about the wrong product, the model did exactly what a well-grounded generation step should do: it answered based on the context it was actually given. The failure happened earlier, in retrieval, which returned the wrong chunks in the first place -- no amount of good generation-model behavior or well-written grounding instructions can produce a correct answer from context that's fundamentally about the wrong topic. The “The generation model, which should be replaced…” option misdiagnoses a retrieval problem as a generation-capability problem. The “The augmentation stage, because grounding instructions can't…” option is a reasonable-sounding but incorrect claim -- augmentation instructions govern how retrieved context is used, not whether the right context was retrieved to begin with, so it's not the root cause here (though it's true they can't fix it after the fact). The “The tokenizer, which likely mis-split the user's question” option is implausible on the evidence given; nothing here points to a tokenization failure."
         },
         {
@@ -282,10 +282,10 @@
           "type": "multipleChoice",
           "prompt": "A chunk contains the correct answer sentence buried among several unrelated sentences. A smaller, tightly-relevant chunk about only the query topic exists elsewhere in the index. Per this module, why does the larger chunk often rank below the smaller one during similarity search, even though it technically contains the answer?",
           "options": [
-            "Vector databases apply a fixed length-based score penalty to any chunk over a certain character count.",
-            "The larger chunk's embedding represents an average of several different pieces of content, diluting the specific relevance signal, so it scores as a weaker match than a chunk that's purely about the query's topic.",
             "Vector indexes silently truncate long chunks before embedding them, so part of the answer is dropped before indexing even happens.",
-            "Larger chunks are always processed by a separate, lower-quality embedding model reserved for bulk content."
+            "The larger chunk's embedding represents an average of several different pieces of content, diluting the specific relevance signal, so it scores as a weaker match than a chunk that's purely about the query's topic.",
+            "Larger chunks are always processed by a separate, lower-quality embedding model reserved for bulk content.",
+            "Vector databases apply a fixed length-based score penalty to any chunk over a certain character count."
           ],
           "correctOptionIndex": 1,
           "explanation": "The module explains chunk-size dilution directly: a large chunk's embedding has to represent multiple different pieces of information averaged together, which weakens its similarity score relative to a chunk whose content is tightly focused on the query topic. The “Vector databases apply a fixed length-based score…”, “Vector indexes silently truncate long chunks before…”, and “Larger chunks are always processed…” options each invent a mechanism -- a fixed length penalty, silent truncation, or a separate lower-quality model for large chunks -- that the module never describes; the actual effect is purely about how averaging diverse content into one embedding dilutes its relevance signal, not any special-cased handling of chunk length."
@@ -295,12 +295,12 @@
           "type": "multipleChoice",
           "prompt": "A user searches a RAG-indexed support knowledge base for a specific product SKU code. Per this module, why might pure semantic vector search underperform plain keyword search for this particular kind of query?",
           "options": [
+            "Two vectors can be semantically 'close' in a general sense without the embedding model having learned fine-grained distinctions between similar-looking exact identifiers, so an exact match may not be prioritized as strongly as it should be.",
             "Vector databases cannot store or index strings containing numeric characters, so SKU codes are dropped entirely.",
             "Semantic embedding models only function on queries phrased as complete grammatical sentences, not short codes.",
-            "Two vectors can be semantically 'close' in a general sense without the embedding model having learned fine-grained distinctions between similar-looking exact identifiers, so an exact match may not be prioritized as strongly as it should be.",
             "Keyword search is unconditionally more accurate than semantic search for every query type, which is why hybrid retrieval is never actually necessary."
           ],
-          "correctOptionIndex": 2,
+          "correctOptionIndex": 0,
           "explanation": "The module specifically calls out exact strings -- error codes, SKUs, names, precise legal terms -- as a case where semantic similarity can underperform lexical matching, because the embedding model may not have learned fine-grained distinctions between similar-looking rare identifiers, even though it captures broader semantic relatedness well. The “Vector databases cannot store or index strings…” and “Semantic embedding models only function on queries…” options describe hard technical limitations that don't actually exist. The “Keyword search is unconditionally more accurate…” option overstates the case in the opposite direction -- the module's actual conclusion is that hybrid systems combining both are common precisely because neither approach dominates for every query type."
         },
         {
@@ -308,12 +308,12 @@
           "type": "multipleChoice",
           "prompt": "Which statement best reflects why this module says RAG substantially reduces, but structurally cannot eliminate, hallucination?",
           "options": [
-            "RAG eliminates hallucination completely, because a grounded model can only copy retrieved text verbatim into its final answer.",
-            "Generation is still the same token-by-token probabilistic mechanism as always; if retrieval returns wrong or irrelevant chunks the model can still confidently generate an answer from that bad material, and even good, relevant context can occasionally get blended with the model's own prior beliefs.",
+            "RAG only reduces hallucination when the generation model's temperature is set above 1.0.",
             "RAG fails to reduce hallucination at all, because vector databases are inherently less reliable than relational databases.",
-            "RAG only reduces hallucination when the generation model's temperature is set above 1.0."
+            "Generation is still the same token-by-token probabilistic mechanism as always; if retrieval returns wrong or irrelevant chunks the model can still confidently generate an answer from that bad material, and even good, relevant context can occasionally get blended with the model's own prior beliefs.",
+            "RAG eliminates hallucination completely, because a grounded model can only copy retrieved text verbatim into its final answer."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "The module is explicit that RAG narrows the space of plausible continuations toward grounded content, which substantially helps, but generation remains the same probabilistic mechanism -- bad retrieval still produces confidently-phrased garbage, and even correct retrieved context can still be blended with or overridden by the model's trained-in assumptions. The “RAG eliminates hallucination completely, because a grounded…” option overstates the guarantee retrieval provides. The “RAG fails to reduce hallucination at all…” option mischaracterizes RAG as providing no benefit at all, which contradicts the module's central claim that it's one of the most effective mitigations available. The “RAG only reduces hallucination when the generation…” option invents an unrelated dependency on a specific temperature threshold that the module never claims."
         },
         {
@@ -428,12 +428,12 @@
           "type": "multipleChoice",
           "prompt": "A team wants their support bot to always answer questions using the current version of their refund policy, which changes every few weeks. Which approach is most appropriate?",
           "options": [
-            "Fine-tune the model on the refund policy text every time it changes.",
-            "Use retrieval-augmented generation over an index of the current policy document, updated whenever the policy changes.",
+            "Lengthen the system prompt with a general reminder to 'always be accurate about refund policy.'",
             "Increase the model's temperature so it is more likely to guess the updated policy correctly.",
-            "Lengthen the system prompt with a general reminder to 'always be accurate about refund policy.'"
+            "Use retrieval-augmented generation over an index of the current policy document, updated whenever the policy changes.",
+            "Fine-tune the model on the refund policy text every time it changes."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 2,
           "explanation": "This is a knowledge-freshness problem -- specific factual content that changes on a regular cadence -- which is exactly the category RAG is suited for: updating a retrieval index when the policy changes is fast and cheap, and it keeps the model's answers traceable to the actual current document. The “Fine-tune the model on the refund policy…” option repeats the classic fine-tuning-for-knowledge mistake -- it's slow, expensive to repeat every few weeks, and fine-tuning doesn't reliably store an exact, verbatim, retrievable version of the policy text anyway. The “Increase the model's temperature…” option is unrelated to the actual problem -- temperature governs sampling randomness, not access to correct information, and would if anything make answers less consistent, not more accurate. The “Lengthen the system prompt with a general…” option fails for the same reason a generic 'answer accurately' instruction always fails: telling the model to be accurate about content it was never actually given access to doesn't create that access."
         },
         {
@@ -448,9 +448,9 @@
           "prompt": "According to this module, what does fine-tuning change that neither prompting nor RAG changes?",
           "options": [
             "Fine-tuning adjusts the model's weights, persistently shifting its default behavior without needing the same instruction repeated on every call, unlike prompting (per-call instructions) or RAG (per-call retrieved context).",
-            "Fine-tuning changes which tokenizer the model uses to encode input at inference time.",
             "Fine-tuning permanently increases the size of the model's context window for all future calls.",
-            "Fine-tuning changes only the default temperature and top-p sampling values used at inference time."
+            "Fine-tuning changes only the default temperature and top-p sampling values used at inference time.",
+            "Fine-tuning changes which tokenizer the model uses to encode input at inference time."
           ],
           "correctOptionIndex": 0,
           "explanation": "The module draws the three-lever distinction explicitly: prompting changes per-call instructions, RAG changes per-call available context, and fine-tuning is the one lever that actually adjusts model weights, so the shifted behavior persists without needing to be re-specified on every call. The “Fine-tuning changes which tokenizer the model uses…”, “Fine-tuning permanently increases the size…”, and “Fine-tuning changes only the default temperature…” options each describe a change fine-tuning does not make -- the tokenizer, the context window size, and the sampling defaults are all independent of the fine-tuning process itself."
@@ -460,10 +460,10 @@
           "type": "multipleChoice",
           "prompt": "A team runs millions of calls per month and currently spends roughly 900 tokens of every single prompt re-explaining a fixed output format via instructions and few-shot examples. The desired format never changes, and the team has a large, clean, human-verified dataset of past correctly-formatted examples from production. Per this module's heuristic, what does this scenario best justify?",
           "options": [
-            "Switching to RAG so the formatting examples can be retrieved per call instead of being hard-coded into the prompt.",
+            "Doing nothing, since the per-call token cost of repeated instructions has no bearing on whether fine-tuning is worth pursuing.",
             "Fine-tuning, since the behavior needing reinforcement is stable over time, is currently being re-specified at real recurring cost on every call, and a large, representative labeled dataset already exists -- exactly the scenario where fine-tuning earns its cost.",
             "Raising the generation temperature so the model applies the format more creatively across different calls.",
-            "Doing nothing, since the per-call token cost of repeated instructions has no bearing on whether fine-tuning is worth pursuing."
+            "Switching to RAG so the formatting examples can be retrieved per call instead of being hard-coded into the prompt."
           ],
           "correctOptionIndex": 1,
           "explanation": "This maps directly onto the module's 'case where fine-tuning actually wins' example: a stable, unchanging behavior, a real recurring cost from re-specifying it every call, and a large, high-quality labeled dataset already available. The “Switching to RAG so the formatting examples…” option misapplies RAG to a behavior-consistency problem rather than a knowledge problem, which is exactly the kind of lever confusion the module warns against. The “Raising the generation temperature so the model…” option is unrelated -- temperature affects sampling randomness, not format consistency. The “Doing nothing, since the per-call token cost…” option ignores that token cost at this call volume is precisely the kind of real, recurring cost the module says justifies considering fine-tuning."
@@ -473,12 +473,12 @@
           "type": "multipleChoice",
           "prompt": "A team fine-tunes their support model every night on that day's product pricing, hoping to keep it current, but pricing changes intraday and the model is still occasionally caught quoting stale prices. What does this module identify as the actual underlying mistake?",
           "options": [
-            "The nightly schedule simply isn't frequent enough; running the same fine-tuning process hourly would fully solve the problem.",
-            "Fine-tuning is being used for a knowledge-freshness problem it is structurally ill-suited to regardless of how often it's run, since it doesn't provide precise, verbatim, on-demand recall and can't keep pace with information that changes faster than the retraining cycle; a retrieval index updated the moment pricing changes is the correct fix.",
             "The base model being fine-tuned is too small to memorize pricing information accurately.",
-            "The fix is to lower the fine-tuning learning rate so the model retains pricing information for longer between retraining runs."
+            "The fix is to lower the fine-tuning learning rate so the model retains pricing information for longer between retraining runs.",
+            "The nightly schedule simply isn't frequent enough; running the same fine-tuning process hourly would fully solve the problem.",
+            "Fine-tuning is being used for a knowledge-freshness problem it is structurally ill-suited to regardless of how often it's run, since it doesn't provide precise, verbatim, on-demand recall and can't keep pace with information that changes faster than the retraining cycle; a retrieval index updated the moment pricing changes is the correct fix."
           ],
-          "correctOptionIndex": 1,
+          "correctOptionIndex": 3,
           "explanation": "The module is explicit that this is the same fine-tuning-for-knowledge mismatch as the policy-text example, just applied to pricing: the mechanical unreliability of fine-tuning for exact, verbatim facts, and the inherent lag of a batch retraining cycle, don't go away just by running the job more often. The “The nightly schedule simply isn't frequent enough…” option treats this as purely a scheduling problem, which misses that even more frequent retraining still can't match near-real-time changes and still doesn't guarantee precise recall. The “The base model being fine-tuned is too…” and “The fix is to lower the fine-tuning…” options propose unrelated technical tweaks (model size, learning rate) that don't address the structural mismatch the module identifies."
         }
       ]
