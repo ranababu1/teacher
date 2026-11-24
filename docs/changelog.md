@@ -3,7 +3,7 @@
 ## 2026-11-24 (content audit)
 
 ### Changed
-- **Python, Go, Spring Boot,
+- **React, Python, Go, Spring Boot,
   Java, Databases and System Design lessons audited.** Tighter prose with the same structure and quizzes.
 
 ### Fixed
@@ -27,6 +27,10 @@
 - Python: the naive/aware datetime error message, `==` between them
   (False, not an error), a `total_seconds()` value, a regex comment that
   claimed no match, and an unreliable `math.py` shadowing example.
+- React: a missing named import fails before anything runs in native
+  modules; a context re-render demo that did not show the problem; a
+  conditional hook throws instead of failing silently; a `memo` list that
+  could never skip rows; `this` in Node timers; float output of `map`.
 
 ## 2026-11-24 (release: v0.33.1 - Real AdMob IDs, Help & support)
 
