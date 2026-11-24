@@ -4,7 +4,7 @@
 
 ### Changed
 - **React, Python, Go, Spring Boot,
-  Java, Databases and System Design lessons audited.** Tighter prose with the same structure and quizzes.
+  Java, Databases, System Design and DevOps lessons audited.** Tighter prose with the same structure and quizzes.
 
 ### Fixed
 - Go: the broken auth middleware example had a second, unintended compile
@@ -31,6 +31,9 @@
   modules; a context re-render demo that did not show the problem; a
   conditional hook throws instead of failing silently; a `memo` list that
   could never skip rows; `this` in Node timers; float output of `map`.
+- DevOps: an error-rate alert whose ratio was always 1 without `sum()`, an
+  invalid `histogram_quantile` call, Ansible recap counts, Terraform lock
+  behaviour, and a NOT NULL migration that fails on a non-empty table.
 
 ## 2026-11-24 (release: v0.33.1 - Real AdMob IDs, Help & support)
 
