@@ -5,7 +5,8 @@
 ### Changed
 - **AI/ML, AWS, Kubernetes, LLM Engineering, React, Statistics (descriptive statistics,
   probability, random variables, distributions, information theory, limit
-  theorems, hypothesis testing, statistical tests), Vector Databases, Node.js, Python, Go, Spring Boot,
+  theorems, hypothesis testing, statistical tests, multivariate statistics,
+  regression), Vector Databases, Node.js, Python, Go, Spring Boot,
   Java, Databases, System Design, DevOps and Docker lessons audited.** Tighter prose with the same structure and quizzes.
 
 ### Fixed
@@ -69,6 +70,10 @@
   fit on separable data, skew and kurtosis demos on a t distribution
   whose higher moments do not exist, a correlation example that named the
   wrong pair, and retransformation bias credited to the Jacobian.
+- Statistics: a singular dummy-trap matrix does not always raise in numpy;
+  `get_dummies` and `OneHotEncoder` do not drop a column by default;
+  standard-error examples on noise-free data printed 0.0; an LDA/QDA table
+  that did not match its code; sklearn's default logistic penalty.
 - Vector Databases: two debugging exercises whose buggy code already gave
   the right answer, a tied distance that made a "true top-3" depend on
   dict order, and wrong explanations of SKU matching and RRF.
