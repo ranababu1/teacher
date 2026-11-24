@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app/app.dart';
@@ -8,6 +9,10 @@ import 'core/services/crash_reporting_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Draw behind the status and navigation bars (the default from Android
+  // 15). Screens keep content clear of them with SafeArea or an app bar.
+  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 
   // Firebase + Crashlytics on Android; a no-op everywhere else. Never
   // throws: if Firebase can't start, the app runs without crash reporting.
