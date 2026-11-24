@@ -6,7 +6,8 @@
 - **AI/ML, AWS, Kubernetes, LLM Engineering, React, Statistics (descriptive statistics,
   probability, random variables, distributions, information theory, limit
   theorems, hypothesis testing, statistical tests, multivariate statistics,
-  regression, Bayesian statistics, stochastic processes and time series), Vector Databases, Node.js, Python, Go, Spring Boot,
+  regression, Bayesian statistics, stochastic processes and time series,
+  sampling and estimation, statistical learning theory), Vector Databases, Node.js, Python, Go, Spring Boot,
   Java, Databases, System Design, DevOps and Docker lessons audited.** Tighter prose with the same structure and quizzes.
 
 ### Fixed
@@ -78,6 +79,10 @@
   reversed; ARIMA with differencing has no drift unless asked; an ACF demo
   series was white noise; several posterior, ELBO and HMM numbers now
   match what the code prints.
+- Statistics: the MAP/Lasso example used an sklearn alpha twice too large;
+  variance and proportion confidence intervals had wrong numbers;
+  bias-variance "monotone" claims did not fit the listed numbers; bootstrap
+  figures now come with code that reproduces them.
 - Vector Databases: two debugging exercises whose buggy code already gave
   the right answer, a tied distance that made a "true top-3" depend on
   dict order, and wrong explanations of SKU matching and RRF.
