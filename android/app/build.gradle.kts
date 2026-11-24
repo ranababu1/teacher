@@ -12,9 +12,10 @@ plugins {
 
 // Release signing, standard Flutter key.properties style. The file is
 // local-only (see .gitignore); CI materializes it from GitHub Secrets
-// (see .github/workflows/release.yml). When it's absent — plain dev
-// machines — release builds fall back to the debug keystore so they keep
-// building anywhere.
+// (see .github/workflows/release.yml). Release builds refuse to run
+// without it (see the check at the bottom of this file), so a debug-signed
+// bundle can never be uploaded to Play by mistake. Debug builds don't
+// need it.
 val keystorePropertiesFile = rootProject.file("key.properties")
 val keystoreProperties = Properties()
 if (keystorePropertiesFile.exists()) {
@@ -65,13 +66,9 @@ android {
 
     buildTypes {
         release {
-            // Real upload keystore when key.properties is present; the debug
-            // keystore otherwise (local builds, CI smoke checks).
-            signingConfig = if (keystorePropertiesFile.exists()) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
-            }
+            // Upload keystore from key.properties. Never the debug key: if
+            // the file is missing the release build fails (check below).
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 }
@@ -88,4 +85,27 @@ dependencies {
 
 flutter {
     source = "../.."
+}
+
+// Fail fast with a clear message instead of producing an unsigned or
+// debug-signed release. Only release tasks of this module are checked, so
+// `flutter run` and `flutter build apk --debug` keep working without
+// key.properties.
+gradle.taskGraph.whenReady {
+    val appPath = project.path
+    val buildsRelease = allTasks.any { task ->
+        task.project.path == appPath &&
+            task.name.endsWith("Release") &&
+            (task.name.startsWith("assemble") ||
+                task.name.startsWith("bundle") ||
+                task.name.startsWith("package") ||
+                task.name.startsWith("sign"))
+    }
+    if (buildsRelease && !keystorePropertiesFile.exists()) {
+        throw GradleException(
+            "Release signing is not set up: android/key.properties is missing. " +
+                "Create it with storeFile, storePassword, keyAlias and keyPassword " +
+                "for the Play upload key, then build again. Debug builds do not need it.",
+        )
+    }
 }
