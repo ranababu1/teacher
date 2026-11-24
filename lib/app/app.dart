@@ -50,11 +50,10 @@ class TeacherApp extends ConsumerWidget {
       routerConfig: router,
       builder: (context, child) {
         final theme = Theme.of(context);
-        // Status bar icons that contrast with the current theme on every
-        // screen, including the ones without an app bar. App bars set the
-        // same style through AppBarTheme.systemOverlayStyle.
+        // Default bar style for screens without an app bar (dashboard,
+        // onboarding, flash cards). App bars set the same style.
         return AnnotatedRegion<SystemUiOverlayStyle>(
-          value: AppSystemUi.overlayFor(theme.brightness),
+          value: AppTheme.systemOverlayStyle(theme.brightness),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 300),
             decoration: BoxDecoration(

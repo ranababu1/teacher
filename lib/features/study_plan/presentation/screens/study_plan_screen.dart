@@ -4,13 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/navigation.dart';
 import '../../../../core/constants/routes.dart';
 import '../../../../core/errors/app_exception.dart';
-import '../../../../shared/widgets/report_ai_reply_button.dart';
 import '../../../../shared/widgets/async_value_view.dart';
 import '../../../../shared/widgets/glass_app_bar.dart';
 import '../../../../shared/widgets/gradient_card.dart';
 import '../../../../shared/widgets/skeleton_loader.dart';
 import '../../domain/models/study_plan.dart';
 import '../providers/study_plan_providers.dart';
+import '../../../../shared/widgets/report_ai_reply_button.dart';
 
 IconData planStepIcon(PlanStepKind kind) => switch (kind) {
   PlanStepKind.review => Icons.replay_outlined,

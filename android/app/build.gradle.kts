@@ -12,14 +12,24 @@ plugins {
 
 // Release signing, standard Flutter key.properties style. The file is
 // local-only (see .gitignore); CI materializes it from GitHub Secrets
-// (see .github/workflows/release.yml). Release builds refuse to run
-// without it (see the check at the bottom of this file), so a debug-signed
-// bundle can never be uploaded to Play by mistake. Debug builds don't
-// need it.
+// (see .github/workflows/release.yml). A release build without it fails
+// right away instead of quietly signing with the debug key, which Play
+// rejects. Debug and profile builds don't need it.
 val keystorePropertiesFile = rootProject.file("key.properties")
 val keystoreProperties = Properties()
 if (keystorePropertiesFile.exists()) {
     keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
+}
+val isReleaseBuild = gradle.startParameter.taskNames.any {
+    it.contains("Release", ignoreCase = true)
+}
+if (isReleaseBuild && !keystorePropertiesFile.exists()) {
+    throw GradleException(
+        "Release signing is not set up: android/key.properties is missing. " +
+            "Create it (storeFile, storePassword, keyAlias, keyPassword) " +
+            "before building a release. Release builds are never signed " +
+            "with the debug key."
+    )
 }
 
 android {
@@ -52,10 +62,8 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
 
-        // AdMob app id for the manifest meta-data
-        // com.google.android.gms.ads.APPLICATION_ID. Debug and profile
-        // builds use Google's sample app id (test ads only); release
-        // overrides it below. Keep in sync with lib/core/ads/ad_ids.dart.
+        // AdMob app ID for the manifest. Debug and profile builds use
+        // Google's sample app ID (test ads only); release overrides it.
         manifestPlaceholders["admobAppId"] = "ca-app-pub-3940256099942544~3347511713"
     }
 
@@ -72,10 +80,10 @@ android {
 
     buildTypes {
         release {
-            // Upload keystore from key.properties. Never the debug key: if
-            // the file is missing the release build fails (check below).
+            // Always the upload keystore. The check above stops a release
+            // build early when key.properties is missing.
             signingConfig = signingConfigs.getByName("release")
-            // Teacher's real AdMob app id (release builds only).
+            // Teacher's real AdMob app ID (release builds only).
             manifestPlaceholders["admobAppId"] = "ca-app-pub-1106747567696734~9070367235"
         }
     }
@@ -93,27 +101,4 @@ dependencies {
 
 flutter {
     source = "../.."
-}
-
-// Fail fast with a clear message instead of producing an unsigned or
-// debug-signed release. Only release tasks of this module are checked, so
-// `flutter run` and `flutter build apk --debug` keep working without
-// key.properties.
-gradle.taskGraph.whenReady {
-    val appPath = project.path
-    val buildsRelease = allTasks.any { task ->
-        task.project.path == appPath &&
-            task.name.endsWith("Release") &&
-            (task.name.startsWith("assemble") ||
-                task.name.startsWith("bundle") ||
-                task.name.startsWith("package") ||
-                task.name.startsWith("sign"))
-    }
-    if (buildsRelease && !keystorePropertiesFile.exists()) {
-        throw GradleException(
-            "Release signing is not set up: android/key.properties is missing. " +
-                "Create it with storeFile, storePassword, keyAlias and keyPassword " +
-                "for the Play upload key, then build again. Debug builds do not need it.",
-        )
-    }
 }

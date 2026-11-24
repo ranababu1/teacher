@@ -1,8 +1,8 @@
 import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 
-import '../core/ads/ad_service.dart';
 import '../core/constants/routes.dart';
+import '../features/ads/data/ad_service.dart';
 
 /// The app's navigation rules in one place (see docs/changelog.md, 0.17.0):
 ///
@@ -90,34 +90,31 @@ extension AppNavigation on BuildContext {
 
   /// From a topic page: swap it for the next topic so finished topics do
   /// not pile up in the back stack.
-  ///
-  /// This is a "next chapter" moment, so an interstitial may follow once
-  /// the next topic is showing (see [AdService.showAtNextChapter]).
   void replaceWithNextTopic(String pathId, String nextModuleId) {
     _router.pushReplacement(Routes.module(pathId, nextModuleId));
-    AdService.instance.showAtNextChapter();
+    // A natural break: an interstitial may show once the next topic is up.
+    AdService.instance.showAfterNavigation();
   }
 
   /// From a passed topic test: close the test, then swap the topic it was
   /// opened from for the next topic. Back from the next topic therefore
   /// returns to the learning path, not to finished pages.
-  ///
-  /// An interstitial may follow, but only once the next topic is showing,
-  /// never over the test results (the test screen blocks ads until it is
-  /// gone).
   void continueFromTestToNextTopic(String pathId, String nextModuleId) {
     final router = _router;
     final next = Routes.module(pathId, nextModuleId);
     if (!router.canPop()) {
       router.go(next);
-    } else {
-      router.pop();
-      if (router.canPop()) {
-        router.pushReplacement(next);
-      } else {
-        router.push(next);
-      }
+      AdService.instance.showAfterNavigation();
+      return;
     }
-    AdService.instance.showAtNextChapter(checkNow: false);
+    router.pop();
+    if (router.canPop()) {
+      router.pushReplacement(next);
+    } else {
+      router.push(next);
+    }
+    // Runs after a short delay, so the test screen (a no-ads zone) is
+    // already gone and the next topic is showing. Never on the results.
+    AdService.instance.showAfterNavigation();
   }
 }

@@ -535,11 +535,14 @@ class _AiGradeBanner extends StatelessWidget {
                 size: 16,
                 color: theme.colorScheme.onSurfaceVariant,
               ),
-              const ReportAiReplyButton(size: 16),
             ],
           ),
           const SizedBox(height: 8),
           MarkdownText(data: result.feedback),
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: ReportAiReplyButton(),
+          ),
         ],
       ),
     );

@@ -4,12 +4,12 @@ import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../../../core/ads/ad_service.dart';
 import '../../../../core/services/crash_reporting_service.dart';
 import '../../../../shared/utils/external_links.dart';
 import '../../../../shared/widgets/async_value_view.dart';
 import '../../../../shared/widgets/glass_app_bar.dart';
 import '../../../../shared/widgets/gradient_card.dart';
+import '../../../ads/presentation/privacy_options_tile.dart';
 import '../../../code_runner/presentation/widgets/code_runner_settings_tile.dart';
 import '../../../flashcards/domain/models/flash_card.dart';
 import '../../../flashcards/presentation/providers/flashcard_providers.dart';
@@ -234,17 +234,16 @@ class SettingsScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 16),
               _SectionCard(
-                title: 'Privacy & Crash Reports',
+                title: 'Privacy, Ads & Crash Reports',
                 children: [
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Share crash reports'),
                     subtitle: const Text(
-                      'If the app crashes, an anonymous crash report goes to '
-                      'Firebase Crashlytics so the bug can be fixed. You can '
-                      'turn this off at any time. No accounts. Your progress '
-                      'stays on your device. The app shows a few ads to stay '
-                      'free.',
+                      'If the app crashes, an anonymous stack trace is sent '
+                      'to Firebase Crashlytics so bugs can be fixed faster. '
+                      'You can turn this off at any time. No accounts. Ads '
+                      'keep the app free.',
                     ),
                     value: settings.crashReportsEnabled,
                     onChanged: (value) => ref
@@ -252,7 +251,9 @@ class SettingsScreen extends ConsumerWidget {
                         .setCrashReportsEnabled(value),
                   ),
                   const _PrivacyPolicyTile(),
-                  const _AdPrivacyOptionsTile(),
+                  // Ad consent choices; only appears where the rules
+                  // require it (for example the EEA and UK).
+                  const PrivacyOptionsTile(),
                   // Debug builds only; tree-shaken out of release/profile.
                   if (kDebugMode) const _CrashTestTile(),
                 ],
@@ -346,7 +347,7 @@ class _SectionCard extends StatelessWidget {
 class _PrivacyPolicyTile extends StatelessWidget {
   const _PrivacyPolicyTile();
 
-  static const _url = ExternalLinks.privacyPolicy;
+  static const _url = 'https://imrn.dev/products/teacher/privacy-policy';
 
   @override
   Widget build(BuildContext context) {
@@ -392,35 +393,6 @@ class _HelpSupportTile extends StatelessWidget {
       ),
       trailing: const Icon(Icons.open_in_new, size: 18),
       onTap: () => openExternalLink(context, ExternalLinks.support),
-    );
-  }
-}
-
-/// Whether Google's consent rules (EEA, UK) require a way to change ad
-/// consent. Only true on Android after the consent flow has run.
-final adPrivacyOptionsRequiredProvider = FutureProvider<bool>(
-  (ref) => AdService.isPrivacyOptionsRequired(),
-);
-
-/// "Privacy options": reopens Google's ad consent form. Shown only where
-/// the law requires it.
-class _AdPrivacyOptionsTile extends ConsumerWidget {
-  const _AdPrivacyOptionsTile();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final required =
-        ref.watch(adPrivacyOptionsRequiredProvider).valueOrNull ?? false;
-    if (!required) return const SizedBox.shrink();
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      title: const Text('Privacy options'),
-      subtitle: const Text('Change how ads use your data.'),
-      trailing: const Icon(Icons.chevron_right, size: 18),
-      onTap: () async {
-        await AdService.instance.showPrivacyOptions();
-        ref.invalidate(adPrivacyOptionsRequiredProvider);
-      },
     );
   }
 }
@@ -491,10 +463,9 @@ class _FixedTimesEditor extends ConsumerWidget {
           '${picked.hour.toString().padLeft(2, '0')}:'
           '${picked.minute.toString().padLeft(2, '0')}';
       if (sorted.contains(formatted)) return;
-      ref.read(settingsControllerProvider.notifier).setFlashcardFixedTimes([
-        ...sorted,
-        formatted,
-      ]);
+      ref
+          .read(settingsControllerProvider.notifier)
+          .setFlashcardFixedTimes([...sorted, formatted]);
     }
 
     void removeTime(String time) {
@@ -558,9 +529,7 @@ class _SendTestFlashcardButtonState
           back: "If you can see this, the notification and tap-to-open flow both work.",
         ),
       );
-      _showMessage(
-        'Test notification sent — it should arrive in a few seconds.',
-      );
+      _showMessage('Test notification sent — it should arrive in a few seconds.');
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -568,8 +537,7 @@ class _SendTestFlashcardButtonState
 
   void _showMessage(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -585,9 +553,7 @@ class _SendTestFlashcardButtonState
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
             : const Icon(Icons.notifications_active_outlined, size: 16),
-        label: Text(
-          _sending ? 'Sending...' : 'Send test flash card notification',
-        ),
+        label: Text(_sending ? 'Sending...' : 'Send test flash card notification'),
       ),
     );
   }

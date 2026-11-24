@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/navigation.dart';
 import '../../../../core/errors/app_exception.dart';
-import '../../../../shared/widgets/report_ai_reply_button.dart';
 import '../../../../shared/widgets/async_value_view.dart';
 import '../../../../shared/widgets/glass_app_bar.dart';
 import '../../../../shared/widgets/gradient_card.dart';
@@ -13,6 +12,7 @@ import '../../../profile/presentation/providers/profile_providers.dart';
 import '../../domain/models/roadmap.dart';
 import '../../domain/roadmap_progress.dart';
 import '../providers/roadmap_providers.dart';
+import '../../../../shared/widgets/report_ai_reply_button.dart';
 
 IconData roadmapItemIcon(RoadmapItemKind kind) => switch (kind) {
   RoadmapItemKind.topic => Icons.menu_book_outlined,

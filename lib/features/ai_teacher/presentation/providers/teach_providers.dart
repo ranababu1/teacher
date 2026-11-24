@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/config/app_config.dart';
 import '../../../../core/config/app_config_provider.dart';
 import '../../../../core/errors/app_exception.dart';
+import '../../../ads/data/ad_service.dart';
 import '../../../curriculum/domain/models/assessment.dart';
 import '../../../curriculum/domain/models/exercise.dart';
 import '../../../curriculum/presentation/curriculum_providers.dart';
@@ -14,6 +15,7 @@ import '../../data/anthropic_provider.dart';
 import '../../data/gemini_provider.dart';
 import '../../data/openai_compatible_provider.dart';
 import '../../domain/ai_provider.dart';
+import '../../domain/activity_tracking_ai_provider.dart';
 import '../../domain/consent_gated_ai_provider.dart';
 import '../../domain/models/roadmap_generation.dart';
 import '../../domain/models/study_coaching.dart';
@@ -129,8 +131,14 @@ final aiProviderProvider = Provider<AIProvider>((ref) {
       explanationDepth: depth,
     ),
   };
+  final gate = AdService.instance.gate;
   return ConsentGatedAiProvider(
-    inner: provider,
+    // Tracking keeps interstitials away while any AI request is running.
+    inner: ActivityTrackingAiProvider(
+      inner: provider,
+      onStart: gate.aiRequestStarted,
+      onFinish: gate.aiRequestFinished,
+    ),
     ensureConsent: () => consent.ensure(providerKind),
     providerName: providerKind.displayName,
   );

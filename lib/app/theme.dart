@@ -6,28 +6,6 @@ import 'package:flutter/services.dart';
 /// Widgets must never hard-code colors — pull everything from
 /// `Theme.of(context)` / [AppColors] / [AppGradients] instead. See
 /// instructions.md section 42.
-/// Status and navigation bar styling. Bars are transparent (Android 15+
-/// draws the app edge to edge anyway) and their icons always contrast with
-/// the app's background: dark icons on the light theme, light icons on
-/// the dark theme.
-abstract final class AppSystemUi {
-  static SystemUiOverlayStyle overlayFor(Brightness brightness) {
-    final isDark = brightness == Brightness.dark;
-    return SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      // Android: icon brightness. iOS: status bar brightness (inverted).
-      statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
-      statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
-      systemNavigationBarColor: Colors.transparent,
-      systemNavigationBarDividerColor: Colors.transparent,
-      systemNavigationBarIconBrightness: isDark
-          ? Brightness.light
-          : Brightness.dark,
-      systemNavigationBarContrastEnforced: false,
-    );
-  }
-}
-
 class AppColors {
   AppColors._();
 
@@ -116,6 +94,22 @@ class AppTheme {
 
   static const fontFamily = 'Atkinson Hyperlegible';
 
+  /// Status and navigation bar style for edge-to-edge: transparent bars,
+  /// dark icons on the light theme and light icons on the dark theme.
+  static SystemUiOverlayStyle systemOverlayStyle(Brightness brightness) {
+    final isDark = brightness == Brightness.dark;
+    final icons = isDark ? Brightness.light : Brightness.dark;
+    return SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: icons,
+      statusBarBrightness: brightness,
+      systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarDividerColor: Colors.transparent,
+      systemNavigationBarIconBrightness: icons,
+      systemNavigationBarContrastEnforced: false,
+    );
+  }
+
   static ThemeData light() => _buildTheme(Brightness.light);
 
   static ThemeData dark() => _buildTheme(Brightness.dark);
@@ -141,11 +135,9 @@ class AppTheme {
       scaffoldBackgroundColor: Colors.transparent,
       textTheme: textTheme,
       appBarTheme: AppBarTheme(
-        // Explicit, because a transparent app bar makes Flutter guess the
-        // icon colour from "transparent" and pick white icons on the light
-        // theme, which made the status bar invisible on Android 15+
-        // (edge to edge is forced there).
-        systemOverlayStyle: AppSystemUi.overlayFor(brightness),
+        // App bars are transparent, so Flutter can't guess the icon colour
+        // from them and would pick light icons on the light theme. Set it.
+        systemOverlayStyle: AppTheme.systemOverlayStyle(brightness),
         backgroundColor: Colors.transparent,
         foregroundColor: colorScheme.onSurface,
         elevation: 0,
@@ -214,11 +206,7 @@ class AppTheme {
   // none of them can silently drift back to the M3 default.
   static TextTheme _buildTextTheme() {
     return const TextTheme(
-      displaySmall: TextStyle(
-        fontSize: 40,
-        fontWeight: FontWeight.w600,
-        height: 1.2,
-      ),
+      displaySmall: TextStyle(fontSize: 40, fontWeight: FontWeight.w600, height: 1.2),
       // Bumped past Material's default and given slightly negative
       // tracking — this is the one "big headline" style in the app (the
       // Dashboard greeting), so it needs real contrast against
@@ -235,21 +223,9 @@ class AppTheme {
         height: 1.3,
         letterSpacing: -0.2,
       ),
-      titleLarge: TextStyle(
-        fontSize: 26,
-        fontWeight: FontWeight.w600,
-        height: 1.3,
-      ),
-      titleMedium: TextStyle(
-        fontSize: 20,
-        fontWeight: FontWeight.w600,
-        height: 1.35,
-      ),
-      titleSmall: TextStyle(
-        fontSize: 18,
-        fontWeight: FontWeight.w500,
-        height: 1.4,
-      ),
+      titleLarge: TextStyle(fontSize: 26, fontWeight: FontWeight.w600, height: 1.3),
+      titleMedium: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, height: 1.35),
+      titleSmall: TextStyle(fontSize: 18, fontWeight: FontWeight.w500, height: 1.4),
       bodyLarge: TextStyle(fontSize: 20, height: 1.5, letterSpacing: 0.1),
       bodyMedium: TextStyle(fontSize: 18, height: 1.5, letterSpacing: 0.1),
       bodySmall: TextStyle(fontSize: 16, height: 1.4, letterSpacing: 0.1),

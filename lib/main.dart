@@ -6,16 +6,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app/app.dart';
 import 'app/startup.dart';
-import 'core/ads/ad_service.dart';
 import 'core/services/app_logger.dart';
 import 'core/services/crash_reporting_service.dart';
+import 'features/ads/data/ad_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Android 15+ (targetSdk 35+) always draws edge to edge. Opt in on older
-  // versions too so every device behaves the same; screens keep content
-  // out from under the bars with app bars and SafeArea.
+  // Draw behind the status and navigation bars (the default from Android
+  // 15). Screens keep content clear of them with SafeArea or an app bar.
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 
   // Firebase + Crashlytics on Android; a no-op everywhere else. Never
@@ -23,10 +22,6 @@ Future<void> main() async {
   await CrashReportingService.initialize();
 
   AppLogger.info('Teacher starting up');
-
-  // Mobile Ads SDK (Android only; a no-op elsewhere). Not awaited, so it
-  // never delays the first frame.
-  unawaited(AdService.initializeSdk());
 
   // Resolve theme mode and onboarding state while the native splash is
   // still showing, so the first frame is final (no theme or screen switch).
@@ -37,9 +32,9 @@ Future<void> main() async {
     UncontrolledProviderScope(container: container, child: const TeacherApp()),
   );
 
-  // Consent (UMP) and the first ad preload need a running UI, so they
-  // start after the first frame.
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    unawaited(AdService.instance.start());
-  });
+  // Ads (Android only): ask for consent where required, then start the
+  // Mobile Ads SDK (MobileAds.instance.initialize) and preload an
+  // interstitial. Runs after runApp because the consent form needs a
+  // visible activity. Never blocks start-up.
+  unawaited(AdService.instance.initialize());
 }
