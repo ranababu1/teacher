@@ -3,7 +3,7 @@
 ## 2026-11-24 (content audit)
 
 ### Changed
-- **React, Node.js, Python, Go, Spring Boot,
+- **AI/ML, React, Node.js, Python, Go, Spring Boot,
   Java, Databases, System Design, DevOps and Docker lessons audited.** Tighter prose with the same structure and quizzes.
 
 ### Fixed
@@ -41,6 +41,10 @@
 - Node.js: `require()` of an ES module works on Node 22.12 and later; CORS
   `*` cannot be combined with credentials (echoing the Origin is the real
   risk); Jest runs tests within a file in order; several printed outputs.
+- AI/ML: about 20 expected outputs and stated numbers now match what the
+  code prints (perceptron, backpropagation, regression coefficients,
+  leakage and overfitting demos); a perceptron debugging exercise had no
+  real bug; backprop's cost; canary routing used per-process `hash()`.
 
 ## 2026-11-24 (release: v0.33.1 - Real AdMob IDs, Help & support)
 
