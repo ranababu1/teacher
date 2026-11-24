@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-11-24 (100 interview questions per course)
+
+### Changed
+- **Interview Prep offers 100 questions in every course** (1,600 in total,
+  up from 399). Purpose-written scenario and explanation questions come
+  first. The rest reuse existing course content: debugging, misconception,
+  coding and code-reading items, then a few multiple-choice questions
+  reworded as open ones by dropping the options. No new content was
+  written.
+- Sessions are still five questions. Each question shows its kind.
+
+### Verification
+- `test/interview_test.dart` checks every course has exactly 100 distinct
+  questions with answers. `flutter analyze`, `flutter test`.
+
 ## 2026-11-24 (AI data-sharing consent)
 
 ### Added

@@ -41,7 +41,7 @@ class InterviewPrepScreen extends ConsumerWidget {
                 Text(
                   'Answer out loud or in notes, then compare with a model '
                   'answer and rate yourself honestly. Five questions per '
-                  'session, mixing real-world scenarios and concepts.',
+                  'session, mixing scenarios, concepts, debugging and code.',
                   style: theme.textTheme.bodyMedium,
                 ),
                 const SizedBox(height: 16),

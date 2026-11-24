@@ -105,7 +105,7 @@ class _InterviewFlowState extends State<_InterviewFlow> {
         const SizedBox(height: 12),
         Text(
           'Question ${_index + 1} of ${widget.questions.length} · '
-          '${q.isScenario ? 'Scenario' : 'Concept'} · ${q.moduleTitle}',
+          '${q.label} · ${q.moduleTitle}',
           style: theme.textTheme.labelLarge?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),

@@ -1,7 +1,7 @@
 import 'package:equatable/equatable.dart';
 
-/// An open-ended interview question drawn from a course's explanation and
-/// scenario assessments, with the model answer used for self-comparison.
+/// An open-ended interview question drawn from a course's authored content,
+/// with the model answer used for self-comparison.
 class InterviewQuestion extends Equatable {
   const InterviewQuestion({
     required this.id,
@@ -13,6 +13,7 @@ class InterviewQuestion extends Equatable {
     required this.prompt,
     required this.modelAnswer,
     required this.isScenario,
+    required this.label,
   });
 
   final String id;
@@ -26,6 +27,9 @@ class InterviewQuestion extends Equatable {
 
   /// Real-world scenario question (vs. explain-a-concept).
   final bool isScenario;
+
+  /// Kind of question, shown to the learner.
+  final String label;
 
   @override
   List<Object?> get props => [id, learningPathId, conceptId];

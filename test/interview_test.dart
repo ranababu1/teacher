@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -78,7 +80,60 @@ LearningPath _path(int modules, {int scenarios = 0}) => LearningPath(
   ],
 );
 
+LearningPath _realPath(Directory dir) => LearningPath(
+  id: dir.uri.pathSegments.lastWhere((s) => s.isNotEmpty),
+  title: '',
+  description: '',
+  difficulty: Difficulty.beginner,
+  iconName: '',
+  estimatedHours: 1,
+  modules: [
+    for (final f in dir.listSync().whereType<File>())
+      if (f.path.endsWith('.json'))
+        CurriculumModule(
+          learningPathId: 'p',
+          id: f.path,
+          title: '',
+          order: 0,
+          concepts: [
+            for (final c
+                in (jsonDecode(f.readAsStringSync()) as Map)['concepts']
+                    as List)
+              Concept.fromJson(
+                c as Map<String, dynamic>,
+                learningPathId: 'p',
+              ),
+          ],
+        ),
+  ],
+);
+
 void main() {
+  test('every course offers exactly 100 distinct questions with answers', () {
+    for (final dir
+        in Directory('assets/curriculum').listSync().whereType<Directory>()) {
+      final bank = InterviewService().questionBank(_realPath(dir));
+      final kinds = <String, int>{};
+      for (final q in bank) {
+        kinds[q.label] = (kinds[q.label] ?? 0) + 1;
+      }
+      expect(bank, hasLength(100), reason: '${dir.path} $kinds');
+      expect(bank.map((q) => q.id).toSet(), hasLength(100), reason: dir.path);
+      expect(
+        bank.map((q) => q.prompt).toSet(),
+        hasLength(100),
+        reason: dir.path,
+      );
+      for (final q in bank) {
+        expect(q.modelAnswer.trim(), isNotEmpty, reason: q.id);
+      }
+    }
+  });
+
+  test('the bank stops at its cap', () {
+    expect(InterviewService().questionBank(_path(150)), hasLength(100));
+  });
+
   final service = InterviewService(random: Random(3));
 
   test('bank holds explanation and scenario items with model answers only', () {
