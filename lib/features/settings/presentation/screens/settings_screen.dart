@@ -340,7 +340,7 @@ class _SectionCard extends StatelessWidget {
 class _PrivacyPolicyTile extends StatelessWidget {
   const _PrivacyPolicyTile();
 
-  static const _url = 'https://teacher.imrn.dev/privacy';
+  static const _url = 'https://imrn.dev/products/teacher/privacy-policy';
 
   @override
   Widget build(BuildContext context) {

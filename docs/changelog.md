@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-11-24 (Privacy policy link)
+
+### Changed
+- **The Settings privacy policy row opens
+  imrn.dev/products/teacher/privacy-policy** instead of
+  teacher.imrn.dev/privacy. The new page returned 404 when this change was
+  made, so it must be published before the next release.
+
+### Verification
+- `flutter analyze` and `flutter test`.
+
 ## 2026-11-06 (release: v0.32.3 - Concise AI answers with continue)
 
 ### Changed
