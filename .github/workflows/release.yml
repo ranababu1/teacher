@@ -14,6 +14,10 @@ name: Release
 #   - signed .aab                 for the Play Store
 #   - Dart symbol files           kept so a Crashlytics upload can be redone
 #
+# Manual runs (Actions -> Release -> Run workflow) only build: the signed
+# APKs, .aab and symbols are saved as workflow artifacts. No tag and no
+# GitHub Release are created.
+#
 # Requires four repository secrets (Settings -> Secrets and variables ->
 # Actions); the build fails fast if any are missing:
 #   ANDROID_KEYSTORE_BASE64    base64 of android/app/upload-keystore.jks
@@ -25,6 +29,7 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 jobs:
   build-release:
@@ -101,18 +106,27 @@ jobs:
       - name: Archive Dart symbol files
         uses: actions/upload-artifact@v4
         with:
-          name: release-symbols-${{ github.ref_name }}
+          name: release-symbols-${{ github.ref_name }}${{ github.ref_type != 'tag' && format('-run{0}', github.run_number) || '' }}
           path: build/symbols/
           retention-days: 90
 
       - name: Archive signed app bundle (Play Store)
         uses: actions/upload-artifact@v4
         with:
-          name: appbundle-${{ github.ref_name }}
+          name: appbundle-${{ github.ref_name }}${{ github.ref_type != 'tag' && format('-run{0}', github.run_number) || '' }}
           path: build/app/outputs/bundle/release/app-release.aab
           retention-days: 90
 
+      - name: Archive APKs (manual runs)
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: apks-${{ github.ref_name }}-run${{ github.run_number }}
+          path: release-assets/*.apk
+          retention-days: 30
+
       - name: Create GitHub Release with the APKs attached
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
@@ -125,6 +139,7 @@ jobs:
           append_body: true
 
       - name: Label each APK asset with the devices it fits
+        if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
