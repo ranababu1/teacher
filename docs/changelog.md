@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026-11-24 (release: v0.33.0 - Ads, AI reports and status bar)
+
+### Added
+- **Interstitial ads (Android).** None in the first 5 minutes of use, then
+  at most one every 3 minutes, and only at a natural break: Continue to
+  the next topic, or Finish lesson. Never on tests, skill checks,
+  practice, challenges, coding challenges, system design, interview or
+  review screens, and never while an AI request runs. Google's consent
+  form (UMP) runs first where required, with a Privacy options row in
+  Settings. Real AdMob IDs are still TODO: test IDs in
+  `AndroidManifest.xml` and `lib/features/ads/ads_config.dart`.
+- **Report this reply** on every AI answer, AI grading, AI coach, AI
+  roadmap and AI-generated practice. Opens the support form with "AI reply
+  problem" preselected.
+
+### Fixed
+- **Status bar icons are visible again** in light and dark themes, with
+  the app drawn edge to edge.
+- **Release builds fail without `android/key.properties`** instead of
+  quietly signing with the debug key.
+
+### Verification
+- `test/ad_gate_test.dart`. `flutter analyze`, `flutter test`.
+
 ## 2026-11-24 (Length and True/False giveaways removed)
 
 ### Fixed
