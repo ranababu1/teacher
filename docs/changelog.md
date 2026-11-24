@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-11-24 (AI data-sharing consent)
+
+### Added
+- **The app asks before sending data to an AI provider.** A one-time dialog
+  per provider, shown before the first request, lists what is sent and to
+  whom. One gate around the AI provider covers every AI feature, including
+  the connection test. Existing users are asked too.
+- Declining sends nothing and asks again on the next request. It does not
+  replace a saved roadmap with an offline one.
+
+### Verification
+- `test/ai_consent_test.dart`, `flutter analyze`, `flutter test`.
+- Not tried with a live API key.
+
 ## 2026-11-24 (Privacy policy link)
 
 ### Changed

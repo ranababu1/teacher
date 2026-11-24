@@ -53,6 +53,7 @@ class AppSettings {
     required this.aiProviderKind,
     required this.selectedModelByProvider,
     required this.customModelsByProvider,
+    this.aiConsentProviders = const {},
   });
 
   final String themeModeKey; // 'light' | 'dark' | 'system'
@@ -83,6 +84,9 @@ class AppSettings {
 
   /// User-added model ids per provider, beyond the built-in default.
   final Map<AiProviderKind, List<String>> customModelsByProvider;
+
+  /// Providers the learner has agreed to send data to.
+  final Set<AiProviderKind> aiConsentProviders;
 
   static const defaults = AppSettings(
     themeModeKey: 'system',
@@ -116,6 +120,7 @@ class AppSettings {
     AiProviderKind? aiProviderKind,
     Map<AiProviderKind, String>? selectedModelByProvider,
     Map<AiProviderKind, List<String>>? customModelsByProvider,
+    Set<AiProviderKind>? aiConsentProviders,
   }) {
     return AppSettings(
       themeModeKey: themeModeKey ?? this.themeModeKey,
@@ -136,6 +141,7 @@ class AppSettings {
           selectedModelByProvider ?? this.selectedModelByProvider,
       customModelsByProvider:
           customModelsByProvider ?? this.customModelsByProvider,
+      aiConsentProviders: aiConsentProviders ?? this.aiConsentProviders,
     );
   }
 }

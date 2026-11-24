@@ -89,6 +89,15 @@ class SettingsController extends AsyncNotifier<AppSettings> {
     _update((s) => s.copyWith(aiProviderKind: kind));
   }
 
+  Future<void> grantAiConsent(AiProviderKind provider) async {
+    await ref.read(settingsRepositoryProvider).grantAiConsent(provider);
+    _update(
+      (s) => s.copyWith(
+        aiConsentProviders: {...s.aiConsentProviders, provider},
+      ),
+    );
+  }
+
   /// Selects [model] as the active model for [provider]. Pass an empty
   /// string to clear the selection and fall back to that provider's
   /// built-in default (see [SettingsRepositoryImpl.getSettings], which

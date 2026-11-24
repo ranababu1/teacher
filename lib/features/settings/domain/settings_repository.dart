@@ -27,6 +27,9 @@ abstract class SettingsRepository {
 
   Future<void> setAiProviderKind(AiProviderKind kind);
 
+  /// Records that the learner agreed to send data to [provider].
+  Future<void> grantAiConsent(AiProviderKind provider);
+
   Future<void> setSelectedModel(AiProviderKind provider, String model);
 
   Future<void> setCustomModels(AiProviderKind provider, List<String> models);

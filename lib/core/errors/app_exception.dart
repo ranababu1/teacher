@@ -33,6 +33,18 @@ class AIUnavailableException extends AppException {
   ]) : super(message, userMessage);
 }
 
+/// The learner declined to share data with the AI provider, so nothing was
+/// sent. Separate from [AIUnavailableException] so it never triggers an
+/// automatic offline fallback.
+class AiConsentDeclinedException extends AppException {
+  const AiConsentDeclinedException(String providerName)
+    : super(
+        'Learner declined data sharing with $providerName',
+        'Nothing was sent to $providerName. To use this AI feature, try '
+            'again and choose Allow.',
+      );
+}
+
 /// Shown when an AI provider received the request but didn't answer in
 /// time — distinct from being offline.
 const aiTimeoutUserMessage =

@@ -29,6 +29,9 @@ class SettingsRepositoryImpl implements SettingsRepository {
   static String _keyCustomModels(AiProviderKind provider) =>
       'custom_models_${provider.name}';
 
+  static String _keyAiConsent(AiProviderKind provider) =>
+      'ai_consent_${provider.name}';
+
   Future<String?> _read(String key) async {
     final row = await (_db.select(
       _db.settingsTable,
@@ -69,7 +72,12 @@ class SettingsRepositoryImpl implements SettingsRepository {
 
     final selectedModelByProvider = <AiProviderKind, String>{};
     final customModelsByProvider = <AiProviderKind, List<String>>{};
+    final aiConsentProviders = <AiProviderKind>{};
     for (final provider in AiProviderKind.values) {
+      if (await _read(_keyAiConsent(provider)) == 'true') {
+        aiConsentProviders.add(provider);
+      }
+
       final selectedModel = await _read(_keySelectedModel(provider));
       if (selectedModel != null && selectedModel.isNotEmpty) {
         selectedModelByProvider[provider] = selectedModel;
@@ -126,6 +134,7 @@ class SettingsRepositoryImpl implements SettingsRepository {
       ),
       selectedModelByProvider: selectedModelByProvider,
       customModelsByProvider: customModelsByProvider,
+      aiConsentProviders: aiConsentProviders,
     );
   }
 
@@ -176,6 +185,10 @@ class SettingsRepositoryImpl implements SettingsRepository {
   @override
   Future<void> setAiProviderKind(AiProviderKind kind) =>
       _write(_keyAiProviderKind, kind.name);
+
+  @override
+  Future<void> grantAiConsent(AiProviderKind provider) =>
+      _write(_keyAiConsent(provider), 'true');
 
   @override
   Future<void> setSelectedModel(AiProviderKind provider, String model) =>

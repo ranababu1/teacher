@@ -14,12 +14,14 @@ import '../../data/anthropic_provider.dart';
 import '../../data/gemini_provider.dart';
 import '../../data/openai_compatible_provider.dart';
 import '../../domain/ai_provider.dart';
+import '../../domain/consent_gated_ai_provider.dart';
 import '../../domain/models/roadmap_generation.dart';
 import '../../domain/models/study_coaching.dart';
 import '../../domain/models/teacher_response.dart';
 import '../../domain/teach_use_case.dart';
 import '../../domain/teaching_context_builder.dart';
 import '../../domain/test_ai_connection_use_case.dart';
+import 'ai_consent_providers.dart';
 import 'api_key_providers.dart';
 import 'misconception_providers.dart';
 
@@ -98,7 +100,8 @@ final aiProviderProvider = Provider<AIProvider>((ref) {
   final depth = settings?.explanationDepth ?? ExplanationDepth.standard;
   final model = _effectiveModel(providerKind, settings, config);
 
-  return switch (providerKind) {
+  final consent = ref.watch(aiConsentServiceProvider);
+  final provider = switch (providerKind) {
     AiProviderKind.gemini => GeminiProvider(
       apiKey: apiKey,
       model: model,
@@ -126,6 +129,11 @@ final aiProviderProvider = Provider<AIProvider>((ref) {
       explanationDepth: depth,
     ),
   };
+  return ConsentGatedAiProvider(
+    inner: provider,
+    ensureConsent: () => consent.ensure(providerKind),
+    providerName: providerKind.displayName,
+  );
 });
 
 /// The model to actually use for [provider] — the learner's selection if
