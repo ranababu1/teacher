@@ -3,8 +3,8 @@
 ## 2026-11-24 (content audit)
 
 ### Changed
-- **Python (oop, pythonic, tooling, async, web and data), Go, Spring Boot and
-  Java lessons audited.** Tighter prose with the same structure and quizzes.
+- **Python (oop, pythonic, tooling, async, web and data), Go, Spring Boot,
+  Java and Databases lessons audited.** Tighter prose with the same structure and quizzes.
 
 ### Fixed
 - Go: the broken auth middleware example had a second, unintended compile
@@ -17,6 +17,9 @@
 - Java: `count()` on a sized stream skips `map`, so the laziness example now
   collects instead; four exercises had a missing closing brace; multi-catch
   variables are implicitly `final`.
+- Databases: the booking write-skew exercise used a case REPEATABLE READ
+  already stops; full-text and trigram outputs, sample plans and the
+  PgBouncer reset-query advice corrected.
 
 ## 2026-11-24 (release: v0.33.1 - Real AdMob IDs, Help & support)
 
