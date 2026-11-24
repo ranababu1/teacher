@@ -3,7 +3,8 @@
 ## 2026-11-24 (content audit)
 
 ### Changed
-- **AI/ML, AWS, LLM Engineering, React, Node.js, Python, Go, Spring Boot,
+- **AI/ML, AWS, LLM Engineering, React, Statistics (descriptive statistics and
+  probability), Node.js, Python, Go, Spring Boot,
   Java, Databases, System Design, DevOps and Docker lessons audited.** Tighter prose with the same structure and quizzes.
 
 ### Fixed
@@ -53,6 +54,9 @@
   tool-call guarantees that need strict mode, an eval table whose overall
   rates could not be produced by any weighting, the sampling-order claim,
   and an output-side prompt leak filed as input-side.
+- Statistics: total-probability and Bayes numbers, debugging exercises
+  whose "buggy" output was already correct, Q-Q plot and z-score claims
+  for skewed data, and the harmonic-mean condition.
 
 ## 2026-11-24 (release: v0.33.1 - Real AdMob IDs, Help & support)
 
