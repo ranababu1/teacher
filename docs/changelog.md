@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-11-24 (content audit)
+
+### Changed
+- **Python (oop, pythonic, tooling, async, web and data) and Go lessons
+  audited.** Tighter prose with the same structure and quizzes.
+
+### Fixed
+- Go: the broken auth middleware example had a second, unintended compile
+  error; a wrong method on a ServeMux pattern returns 405, not 404; headers
+  set after the body do not trigger the WriteHeader warning; discarded
+  errors are not always caught by the compiler.
+
 ## 2026-11-24 (release: v0.33.1 - Real AdMob IDs, Help & support)
 
 ### Added
