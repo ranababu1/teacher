@@ -3,7 +3,8 @@
 ## 2026-11-24 (content audit)
 
 ### Changed
-- **Python (oop, pythonic, tooling, async, web and data), Go, Spring Boot,
+- **Python (all but error handling, files and data, advanced functions and
+  modules), Go, Spring Boot,
   Java, Databases and System Design lessons audited.** Tighter prose with the same structure and quizzes.
 
 ### Fixed
@@ -22,6 +23,8 @@
   PgBouncer reset-query advice corrected.
 - System Design: the thread-pool exhaustion timeline, rate-limit and cache
   expiry answers, and a chat registry key that expired mid-connection.
+- Python: the `is` quiz question printed `True` as a script, a `sort()`
+  example raised TypeError, and UnboundLocalError messages were pre-3.11.
 
 ## 2026-11-24 (release: v0.33.1 - Real AdMob IDs, Help & support)
 
