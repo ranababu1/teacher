@@ -3,7 +3,7 @@
 ## 2026-11-24 (content audit)
 
 ### Changed
-- **React, Python, Go, Spring Boot,
+- **React, Node.js, Python, Go, Spring Boot,
   Java, Databases, System Design, DevOps and Docker lessons audited.** Tighter prose with the same structure and quizzes.
 
 ### Fixed
@@ -38,6 +38,9 @@
   passing health check during the start period counts as healthy at once,
   Compose rejects undeclared named volumes, `docker rm -v` keeps named
   volumes, and Alpine does ship `wget` and `nc`.
+- Node.js: `require()` of an ES module works on Node 22.12 and later; CORS
+  `*` cannot be combined with credentials (echoing the Origin is the real
+  risk); Jest runs tests within a file in order; several printed outputs.
 
 ## 2026-11-24 (release: v0.33.1 - Real AdMob IDs, Help & support)
 
