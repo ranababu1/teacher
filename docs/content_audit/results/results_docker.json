@@ -1,0 +1,1082 @@
+[
+ {
+  "course": "docker",
+  "id": "docker-compose-multi-container-apps#ex0",
+  "type": "example",
+  "lang": "dockerfile",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "FROM ubuntu:22.04\nRUN apt-get update && apt-get install -y nginx postgresql redis-server python3 python3-pip supervisor\nCOPY app/ /app\nCOPY supervisord.conf /etc/supervisor/conf.d/app.conf\nCMD [\"supervisord\", \"-n\"]\n\n# supervisord.conf (excerpt)\n# [program:app]\n# command=python3 /app/server.py\n# [program:postgres]\n# command=/usr/lib/postgresql/16/bin/postgres -D /var/lib/postgresql/data\n# [program:redis]\n# command=redis-server",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-compose-multi-container-apps#ex1",
+  "type": "example",
+  "lang": "yaml",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# A preview of the shape the next concept covers in full detail\nservices:\n  app:\n    build: ./app\n    ports:\n      - \"8000:8000\"\n  db:\n    image: postgres:16\n    volumes:\n      - pgdata:/var/lib/postgresql/data\n  cache:\n    image: redis:7-alpine\n\nvolumes:\n  pgdata:",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-compose-multi-container-apps#ex2",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# Multi-container: bouncing the cache doesn't touch the app or database\n$ docker restart cache\ncache\n$ docker exec app curl -s http://localhost:8000/health\n{\"status\": \"ok\"}   # never went down\n\n# Monolith container: any restart takes down everything inside it\n$ docker restart myapp\nmyapp\n# nginx, the app process, AND postgres all restarted together --\n# any in-flight request to any of the three was dropped, including ones that had\n# nothing to do with whatever needed the restart in the first place",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-compose-multi-container-apps-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "docker ps still shows the container as \"Up\" (healthy from Docker's point of view), because supervisord (PID 1) is still running fine -- it just has one dead child it isn't restarting. This demonstrates that Docker's restart-policy and health-status machinery only ever observes PID 1; it has no visibility into, and cannot react to, the individual health of nginx, the app, or Postgres running underneath a process manager.",
+  "st": "skip-lang",
+  "code": "$ docker run -d --name bundle mybundle:latest\n# ...some time later, postgres inside is OOM-killed and stays dead...\n$ docker ps --filter name=bundle",
+  "expl": "Docker only tracks the lifecycle of a container's PID 1. supervisord, as PID 1, is still alive and running -- it simply has a dead Postgres child it never restarted -- so from Docker's perspective nothing is wrong at all, and `docker ps` reports the container as \"Up\" with no indication that a core piece of the running system is silently gone. This is exactly the failure mode the one-process-per-container convention avoids: if Postgres ran as its own container's PID 1 instead, its own crash would be Docker's restart policy's problem directly, and `docker ps` would accurately reflect that this specific piece had exited, rather than that fact being invisible, masked by an unrelated supervisor process still technically running."
+ },
+ {
+  "course": "docker",
+  "id": "docker-compose-multi-container-apps-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "FROM node:20.11.1-bookworm-slim\nRUN apt-get update && apt-get install -y redis-server\nCOPY . /app\nWORKDIR /app\nRUN npm ci\nCMD [\"sh\", \"-c\", \"redis-server --daemonize yes && node server.js\"]\n\n# Scaling attempt:\n$ docker run -d --name app1 myapp:1.0\n$ docker run -d --name app2 myapp:1.0\n$ docker run -d --name app3 myapp:1.0\n# each replica now has its OWN independent, empty Redis cache --\n# cache hits in app1 are invisible to app2 and app3",
+  "expl": "Bundling Redis into the app image meant that \"scaling the app\" to three replicas actually created three completely independent, empty Redis instances -- one per container -- rather than three app processes sharing one cache, which defeats the entire purpose of caching (a cache hit in one replica should be visible to the others, not siloed per replica). The fix removes Redis from the app image entirely and runs it as its own single, shared container/service on a common Docker network, exactly the shape the multi-container split argued for: the app image now only contains the app, connects to the cache over the network by hostname (`cache`, resolvable via the DNS mechanism from the previous module's networking concept), and can be scaled to any number of replicas, all of which correctly share the one real cache instance."
+ },
+ {
+  "course": "docker",
+  "id": "docker-compose-multi-container-apps-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# Split into two independent services (conceptually -- covered fully as YAML in the next concept)\n# Service \"cache\": one shared instance\n$ docker network create appnet\n$ docker run -d --network appnet --name cache redis:7-alpine\n\n# Service \"app\": scale freely, all replicas point at the SAME shared cache over the network\n$ docker run -d --network appnet --name app1 -e REDIS_HOST=cache myapp:2.0\n$ docker run -d --network appnet --name app2 -e REDIS_HOST=cache myapp:2.0\n$ docker run -d --network appnet --name app3 -e REDIS_HOST=cache myapp:2.0",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-compose-file-structure#ex0",
+  "type": "example",
+  "lang": "yaml",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "services:\n  app:\n    build: ./app\n    ports:\n      - \"8000:8000\"\n    environment:\n      - DATABASE_URL=postgresql://db:5432/mydb\n      - REDIS_URL=redis://cache:6379\n    depends_on:\n      - db\n      - cache\n\n  db:\n    image: postgres:16\n    environment:\n      - POSTGRES_PASSWORD=devpassword\n      - POSTGRES_DB=mydb\n    volumes:\n      - pgdata:/var/lib/postgresql/data\n\n  cache:\n    image: redis:7-alpine\n\nvolumes:\n  pgdata:",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-compose-file-structure#ex1",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "$ docker compose up -d\n$ docker network ls | grep myproject\nmyproject_default   bridge\n\n$ docker volume ls | grep pgdata\nmyproject_pgdata\n\n$ docker ps --format \"table {{.Names}}\\t{{.Networks}}\"\nmyproject-app-1     myproject_default\nmyproject-db-1      myproject_default\nmyproject-cache-1   myproject_default",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-compose-file-structure#ex2",
+  "type": "example",
+  "lang": "yaml",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# WRONG -- \"localhost\" inside app's own container refers to app itself, not db\nservices:\n  app:\n    build: ./app\n    environment:\n      - DATABASE_URL=postgresql://localhost:5432/mydb   # connection refused\n  db:\n    image: postgres:16\n\n# RIGHT -- the service name IS the hostname, resolved via Compose's shared network DNS\nservices:\n  app:\n    build: ./app\n    environment:\n      - DATABASE_URL=postgresql://db:5432/mydb\n  db:\n    image: postgres:16",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-compose-file-structure-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "app should connect to cache:6379 -- the hostname is the service name \"cache\", and the port is Redis's normal container-internal port, 6379. No ports: entry is needed on the cache service for this to work, because app and cache are both already on the same Compose-managed network and can reach each other's container-internal ports directly by service name; ports: would only matter if something outside the Compose network (like a client on your host machine) needed to reach cache directly.",
+  "st": "skip-lang",
+  "code": "services:\n  app:\n    build: ./app\n  cache:\n    image: redis:7-alpine",
+  "expl": "Compose places every service in this file onto one shared, automatically created network and gives each one DNS resolution of every other service's name -- so `cache` is directly resolvable as a hostname from inside `app`'s container, with zero extra configuration. Redis's own process inside its container listens on its default port, 6379, regardless of Compose -- that's just what the redis:7-alpine image's process does by default, unrelated to any Compose-specific setting. Because both containers already share one network, `app` can reach `cache:6379` directly; a `ports:` entry on `cache` is a completely separate, opt-in mechanism for exposing a port to entities outside that shared network (your host's own browser or CLI tools, for example) and has no bearing on whether services within the file can already reach each other."
+ },
+ {
+  "course": "docker",
+  "id": "docker-compose-file-structure-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "services:\n  app:\n    build: ./app\n    environment:\n      - DATABASE_URL=postgresql://localhost:5432/mydb\n  db:\n    image: postgres:16\n    environment:\n      - POSTGRES_PASSWORD=secret\n    volumes:\n      - pgdata:/var/lib/postgresql/data\n\nvolumes:\n  pgdata:",
+  "expl": "DATABASE_URL points at `localhost`, which inside the `app` container's own network namespace refers to `app` itself, not to the separate `db` container -- there is no Postgres process listening on port 5432 inside `app`'s own namespace, so every connection attempt is refused, regardless of the fact that Postgres really is running fine inside `db`, exactly as `docker compose ps` reports. The fix replaces `localhost` with the service name `db`, which Compose's shared network resolves via DNS to the actual `db` container's address -- at that point the same port, 5432, correctly reaches the real Postgres process running in the sibling container instead of nothing at all inside app's own namespace."
+ },
+ {
+  "course": "docker",
+  "id": "docker-compose-file-structure-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "services:\n  app:\n    build: ./app\n    environment:\n      - DATABASE_URL=postgresql://db:5432/mydb\n  db:\n    image: postgres:16\n    environment:\n      - POSTGRES_PASSWORD=secret\n    volumes:\n      - pgdata:/var/lib/postgresql/data\n\nvolumes:\n  pgdata:",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-compose-depends-on-ordering#ex0",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "$ docker compose up\ndb-1    | ... database system is ready to accept connections ...\napp-1   | Traceback (most recent call last):\napp-1   |   psycopg2.OperationalError: connection refused\napp-1 exited with code 1\n# NOTE the ordering of the log lines: db actually became ready\n# only slightly AFTER app already tried and failed to connect",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-compose-depends-on-ordering#ex1",
+  "type": "example",
+  "lang": "yaml",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "services:\n  app:\n    build: ./app\n    depends_on:\n      db:\n        condition: service_healthy\n  db:\n    image: postgres:16\n    environment:\n      - POSTGRES_PASSWORD=devpassword\n    healthcheck:\n      test: [\"CMD-SHELL\", \"pg_isready -U postgres\"]\n      interval: 5s\n      timeout: 3s\n      retries: 5\n      start_period: 10s",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-compose-depends-on-ordering#ex2",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "$ docker compose up -d\n# ... hours later, a routine maintenance restart of the database ...\n$ docker compose restart db\n$ docker logs app --tail 5\nERROR: connection to db failed: connection refused\nWARNING: retrying in 1s...\nWARNING: retrying in 2s...\nWARNING: retrying in 4s...\nINFO: reconnected to db successfully",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-compose-depends-on-ordering-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "No, it's not guaranteed. depends_on: [db] with no condition: only waits for db's container process to start, not for Postgres inside it to finish its own initialization and start accepting connections. On a first-time startup, Postgres's setup sequence can easily still be running when app's own code makes its first connection attempt, causing an intermittent connection-refused failure that has nothing to do with a bug in the app's code.",
+  "st": "skip-lang",
+  "code": "services:\n  app:\n    build: ./app\n    depends_on:\n      - db\n  db:\n    image: postgres:16\n    environment:\n      - POSTGRES_PASSWORD=devpassword",
+  "expl": "The list-form `depends_on: - db` implicitly uses the default condition, `service_started`, which is satisfied the instant `db`'s container process begins executing -- it does not check, and has no way to check, whether Postgres itself has finished creating its data directory and started actually listening for connections. Because that initialization sequence takes real, nonzero time, especially on a fresh database with no existing data directory, there's a genuine race: on some runs, by pure luck, Postgres finishes just before `app` tries to connect and everything works; on others, `app`'s connection attempt lands first and fails. Fixing this reliably requires the explicit map-form depends_on with `condition: service_healthy`, paired with an actual `healthcheck:` on `db` (e.g. using `pg_isready`), which is the only combination that genuinely waits for readiness rather than mere container start."
+ },
+ {
+  "course": "docker",
+  "id": "docker-compose-depends-on-ordering-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "services:\n  app:\n    build: ./app\n    depends_on:\n      - db\n  db:\n    image: postgres:16\n    environment:\n      - POSTGRES_PASSWORD=devpassword\n    healthcheck:\n      test: [\"CMD-SHELL\", \"pg_isready -U postgres\"]\n      interval: 5s\n      timeout: 3s\n      retries: 5",
+  "expl": "The healthcheck on `db` is correctly defined and correctly reports healthy status -- the bug is that `app`'s `depends_on` is still in the short list form (`- db`), which implicitly uses the default `service_started` condition and never looks at `db`'s health status at all, healthcheck or no healthcheck. The fix switches `app`'s `depends_on` to the explicit map form, `db: condition: service_healthy`, which is the only syntax that actually ties `app`'s startup to `db`'s healthcheck outcome. Without that explicit condition, the healthcheck runs, genuinely reports accurate health information visible via `docker compose ps`, and has precisely zero effect on when `app` is allowed to start -- it's purely observational unless something else's `depends_on` explicitly opts into respecting it."
+ },
+ {
+  "course": "docker",
+  "id": "docker-compose-depends-on-ordering-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "services:\n  app:\n    build: ./app\n    depends_on:\n      db:\n        condition: service_healthy\n  db:\n    image: postgres:16\n    environment:\n      - POSTGRES_PASSWORD=devpassword\n    healthcheck:\n      test: [\"CMD-SHELL\", \"pg_isready -U postgres\"]\n      interval: 5s\n      timeout: 3s\n      retries: 5",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-namespaces-and-cgroups#ex0",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# On the host\n$ docker run -d --name web nginx\n$ ps aux | grep nginx\nroot      48213  0.0  0.1  10616  5632 ?        Ss   10:02   0:00 nginx: master process nginx -g daemon off;\n\n# Inside the container's OWN pid namespace\n$ docker exec web ps aux\nPID   USER     TIME  COMMAND\n    1 root      0:00 nginx: master process nginx -g daemon off;\n    7 root      0:00 nginx: worker process",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-namespaces-and-cgroups#ex1",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "$ docker run --memory=50m --name hog alpine sh -c \"apk add --no-cache stress-ng >/dev/null 2>&1 && stress-ng --vm 1 --vm-bytes 100M --timeout 5s\"\n$ docker inspect hog --format '{{.State.OOMKilled}} {{.State.ExitCode}}'\ntrue 137",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-namespaces-and-cgroups#ex2",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "$ unshare --pid --fork --mount-proc /bin/sh\n$ ps aux\nPID   USER     TIME  COMMAND\n    1 root      0:00 /bin/sh\n    5 root      0:00 ps aux",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-namespaces-and-cgroups-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "Inside the container, sleep shows up as PID 1, since it's the first (and only) process started in that pid namespace. On the host, the exact same physical process has a different, much larger PID, since it's just one more entry in the host's own, much longer-running process table. Both PIDs refer to the same running process -- there is no 'more real' one, just two different numbering views.",
+  "st": "skip-lang",
+  "code": "$ docker run -d --name app alpine sleep 1000\n$ docker exec app ps aux\n$ ps aux | grep sleep",
+  "expl": "docker exec app ps aux runs ps inside app's own pid namespace, where sleep was the very first process ever started in that namespace, so it's labeled PID 1 there -- pid namespaces number processes from 1 within their own namespace, independent of any numbering happening anywhere else. ps aux | grep sleep on the host runs in the host's own, unrelated pid namespace, which sees every process on the whole machine, including this one -- but labeled with whatever the next available host-wide PID happened to be, e.g. 48213. Both commands are looking at the exact same physical process; they're just two independent labelings from two different namespace vantage points."
+ },
+ {
+  "course": "docker",
+  "id": "docker-namespaces-and-cgroups-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "$ docker run -d --name sidecar --pid=host mymonitor:latest --target-pid=48213",
+  "expl": "--pid=host drops the sidecar into the HOST's pid namespace instead of giving it its own -- so every PID the sidecar sees or acts on, including whatever '48213' happens to mean, is a real host-wide PID, not a number scoped to any one container. Host PIDs get recycled constantly on a busy machine, so if the original process behind 48213 has already exited and the host has reassigned that number to something completely unrelated, the sidecar's 'restart if using too much CPU' logic can end up signaling that unrelated process instead. The structural fix is to not share the host pid namespace at all -- let the sidecar keep its own isolated pid namespace, and identify its target through something namespace-independent, like the Docker API or a container name, rather than a raw numeric PID that only means something relative to whichever pid namespace happens to be in view."
+ },
+ {
+  "course": "docker",
+  "id": "docker-namespaces-and-cgroups-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# Don't share the host's pid namespace at all -- let the sidecar keep its own,\n# and identify the target container by name/label through the Docker API instead of a raw host PID.\n$ docker run -d --name sidecar mymonitor:latest --target-container=app",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-images-and-layers#ex0",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "$ docker pull ubuntu:22.04\n$ docker run -d --name svc_a ubuntu:22.04 sleep 3600\n$ docker run -d --name svc_b ubuntu:22.04 sleep 3600\n$ docker system df -v\nImages space usage:\nIMAGE            SHARED SIZE   UNIQUE SIZE   CONTAINERS\nubuntu:22.04     0B            77.9MB        2\nContainers space usage:\nCONTAINER   IMAGE          SIZE\nsvc_a       ubuntu:22.04   0B (virtual 77.9MB)\nsvc_b       ubuntu:22.04   0B (virtual 77.9MB)",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-images-and-layers#ex1",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "$ docker run -dit --name box ubuntu:22.04 bash\n$ docker exec box bash -c \"echo 'nameserver 1.1.1.1' >> /etc/resolv.conf\"\n$ docker exec box bash -c \"rm /etc/hostname\"\n$ docker exec box bash -c \"echo hi > /tmp/scratch.txt\"\n$ docker diff box\nC /etc\nC /etc/resolv.conf\nA /tmp/scratch.txt\nD /etc/hostname",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-images-and-layers#ex2",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "$ docker run -dit --name teammate_a myapp:1.0 bash\n$ docker exec teammate_a bash -c \"echo 'FEATURE_FLAG=true' >> /app/.env\"\n# Meanwhile, a teammate starts a fresh container from the SAME image tag:\n$ docker run -dit --name teammate_b myapp:1.0 bash\n$ docker exec teammate_b cat /app/.env\n# FEATURE_FLAG=true is NOT there -- teammate_b's .env looks exactly like the original image's",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-images-and-layers-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "docker exec box cat /etc/motd prints 'Hi there' (box's own writable layer now has the modified file). docker run --rm same_image cat /etc/motd prints the original 'Welcome' -- the new container gets a brand-new, empty writable layer stacked on the same unmodified read-only image layers, and never sees anything from box's writable layer.",
+  "st": "skip-lang",
+  "code": "$ docker exec box bash -c \"echo 'Hi there' > /etc/motd\"\n$ docker exec box cat /etc/motd\n$ docker run --rm same_image cat /etc/motd",
+  "expl": "Overwriting /etc/motd inside box triggers a copy-up: the file is copied from the image's read-only layer into box's own writable layer, and the write happens to that copy -- box's writable layer now holds 'Hi there', while the image's underlying layer still holds the original 'Welcome', completely untouched. A brand-new docker run from the same image never touches box's writable layer at all; it mounts the same shared read-only layers plus a brand-new, independent, empty writable layer of its own. Since that new container's writable layer never received box's copy-up, reading /etc/motd falls through to the shared lower layer and finds the original, unmodified 'Welcome'."
+ },
+ {
+  "course": "docker",
+  "id": "docker-images-and-layers-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "$ docker run -d --name web myapp:2.3\n$ docker exec web apt-get install -y curl\n$ docker exec web curl -s localhost:8080/health   # works!\n# ...one week and one redeploy later...\n$ docker run -d --name web2 myapp:2.3\n$ docker exec web2 curl -s localhost:8080/health   # curl: not found",
+  "expl": "apt-get install -y curl run via docker exec modifies only web's own writable layer -- it never touches the myapp:2.3 image on disk. The 'fix' the teammate confirmed working was real, but it was scoped entirely to that one specific, disposable container instance. A week later's redeploy starts a brand-new container (web2) from the same, still-unmodified myapp:2.3 image, with its own brand-new empty writable layer -- none of web's writable-layer changes exist anywhere near it, so curl is missing again, exactly as if the original fix had never happened, because from the image's perspective, it never did. The durable fix has to modify the image itself: add the apt-get install curl step as an actual Dockerfile instruction, rebuild to produce a new image (or overwrite the same tag, if that's the team's convention), and make sure every future deploy pulls that rebuilt image rather than relying on any container's individually-patched writable layer."
+ },
+ {
+  "course": "docker",
+  "id": "docker-images-and-layers-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# Dockerfile\nFROM myapp:2.3\nRUN apt-get update && apt-get install -y --no-install-recommends curl \\\n    && rm -rf /var/lib/apt/lists/*\n# then: docker build -t myapp:2.4 .\n# and redeploy using myapp:2.4 (or re-tag/overwrite 2.3 if that's your convention)",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-works-on-my-machine#ex0",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# Works fine on the developer's laptop:\n$ python app.py\nServing on https://localhost:8443  (TLS 1.3 negotiated)\n\n# Fails on a teammate's older Linux box with a system-installed Python 3.9 and an old OpenSSL 1.0.2:\n$ python app.py\nssl.SSLError: [SSL: NO_PROTOCOL_ALTERNATIVE] unsupported protocol",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-works-on-my-machine#ex1",
+  "type": "example",
+  "lang": "dockerfile",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# Dockerfile written and first built in January -- passes every test.\nFROM node:latest\nWORKDIR /app\nCOPY . .\nRUN npm install\nCMD [\"node\", \"server.js\"]\n\n# Rebuilt from the SAME Dockerfile, unmodified, in June:\n# $ docker build -t myapp .\n#   npm WARN EBADENGINE Unsupported engine ...\n#   Error: Cannot find module 'some-native-addon' -- built for a different Node ABI",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-works-on-my-machine#ex2",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# Built on an Apple Silicon (arm64) laptop:\n$ docker build -t myapp:1.0 .\n$ docker push myregistry/myapp:1.0\n\n# Deployed to a standard x86-64 (amd64) production EC2 instance:\n$ docker run myregistry/myapp:1.0\nstandard_init_linux.go:228: exec user process caused: exec format error",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-works-on-my-machine-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "No, not guaranteed. Two lines put reproducibility at risk: FROM ubuntu:latest can resolve to a different, newer Ubuntu base image months later, since the latest tag gets reassigned over time, and apt-get install -y python3 nginx with no version pins can install different concrete package versions depending on whatever the package repository currently serves as 'the' python3/nginx package on the day the build runs. COPY and CMD are deterministic given the same source tree and don't add risk on their own.",
+  "st": "skip-lang",
+  "code": "FROM ubuntu:latest\nRUN apt-get update && apt-get install -y python3 nginx\nCOPY . /app\nCMD [\"python3\", \"/app/main.py\"]",
+  "expl": "FROM ubuntu:latest is a floating reference: latest is reassigned by the image publisher over time to point at whatever their newest build currently is, so the exact same Dockerfile line can pull a meaningfully different base image (different Ubuntu point release, different pre-installed package versions) depending purely on when the build happens to run. apt-get install -y python3 nginx has the identical problem one layer down: with no version pinned, apt resolves 'python3' and 'nginx' to whatever versions the configured repositories currently serve, which drifts over time as upstream publishes updates. COPY and CMD, by contrast, only depend on your own source tree and the text of the Dockerfile itself, both of which are unchanged in this scenario -- so they contribute no additional risk. Between the two risky lines, a rebuild six months later could easily pull a newer Ubuntu release with a newer default Python 3.x version, install different nginx behavior, or hit a compatibility issue that simply didn't exist on day one, despite the Dockerfile's text being character-for-character unchanged."
+ },
+ {
+  "course": "docker",
+  "id": "docker-works-on-my-machine-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "FROM node:latest\nWORKDIR /app\nCOPY package.json .\nRUN npm install\nCOPY . .\nCMD [\"node\", \"index.js\"]",
+  "expl": "FROM node:latest is a floating tag -- CI pulling a fresh base image on a day when latest has moved to a newer Node major version can introduce a real behavioral or compatibility break with zero corresponding change in the actual commit being tested, which matches exactly the 'intermittent, no relevant diff' symptom described. npm install, rather than npm ci, resolves dependency version ranges from package.json at install time rather than strictly honoring an exact, locked set of versions, so it can also pull a newer transitive dependency version on a later date even with an identical package.json. Pinning the base image to an exact tag removes the first source of drift, and switching to npm ci against a committed package-lock.json removes the second, by forcing every install to reproduce the exact dependency tree that was locked and committed, failing loudly instead of silently drifting if the lockfile and package.json ever disagree."
+ },
+ {
+  "course": "docker",
+  "id": "docker-works-on-my-machine-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "FROM node:20.11.1-bookworm-slim\nWORKDIR /app\nCOPY package.json package-lock.json .\nRUN npm ci\nCOPY . .\nCMD [\"node\", \"index.js\"]",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-logs-and-log-drivers#ex0",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "$ docker logs --tail 50 -f web\n2026-08-14T09:12:03Z [INFO] handling GET /health\n2026-08-14T09:12:03Z [INFO] 200 OK in 4ms\n# ... stays attached, printing new lines as they're written ...\n# Ctrl+C detaches the log reader only -- \"web\" keeps running untouched\n\n$ docker logs --since 10m web | grep ERROR",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-logs-and-log-drivers#ex1",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# The app inside this container writes to /var/log/app.log via a FileHandler,\n# and never touches stdout at all.\n$ docker run -d --name quiet myapp:with-file-logging\n$ docker logs quiet\n# (nothing -- empty output, even though the app is actively running and logging)\n\n$ docker exec quiet tail -n 5 /var/log/app.log\n2026-08-14T09:20:11Z INFO Handling request id=8841\n2026-08-14T09:20:11Z INFO Responded 200 in 6ms",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-logs-and-log-drivers#ex2",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# Per-container override at run time:\n$ docker run -d --log-opt max-size=10m --log-opt max-file=3 --name web myapp\n\n# Daemon-wide default so every future container gets this unless it overrides it:\n# /etc/docker/daemon.json\n{\n  \"log-driver\": \"json-file\",\n  \"log-opts\": {\n    \"max-size\": \"10m\",\n    \"max-file\": \"3\"\n  }\n}\n# then: sudo systemctl restart docker",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-logs-and-log-drivers-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "docker logs svc prints nothing at all -- completely empty output -- even though the application is actively running and genuinely writing log lines to /var/log/service.log. Docker only captures stdout and stderr, and this application writes to neither.",
+  "st": "skip-lang",
+  "code": "$ docker run -d --name svc myservice:1.0\n$ docker logs svc",
+  "expl": "docker logs is a thin read wrapper around whatever the container's logging driver captured from the container's stdout and stderr file descriptors specifically -- it has no visibility into arbitrary files written inside the container's own filesystem. Because this application's logging library was configured to write exclusively to /var/log/service.log, and never touches stdout or stderr at all, there is nothing for the json-file (or any other) logging driver to capture in the first place, so docker logs returns empty output. This is not an error state or a sign the container is misbehaving -- confirming the app is actually working would require a different tool, such as docker exec svc tail /var/log/service.log, which reads the file directly rather than relying on captured streams."
+ },
+ {
+  "course": "docker",
+  "id": "docker-logs-and-log-drivers-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "$ docker run -d --name flaky-worker myworker:2.1\n# ... two days later ...\n$ du -sh /var/lib/docker/containers/*/*-json.log\n42G   /var/lib/docker/containers/a1b2.../a1b2...-json.log",
+  "expl": "flaky-worker was started with no --log-opt flags at all, so it used the json-file driver's unbounded default -- every single line of every restart's crash output over two full days was captured and appended, with nothing ever rotated out or capped, which is exactly how one container reached 42GB. The immediate fix is recreating the container with --log-opt max-size and max-file set, which caps this specific container's retained log history going forward (it does not retroactively shrink the already-huge existing file, which needs to be cleaned up separately, typically by removing the old container entirely as shown). The durable fix is setting the same limits as a daemon-wide default in daemon.json, so that no future container on this host -- flaky or not -- can silently repeat the exact same disk-exhaustion pattern just because nobody remembered to pass --log-opt at its own docker run time. The crash loop itself is a legitimate, separate bug to chase down in the application, but it's worth noting that bounded logging is what keeps a crash loop from becoming a host-wide outage while that root cause is being fixed."
+ },
+ {
+  "course": "docker",
+  "id": "docker-logs-and-log-drivers-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# Stop and remove the current container, then restart it with bounded logging:\n$ docker rm -f flaky-worker\n$ docker run -d --name flaky-worker --log-opt max-size=10m --log-opt max-file=3 myworker:2.1\n\n# And, to prevent any OTHER container on this host from doing the same thing,\n# set a host-wide default in /etc/docker/daemon.json:\n{\n  \"log-driver\": \"json-file\",\n  \"log-opts\": { \"max-size\": \"10m\", \"max-file\": \"3\" }\n}\n# then: sudo systemctl restart docker",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-exec-shells#ex0",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "$ docker run -d --name web nginx\n$ docker exec -it web sh\n# whoami\nroot\n# ps aux\nPID   USER     TIME  COMMAND\n    1 root      0:00 nginx: master process nginx -g daemon off;\n    8 root      0:00 nginx: worker process\n   15 root      0:00 sh\n# exit\n$ docker ps --filter name=web\n# web is still Up -- exiting the exec'd shell did not stop the container",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-exec-shells#ex1",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "$ docker exec -it tiny-service sh\nOCI runtime exec failed: exec failed: unable to start container process: exec: \"sh\": executable file not found in $PATH: unknown\n\n# Attach a fully-featured throwaway container into tiny-service's namespaces instead:\n$ docker run --rm -it --pid=container:tiny-service --network=container:tiny-service alpine sh\n/ # ps aux   # can see tiny-service's own process(es), because we're sharing its pid namespace\n/ # wget -qO- http://localhost:8080/health   # reaches tiny-service's port directly, sharing its net namespace",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-exec-shells#ex2",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "$ docker exec -d worker sh -c \"while true; do echo tick; sleep 5; done\"\n$ docker exec worker ps aux | grep tick\n   42 root      0:00 sh -c while true; do echo tick; sleep 5; done\n\n$ docker restart worker\n$ docker exec worker ps aux | grep tick\n# (nothing -- the manually-started loop is gone; only the container's real CMD process came back)",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-exec-shells-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "The container ('api') is still running normally afterward, with STATUS showing Up. Killing the exec'd shell only terminated that one, separate process -- it had no relationship to the container's actual PID 1 process, which was never touched.",
+  "st": "skip-lang",
+  "code": "$ docker exec -it api sh\n# kill -9 $$\n# (session ends)\n$ docker ps --filter name=api",
+  "expl": "kill -9 $$ sends SIGKILL to $$, the current shell's own PID -- which is the exec'd shell process itself, not the container's original PID 1. Because docker exec always starts a genuinely new, independent process rather than attaching to the existing one, killing that new process has no more effect on the container's real application than killing any other unrelated process on the same host would. docker ps immediately afterward shows api still Up, with whatever its actual CMD/ENTRYPOINT process was continuing to run exactly as before -- the entire incident was scoped to the one throwaway shell process created for this debugging session."
+ },
+ {
+  "course": "docker",
+  "id": "docker-exec-shells-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "$ docker exec -it api sh\n# vi /app/config/settings.json    # manually edits a value, saves, exits\n# exit\n$ docker exec api cat /app/config/settings.json   # shows the edited value -- \"fixed\"\n# ... next scheduled deploy ...\n$ docker ps   # a brand-new \"api\" container, replacing the old one\n$ docker exec api cat /app/config/settings.json   # shows the ORIGINAL, unedited value -- bug is back",
+  "expl": "vi editing the file inside the running container writes the change into that specific container's own writable layer -- exactly the same mechanism covered in the images-and-layers module, just reached via docker exec instead of any other route. A scheduled deploy that replaces the container starts a brand-new container instance from the same, unmodified image, with its own brand-new, empty writable layer; none of the previous container's writable-layer edits exist anywhere near it, so the config file reverts to whatever the image itself actually contains. The confirmation that the edit 'worked' was real, but it was only ever true for that one specific, soon-to-be-replaced container instance -- not a property of the image at all. The durable fix has to change the actual source that produces the image: correct the config file (or its generating template) in version control, rebuild, and let every future deploy pull the corrected version automatically, the same discipline the earlier curriculum module argued for when discussing why docker commit is a trap rather than a shortcut."
+ },
+ {
+  "course": "docker",
+  "id": "docker-exec-shells-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# The fix needs to be baked into the image/config source, not applied by hand to a live container:\n# e.g. update the actual config file (or template) in version control,\n# rebuild the image, and let the normal deploy pipeline ship the corrected file.\n$ git commit -am \"fix: correct settings.json value that was causing <bug>\"\n$ docker build -t api:2.5 .\n# deploy api:2.5 through the normal pipeline",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-healthchecks#ex0",
+  "type": "example",
+  "lang": "dockerfile",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "FROM python:3.11.8-slim-bookworm\nWORKDIR /app\nCOPY . .\nRUN pip install --no-cache-dir -r requirements.txt\nHEALTHCHECK --interval=30s --timeout=3s --retries=3 --start-period=20s \\\n  CMD python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)\" || exit 1\nCMD [\"python\", \"app.py\"]",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-healthchecks#ex1",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "$ docker run -d --name api myapi:1.0\n$ docker ps --filter name=api\nSTATUS: Up 5 seconds (health: starting)\n\n$ sleep 25 && docker ps --filter name=api\nSTATUS: Up 30 seconds (healthy)\n\n# ... later, the app's database connection breaks internally ...\n$ docker ps --filter name=api\nSTATUS: Up 6 minutes (unhealthy)\n\n$ docker inspect --format='{{.State.Health.FailingStreak}}' api\n3",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-healthchecks#ex2",
+  "type": "example",
+  "lang": "yaml",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# WITHOUT a health condition -- api can start before db is actually ready to accept connections\nservices:\n  db:\n    image: postgres:16\n  api:\n    image: myapi:1.0\n    depends_on:\n      - db\n\n# WITH a health condition -- api waits for db's own HEALTHCHECK to report healthy\nservices:\n  db:\n    image: postgres:16\n    healthcheck:\n      test: [\"CMD-SHELL\", \"pg_isready -U postgres\"]\n      interval: 5s\n      retries: 5\n  api:\n    image: myapi:1.0\n    depends_on:\n      db:\n        condition: service_healthy",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-healthchecks-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "The container never becomes unhealthy. Both failing checks (at t=5s and t=10s) occur within the 20-second start-period window, so neither counts toward the retries=3 threshold. Once the start-period ends at t=20s, the app is already passing checks reliably, so the container transitions from starting directly to healthy, with FailingStreak staying at 0 the entire time.",
+  "st": "skip-lang",
+  "code": "# t=0s: container starts\n# checks at t=5s, t=10s: FAIL (app still starting)\n# app finishes starting at t=12s\n# checks at t=15s, t=20s, t=25s, ...: PASS",
+  "expl": "start-period=20s specifically exempts any check failures that happen within the first 20 seconds after the container starts from counting toward the retries total -- they're recorded, but they don't advance a failing streak that could flip the container to unhealthy. Since both actual failures here (t=5s, t=10s) fall entirely inside that 20-second window, neither one counts, and by the time the start-period ends at t=20s, the application has already been passing checks since t=12s. So the container simply moves from starting to healthy once the grace period elapses and a passing check has been observed, having never accumulated any counted failures, let alone the 3 consecutive ones retries=3 would require to ever become unhealthy."
+ },
+ {
+  "course": "docker",
+  "id": "docker-healthchecks-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "services:\n  db:\n    image: postgres:16\n    environment:\n      POSTGRES_PASSWORD: secret\n  api:\n    image: myapi:1.0\n    depends_on:\n      - db\n    environment:\n      DATABASE_URL: postgres://postgres:secret@db:5432/postgres",
+  "expl": "depends_on: - db is shorthand for condition: service_started, which only waits for db's container process to launch -- it says nothing about whether Postgres inside that container has finished its own initialization and is actually accepting connections, a step that takes a real, if usually short, amount of time after the process starts and can plausibly take longer on a slower or more resource-constrained CI runner than on a fast local machine, which matches the 'works on a fast machine, intermittent in CI' symptom precisely. Adding a healthcheck to db using pg_isready, a tool built specifically to report genuine Postgres readiness, and changing api's dependency to depends_on: db: condition: service_healthy makes Compose wait for that healthcheck to actually pass before starting api at all -- turning an intermittent timing race into a deterministically sequenced startup, regardless of how fast or slow db's own initialization happens to be on any given run."
+ },
+ {
+  "course": "docker",
+  "id": "docker-healthchecks-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "services:\n  db:\n    image: postgres:16\n    environment:\n      POSTGRES_PASSWORD: secret\n    healthcheck:\n      test: [\"CMD-SHELL\", \"pg_isready -U postgres\"]\n      interval: 3s\n      timeout: 3s\n      retries: 10\n  api:\n    image: myapi:1.0\n    depends_on:\n      db:\n        condition: service_healthy\n    environment:\n      DATABASE_URL: postgres://postgres:secret@db:5432/postgres",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-dockerfile-layer-caching#ex0",
+  "type": "example",
+  "lang": "dockerfile",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# BEFORE -- every source change forces a full reinstall\nFROM node:20.11.1-bookworm-slim\nWORKDIR /app\nCOPY . .\nRUN npm install\nCMD [\"node\", \"server.js\"]\n\n# AFTER -- reinstall only happens when the dependency manifest itself changes\nFROM node:20.11.1-bookworm-slim\nWORKDIR /app\nCOPY package.json package-lock.json ./\nRUN npm ci\nCOPY . .\nCMD [\"node\", \"server.js\"]",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-dockerfile-layer-caching#ex1",
+  "type": "example",
+  "lang": "dockerfile",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# Shell form -- /bin/sh becomes PID 1, node is its child\nCMD node server.js\n\n# Exec form -- node itself becomes PID 1\nCMD [\"node\", \"server.js\"]",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-dockerfile-layer-caching#ex2",
+  "type": "example",
+  "lang": "dockerfile",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "FROM python:3.11.8-slim-bookworm\nWORKDIR /app\nCOPY . .\nENTRYPOINT [\"python\", \"manage.py\"]\nCMD [\"runserver\", \"0.0.0.0:8000\"]",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-dockerfile-layer-caching-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "FROM and WORKDIR still hit the cache, since nothing about their inputs changed. COPY . . is a cache miss, because app.py, one of the files it copies, changed, which changes its overall content checksum. RUN pip install ... is ALSO forced to re-execute, purely because it comes after the now-invalidated COPY, even though requirements.txt itself never changed and the actual list of dependencies to install is identical to last time.",
+  "st": "skip-lang",
+  "code": "FROM python:3.11.8-slim-bookworm\nWORKDIR /app\nCOPY . .\nRUN pip install --no-cache-dir -r requirements.txt\nCMD [\"python\", \"app.py\"]",
+  "expl": "COPY . . computes its cache validity from a checksum over every file in the build context it copies, which includes app.py -- so changing even one unrelated line inside app.py changes that checksum and forces a cache miss on this COPY instruction, regardless of the fact that requirements.txt is byte-for-byte identical to the previous build. Because a cache miss cascades to every instruction below it in the file, RUN pip install --no-cache-dir -r requirements.txt is also forced to re-execute -- pip will resolve and reinstall the exact same dependencies it already had cached from last time, wasting real build time for zero actual behavioral difference. This is precisely the anti-pattern the ordering-for-cache-efficiency section warns about: copying requirements.txt separately, before the rest of the source, and running pip install against just that narrower COPY, would have let this exact build skip the reinstall entirely."
+ },
+ {
+  "course": "docker",
+  "id": "docker-dockerfile-layer-caching-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "FROM node:20.11.1-bookworm-slim\nWORKDIR /app\nCOPY . .\nRUN npm ci\nRUN npm run build\nCMD [\"node\", \"dist/server.js\"]",
+  "expl": "The original COPY . . before RUN npm ci means the install step's cache validity is tied to a checksum over the entire project, including every frontend source file -- so any commit at all, even one that never touches package.json or package-lock.json, invalidates that COPY and cascades into forcing a full npm ci rerun. The fix splits the single COPY into two: a narrow one that copies only package.json and package-lock.json before npm ci, so that instruction's cache validity depends solely on the dependency manifests, and a second, broader COPY . . afterward that brings in the rest of the source, which the subsequent npm run build step does need, but which doesn't affect npm ci's own caching at all anymore. A typical one-line frontend tweak now only invalidates the second COPY and everything after it -- npm ci's 4-minute install step hits the cache and is skipped entirely, unless package.json or package-lock.json themselves actually changed."
+ },
+ {
+  "course": "docker",
+  "id": "docker-dockerfile-layer-caching-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "FROM node:20.11.1-bookworm-slim\nWORKDIR /app\nCOPY package.json package-lock.json ./\nRUN npm ci\nCOPY . .\nRUN npm run build\nCMD [\"node\", \"dist/server.js\"]",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-multi-stage-builds#ex0",
+  "type": "example",
+  "lang": "dockerfile",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# Single-stage: ships the entire Go toolchain in production (~900MB+)\nFROM golang:1.22\nWORKDIR /src\nCOPY . .\nRUN CGO_ENABLED=0 go build -o /out/server .\nENTRYPOINT [\"/out/server\"]\n\n# Multi-stage: ships only the compiled binary (~15-20MB)\nFROM golang:1.22 AS builder\nWORKDIR /src\nCOPY . .\nRUN CGO_ENABLED=0 go build -o /out/server .\n\nFROM alpine:3.19\nRUN apk add --no-cache ca-certificates\nCOPY --from=builder /out/server /usr/local/bin/server\nENTRYPOINT [\"server\"]",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-multi-stage-builds#ex1",
+  "type": "example",
+  "lang": "dockerfile",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "FROM node:20.11.1-bookworm-slim AS deps\nWORKDIR /app\nCOPY package.json package-lock.json ./\nRUN npm ci\n\nFROM deps AS build\nCOPY . .\nRUN npm run build\n\nFROM node:20.11.1-bookworm-slim AS runtime\nWORKDIR /app\nCOPY --from=deps /app/node_modules ./node_modules\nCOPY --from=build /app/dist ./dist\nCOPY package.json .\nCMD [\"node\", \"dist/server.js\"]",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-multi-stage-builds#ex2",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "$ docker build --target test -t myapp:ci-test .\n$ docker run --rm myapp:ci-test\n# runs the test suite inside the exact same environment the real build uses,\n# and never builds or tags the final production stage at all\n\n$ docker build -t myapp:latest .\n# with no --target, builds the FULL chain through to the last stage (production)",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-multi-stage-builds-ex1",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "FROM golang:1.22 AS build\nWORKDIR /src\nCOPY . .\nRUN CGO_ENABLED=0 go build -o /out/server .\n\nFROM alpine:3.19\nCOPY --from=builder /out/server /usr/local/bin/server\nENTRYPOINT [\"server\"]",
+  "expl": "The first stage is named build (AS build), but the final stage's COPY --from=builder references a stage named builder -- a name that was never actually declared anywhere in the file. Docker doesn't fuzzy-match or warn about a close-enough stage name; a COPY --from referencing a nonexistent stage name simply fails outright, or, in some contexts, silently fails to produce anything meaningful in the target path. The fix is just making the two names agree -- either rename the reference to --from=build to match the actual declared stage name, or rename the stage itself to AS builder to match the reference; either direction resolves the mismatch."
+ },
+ {
+  "course": "docker",
+  "id": "docker-multi-stage-builds-ex1",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "FROM golang:1.22 AS build\nWORKDIR /src\nCOPY . .\nRUN CGO_ENABLED=0 go build -o /out/server .\n\nFROM alpine:3.19\nCOPY --from=build /out/server /usr/local/bin/server\nENTRYPOINT [\"server\"]",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-multi-stage-builds-ex2",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "Only (b), the compiled server binary, exists in the final image -- it's the one artifact explicitly brought over with COPY --from=builder. (a) gcc and (c) main.c exist only in the builder stage, which is discarded once the build finishes and never contributes anything else to the final image. (d) the apk package cache does NOT exist either, specifically because apk add --no-cache deliberately skips writing a local package cache to disk in the first place.",
+  "st": "skip-lang",
+  "code": "FROM gcc:13 AS builder\nWORKDIR /src\nCOPY main.c .\nRUN gcc -o /out/server main.c\n\nFROM alpine:3.19\nRUN apk add --no-cache ca-certificates\nCOPY --from=builder /out/server /usr/local/bin/server\nENTRYPOINT [\"server\"]",
+  "expl": "The final stage starts completely fresh FROM alpine:3.19 and gets exactly two things added to it: ca-certificates installed directly via RUN apk add, which lives entirely within this stage, not something copied from elsewhere, and the compiled server binary explicitly pulled forward with COPY --from=builder. gcc and main.c belong entirely to the builder stage's own filesystem -- since nothing in the final stage references or copies either of them, they're never present in the final image at all, despite gcc having been necessary to produce the one artifact, the binary, that IS present. The apk package cache is a slightly different kind of gotcha: --no-cache is a flag telling apk not to persist its package index/cache to disk during this install at all, so there's no cache directory left behind in this stage either -- independent of any multi-stage reasoning, it simply was never written in the first place."
+ },
+ {
+  "course": "docker",
+  "id": "docker-volumes-and-networking#ex0",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "$ docker run -d --name db -v pgdata:/var/lib/postgresql/data postgres:16\n$ docker exec db psql -U postgres -c \"CREATE TABLE t(x int); INSERT INTO t VALUES (1);\"\n\n$ docker stop db && docker start db\n$ docker exec db psql -U postgres -c \"SELECT * FROM t;\"\n# x\n# ---\n# 1        <- still there, stop/start preserved both the writable layer AND the volume\n\n$ docker rm -f db\n$ docker run -d --name db -v pgdata:/var/lib/postgresql/data postgres:16\n$ docker exec db psql -U postgres -c \"SELECT * FROM t;\"\n# x\n# ---\n# 1        <- STILL there, because it lives in the named volume pgdata, not in db's writable layer,\n#             and pgdata's lifecycle is independent of the container that used it",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-volumes-and-networking#ex1",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "$ docker run -d --name web1 -p 8080:80 nginx\n$ curl -s -o /dev/null -w \"%{http_code}\\n\" http://localhost:8080\n200\n\n$ docker run -d --name web2 nginx   # no -p at all\n$ curl -s -o /dev/null -w \"%{http_code}\\n\" http://localhost:80\ncurl: (7) Failed to connect to localhost port 80: Connection refused\n$ docker ps --filter name=web2\n# STATUS shows \"Up\" -- nginx really is running and listening on port 80 INSIDE its own network namespace",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-volumes-and-networking#ex2",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "$ docker network create appnet\n$ docker run -d --network appnet --name db postgres:16\n$ docker run -d --network appnet --name api myapi:1.0\n$ docker exec api curl -s http://db:5432\n# connects successfully by resolving the hostname \"db\" via Docker's embedded DNS on appnet\n\n$ docker run -d --name db2 postgres:16          # no --network at all -- lands on the default bridge\n$ docker run -d --name api2 myapi:1.0            # same -- default bridge\n$ docker exec api2 curl -s http://db2:5432\n# curl: (6) Could not resolve host: db2",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-volumes-and-networking-ex1",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "$ docker build -t myapp .\n$ docker run -d --name myapp myapp\n$ docker ps\nCONTAINER ID   IMAGE    STATUS         PORTS\na1b2c3d4e5f6   myapp    Up 2 minutes\n$ curl http://localhost:3000\ncurl: (7) Failed to connect to localhost port 3000: Connection refused",
+  "expl": "The original docker run -d --name myapp myapp never included a -p flag at all, so no NAT/port-forwarding rule was ever created between the host's network namespace and the container's -- the app really is running and really is listening on port 3000, but strictly within its own private network namespace, which the host's localhost has no path into. The empty PORTS column in docker ps is the direct, visible confirmation that nothing was published. Because -p can only be specified when a container is created, not added to an already-running one, the fix requires removing the existing container and recreating it with -p 3000:3000, at which point docker ps shows the expected 0.0.0.0:3000->3000/tcp mapping and the host-side curl succeeds."
+ },
+ {
+  "course": "docker",
+  "id": "docker-volumes-and-networking-ex1",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "$ docker rm -f myapp\n$ docker run -d --name myapp -p 3000:3000 myapp\n$ docker ps\nCONTAINER ID   IMAGE    STATUS         PORTS\nf6e5d4c3b2a1   myapp    Up 2 seconds   0.0.0.0:3000->3000/tcp\n$ curl http://localhost:3000\n# now succeeds",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-volumes-and-networking-ex2",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "It fails with a name resolution error, something like socket.gaierror: [Errno -2] Name or service not known, because both containers landed on Docker's default bridge network with no --network flag specified, and the default bridge does not provide automatic DNS resolution of container names -- db simply doesn't resolve to anything from api's point of view.",
+  "st": "skip-lang",
+  "code": "$ docker run -d --name db postgres:16\n$ docker run -d --name api myapi:1.0\n$ docker exec api python -c \"import socket; print(socket.gethostbyname('db'))\"",
+  "expl": "With no --network specified, both db and api are attached to Docker's default bridge network, which, unlike a user-defined bridge network, does not run the embedded DNS resolution that maps container names to their IP addresses automatically. From inside api, looking up the hostname db has nothing to resolve it against, so the lookup fails outright rather than connecting to the wrong thing or timing out slowly. The fix is to create a user-defined network, docker network create appnet, and start both containers with --network appnet, which is exactly the setup a docker-compose.yml provides implicitly for every service it defines -- at which point the identical socket.gethostbyname('db') call would succeed and return db's actual IP address on that network."
+ },
+ {
+  "course": "docker",
+  "id": "docker-registries-push-pull#ex0",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "$ docker pull nginx\n# expands to: docker.io/library/nginx:latest\n\n$ docker pull myorg/app\n# expands to: docker.io/myorg/app:latest\n\n$ docker pull ghcr.io/myorg/app:v2\n# an explicit host (ghcr.io) is given -- goes to GitHub Container Registry, NOT Docker Hub\n\n$ docker pull localhost:5000/test:dev\n# an explicit host:port -- goes to a registry running locally on port 5000",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-registries-push-pull#ex1",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "$ docker build -t myregistry.example.com/team/app:1.0 .\n$ docker push myregistry.example.com/team/app:1.0\nThe push refers to repository [myregistry.example.com/team/app]\n7a3b9c1d2e4f: Pushed\nf1e2d3c4b5a6: Pushed\n... (base image layers) ...: Layer already exists\n1.0: digest: sha256:9f8e7d6c5b4a... size: 1782\n\n# Change only application source, rebuild, tag as 2.0, push again:\n$ docker build -t myregistry.example.com/team/app:2.0 .\n$ docker push myregistry.example.com/team/app:2.0\nThe push refers to repository [myregistry.example.com/team/app]\nc9d8e7f6a5b4: Pushed          <- only the changed application-code layer actually uploads\n... (base image + dependency layers) ...: Layer already exists\n2.0: digest: sha256:1a2b3c4d5e6f... size: 1798",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-registries-push-pull#ex2",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "$ docker build -t app:1.0 .\n$ docker push app:1.0\ndenied: requested access to the resource is denied\n# app:1.0 with no host segment means docker.io/library/app:1.0 -- Docker Hub, not intended at all\n\n$ echo \"$REGISTRY_TOKEN\" | docker login myregistry.example.com --username ci-bot --password-stdin\n$ docker tag app:1.0 myregistry.example.com/team/app:1.0\n$ docker push myregistry.example.com/team/app:1.0\n# succeeds",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-registries-push-pull-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "The first two both contact docker.io (Docker Hub) -- 'redis' expands to docker.io/library/redis:latest, and 'bitnami/redis' expands to docker.io/bitnami/redis:latest, since neither has an explicit host segment. The third explicitly names registry.example.com as the host, so it contacts that registry specifically, not Docker Hub.",
+  "st": "skip-lang",
+  "code": "$ docker pull redis\n$ docker pull bitnami/redis\n$ docker pull registry.example.com/internal/redis:1.0",
+  "expl": "docker pull redis has no slash-separated host component at all, so Docker applies its full default expansion: docker.io/library/redis:latest -- the library/ namespace is specifically reserved for Docker Hub's own official images. docker pull bitnami/redis has a namespace (bitnami) but still no host segment, so it also defaults to docker.io, just under a different namespace: docker.io/bitnami/redis:latest. Only docker pull registry.example.com/internal/redis:1.0 supplies an explicit host, registry.example.com, which is the only one of the three that contacts anything other than Docker Hub -- the presence of a dot in the first path segment is exactly the signal Docker uses to recognize it as a host rather than a namespace."
+ },
+ {
+  "course": "docker",
+  "id": "docker-registries-push-pull-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "docker build -t app:${GIT_SHA} .\ndocker login registry.internal:5000 -u ci-bot --password-stdin <<< \"$REGISTRY_TOKEN\"\ndocker push app:${GIT_SHA}",
+  "expl": "app:${GIT_SHA} has no host segment, so regardless of the docker login against registry.internal:5000 that runs afterward, the push targets docker.io/library/app:${GIT_SHA} -- Docker Hub's official-images namespace -- which correctly denies an arbitrary push. Logging into a specific registry only stores a credential for use IF a command later targets that registry; it has no effect on which registry an unqualified reference resolves to. The fix is building (or re-tagging before push) with the registry host baked directly into the image reference, registry.internal:5000/team/app:${GIT_SHA}, so the reference itself, not the login state, determines the destination -- and now that destination matches the registry the login step actually authenticated against."
+ },
+ {
+  "course": "docker",
+  "id": "docker-registries-push-pull-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "docker build -t registry.internal:5000/team/app:${GIT_SHA} .\ndocker login registry.internal:5000 -u ci-bot --password-stdin <<< \"$REGISTRY_TOKEN\"\ndocker push registry.internal:5000/team/app:${GIT_SHA}",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-tagging-strategies#ex0",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "$ GIT_SHA=$(git rev-parse --short HEAD)\n$ docker build -t app:$GIT_SHA -t app:1.4.2 -t app:staging .\n$ docker push app:$GIT_SHA      # immutable, traceable back to this exact commit\n$ docker push app:1.4.2         # semver, treated as append-only by team convention\n$ docker push app:staging       # floating -- expected to move on every future build",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-tagging-strategies#ex1",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# t=0: deploy tool starts a rolling restart of 4 replicas, all pulling app:latest\n$ kubectl rollout restart deployment/app   # (illustrative -- same issue applies to any orchestrator)\n\n# t=0: replica 1 pulls -- gets version A (whatever :latest currently points at)\n# t=5s: replica 2 pulls -- gets version A\n\n# t=8s: a DIFFERENT pipeline finishes and pushes a new build to app:latest -- now points at version B\n\n# t=10s: replica 3 pulls -- gets version B\n# t=15s: replica 4 pulls -- gets version B\n# Result: 2 replicas running version A, 2 running version B, simultaneously, from ONE rollout",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-tagging-strategies#ex2",
+  "type": "example",
+  "lang": "yaml",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# docker-compose.yml or a Kubernetes manifest, referencing a digest rather than a tag\nservices:\n  api:\n    image: myregistry.example.com/team/app@sha256:9f8e7d6c5b4a3928374658493827465849382746584938274658493827465\n\n# Deploy record / commit message convention pairing the human-readable tag with the pinned digest:\n# \"Deploying app:1.4.2 (sha256:9f8e7d...) to production\"",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-tagging-strategies-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "Replicas 1 and 2 (pulled at t=0s and t=5s, before the new push) end up running the OLD image content; replicas 3 and 4 (pulled at t=10s and t=15s, after the new push) end up running the NEW image content. The rollout ends with two different versions of the application running simultaneously, purely due to pull timing relative to the unrelated push.",
+  "st": "skip-lang",
+  "code": "# replica 1 pulls at t=0s\n# replica 2 pulls at t=5s\n# [unrelated pipeline pushes a NEW build to app:latest at t=8s]\n# replica 3 pulls at t=10s\n# replica 4 pulls at t=15s",
+  "expl": ":latest is resolved independently by each replica at the moment it actually performs its pull -- there is no snapshotting of 'what latest meant when this rollout started' shared across the replicas. Replicas 1 and 2 pulled before the unrelated pipeline's push at t=8s, so they received whatever content latest pointed to at that earlier moment; replicas 3 and 4 pulled after that push, receiving the new content instead. The rollout completes with a split population -- two replicas on one version, two on another -- with nothing in any individual replica's logs indicating this happened, since each one correctly did exactly what it was told: pull whatever latest currently resolves to, at whatever moment it happened to ask."
+ },
+ {
+  "course": "docker",
+  "id": "docker-tagging-strategies-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "$ docker pull app:latest && docker run -d app:latest   # \"rollback\" attempt -- pulls the SAME broken build again\n# still broken -- because :latest was never repointed away from the broken build in the first place",
+  "expl": "The rollback attempt failed because it redeployed the same tag, app:latest, which still resolves to the same broken content it already pointed at -- 'redeploy latest again' doesn't move the pointer backward to anything; there's no history built into a tag to roll back through. The actual bug is upstream of the incident: because the pipeline only ever pushed app:latest, with no separate immutable tag per build, there was no other reference anywhere that still pointed specifically at the last known-good version once latest itself was overwritten by the broken build. Fixing this requires the pipeline to push an immutable identifier tag (the git SHA, here) alongside latest on every single build, not just the broken one -- once that convention exists, a real rollback becomes a matter of deploying app:<previous-good-sha> directly, which resolves reliably to that exact previous content regardless of whatever app:latest currently points at, and requires no rebuild, no guessing, and no hoping a rebuild would even be reproducible."
+ },
+ {
+  "course": "docker",
+  "id": "docker-tagging-strategies-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# What the pipeline SHOULD have been doing all along, before this incident:\n$ docker build -t app:$(git rev-parse --short HEAD) -t app:latest .\n$ docker push app:$(git rev-parse --short HEAD)\n$ docker push app:latest\n\n# Then a real rollback becomes possible, by targeting the PREVIOUS known-good immutable tag directly:\n$ docker pull app:9f8e7d6   # the commit SHA of the last known-good build\n$ docker run -d app:9f8e7d6",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-cicd-image-builds#ex0",
+  "type": "example",
+  "lang": "yaml",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# Illustrative, tool-agnostic pipeline definition\nstages:\n  - checkout\n  - build:      docker build -t app:${GIT_SHA} .\n  - test:       docker run --rm app:${GIT_SHA} pytest\n  - scan:       trivy image --exit-code 1 --severity HIGH,CRITICAL app:${GIT_SHA}\n  - tag:        docker tag app:${GIT_SHA} app:${VERSION}\n  - push:       docker push app:${GIT_SHA} && docker push app:${VERSION}\n  - deploy_staging:    deploy-tool apply --image app@$(docker inspect --format='{{index .RepoDigests 0}}' app:${GIT_SHA}) --env staging\n  - deploy_production:  # gated on manual approval or further automated checks, using the SAME digest",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-cicd-image-builds#ex1",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "$ docker buildx build \\\n    --cache-from=type=registry,ref=myregistry.example.com/app:buildcache \\\n    --cache-to=type=registry,ref=myregistry.example.com/app:buildcache,mode=max \\\n    -t myregistry.example.com/app:${GIT_SHA} \\\n    --push .",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-cicd-image-builds#ex2",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# Staging deploy\n$ docker run -d --name api \\\n    -e DATABASE_URL=postgres://staging-db:5432/app \\\n    -e FEATURE_NEW_CHECKOUT=true \\\n    myregistry.example.com/app@sha256:9f8e7d6c5b4a...\n\n# Production deploy -- THE SAME IMAGE DIGEST, only the environment variables differ\n$ docker run -d --name api \\\n    -e DATABASE_URL=postgres://prod-db:5432/app \\\n    -e FEATURE_NEW_CHECKOUT=false \\\n    myregistry.example.com/app@sha256:9f8e7d6c5b4a...",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-cicd-image-builds-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "The broken image is pushed to the registry BEFORE the test stage even runs, meaning it becomes pullable by anything watching that tag -- another system, an automated deploy trigger, a teammate -- during the window between push and the eventual test failure. Once pytest fails, THIS pipeline's own deploy stage correctly never runs, but the image had already been made available externally in the meantime, which push-before-test was never supposed to allow.",
+  "st": "skip-lang",
+  "code": "stages:\n  - build:  docker build -t app:${GIT_SHA} .\n  - push:   docker push app:${GIT_SHA}\n  - test:   docker run --rm app:${GIT_SHA} pytest\n  - scan:   trivy image app:${GIT_SHA}\n  - deploy: deploy-tool apply --image app:${GIT_SHA}",
+  "expl": "Because push comes before test in this pipeline's ordering, the broken image is uploaded to the registry and becomes pullable by anything with access to it -- immediately, regardless of what the later test stage eventually finds. When test does run and pytest fails, this specific pipeline correctly halts before reaching deploy, so THIS pipeline never deploys the broken image itself. But the damage the ordering enables is separate from that: any other system polling the registry for new pushes, an automated staging auto-deploy watching for new tags, or simply a teammate pulling the tag manually during that window could pick up the broken image before the test failure is even known. The fix is reordering so test (and scan) run and must pass BEFORE push, ensuring a broken build is caught and contained entirely within the pipeline, before it's ever made externally available at all."
+ },
+ {
+  "course": "docker",
+  "id": "docker-cicd-image-builds-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# Dockerfile.staging\nFROM node:20.11.1-bookworm-slim\n...\nENV FEATURE_NEW_CHECKOUT=true\nCMD [\"node\", \"server.js\"]\n\n# Dockerfile.prod\nFROM node:20.11.1-bookworm-slim\n...\n# (no ENV FEATURE_NEW_CHECKOUT line here -- someone forgot to add it when this file was created)\nCMD [\"node\", \"server.js\"]",
+  "expl": "The root cause is having three separately-maintained Dockerfiles at all -- each one is an independent artifact that can drift from the others with zero tooling enforcing consistency between them, and this incident is exactly that: a feature-flag default that existed in one file and was simply never added to another, an easy, invisible mistake with no build-time error to catch it, since each Dockerfile builds successfully on its own. Baking an environment-specific value into an image via ENV in a per-environment Dockerfile is also the wrong layer for that value to live at in the first place -- feature flags, connection strings, and similar configuration are exactly what belongs in runtime configuration, supplied when a container starts, not compiled into the image itself. The structural fix collapses this to one Dockerfile, building one image per commit, with FEATURE_NEW_CHECKOUT and anything else environment-specific supplied via -e (or an orchestrator's equivalent) at deploy time, per environment -- staging and production then run the literal same image digest, and any future flag or config difference is visible directly in each environment's own deploy configuration, rather than hidden as a silent discrepancy between two independently hand-maintained Dockerfiles."
+ },
+ {
+  "course": "docker",
+  "id": "docker-cicd-image-builds-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# ONE Dockerfile, no environment-specific ENV defaults for things that should vary by environment:\n# Dockerfile\nFROM node:20.11.1-bookworm-slim\n...\nCMD [\"node\", \"server.js\"]\n\n# Build ONCE:\n$ docker build -t app:${GIT_SHA} .\n$ docker push app:${GIT_SHA}\n\n# Supply the environment-specific value at deploy time, per environment, instead of at build time:\n$ docker run -d -e FEATURE_NEW_CHECKOUT=true  app@sha256:... # staging\n$ docker run -d -e FEATURE_NEW_CHECKOUT=false app@sha256:... # production (same digest)",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-non-root-containers#ex0",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "$ docker run --rm -v \"$(pwd)/output:/app/output\" myimage-running-as-root\n$ ls -la output/\n-rw-r--r--  1 root root  1024  result.json\n$ rm output/result.json\nrm: cannot remove 'output/result.json': Permission denied",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-non-root-containers#ex1",
+  "type": "example",
+  "lang": "dockerfile",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# BEFORE -- runs as root, the silent default\nFROM python:3.11.8-slim-bookworm\nWORKDIR /app\nCOPY . .\nRUN pip install --no-cache-dir -r requirements.txt\nCMD [\"python\", \"app.py\"]\n\n# AFTER -- dedicated user, ownership fixed while still root, then switch\nFROM python:3.11.8-slim-bookworm\nWORKDIR /app\nCOPY requirements.txt .\nRUN pip install --no-cache-dir -r requirements.txt\nCOPY . .\nRUN groupadd --system appgroup && useradd --system --gid appgroup appuser \\\n    && chown -R appuser:appgroup /app\nUSER appuser\nCMD [\"python\", \"app.py\"]",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-non-root-containers#ex2",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "$ docker build -t myapp .\n$ docker run --rm myapp whoami\nappuser\n$ docker run --rm myapp id\nuid=999(appuser) gid=999(appgroup) groups=999(appgroup)\n$ docker run --rm myapp touch /etc/some-protected-file\ntouch: cannot touch '/etc/some-protected-file': Permission denied",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-non-root-containers-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "The process runs as root, and docker run --rm this-image whoami would print \"root\" -- there is no USER instruction anywhere in this Dockerfile, and Docker's default, with no USER specified, is to run the container's main process as root (UID 0).",
+  "st": "skip-lang",
+  "code": "FROM python:3.11.8-slim-bookworm\nWORKDIR /app\nCOPY . .\nRUN pip install --no-cache-dir -r requirements.txt\nCMD [\"python\", \"app.py\"]",
+  "expl": "Docker's behavior with no explicit USER instruction is well-defined, not ambiguous: the container's main process runs as whichever user the base image's own default happens to be, which for python:3.11.8-slim-bookworm, like the vast majority of common base images with no USER already baked in, is root. Nothing in this Dockerfile creates an alternate user or switches to one at any point, so every instruction, and critically the final CMD that becomes the actual running process, executes as root -- confirmable directly with `docker run --rm this-image whoami`, which would print \"root\", not some other default or an error."
+ },
+ {
+  "course": "docker",
+  "id": "docker-non-root-containers-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "FROM node:20.11.1-bookworm-slim\nWORKDIR /app\nUSER node\nCOPY package.json package-lock.json ./\nRUN npm ci\nCOPY . .\nRUN chown -R node:node /app\nCMD [\"node\", \"server.js\"]",
+  "expl": "USER node appears near the top of the file, before COPY and RUN chown -- so by the time RUN chown -R node:node /app runs, the build is already executing as the unprivileged node user, which does not have permission to change ownership of files (especially ones it doesn't already own, having just copied them in as itself). The fix moves USER node to the very end, right before CMD, so every earlier step -- copying files, installing dependencies, and critically the chown itself -- runs while the build is still root and genuinely has permission to change file ownership; only the final CMD, the actual running process, executes as the now-properly-owned node user."
+ },
+ {
+  "course": "docker",
+  "id": "docker-non-root-containers-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "FROM node:20.11.1-bookworm-slim\nWORKDIR /app\nCOPY package.json package-lock.json ./\nRUN npm ci\nCOPY . .\nRUN chown -R node:node /app\nUSER node\nCMD [\"node\", \"server.js\"]",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-minimal-base-images#ex0",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "$ docker images --format \"table {{.Repository}}:{{.Tag}}\\t{{.Size}}\"\nnode:20.11.1              1.1GB\nnode:20.11.1-bookworm-slim  242MB\nnode:20.11.1-alpine        133MB\ngcr.io/distroless/nodejs20-debian12   152MB\n\n$ docker run --rm node:20.11.1-alpine which curl wget nc\n# (no output -- none of these exist in this image)\n$ docker run --rm gcr.io/distroless/nodejs20-debian12 /bin/sh\ndocker: Error response from daemon: OCI runtime exec failed: exec failed: unable to start container process: exec: \"/bin/sh\": stat /bin/sh: no such file or directory",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-minimal-base-images#ex1",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "$ docker build -t myapp:alpine -f Dockerfile.alpine .\n$ docker run --rm myapp:alpine node -e \"require('some-native-package')\"\nError: Error loading shared library ld-linux-x86-64.so.2: No such file or directory\n(needed by /app/node_modules/some-native-package/build/Release/binding.node)\n\n# Same package, Debian-based slim image:\n$ docker build -t myapp:slim -f Dockerfile.slim .\n$ docker run --rm myapp:slim node -e \"require('some-native-package')\"\n# loads and runs fine",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-minimal-base-images#ex2",
+  "type": "example",
+  "lang": "dockerfile",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "FROM node:20.11.1-bookworm-slim AS build\nWORKDIR /app\nCOPY package.json package-lock.json ./\nRUN npm ci --omit=dev\nCOPY . .\nRUN npm run build\n\nFROM gcr.io/distroless/nodejs20-debian12\nWORKDIR /app\nCOPY --from=build /app/node_modules ./node_modules\nCOPY --from=build /app/dist ./dist\nCMD [\"dist/server.js\"]",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-minimal-base-images-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "On the full node:20.11.1 image, curl, wget, nc, bash, and apt-get are all likely present, giving the attacker an interactive shell, tools to exfiltrate data or fetch additional payloads, and a package manager to pull in even more tools. On the distroless image, none of these exist at all -- there isn't even a shell to run further commands with, which drastically limits what the attacker can do beyond whatever the initial exploit itself directly achieved within the Node process.",
+  "st": "skip-lang",
+  "code": "# Full image\n$ docker run --rm node:20.11.1 sh -c \"which curl wget nc bash apt-get\"\n\n# Distroless image\n$ docker run --rm gcr.io/distroless/nodejs20-debian12 sh -c \"which curl wget nc bash apt-get\"",
+  "expl": "The full node:20.11.1 image is a complete Debian-based system with a shell and a wide range of common utilities pre-installed, all of which remain fully available to anyone who achieves code execution inside it -- an attacker can pop an interactive shell, use curl or wget to exfiltrate stolen data or download a second-stage payload, and use apt-get to install still more tools if needed. The distroless image was built specifically to not include any of that: no shell binary exists at all, so there is nothing to \"drop into\" even if the exploit tries to spawn one, and none of curl, wget, nc, or apt-get exist to be leveraged either. The original vulnerability and the initial code execution inside the Node process itself are identical in both scenarios -- what differs entirely is the attacker's ability to pivot beyond that single compromised process, which is precisely the attack-surface reduction a minimal or distroless image is designed to provide."
+ },
+ {
+  "course": "docker",
+  "id": "docker-minimal-base-images-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "FROM node:20.11.1-alpine\nWORKDIR /app\nCOPY package.json package-lock.json ./\nRUN npm ci\nCOPY . .\nCMD [\"node\", \"server.js\"]\n\n# npm ci fails with something like:\n# node-gyp rebuild failed\n# gyp ERR! find Python\n# gyp ERR! stack Error: Can't find Python executable \"python3\"",
+  "expl": "One of the project's dependencies needs to compile a native addon from source using node-gyp, which itself requires Python and a C/C++ toolchain (make, g++) to actually run the compilation -- Alpine's minimal base doesn't include these by default, which is exactly the kind of thing a genuinely minimal image strips out. The fix explicitly installs the missing build prerequisites with apk add before running npm ci, restoring the ability to compile native addons on Alpine specifically. This is a different situation from the musl/glibc binary-incompatibility trap covered elsewhere in this concept -- here the dependency is happy to compile from source against whatever libc is present, it just needs the compiler and Python available to do that compiling in the first place, which is a solvable, one-line fix rather than a fundamental incompatibility."
+ },
+ {
+  "course": "docker",
+  "id": "docker-minimal-base-images-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "FROM node:20.11.1-alpine\nRUN apk add --no-cache python3 make g++\nWORKDIR /app\nCOPY package.json package-lock.json ./\nRUN npm ci\nCOPY . .\nCMD [\"node\", \"server.js\"]",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-image-vulnerability-scanning#ex0",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "$ trivy image node:18.13.0-bookworm-slim\nnode:18.13.0-bookworm-slim (debian 12.5)\n=========================================\nTotal: 23 (LOW: 9, MEDIUM: 8, HIGH: 5, CRITICAL: 1)\n\nLibrary   Vulnerability     Severity   Installed Version   Fixed Version\nlibc6     CVE-2023-4911     CRITICAL   2.36-9+deb12u4       2.36-9+deb12u7\nzlib1g    CVE-2023-45853    HIGH       1:1.2.13.dfsg-1      (no fix yet)",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-image-vulnerability-scanning#ex1",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# January: image built, scanned, clean\n$ docker build -t myapp:2024-01 .\n$ trivy image myapp:2024-01\nTotal: 0 (UNKNOWN: 0, LOW: 0, MEDIUM: 0, HIGH: 0, CRITICAL: 0)\n\n# March: the EXACT SAME image, re-scanned, no rebuild at all\n$ trivy image myapp:2024-01\nTotal: 2 (UNKNOWN: 0, LOW: 0, MEDIUM: 0, HIGH: 1, CRITICAL: 1)\nopenssl   CVE-2024-YYYY   CRITICAL   3.0.11-1~deb12u2   fixed in 3.0.13-1~deb12u1",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-image-vulnerability-scanning#ex2",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "$ docker build -t myapp:ci .\n$ trivy image --severity HIGH,CRITICAL --exit-code 1 myapp:ci\nTotal: 3 (HIGH: 2, CRITICAL: 1)\n...\n$ echo \"exit code: $?\"\nexit code: 1\n# In a CI pipeline, this nonzero exit code fails the job, blocking\n# this image from being pushed to the registry or deployed anywhere",
+  "expl": null
+ },
+ {
+  "course": "docker",
+  "id": "docker-image-vulnerability-scanning-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "The April scan of the identical, unchanged myapp:1.0 image now reports the new finding, because the CVE was disclosed against a package version that was already frozen inside the image the whole time -- the vulnerability database the scanner checks against grew to include it between January and April, even though the image itself never changed at all.",
+  "st": "skip-lang",
+  "code": "# January\n$ trivy image myapp:1.0\nTotal: 0\n\n# April -- same image, no rebuild, no changes at all\n$ trivy image myapp:1.0",
+  "expl": "myapp:1.0's actual contents -- every package, at every specific version -- have been completely static since it was built in January; nothing about the image itself changed by April. What changed is external to the image: the public vulnerability databases scanners check against were updated to include a newly disclosed CVE affecting a package version that happens to already be frozen inside this specific image. The scanner's report is always a snapshot of \"what's known publicly, right now, about the exact package versions present\" -- a clean report in January accurately reflected the state of public knowledge in January, and a report showing a new finding in April accurately reflects the state of public knowledge in April, applied to the exact same underlying package inventory both times. This is precisely why a mature process re-scans images on a recurring schedule even when nothing about the Dockerfile or build process has changed."
+ },
+ {
+  "course": "docker",
+  "id": "docker-image-vulnerability-scanning-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# CI step\n- name: Scan for vulnerabilities\n  run: trivy image myapp:${{ github.sha }}\n- name: Deploy\n  run: ./deploy.sh myapp:${{ github.sha }}",
+  "expl": "Trivy, by default, prints its findings but still exits with code 0 (success) even when it finds vulnerabilities -- reporting and failing are two separate, independently-controlled behaviors, and without an explicit flag telling it otherwise, a CI system reads that exit code 0 as \"this step succeeded,\" letting the pipeline continue on to the deploy step regardless of what the report actually said. The fix adds --exit-code 1 (return a nonzero, failing exit code specifically when matching findings are present) together with a severity filter like --severity HIGH,CRITICAL, so the scan step itself now genuinely fails the CI job when a CRITICAL vulnerability like this one is found, which stops the pipeline before it ever reaches the deploy step -- turning what was previously just informational log output into an actual, enforced gate."
+ },
+ {
+  "course": "docker",
+  "id": "docker-image-vulnerability-scanning-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "- name: Scan for vulnerabilities\n  run: trivy image --severity HIGH,CRITICAL --exit-code 1 myapp:${{ github.sha }}\n- name: Deploy\n  run: ./deploy.sh myapp:${{ github.sha }}",
+  "expl": null
+ }
+]

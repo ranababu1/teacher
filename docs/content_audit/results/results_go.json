@@ -1,0 +1,1082 @@
+[
+ {
+  "course": "go",
+  "id": "go-http-handlers-routing#ex0",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"net/http\"\n)\n\ntype greeter struct {\n\tname string\n}\n\nfunc (g greeter) ServeHTTP(w http.ResponseWriter, r *http.Request) {\n\tfmt.Fprintf(w, \"Hello, %s!\", g.name)\n}\n\nfunc main() {\n\tmux := http.NewServeMux()\n\tmux.Handle(\"/hello\", greeter{name: \"Gopher\"})\n\thttp.ListenAndServe(\":8080\", mux)\n}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-http-handlers-routing#ex1",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"net/http\"\n)\n\nfunc helloHandler(w http.ResponseWriter, r *http.Request) {\n\tfmt.Fprintln(w, \"Hello from a plain function!\")\n}\n\nfunc main() {\n\tmux := http.NewServeMux()\n\tmux.HandleFunc(\"/hello\", helloHandler)   // internally wraps helloHandler in http.HandlerFunc(...)\n\thttp.ListenAndServe(\":8080\", mux)\n}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-http-handlers-routing#ex2",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"net/http\"\n)\n\nfunc main() {\n\tmux := http.NewServeMux()\n\n\tmux.HandleFunc(\"GET /users/{id}\", func(w http.ResponseWriter, r *http.Request) {\n\t\tid := r.PathValue(\"id\")\n\t\tfmt.Fprintf(w, \"fetching user %s\", id)\n\t})\n\n\tmux.HandleFunc(\"DELETE /users/{id}\", func(w http.ResponseWriter, r *http.Request) {\n\t\tid := r.PathValue(\"id\")\n\t\tfmt.Fprintf(w, \"deleting user %s\", id)\n\t})\n\n\thttp.ListenAndServe(\":8080\", mux)\n}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-http-handlers-routing-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "The client receives HTTP 200 OK, not 500. The first fmt.Fprintln call writes body bytes before any explicit WriteHeader call, which implicitly sends a 200 OK status immediately. The later w.WriteHeader(http.StatusInternalServerError) call has no effect on the already-sent status -- it only logs a 'superfluous WriteHeader call' warning on the server. The client sees a 200 response body containing both 'Report starting...' and 'An error occurred.'",
+  "st": "skip-lang",
+  "code": "func reportHandler(w http.ResponseWriter, r *http.Request) {\n\tfmt.Fprintln(w, \"Report starting...\")\n\tif somethingWentWrong() {\n\t\tw.WriteHeader(http.StatusInternalServerError)\n\t\tfmt.Fprintln(w, \"An error occurred.\")\n\t\treturn\n\t}\n\tfmt.Fprintln(w, \"Report finished successfully.\")\n}",
+  "expl": "`fmt.Fprintln(w, \"Report starting...\")` calls w.Write under the hood, and because no WriteHeader call has happened yet at that point, Write implicitly sends `http.StatusOK` (200) as the status code before writing the body bytes -- this happens on the very first line, unconditionally, regardless of whether somethingWentWrong() later returns true. By the time the code reaches `w.WriteHeader(http.StatusInternalServerError)`, the status is already committed and sent; that call is now a no-op as far as the client is concerned (aside from a server-side log warning), and execution continues to print 'An error occurred.' as more body content appended after the already-sent 200 status. The client therefore receives a 200 OK response whose body happens to contain text that reads like an error, which is a genuinely misleading outcome for any caller checking the status code programmatically rather than reading the body text."
+ },
+ {
+  "course": "go",
+  "id": "go-http-handlers-routing-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "func main() {\n\tmux := http.NewServeMux()\n\tmux.HandleFunc(\"/items/{id}\", func(w http.ResponseWriter, r *http.Request) {\n\t\tid := r.PathValue(\"id\")\n\t\tfmt.Fprintf(w, \"fetching item %s\", id)\n\t})\n\thttp.ListenAndServe(\":8080\", mux)\n}",
+  "expl": "A ServeMux pattern with no method prefix, like the original \"/items/{id}\", matches a request to that path regardless of its HTTP method -- GET, DELETE, POST, or anything else -- which is exactly why a DELETE request was silently routed to a handler that was only ever written with GET semantics in mind, running the same 'fetching item' logic for what should have been an entirely different operation. The fix adds an explicit method prefix, \"GET /items/{id}\", which is one of Go 1.22's ServeMux enhancements: the pattern now only matches requests whose method is exactly GET. A DELETE request to the same path no longer matches this registration at all -- it would need its own separate \"DELETE /items/{id}\" registration to be handled deliberately, or otherwise fall through to ServeMux's default 404 (or a 405 Method Not Allowed in cases where the path matches some registered pattern but no method-specific variant does)."
+ },
+ {
+  "course": "go",
+  "id": "go-http-handlers-routing-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "func main() {\n\tmux := http.NewServeMux()\n\tmux.HandleFunc(\"GET /items/{id}\", func(w http.ResponseWriter, r *http.Request) {\n\t\tid := r.PathValue(\"id\")\n\t\tfmt.Fprintf(w, \"fetching item %s\", id)\n\t})\n\thttp.ListenAndServe(\":8080\", mux)\n}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-http-json#ex0",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"encoding/json\"\n\t\"net/http\"\n)\n\ntype CreateUserRequest struct {\n\tName string `json:\"name\"`\n\tAge  int    `json:\"age\"`\n}\n\nfunc createUserHandler(w http.ResponseWriter, r *http.Request) {\n\tvar req CreateUserRequest\n\tif err := json.NewDecoder(r.Body).Decode(&req); err != nil {\n\t\thttp.Error(w, \"invalid request body: \"+err.Error(), http.StatusBadRequest)\n\t\treturn\n\t}\n\n\tw.Header().Set(\"Content-Type\", \"application/json\")\n\tw.WriteHeader(http.StatusCreated)\n\tjson.NewEncoder(w).Encode(req)\n}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-http-json#ex1",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"encoding/json\"\n\t\"fmt\"\n)\n\ntype Profile struct {\n\tName     string `json:\"name\"`\n\tNickname string `json:\"nickname,omitempty\"`\n\tpassword string `json:\"password\"`   // unexported -- the tag has NO effect here at all\n}\n\nfunc main() {\n\tp := Profile{Name: \"Amy\", Nickname: \"\", password: \"secret123\"}\n\tdata, _ := json.Marshal(p)\n\tfmt.Println(string(data))\n\t// {\"name\":\"Amy\"}\n\t// Nickname is omitted (it's the zero value, \"\", and tagged omitempty)\n\t// password is ALWAYS omitted -- it's unexported, so json can't see it, tag or not",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-http-json#ex2",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"encoding/json\"\n\t\"errors\"\n\t\"fmt\"\n\t\"io\"\n\t\"net/http\"\n)\n\ntype Order struct {\n\tQuantity int `json:\"quantity\"`\n}\n\nfunc createOrderHandler(w http.ResponseWriter, r *http.Request) {\n\tvar order Order\n\terr := json.NewDecoder(r.Body).Decode(&order)\n\n\tvar typeErr *json.UnmarshalTypeError\n\tswitch {\n\tcase errors.Is(err, io.EOF):\n\t\thttp.Error(w, \"request body must not be empty\", http.StatusBadRequest)\n\t\treturn\n\tcase errors.As(err, &typeErr):\n\t\thttp.Error(w, fmt.Sprintf(\"field %q must be a %s\", typeErr.Field, typeErr.Type), http.StatusBadRequest)\n\t\treturn\n\tcase err != nil:\n\t\thttp.Error(w, \"malformed JSON in request body\", http.StatusBadRequest)\n\t\treturn\n\t}\n\n\tw.Header().Set(\"Content-Type\", \"application/json\")\n\tjson.NewEncoder(w).Encode(order)\n}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-http-json-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "{\"title\":\"Widget\"} -- Description and Quantity are both omitted because they're tagged omitempty and hold their zero values. internalID is omitted entirely because it's unexported (lowercase), regardless of its json tag or its non-empty value \"abc-123\" -- encoding/json cannot see unexported fields at all.",
+  "st": "skip-lang",
+  "code": "type Item struct {\n\tTitle       string `json:\"title\"`\n\tDescription string `json:\"description,omitempty\"`\n\tQuantity    int    `json:\"quantity,omitempty\"`\n\tinternalID  string `json:\"internal_id\"`\n}\n\nitem := Item{\n\tTitle:       \"Widget\",\n\tDescription: \"\",\n\tQuantity:    0,\n\tinternalID:  \"abc-123\",\n}\ndata, _ := json.Marshal(item)\nfmt.Println(string(data))",
+  "expl": "Title is exported, has no omitempty, and holds the non-zero value \"Widget\", so it's included as {\"title\":\"Widget\"} unconditionally. Description is exported and tagged omitempty, and its current value is \"\" (the zero value for string), so it's dropped from the output entirely. Quantity is exported and tagged omitempty, and its current value is 0 (the zero value for int), so it's also dropped. internalID starts with a lowercase letter, making it unexported -- encoding/json, which operates via reflection with no special access privileges, cannot read unexported fields under any circumstances, so its json:\"internal_id\" tag is completely inert and it never appears in the output no matter what value it holds. The final marshaled result contains only the one field that is both exported and either untagged-with-omitempty or non-zero: {\"title\":\"Widget\"}."
+ },
+ {
+  "course": "go",
+  "id": "go-http-json-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "func getStatusHandler(w http.ResponseWriter, r *http.Request) {\n\tstatus := struct {\n\t\tHealthy bool `json:\"healthy\"`\n\t}{Healthy: true}\n\n\tjson.NewEncoder(w).Encode(status)\n\tw.Header().Set(\"Content-Type\", \"application/json\")\n}",
+  "expl": "The original code calls Encode first, which performs its first internal Write call immediately -- and because no status code or headers had been explicitly sent yet at that point, Go's net/http implicitly sends the response headers right then, using whatever Content-Type happened to be set in the header map at that exact moment (none, in the original code, since the Set call hadn't run yet). The subsequent w.Header().Set(\"Content-Type\", \"application/json\") call modifies the header map, but the headers have already been sent to the client by then, so this mutation has no effect on the actual response -- the client already received it, header-less (or with whatever default net/http applies). The fix simply reorders the two lines: set Content-Type first, so it's part of the header map by the time Encode's first Write triggers the implicit header send, and only then call Encode to write the actual JSON body."
+ },
+ {
+  "course": "go",
+  "id": "go-http-json-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "func getStatusHandler(w http.ResponseWriter, r *http.Request) {\n\tstatus := struct {\n\t\tHealthy bool `json:\"healthy\"`\n\t}{Healthy: true}\n\n\tw.Header().Set(\"Content-Type\", \"application/json\")\n\tjson.NewEncoder(w).Encode(status)\n}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-http-middleware#ex0",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"log\"\n\t\"net/http\"\n\t\"time\"\n)\n\nfunc LoggingMiddleware(next http.Handler) http.Handler {\n\treturn http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {\n\t\tstart := time.Now()\n\t\tnext.ServeHTTP(w, r)\n\t\tlog.Printf(\"%s %s took %v\", r.Method, r.URL.Path, time.Since(start))\n\t})\n}\n\nfunc main() {\n\tmux := http.NewServeMux()\n\tmux.HandleFunc(\"/hello\", func(w http.ResponseWriter, r *http.Request) {\n\t\tw.Write([]byte(\"hello\"))\n\t})\n\n\twrapped := LoggingMiddleware(mux)\n\thttp.ListenAndServe(\":8080\", wrapped)\n}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-http-middleware#ex1",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport \"net/http\"\n\ntype Middleware func(http.Handler) http.Handler\n\nfunc Chain(h http.Handler, mws ...Middleware) http.Handler {\n\tfor i := len(mws) - 1; i >= 0; i-- {\n\t\th = mws[i](h)\n\t}\n\treturn h\n}\n\nfunc main() {\n\tmux := http.NewServeMux()\n\tmux.HandleFunc(\"/data\", dataHandler)\n\n\t// Requests flow: Recover -> Logging -> Auth -> dataHandler\n\thandler := Chain(mux, RecoverMiddleware, LoggingMiddleware, AuthMiddleware)\n\thttp.ListenAndServe(\":8080\", handler)\n}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-http-middleware#ex2",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"context\"\n\t\"fmt\"\n\t\"net/http\"\n)\n\ntype User struct{ Name string }\n\ntype contextKey int\n\nconst userContextKey contextKey = 0\n\nfunc AuthMiddleware(next http.Handler) http.Handler {\n\treturn http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {\n\t\ttoken := r.Header.Get(\"Authorization\")\n\t\tuser, ok := lookupUserByToken(token)\n\t\tif !ok {\n\t\t\thttp.Error(w, \"unauthorized\", http.StatusUnauthorized)\n\t\t\treturn   // stop here -- next.ServeHTTP must never run for a rejected request\n\t\t}\n\n\t\tctx := context.WithValue(r.Context(), userContextKey, user)\n\t\tnext.ServeHTTP(w, r.WithContext(ctx))\n\t})\n}\n\nfunc profileHandler(w http.ResponseWriter, r *http.Request) {\n\tuser, _ := r.Context().Value(userContextKey).(User)\n\tfmt.Fprintf(w, \"Profile for %s\", user.Name)\n}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-http-middleware-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "A: before, B: before, final handler, B: after, A: after -- in that exact order. Execution enters the outermost middleware (A) first, then the next layer in (B), then the innermost handler, and then unwinds back out in the reverse order, with each layer's 'after' print firing only once everything it wrapped has fully completed.",
+  "st": "skip-lang",
+  "code": "func MiddlewareA(next http.Handler) http.Handler {\n\treturn http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {\n\t\tfmt.Println(\"A: before\")\n\t\tnext.ServeHTTP(w, r)\n\t\tfmt.Println(\"A: after\")\n\t})\n}\n\nfunc MiddlewareB(next http.Handler) http.Handler {\n\treturn http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {\n\t\tfmt.Println(\"B: before\")\n\t\tnext.ServeHTTP(w, r)\n\t\tfmt.Println(\"B: after\")\n\t})\n}\n\nfunc finalHandler(w http.ResponseWriter, r *http.Request) {\n\tfmt.Println(\"final handler\")\n}\n\nhandler := MiddlewareA(MiddlewareB(http.HandlerFunc(finalHandler)))",
+  "expl": "handler is MiddlewareA wrapping (MiddlewareB wrapping finalHandler), so calling handler.ServeHTTP first runs MiddlewareA's body: it prints 'A: before', then calls next.ServeHTTP, which is MiddlewareB's ServeHTTP. That prints 'B: before', then calls ITS next.ServeHTTP, which is finalHandler, printing 'final handler' and returning immediately (it has no next to call). Control now unwinds back into MiddlewareB's function, past its next.ServeHTTP call, which prints 'B: after' and returns. Control unwinds one more level, back into MiddlewareA's function, past ITS next.ServeHTTP call, which prints 'A: after' and finally returns to whatever called handler.ServeHTTP in the first place. The result is a strict nested ordering -- 'before' prints happen in outside-to-inside order, and 'after' prints happen in the exact reverse, inside-to-outside order, mirroring how nested function calls unwind."
+ },
+ {
+  "course": "go",
+  "id": "go-http-middleware-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "func RequireAPIKey(next http.Handler) http.Handler {\n\treturn http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {\n\t\tkey := r.Header.Get(\"X-API-Key\")\n\t\tif key != validAPIKey {\n\t\t\thttp.Error(w, \"invalid or missing API key\", http.StatusUnauthorized)\n\t\t}\n\t\tnext.ServeHTTP(w, r)\n\t})\n}",
+  "expl": "The original code calls http.Error to write a 401 response when the API key check fails, but has no return statement inside that if block -- so regardless of whether the key was valid, execution always falls through to the unconditional next.ServeHTTP(w, r) call directly below the if statement. This means a rejected request still gets the wrapped handler's real logic executed against it (explaining the wrapped handler's own log lines appearing even for invalid-key requests), in addition to the 401 response already sent -- and if the wrapped handler itself tries to write its own status code or body, that produces a 'superfluous response.WriteHeader call' warning on top of the underlying security bug of running privileged logic for an unauthenticated request. Adding `return` immediately after the http.Error call ensures that when the key check fails, the function exits right there, and next.ServeHTTP is never reached at all for a rejected request -- exactly matching the intended behavior of blocking access entirely."
+ },
+ {
+  "course": "go",
+  "id": "go-http-middleware-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "func RequireAPIKey(next http.Handler) http.Handler {\n\treturn http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {\n\t\tkey := r.Header.Get(\"X-API-Key\")\n\t\tif key != validAPIKey {\n\t\t\thttp.Error(w, \"invalid or missing API key\", http.StatusUnauthorized)\n\t\t\treturn\n\t\t}\n\t\tnext.ServeHTTP(w, r)\n\t})\n}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-goroutines#ex0",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"time\"\n)\n\nfunc main() {\n\tgo func() {\n\t\tfmt.Println(\"goroutine ran\")\n\t}()\n\tfmt.Println(\"main returning now\")\n\t// time.Sleep(100 * time.Millisecond)   // uncommenting this \"fixes\" it, but only by luck/timing\n}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-goroutines#ex1",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"sync\"\n)\n\nfunc main() {\n\tvar wg sync.WaitGroup\n\tfor i := 0; i < 3; i++ {\n\t\twg.Add(1)\n\t\tgo func(i int) {   // i is now this goroutine's OWN parameter, not the shared loop variable\n\t\t\tdefer wg.Done()\n\t\t\tfmt.Println(i)\n\t\t}(i)                  // passing the CURRENT value of the loop variable as the argument\n\t}\n\twg.Wait()\n\t// Prints 0, 1, 2 in some non-deterministic order -- reliably all three\n\t// distinct values, though never in a guaranteed order.",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-goroutines#ex2",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"errors\"\n\t\"fmt\"\n)\n\nfunc fetchWithTimeout(shouldFail bool) (int, error) {\n\tch := make(chan int)\n\tgo func() {\n\t\t// simulate slow work\n\t\tresult := 42\n\t\tch <- result   // LEAK RISK: blocks forever if the caller never reads\n\t}()\n\n\tif shouldFail {\n\t\treturn 0, errors.New(\"pretend early failure\")   // returns WITHOUT ever reading from ch\n\t}\n\treturn <-ch, nil\n}\n\nfunc main() {\n\t_, err := fetchWithTimeout(true)   // this call leaks a goroutine, permanently\n\tfmt.Println(err)\n}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-goroutines-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "Most likely, the program prints only \"main done\", with none or only some of the 5 goroutine prints appearing, and in no guaranteed order even if some do appear. This is because main() has no synchronization forcing it to wait for the goroutines, so it typically reaches its end and the process exits before the scheduler gives any of them a turn to run.",
+  "st": "skip-lang",
+  "code": "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tfor i := 0; i < 5; i++ {\n\t\tgo fmt.Println(\"goroutine\", i)\n\t}\n\tfmt.Println(\"main done\")\n}",
+  "expl": "Each `go fmt.Println(...)` call starts a new goroutine and immediately returns control to the loop, without waiting for that goroutine to actually execute. After the loop finishes launching all 5, `main` immediately prints \"main done\" and returns -- and the instant main returns, the entire program exits, taking any still-pending goroutines down with it before they necessarily get a chance to run. In practice you might occasionally see one or two of the numbered prints sneak in, purely due to scheduling timing, but there is no guarantee of that, and no guarantee of any particular order among the ones that do print -- this exact unpredictability is the reason explicit synchronization (a sync.WaitGroup, covered later in this module) is needed whenever you actually need to wait for goroutines to finish."
+ },
+ {
+  "course": "go",
+  "id": "go-goroutines-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"time\"\n)\n\nfunc startHeartbeat() chan int {\n\tch := make(chan int)\n\tgo func() {\n\t\tcount := 0\n\t\tfor {\n\t\t\tcount++\n\t\t\tch <- count\n\t\t\ttime.Sleep(time.Second)\n\t\t}\n\t}()\n\treturn ch\n}\n\nfunc main() {\n\tch := startHeartbeat()\n\tfmt.Println(\"started, not reading heartbeats yet\")\n\ttime.Sleep(3 * time.Second)\n\tfmt.Println(\"first heartbeat:\", <-ch)\n}",
+  "expl": "The original `ch` is unbuffered, so `ch <- count` can only complete at the exact moment some other goroutine is simultaneously executing `<-ch` -- with main asleep and not reading for the first 3 seconds, the very first send blocks indefinitely, and the goroutine never gets past its first iteration, effectively leaking (it's stuck forever if main never eventually reads, and even here it's needlessly stalled). The fix gives `ch` a buffer of 1 (`make(chan int, 1)`), so one send can complete and sit in the channel's buffer without any reader present, letting the sending goroutine keep making progress instead of blocking on every single send. The `select`/`default` combination goes a step further, making the send non-blocking entirely: if the buffer already holds an unread heartbeat, the goroutine drops the new one instead of piling up or blocking, which matches the stated intent that the caller only wants to read occasionally, not receive every single heartbeat ever sent."
+ },
+ {
+  "course": "go",
+  "id": "go-goroutines-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"time\"\n)\n\nfunc startHeartbeat() chan int {\n\tch := make(chan int, 1)   // buffered -- sender can complete one send without a waiting receiver\n\tgo func() {\n\t\tcount := 0\n\t\tfor {\n\t\t\tcount++\n\t\t\tselect {\n\t\t\tcase ch <- count:\n\t\t\tdefault:\n\t\t\t\t// nobody has read the previous heartbeat yet -- drop this one instead of blocking\n\t\t\t}\n\t\t\ttime.Sleep(time.Second)\n\t\t}\n\t}()\n\treturn ch\n}\n\nfunc main() {\n\tch := startHeartbeat()\n\tfmt.Println(\"started, not reading heartbeats yet\")\n\ttime.Sleep(3 * time.Second)\n\tfmt.Println(\"first heartbeat:\", <-ch)\n}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-channels-select#ex0",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tunbuffered := make(chan int)\n\tbuffered := make(chan int, 2)\n\n\tbuffered <- 1   // succeeds immediately -- buffer has room\n\tbuffered <- 2   // succeeds immediately -- buffer now full (2/2)\n\tfmt.Println(\"both buffered sends completed without any receiver\")\n\n\tgo func() {\n\t\tfmt.Println(<-unbuffered)   // the receiver that makes the next line possible\n\t}()\n\tunbuffered <- 42   // blocks until the goroutine above is ready to receive\n\tfmt.Println(\"unbuffered send completed once a receiver showed up\")",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-channels-select#ex1",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"time\"\n)\n\nfunc slowOperation(result chan<- string) {\n\ttime.Sleep(3 * time.Second)\n\tresult <- \"done\"\n}\n\nfunc main() {\n\tresult := make(chan string)\n\tgo slowOperation(result)\n\n\tselect {\n\tcase r := <-result:\n\t\tfmt.Println(\"operation finished:\", r)\n\tcase <-time.After(1 * time.Second):\n\t\tfmt.Println(\"gave up waiting after 1 second\")\n\t}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-channels-select#ex2",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"sync\"\n)\n\nfunc main() {\n\tdone := make(chan struct{})\n\tvar wg sync.WaitGroup\n\n\tfor i := 0; i < 3; i++ {\n\t\twg.Add(1)\n\t\tgo func(id int) {\n\t\t\tdefer wg.Done()\n\t\t\t<-done   // every one of the 3 goroutines blocks here...\n\t\t\tfmt.Println(\"worker\", id, \"released\")\n\t\t}(i)\n\t}\n\n\tfmt.Println(\"releasing all workers at once\")\n\tclose(done)   // ...and this single close() unblocks all 3 simultaneously\n\twg.Wait()",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-channels-select-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "It prints 1, then 2, then \"loop finished cleanly\" -- with no panic and no deadlock. Closing a channel doesn't discard values already sitting in its buffer; range continues to receive those remaining buffered values first, and only exits once the channel is both closed and fully drained.",
+  "st": "skip-lang",
+  "code": "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tch := make(chan int, 2)\n\tch <- 1\n\tch <- 2\n\tclose(ch)\n\n\tfor v := range ch {\n\t\tfmt.Println(v)\n\t}\n\tfmt.Println(\"loop finished cleanly\")\n}",
+  "expl": "Both `ch <- 1` and `ch <- 2` succeed immediately with no receiver present, because the channel's buffer has capacity 2 and neither send exceeds it. `close(ch)` marks the channel as closed for any further sends, but it does not erase or invalidate the two values already sitting in the buffer -- `for v := range ch` continues to receive them in order (1, then 2) exactly as if the channel were still open, and only exits the loop once the buffer is empty and the channel is closed, which the range loop detects automatically without you needing to check the two-value `ok` form by hand. The final print then runs normally, since nothing here panics or blocks forever -- closing a channel that still has buffered values is completely legitimate and a common pattern for 'no more values are coming, but drain whatever's left first.'"
+ },
+ {
+  "course": "go",
+  "id": "go-channels-select-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport \"fmt\"\n\nfunc worker(id int, results chan int) {\n\tresults <- id * id\n}\n\nfunc main() {\n\tresults := make(chan int)\n\n\tfor i := 1; i <= 3; i++ {\n\t\tgo worker(i, results)\n\t}\n\n\tvar collected []int\n\tfor v := range results {\n\t\tcollected = append(collected, v)\n\t}\n\tfmt.Println(collected)\n}",
+  "expl": "The original code's `for v := range results` will only ever stop once `results` is closed, but nothing in the program ever calls `close(results)` -- each worker sends its one value and returns, and nobody takes responsibility for closing the channel afterward, so `range` keeps waiting for a 4th value that will never arrive, hanging forever (main is still making progress in the sense that it's not deadlocked-and-crashed, since the workers did successfully send and main did successfully receive 3 values -- it's just stuck waiting on a channel that was never told 'no more are coming'). The fix adds a `sync.WaitGroup` so something can know exactly when all 3 workers have finished sending, and a separate goroutine that calls `wg.Wait()` and then `close(results)` -- closing exactly once, only after every worker's send has actually completed. That close is what lets the `range` loop in main correctly exit once all 3 values have been drained, rather than waiting indefinitely for one that will never come."
+ },
+ {
+  "course": "go",
+  "id": "go-channels-select-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"sync\"\n)\n\nfunc worker(id int, results chan int, wg *sync.WaitGroup) {\n\tdefer wg.Done()\n\tresults <- id * id\n}\n\nfunc main() {\n\tresults := make(chan int)\n\tvar wg sync.WaitGroup\n\n\tfor i := 1; i <= 3; i++ {\n\t\twg.Add(1)\n\t\tgo worker(i, results, &wg)\n\t}\n\n\tgo func() {\n\t\twg.Wait()\n\t\tclose(results)   // closed exactly once, only after all 3 workers have sent\n\t}()\n\n\tvar collected []int\n\tfor v := range results {\n\t\tcollected = append(collected, v)\n\t}\n\tfmt.Println(collected)   // e.g. [1 4 9] (order may vary)\n}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-sync-package#ex0",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"sync\"\n)\n\nfunc main() {\n\tvar counter int\n\tvar mu sync.Mutex\n\tvar wg sync.WaitGroup\n\n\tfor i := 0; i < 1000; i++ {\n\t\twg.Add(1)\n\t\tgo func() {\n\t\t\tdefer wg.Done()\n\t\t\tmu.Lock()\n\t\t\tdefer mu.Unlock()\n\t\t\tcounter++\n\t\t}()\n\t}\n\twg.Wait()\n\tfmt.Println(counter)   // reliably 1000, every single run",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-sync-package#ex1",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"sync\"\n)\n\nfunc main() {\n\tvar wg sync.WaitGroup\n\tresults := make([]int, 0)\n\tvar mu sync.Mutex\n\n\tfor i := 0; i < 5; i++ {\n\t\tgo func(id int) {\n\t\t\twg.Add(1)   // BUG: Add called inside the goroutine, racing against Wait below\n\t\t\tdefer wg.Done()\n\t\t\tmu.Lock()\n\t\t\tresults = append(results, id*id)\n\t\t\tmu.Unlock()\n\t\t}(i)\n\t}\n\n\twg.Wait()   // might return immediately if no goroutine has called Add(1) yet\n\tfmt.Println(len(results))   // unreliable -- sometimes less than 5, varies by run",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-sync-package#ex2",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"sync\"\n)\n\ntype SafeCounter struct {\n\tmu    sync.Mutex\n\tcount int\n}\n\nfunc (c *SafeCounter) Increment() {   // pointer receiver -- required, see below\n\tc.mu.Lock()\n\tdefer c.mu.Unlock()\n\tc.count++\n}\n\nfunc main() {\n\tcounter := &SafeCounter{}   // created as a pointer from the start\n\tvar wg sync.WaitGroup\n\tfor i := 0; i < 100; i++ {\n\t\twg.Add(1)\n\t\tgo func() {\n\t\t\tdefer wg.Done()\n\t\t\tcounter.Increment()   // all 100 goroutines share the SAME SafeCounter, via the pointer\n\t\t}()\n\t}\n\twg.Wait()\n\tfmt.Println(counter.count)   // 100",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-sync-package-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "No -- it will frequently print something less than 500, and the exact number will vary from run to run. wg correctly waits for all 500 goroutines to finish, but total++ is a data race: nothing synchronizes access to `total` itself, so concurrent read-modify-write interleavings across goroutines cause some increments to be silently lost.",
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"sync\"\n)\n\nfunc main() {\n\tvar total int\n\tvar wg sync.WaitGroup\n\n\tfor i := 0; i < 500; i++ {\n\t\twg.Add(1)\n\t\tgo func() {\n\t\t\tdefer wg.Done()\n\t\t\ttotal++\n\t\t}()\n\t}\n\twg.Wait()\n\tfmt.Println(total)\n}",
+  "expl": "sync.WaitGroup only tracks and signals completion -- it guarantees wg.Wait() doesn't return until all 500 goroutines have called wg.Done(), but it provides zero protection for any shared data those goroutines touch along the way. `total++` expands to a read, an addition, and a write, and with no mutex or other synchronization guarding `total`, two goroutines can interleave those steps: both read the same current value, both independently compute value+1, and both write back the same result, silently losing one of the two increments. Across 500 goroutines racing like this, some number of increments get lost this way, so the final total is frequently below 500 -- and because the exact interleaving depends on unpredictable scheduling, the specific shortfall varies from run to run rather than being a fixed, reproducible number. Fixing this requires wrapping `total++` in a sync.Mutex Lock/Unlock (or using sync/atomic for a simple counter like this), entirely separate from the WaitGroup, which is solving a different problem."
+ },
+ {
+  "course": "go",
+  "id": "go-sync-package-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"sync\"\n)\n\nfunc main() {\n\tscores := make(map[string]int)\n\tvar wg sync.WaitGroup\n\n\tnames := []string{\"Amy\", \"Ben\", \"Cara\", \"Dev\", \"Ella\"}\n\tfor i, name := range names {\n\t\twg.Add(1)\n\t\tgo func(n string, s int) {\n\t\t\tdefer wg.Done()\n\t\t\tscores[n] = s * 10\n\t\t}(name, i)\n\t}\n\n\twg.Wait()\n\tfmt.Println(scores)\n}",
+  "expl": "Go's built-in map type is explicitly not safe for concurrent access -- the runtime actively detects concurrent writes (and concurrent read/write mixes) to the same map and crashes immediately with a fatal error, rather than silently corrupting data or quietly losing entries. `sync.WaitGroup` in the original code correctly ensures main waits for all 5 goroutines to finish, but it does absolutely nothing to prevent those 5 goroutines from writing into `scores` at the same moment as each other, which is exactly what triggers the panic. The fix introduces a `sync.Mutex`, locked immediately before each goroutine's map write and unlocked (via `defer`) immediately after -- this serializes access to `scores` so that only one goroutine is ever actually writing into the map at any given instant, eliminating the concurrent-access condition the runtime was detecting and crashing on."
+ },
+ {
+  "course": "go",
+  "id": "go-sync-package-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"sync\"\n)\n\nfunc main() {\n\tscores := make(map[string]int)\n\tvar mu sync.Mutex\n\tvar wg sync.WaitGroup\n\n\tnames := []string{\"Amy\", \"Ben\", \"Cara\", \"Dev\", \"Ella\"}\n\tfor i, name := range names {\n\t\twg.Add(1)\n\t\tgo func(n string, s int) {\n\t\t\tdefer wg.Done()\n\t\t\tmu.Lock()\n\t\t\tdefer mu.Unlock()\n\t\t\tscores[n] = s * 10\n\t\t}(name, i)\n\t}\n\n\twg.Wait()\n\tfmt.Println(scores)   // map[Amy:0 Ben:10 Cara:20 Dev:30 Ella:40]",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-error-interface-basics#ex0",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"strconv\"\n)\n\nfunc main() {\n\tinput := \"not-a-number\"\n\tvalue, err := strconv.Atoi(input)\n\n\tdoubled := value * 2   // BUG: using value before checking err\n\tfmt.Println(\"doubled:\", doubled)\n\n\tif err != nil {\n\t\tfmt.Println(\"parse failed:\", err)\n\t}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-error-interface-basics#ex1",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"errors\"\n\t\"fmt\"\n)\n\nvar ErrEmptyQueue = errors.New(\"queue is empty\")\n\ntype Queue struct {\n\titems []int\n}\n\nfunc (q *Queue) Pop() (int, error) {\n\tif len(q.items) == 0 {\n\t\treturn 0, ErrEmptyQueue\n\t}\n\tlast := len(q.items) - 1\n\tv := q.items[last]\n\tq.items = q.items[:last]\n\treturn v, nil\n}\n\nfunc main() {\n\tq := &Queue{}\n\t_, err := q.Pop()\n\tif err == ErrEmptyQueue {\n\t\tfmt.Println(\"nothing to pop -- that's an expected, handleable case\")\n\t} else if err != nil {\n\t\tfmt.Println(\"unexpected error:\", err)\n\t}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-error-interface-basics#ex2",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"os\"\n)\n\nfunc main() {\n\tdata, _ := os.ReadFile(\"config.json\")   // error thrown away entirely\n\tfmt.Println(\"config contents:\", string(data))",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-error-interface-basics-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "It prints 'age: 0' and then 'err: strconv.Atoi: parsing \"abc\": invalid syntax' (or a very similarly worded message). Atoi returns int's zero value, 0, alongside a descriptive non-nil error when parsing fails -- there's no crash because a returned error is just an ordinary value, not a thrown exception that could halt execution on its own.",
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"strconv\"\n)\n\nfunc main() {\n\tage, err := strconv.Atoi(\"abc\")\n\tfmt.Println(\"age:\", age)\n\tfmt.Println(\"err:\", err)\n}",
+  "expl": "`strconv.Atoi(\"abc\")` cannot parse \"abc\" as an integer, so it returns two things: `0` (the zero value for `int`, per Go's zero-value guarantee) and a non-nil `error` describing exactly what went wrong. Because Go errors are ordinary values rather than exceptions, nothing about this failure interrupts control flow -- execution proceeds straight to the next line regardless of whether `err` is nil or not. Both `fmt.Println` calls run normally, printing whatever `age` and `err` actually hold: `0` and the descriptive parse-failure message, respectively. If this code had gone on to *use* `age` as if the parse had succeeded (say, multiplying it by a price), it would have silently computed a nonsense result from the meaningless zero value -- exactly the kind of bug that motivates checking `err` immediately after the call."
+ },
+ {
+  "course": "go",
+  "id": "go-error-interface-basics-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"os\"\n)\n\nfunc loadConfig(path string) string {\n\tdata, err := os.ReadFile(path)\n\tfmt.Println(\"loaded\", len(data), \"bytes\")\n\tif err != nil {\n\t\tfmt.Println(\"warning: could not read config:\", err)\n\t}\n\treturn string(data)\n}\n\nfunc main() {\n\tconfig := loadConfig(\"does-not-exist.json\")\n\tfmt.Println(\"using config:\", config)\n}",
+  "expl": "The original code calls `len(data)` and later `return string(data)` regardless of whether the read actually succeeded -- checking `err` only ever produced an extra warning printed alongside the (wrong) result, it never changed what got returned. Since a failed `os.ReadFile` returns `nil` for `data` (the zero value for `[]byte`), `len(data)` is `0` and `string(data)` is `\"\"`, so the caller receives an empty string indistinguishable from 'the file genuinely exists and is empty.' The fix moves the `err != nil` check to immediately after the call and returns early with `\"\"` in that branch, before `data` is used for anything else at all -- this guarantees the rest of the function, and everything the caller does with the returned string, only ever executes on a path where the read is known to have succeeded."
+ },
+ {
+  "course": "go",
+  "id": "go-error-interface-basics-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"os\"\n)\n\nfunc loadConfig(path string) string {\n\tdata, err := os.ReadFile(path)\n\tif err != nil {\n\t\tfmt.Println(\"warning: could not read config:\", err)\n\t\treturn \"\"\n\t}\n\tfmt.Println(\"loaded\", len(data), \"bytes\")\n\treturn string(data)\n}\n\nfunc main() {\n\tconfig := loadConfig(\"does-not-exist.json\")\n\tfmt.Println(\"using config:\", config)\n}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-error-wrapping#ex0",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"errors\"\n\t\"fmt\"\n)\n\nvar ErrPermission = errors.New(\"permission denied\")\n\nfunc openFile() error {\n\treturn ErrPermission\n}\n\nfunc loadSettings() error {\n\tif err := openFile(); err != nil {\n\t\treturn fmt.Errorf(\"loading settings: %w\", err)\n\t}\n\treturn nil\n}\n\nfunc startApp() error {\n\tif err := loadSettings(); err != nil {\n\t\treturn fmt.Errorf(\"starting app: %w\", err)\n\t}\n\treturn nil\n}\n\nfunc main() {\n\terr := startApp()\n\tfmt.Println(err)                              // starting app: loading settings: permission denied\n\tfmt.Println(errors.Is(err, ErrPermission))   // true\n}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-error-wrapping#ex1",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"errors\"\n\t\"fmt\"\n)\n\nvar ErrTimeout = errors.New(\"request timed out\")\n\nfunc fetch() error {\n\treturn ErrTimeout\n}\n\nfunc callAPI() error {\n\tif err := fetch(); err != nil {\n\t\treturn fmt.Errorf(\"calling API: %v\", err)   // %v, not %w -- looks identical when printed\n\t}\n\treturn nil\n}\n\nfunc main() {\n\terr := callAPI()\n\tfmt.Println(err)                          // calling API: request timed out\n\tfmt.Println(errors.Is(err, ErrTimeout)) // false -- the chain was never actually formed\n}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-error-wrapping#ex2",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"errors\"\n\t\"fmt\"\n)\n\ntype ValidationError struct {\n\tField string\n\tValue string\n}\n\nfunc (e *ValidationError) Error() string {\n\treturn fmt.Sprintf(\"invalid value %q for field %q\", e.Value, e.Field)\n}\n\nfunc validate(age string) error {\n\treturn &ValidationError{Field: \"age\", Value: age}\n}\n\nfunc handleRequest(age string) error {\n\tif err := validate(age); err != nil {\n\t\treturn fmt.Errorf(\"handling request: %w\", err)\n\t}\n\treturn nil\n}\n\nfunc main() {\n\terr := handleRequest(\"twelve\")\n\n\tvar ve *ValidationError\n\tif errors.As(err, &ve) {\n\t\tfmt.Printf(\"field %q rejected, got %q\\n\", ve.Field, ve.Value)\n\t}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-error-wrapping-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "Both print 'send failed: connection closed' identically. errors.Is(errW, ErrClosed) is true, because %w created a real Unwrap chain back to ErrClosed. errors.Is(errV, ErrClosed) is false, because %v discarded the relationship entirely -- errV has no Unwrap() method leading back to ErrClosed, even though its message mentions the same text.",
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"errors\"\n\t\"fmt\"\n)\n\nvar ErrClosed = errors.New(\"connection closed\")\n\nfunc withW() error {\n\treturn fmt.Errorf(\"send failed: %w\", ErrClosed)\n}\n\nfunc withV() error {\n\treturn fmt.Errorf(\"send failed: %v\", ErrClosed)\n}\n\nfunc main() {\n\terrW := withW()\n\terrV := withV()\n\tfmt.Println(errW)\n\tfmt.Println(errV)\n\tfmt.Println(errors.Is(errW, ErrClosed))\n\tfmt.Println(errors.Is(errV, ErrClosed))\n}",
+  "expl": "`withW` wraps `ErrClosed` with `%w`, so the error it returns carries a real `Unwrap()` method that leads back to `ErrClosed` -- `errors.Is(errW, ErrClosed)` walks that link and finds a match, returning `true`. `withV` wraps with `%v` instead, which flattens `ErrClosed` into plain text inside the new error's message and keeps no reference to the original value at all; the resulting error has no `Unwrap()` method pointing anywhere. Both `fmt.Println` calls print identical-looking text because the formatted message itself doesn't depend on which verb was used -- the divergence is entirely invisible until something actually calls `errors.Is` or `errors.As` and discovers that one chain exists and the other one simply never did."
+ },
+ {
+  "course": "go",
+  "id": "go-error-wrapping-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"errors\"\n\t\"fmt\"\n)\n\nvar ErrRecordLocked = errors.New(\"record is locked\")\n\nfunc updateRecord() error {\n\treturn ErrRecordLocked\n}\n\nfunc saveChanges() error {\n\tif err := updateRecord(); err != nil {\n\t\treturn fmt.Errorf(\"saving changes: %w\", err)\n\t}\n\treturn nil\n}\n\nfunc main() {\n\terr := saveChanges()\n\tif err == ErrRecordLocked {\n\t\tfmt.Println(\"record locked -- retrying\")\n\t} else if err != nil {\n\t\tfmt.Println(\"unrecoverable error:\", err)\n\t}",
+  "expl": "`saveChanges` wraps the original error with `%w`, so `err` in `main` is the *wrapping* error produced by `fmt.Errorf` -- a distinct value from `ErrRecordLocked` itself, even though `ErrRecordLocked` is exactly what caused the failure underneath it. `err == ErrRecordLocked` compares `err`'s actual concrete value against `ErrRecordLocked` and finds they're different values, so it's false, and the 'unrecoverable error' branch runs instead, even though this failure is clearly recoverable by retrying. Replacing the comparison with `errors.Is(err, ErrRecordLocked)` fixes it: `errors.Is` calls `Unwrap()` on `err`, finds `ErrRecordLocked` one level down, and correctly reports a match -- exactly the situation `errors.Is` exists to handle, since `==` alone cannot see through any wrapping layer at all."
+ },
+ {
+  "course": "go",
+  "id": "go-error-wrapping-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"errors\"\n\t\"fmt\"\n)\n\nvar ErrRecordLocked = errors.New(\"record is locked\")\n\nfunc updateRecord() error {\n\treturn ErrRecordLocked\n}\n\nfunc saveChanges() error {\n\tif err := updateRecord(); err != nil {\n\t\treturn fmt.Errorf(\"saving changes: %w\", err)\n\t}\n\treturn nil\n}\n\nfunc main() {\n\terr := saveChanges()\n\tif errors.Is(err, ErrRecordLocked) {\n\t\tfmt.Println(\"record locked -- retrying\")\n\t} else if err != nil {\n\t\tfmt.Println(\"unrecoverable error:\", err)\n\t}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-panic-recover#ex0",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport \"fmt\"\n\nfunc step3() {\n\tdefer fmt.Println(\"step3 cleanup\")\n\tpanic(\"failure in step3\")\n}\n\nfunc step2() {\n\tdefer fmt.Println(\"step2 cleanup\")\n\tstep3()\n}\n\nfunc step1() {\n\tdefer fmt.Println(\"step1 cleanup\")\n\tstep2()\n}\n\nfunc main() {\n\tstep1()\n}\n// step3 cleanup\n// step2 cleanup\n// step1 cleanup\n// panic: failure in step3\n// ...",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-panic-recover#ex1",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport \"fmt\"\n\nfunc safeDivide(a, b int) (result int, err error) {\n\tdefer func() {\n\t\tif r := recover(); r != nil {\n\t\t\terr = fmt.Errorf(\"recovered: %v\", r)\n\t\t}\n\t}()\n\tresult = a / b\n\treturn\n}\n\nfunc main() {\n\tr, err := safeDivide(10, 0)\n\tfmt.Println(r, err)     // 0 recovered: runtime error: integer divide by zero\n\n\tr, err = safeDivide(10, 5)\n\tfmt.Println(r, err)     // 2 <nil>\n}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-panic-recover#ex2",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"time\"\n)\n\nfunc worker(id int) {\n\tdefer func() {\n\t\tif r := recover(); r != nil {\n\t\t\tfmt.Println(\"worker\", id, \"recovered from:\", r)\n\t\t}\n\t}()\n\tif id == 2 {\n\t\tpanic(\"bad input for worker 2\")\n\t}\n\tfmt.Println(\"worker\", id, \"finished normally\")\n}\n\nfunc main() {\n\tfor i := 1; i <= 3; i++ {\n\t\tworker(i)\n\t}\n\tfmt.Println(\"main finished -- every worker's panic stayed contained\")\n}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-panic-recover-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "It prints 'risky: recovered from unexpected condition', then 'risky: deferred cleanup', then 'main: continuing normally' -- and it does not crash. The recover() defer runs first (LIFO order, deferred second) and successfully stops the panic, so the unwind never reaches past risky; the cleanup defer still runs afterward since all deferred calls run regardless, and main proceeds completely normally, with no way to even tell a panic happened unless it checks a return value (which this version doesn't provide).",
+  "st": "skip-lang",
+  "code": "package main\n\nimport \"fmt\"\n\nfunc risky() {\n\tdefer fmt.Println(\"risky: deferred cleanup\")\n\tdefer func() {\n\t\tif r := recover(); r != nil {\n\t\t\tfmt.Println(\"risky: recovered from\", r)\n\t\t}\n\t}()\n\tpanic(\"unexpected condition\")\n}\n\nfunc main() {\n\trisky()\n\tfmt.Println(\"main: continuing normally\")\n}",
+  "expl": "`risky` defers two functions: the cleanup print (deferred first) and the recover closure (deferred second). When `panic(\"unexpected condition\")` runs, deferred calls execute in LIFO order, so the recover closure runs first -- and because it's called directly inside a deferred function while the panic is actively unwinding through this exact point, `recover()` succeeds, returning the panic value and printing 'risky: recovered from unexpected condition'. This stops the unwind entirely: normal execution effectively resumes once `risky`'s remaining deferred calls finish, so the cleanup print still runs next ('risky: deferred cleanup', since deferred functions always run regardless of whether a panic occurred), and then `risky` returns completely normally to `main`, which proceeds to print its own line with no indication anything unusual happened -- because this version of `risky` has no return values at all, the fact that a panic was recovered is entirely invisible to the caller, illustrating why the earlier `safeDivide` example specifically threads the recovered value into a named `err` return instead of just printing it and moving on."
+ },
+ {
+  "course": "go",
+  "id": "go-panic-recover-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport \"fmt\"\n\nfunc processJob(id int, data string) {\n\tif data == \"\" {\n\t\tpanic(\"job \" + fmt.Sprint(id) + \": empty data\")\n\t}\n\tfmt.Println(\"job\", id, \"processed:\", data)\n}\n\nfunc main() {\n\tjobs := map[int]string{1: \"alpha\", 2: \"\", 3: \"gamma\"}\n\tfor id, data := range jobs {\n\t\tgo processJob(id, data)\n\t}\n\tfmt.Println(\"all jobs dispatched\")\n\tselect {} // block forever so goroutines above have time to run in this simplified example\n}",
+  "expl": "`processJob` panics when it receives job 2's empty data, and since that goroutine has no `defer`/`recover` anywhere inside it, the panic unwinds all the way to the goroutine's entry point with nothing catching it -- which terminates the entire program immediately, taking down every other goroutine (including whichever jobs 1 or 3 hadn't finished processing yet) along with it, not just job 2. The fix adds a `defer func() { if r := recover(); r != nil { ... } }()` at the top of `processJob` itself, so a panic while processing any one job is caught and contained within that specific goroutine -- printing a failure message for that job alone, while every other goroutine continues running completely unaffected. This is the general pattern for any goroutine you launch yourself that might panic on bad input: give it its own recover, because nothing else in the program will protect it automatically the way net/http protects each request handler for you."
+ },
+ {
+  "course": "go",
+  "id": "go-panic-recover-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport \"fmt\"\n\nfunc processJob(id int, data string) {\n\tdefer func() {\n\t\tif r := recover(); r != nil {\n\t\t\tfmt.Println(\"job\", id, \"failed and was recovered:\", r)\n\t\t}\n\t}()\n\tif data == \"\" {\n\t\tpanic(\"job \" + fmt.Sprint(id) + \": empty data\")\n\t}\n\tfmt.Println(\"job\", id, \"processed:\", data)\n}\n\nfunc main() {\n\tjobs := map[int]string{1: \"alpha\", 2: \"\", 3: \"gamma\"}\n\tfor id, data := range jobs {\n\t\tgo processJob(id, data)\n\t}\n\tfmt.Println(\"all jobs dispatched\")\n\tselect {}\n}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-compiled-static-toolchain#ex0",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "// main.go\npackage main\n\nimport \"fmt\"\n\nfunc main() {\n\tname := \"Gopher\"\n\tfmt.Println(\"Hello,\", name)\n}\n\n// Terminal:\n// $ go run main.go\n// Hello, Gopher\n//\n// $ go build\n// (produces an executable, e.g. ./main or main.exe on Windows)\n//\n// $ ./main\n// Hello, Gopher",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-compiled-static-toolchain#ex1",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport \"fmt\"\n\nfunc double(n int) int {\n\treturn n * 2\n}\n\nfunc main() {\n\tresult := double(\"five\")\n\tfmt.Println(result)\n}\n\n// $ go build\n// ./main.go:9:15: cannot use \"five\" (untyped string constant) as int value in argument to double",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-compiled-static-toolchain#ex2",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"strings\"  // imported but never used below\n)\n\nfunc main() {\n\tmessage := \"hello\"\n\tfmt.Println(\"done\")\n}\n\n// $ go build\n// ./main.go:5:2: \"strings\" imported and not used\n// ./main.go:8:2: declared and not used: message",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-compiled-static-toolchain-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "It fails to compile with an error like './main.go:5:2: \"os\" imported and not used'. `fmt` is used via fmt.Println, but `os` is imported and never referenced anywhere in the file, and Go treats unused imports as hard compile errors, not warnings.",
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"os\"\n)\n\nfunc main() {\n\tfmt.Println(\"starting up\")\n}",
+  "expl": "The compiler checks every name listed in the import block against actual usages in the file. `fmt` passes the check because `fmt.Println(...)` references it. `os` fails the check -- nothing in `main()` calls anything like `os.Something(...)` -- so `go build` refuses to produce a binary at all and reports the precise unused import, naming the file, line, and package. The fix is either to actually use something from `os` (e.g. `os.Exit(0)`) or to remove the `\"os\"` line from the import block entirely; there is no way to silence this specific check while leaving a genuinely unused import in place."
+ },
+ {
+  "course": "go",
+  "id": "go-compiled-static-toolchain-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport \"fmt\"\n\nfunc add(a int, b int) int {\n\treturn a + b\n}\n\nfunc main() {\n\tresult := add(\"10\", \"20\")\n\tfmt.Println(\"Sum:\", result)\n}",
+  "expl": "`add` is declared with signature `func add(a int, b int) int`, meaning both parameters must be actual `int` values -- not strings that happen to contain digits. `\"10\"` and `\"20\"` are string literals (Go distinguishes them from numeric literals purely by the surrounding quotes), and a string is never automatically converted to an int at a call site; Go has no implicit type coercion at function boundaries. The fix removes the quotes, passing the numeric literals `10` and `20` directly, which match `int` and compile cleanly. Note this failure happens entirely at compile time, before the program ever runs -- there is no runtime 'convert this string to a number if possible, otherwise crash' behavior to fall back on, which is exactly the kind of mismatch static typing is designed to catch immediately rather than let slip into a running program."
+ },
+ {
+  "course": "go",
+  "id": "go-compiled-static-toolchain-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport \"fmt\"\n\nfunc add(a int, b int) int {\n\treturn a + b\n}\n\nfunc main() {\n\tresult := add(10, 20)\n\tfmt.Println(\"Sum:\", result)\n}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-zero-values#ex0",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport \"fmt\"\n\ntype Point struct {\n\tX, Y int\n}\n\nfunc main() {\n\tvar count int\n\tvar label string\n\tvar active bool\n\tvar p Point\n\n\tfmt.Println(count, label, active, p)   // 0 \"\" false {0 0}\n\n\tname := \"Amy\"       // := infers string\n\tage := 30              // := infers int\n\tfmt.Println(name, age)\n}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-zero-values#ex1",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tvar scores map[string]int\n\n\tfmt.Println(scores[\"alice\"])   // 0 -- safe read on a nil map\n\tfmt.Println(len(scores))          // 0\n\n\tscores[\"alice\"] = 90               // panic: assignment to entry in nil map\n\tfmt.Println(\"never reached\")",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-zero-values#ex2",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport \"fmt\"\n\ntype Account struct {\n\tBalance float64\n}\n\nfunc (a Account) DepositWrong(amount float64) {\n\ta.Balance += amount   // mutates a COPY -- caller's Account is untouched\n}\n\nfunc (a *Account) Deposit(amount float64) {\n\ta.Balance += amount   // mutates through the pointer -- reaches the real Account\n}\n\nfunc main() {\n\tacc := Account{Balance: 100}\n\n\tacc.DepositWrong(50)\n\tfmt.Println(acc.Balance)   // 100 -- unchanged\n\n\tacc.Deposit(50)\n\tfmt.Println(acc.Balance)   // 150 -- changed\n}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-zero-values-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "{42  false} -- ID is 42 (explicitly set), Customer is the empty string \"\" (its zero value, printed as nothing visible between the spaces), and Paid is false (its zero value). None of this requires any explicit initialization of Customer or Paid.",
+  "st": "skip-lang",
+  "code": "package main\n\nimport \"fmt\"\n\ntype Order struct {\n\tID       int\n\tCustomer string\n\tPaid     bool\n}\n\nfunc main() {\n\tvar o Order\n\to.ID = 42\n\tfmt.Println(o)\n}",
+  "expl": "`var o Order` immediately gives every field of `o` its own zero value: `ID` becomes `0` (int's zero value), `Customer` becomes `\"\"` (string's zero value), and `Paid` becomes `false` (bool's zero value) -- all before any code runs. The line `o.ID = 42` then overwrites just the `ID` field, leaving `Customer` and `Paid` at their zero values untouched. `fmt.Println(o)` prints the struct's fields in declaration order space-separated inside braces: `{42  false}` -- note the empty string renders as nothing, producing what looks like two spaces between `42` and `false`. Nothing here panics or errors, because every field had a well-defined value the entire time; only `ID` was ever explicitly touched."
+ },
+ {
+  "course": "go",
+  "id": "go-zero-values-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport \"fmt\"\n\ntype Inventory struct {\n\tCount int\n}\n\nfunc (inv Inventory) Sell(quantity int) {\n\tinv.Count -= quantity\n}\n\nfunc main() {\n\tstock := Inventory{Count: 100}\n\tstock.Sell(10)\n\tstock.Sell(5)\n\tfmt.Println(stock.Count)   // expected 85, got 100\n}",
+  "expl": "The original `Sell` used a value receiver, `(inv Inventory)`, so every call -- `stock.Sell(10)`, `stock.Sell(5)` -- received its own fresh copy of `stock`, decremented that copy's `Count`, and then discarded the copy when the method returned, leaving the real `stock.Count` completely untouched across both calls. Changing the receiver to a pointer, `(inv *Inventory)`, means `stock.Sell(10)` is automatically treated as `(&stock).Sell(10)`, so `inv.Count -= quantity` now writes through the pointer directly into the real `stock` struct. With that fix, the first call brings `Count` to 90, and the second brings it to 85, correctly reflecting both sales instead of losing every mutation the instant each call returns."
+ },
+ {
+  "course": "go",
+  "id": "go-zero-values-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport \"fmt\"\n\ntype Inventory struct {\n\tCount int\n}\n\nfunc (inv *Inventory) Sell(quantity int) {\n\tinv.Count -= quantity\n}\n\nfunc main() {\n\tstock := Inventory{Count: 100}\n\tstock.Sell(10)\n\tstock.Sell(5)\n\tfmt.Println(stock.Count)   // 85\n}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-packages-stdlib#ex0",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "// file: bank/account.go\npackage bank\n\ntype Account struct {\n\tOwner   string   // exported\n\tbalance float64   // unexported\n}\n\nfunc NewAccount(owner string, initial float64) *Account {\n\treturn &Account{Owner: owner, balance: initial}\n}\n\nfunc (a *Account) Balance() float64 {   // exported method exposes the unexported field, in a controlled way\n\treturn a.balance\n}\n\n// file: main.go\npackage main\n\nimport (\n\t\"fmt\"\n\t\"example.com/app/bank\"\n)\n\nfunc main() {\n\tacc := bank.NewAccount(\"Amy\", 100)\n\tfmt.Println(acc.Owner)      // fine -- Owner is exported\n\tfmt.Println(acc.Balance())   // fine -- calling the exported method\n\t// fmt.Println(acc.balance)  // compile error: acc.balance undefined (cannot refer to unexported field)\n}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-packages-stdlib#ex1",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"io\"\n\t\"strings\"\n)\n\nfunc printAllUppercase(r io.Reader) {\n\tdata, _ := io.ReadAll(r)\n\tfmt.Println(strings.ToUpper(string(data)))\n}\n\nfunc main() {\n\tprintAllUppercase(strings.NewReader(\"hello from a string\"))\n\t// The exact same function would also accept an *os.File, a bytes.Buffer,\n\t// an http.Response.Body, or anything else implementing io.Reader --\n\t// printAllUppercase never needed to know any of those types exist.\n}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-packages-stdlib#ex2",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"io\"\n\t\"strings\"\n)\n\ntype WordCounter struct {\n\tCount int\n}\n\nfunc CountWords(r io.Reader) *WordCounter {   // accepts the loose, small interface\n\tdata, _ := io.ReadAll(r)\n\twords := strings.Fields(string(data))\n\treturn &WordCounter{Count: len(words)}   // returns the specific, rich concrete type\n}\n\nfunc main() {\n\tresult := CountWords(strings.NewReader(\"the quick brown fox\"))\n\tfmt.Println(result.Count)   // 4 -- full access to WordCounter's own fields, nothing hidden\n}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-packages-stdlib-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "It compiles successfully and prints 5. NewCircle is exported (capital N) so it's callable from main, and Radius is exported (capital R) so it's readable. The type circle itself is unexported (lowercase c), but that's fine here because main.go never needs to name the type explicitly -- it just uses := to capture whatever NewCircle returns.",
+  "st": "skip-lang",
+  "code": "// file: geometry/shapes.go\npackage geometry\n\ntype circle struct {\n\tRadius float64\n}\n\nfunc NewCircle(r float64) circle {\n\treturn circle{Radius: r}\n}\n\n// file: main.go\npackage main\n\nimport (\n\t\"fmt\"\n\t\"example.com/app/geometry\"\n)\n\nfunc main() {\n\tc := geometry.NewCircle(5)\n\tfmt.Println(c.Radius)\n}",
+  "expl": "`NewCircle` is exported and callable from `package main` via `geometry.NewCircle(5)`. Its return type, `circle`, is unexported -- but that alone doesn't prevent this code from compiling, because `main.go` never writes the identifier `circle` anywhere; `c := geometry.NewCircle(5)` lets the compiler infer `c`'s type without main needing to name it explicitly. Reading `c.Radius` works because `Radius` is exported, regardless of whether the struct type itself is exported. This is a real, sometimes-used Go pattern: a package can return values of an unexported type as long as external callers only ever need to receive and use them via inference or through their exported fields/methods, without ever declaring a variable of that type by name themselves."
+ },
+ {
+  "course": "go",
+  "id": "go-packages-stdlib-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "// file: config/config.go\npackage config\n\ntype Config struct {\n\ttimeout int\n}\n\nfunc Load() Config {\n\treturn Config{timeout: 30}\n}\n\n// file: main.go\npackage main\n\nimport (\n\t\"fmt\"\n\t\"example.com/app/config\"\n)\n\nfunc main() {\n\tcfg := config.Load()\n\tfmt.Println(cfg.timeout)\n}",
+  "expl": "`timeout` (lowercase) is unexported, so it is completely invisible outside `package config` -- `cfg.timeout` in `main.go` fails to compile with an error naming the field as not exported, even though `cfg` itself was obtained successfully via the exported `Load()` function. The fix renames the field to `Timeout` (uppercase), which makes it exported and readable from any package that has a `Config` value, and updates the literal inside `Load()` to match. An alternative fix, if you wanted to keep the field itself private for encapsulation reasons, would be to keep `timeout` lowercase and instead add an exported method like `func (c Config) Timeout() int { return c.timeout }`, giving outside callers a deliberate, controlled read path instead of direct field access -- either approach is idiomatic depending on whether you want callers to have raw field access or not."
+ },
+ {
+  "course": "go",
+  "id": "go-packages-stdlib-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "// file: config/config.go\npackage config\n\ntype Config struct {\n\tTimeout int\n}\n\nfunc Load() Config {\n\treturn Config{Timeout: 30}\n}\n\n// file: main.go\npackage main\n\nimport (\n\t\"fmt\"\n\t\"example.com/app/config\"\n)\n\nfunc main() {\n\tcfg := config.Load()\n\tfmt.Println(cfg.Timeout)\n}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-interface-satisfaction#ex0",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"math\"\n)\n\ntype Shape interface {\n\tArea() float64\n}\n\ntype Circle struct{ Radius float64 }\n\nfunc (c Circle) Area() float64 { return math.Pi * c.Radius * c.Radius }\n\ntype Square struct{ Side float64 }\n\nfunc (s Square) Area() float64 { return s.Side * s.Side }\n\nfunc totalArea(shapes []Shape) float64 {\n\tvar sum float64\n\tfor _, s := range shapes {\n\t\tsum += s.Area()\n\t}\n\treturn sum\n}\n\nfunc main() {\n\tshapes := []Shape{Circle{Radius: 2}, Square{Side: 3}}\n\tfmt.Printf(\"%.2f\\n\", totalArea(shapes))   // 21.57",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-interface-satisfaction#ex1",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"log\"\n\t\"os\"\n)\n\n// Defined entirely in this package -- *log.Logger's own package never sees this.\ntype Logger interface {\n\tPrintf(format string, args ...any)\n}\n\nfunc process(logger Logger, orderID string) {\n\tlogger.Printf(\"processing order %s\", orderID)\n}\n\ntype fakeLogger struct {\n\tmessages []string\n}\n\nfunc (f *fakeLogger) Printf(format string, args ...any) {\n\tf.messages = append(f.messages, fmt.Sprintf(format, args...))\n}\n\nfunc main() {\n\treal := log.New(os.Stdout, \"\", 0)\n\tprocess(real, \"order-1\")   // a real *log.Logger, satisfies Logger with zero coordination\n\n\tfake := &fakeLogger{}\n\tprocess(fake, \"order-2\")   // a trivial test double, satisfies the same interface\n\tfmt.Println(fake.messages) // [processing order order-2]",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-interface-satisfaction#ex2",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport \"fmt\"\n\ntype MyError struct{ msg string }\n\nfunc (e *MyError) Error() string { return e.msg }\n\nfunc mightFail(shouldFail bool) error {\n\tvar problem *MyError\n\tif shouldFail {\n\t\tproblem = &MyError{msg: \"it failed\"}\n\t}\n\treturn problem   // always a non-nil error interface, even when problem itself is nil\n}\n\nfunc main() {\n\terr := mightFail(false)\n\tfmt.Println(err == nil)   // false -- surprising!\n\tif err != nil {\n\t\tfmt.Println(\"reported a failure that never actually happened\")\n\t}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-interface-satisfaction-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "It prints 'isNilPointer: true' and then 'isNilInterface: false'. w is a genuinely nil *Widget, so the first, bare pointer comparison is true. But once w is assigned into the Stringer-typed variable s, s holds the pair (type=*Widget, value=nil) -- the type half is populated even though the pointer itself is nil, so s == nil is false.",
+  "st": "skip-lang",
+  "code": "package main\n\nimport \"fmt\"\n\ntype Widget struct{}\n\nfunc (w *Widget) String() string { return \"a widget\" }\n\ntype Stringer interface {\n\tString() string\n}\n\nfunc main() {\n\tvar w *Widget\n\tfmt.Println(\"isNilPointer:\", w == nil)\n\n\tvar s Stringer = w\n\tfmt.Println(\"isNilInterface:\", s == nil)\n}",
+  "expl": "`w` is declared as `var w *Widget` with no initialization, so it's a genuinely nil pointer, and `w == nil` is a straightforward, true pointer comparison. The second comparison is different in kind, not just in value: `s` is a `Stringer`-typed variable, and interface values are internally a (concrete type, concrete value) pair. Assigning `w` into `s` sets that pair to `(*Widget, nil)` -- the type half now names `*Widget` explicitly, even though the value half is still a nil pointer underneath. Comparing `s == nil` checks whether *both* halves of that pair are nil/absent, and since the type half is populated, the comparison is `false`, even though the pointer value stored inside is nil in every practical sense. This is exactly the gotcha that makes returning a possibly-nil concrete pointer through an interface-typed value (like a custom error type through `error`) dangerous unless handled deliberately."
+ },
+ {
+  "course": "go",
+  "id": "go-interface-satisfaction-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport \"fmt\"\n\ntype ValidationError struct{ Reason string }\n\nfunc (e *ValidationError) Error() string { return e.Reason }\n\nfunc validate(input string) error {\n\tvar problem *ValidationError\n\tif len(input) == 0 {\n\t\tproblem = &ValidationError{Reason: \"input cannot be empty\"}\n\t}\n\treturn problem\n}\n\nfunc main() {\n\terr := validate(\"hello\")\n\tif err != nil {\n\t\tfmt.Println(\"unexpectedly failed:\", err)\n\t} else {\n\t\tfmt.Println(\"validation passed\")\n\t}",
+  "expl": "The original `validate` always returns `problem`, a `*ValidationError`, through its `error`-typed return slot -- even when `input` is non-empty and `problem` was never assigned anything, leaving it as a nil `*ValidationError`. Returning that nil pointer through the `error` interface still populates the interface's type half with `*ValidationError`, producing a non-nil `error` value regardless of the pointer's own nil-ness, exactly as the nil-interface gotcha describes. The fix restructures the function to return concrete, explicit values for each case: `return &ValidationError{...}` when validation genuinely fails, and a bare `return nil` -- the untyped nil literal, not a nil-valued variable of a concrete type -- when it doesn't. With that change, the success path returns a truly nil `error` interface, and `err != nil` correctly evaluates to `false` for valid input."
+ },
+ {
+  "course": "go",
+  "id": "go-interface-satisfaction-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport \"fmt\"\n\ntype ValidationError struct{ Reason string }\n\nfunc (e *ValidationError) Error() string { return e.Reason }\n\nfunc validate(input string) error {\n\tif len(input) == 0 {\n\t\treturn &ValidationError{Reason: \"input cannot be empty\"}\n\t}\n\treturn nil\n}\n\nfunc main() {\n\terr := validate(\"hello\")\n\tif err != nil {\n\t\tfmt.Println(\"unexpectedly failed:\", err)\n\t} else {\n\t\tfmt.Println(\"validation passed\")\n\t}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-struct-embedding#ex0",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport \"fmt\"\n\ntype Metadata struct {\n\tCreatedBy string\n}\n\nfunc (m Metadata) Describe() string {\n\treturn \"created by \" + m.CreatedBy\n}\n\ntype Document struct {\n\tMetadata\n\tTitle string\n}\n\nfunc main() {\n\tdoc := Document{\n\t\tMetadata: Metadata{CreatedBy: \"Amy\"},\n\t\tTitle:    \"Q3 Report\",\n\t}\n\n\tfmt.Println(doc.CreatedBy)   // Amy -- Metadata's field, promoted onto Document\n\tfmt.Println(doc.Describe())    // created by Amy -- Metadata's method, promoted onto Document\n\tfmt.Println(doc.Metadata.CreatedBy)   // Amy -- still reachable explicitly too",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-struct-embedding#ex1",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport \"fmt\"\n\ntype Animal struct{ Name string }\n\nfunc (a Animal) Speak() string { return a.Name + \" makes a sound\" }\n\ntype Dog struct {\n\tAnimal\n}\n\nfunc (d Dog) Speak() string {\n\treturn d.Animal.Speak() + \" -- specifically, a bark\"\n}\n\nfunc main() {\n\td := Dog{Animal: Animal{Name: \"Rex\"}}\n\tfmt.Println(d.Speak())            // Rex makes a sound -- specifically, a bark\n\n\tvar a Animal = d.Animal\n\tfmt.Println(a.Speak())            // Rex makes a sound -- Dog's override never enters the picture",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-struct-embedding#ex2",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport \"fmt\"\n\ntype Greeter interface {\n\tGreet() string\n}\n\ntype LoudGreeter struct {\n\tGreeter   // embedded interface -- left unset here\n}\n\nfunc main() {\n\tvar lg LoudGreeter   // Greeter field defaults to nil\n\tfmt.Println(lg.Greet())   // panics: nil pointer dereference / invalid memory address",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-struct-embedding-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "It prints 'balance: 500 (premium: lounge access)', then 'balance: 500', then 'balance: 500'. The first line uses PremiumAccount's own override, which itself calls the embedded Account's Describe() and appends the premium detail. The second and third lines both call Account's own Describe() directly -- one via explicit qualification (p.Account.Describe()), the other via a plain Account-typed variable (a.Describe()) -- neither of which ever invokes PremiumAccount's override, since neither is operating on a PremiumAccount-typed value.",
+  "st": "skip-lang",
+  "code": "package main\n\nimport \"fmt\"\n\ntype Account struct{ Balance int }\n\nfunc (a Account) Describe() string { return fmt.Sprintf(\"balance: %d\", a.Balance) }\n\ntype PremiumAccount struct {\n\tAccount\n\tPerks string\n}\n\nfunc (p PremiumAccount) Describe() string {\n\treturn p.Account.Describe() + \" (premium: \" + p.Perks + \")\"\n}\n\nfunc main() {\n\tp := PremiumAccount{Account: Account{Balance: 500}, Perks: \"lounge access\"}\n\n\tfmt.Println(p.Describe())\n\tfmt.Println(p.Account.Describe())\n\n\tvar a Account = p.Account\n\tfmt.Println(a.Describe())\n}",
+  "expl": "`p.Describe()` resolves to `PremiumAccount`'s own `Describe()`, because it shadows the promoted `Account.Describe()` at `PremiumAccount`'s own call sites; that method's body explicitly calls `p.Account.Describe()` and appends the premium detail, producing the combined string. `p.Account.Describe()` on the second line reaches directly into the embedded `Account` value and calls its own `Describe()`, which knows nothing about `PremiumAccount` or its override -- it simply reports the balance. The third line copies `p.Account` into a plain `Account`-typed variable `a`; calling `a.Describe()` invokes `Account`'s own method exactly as it would for any standalone `Account` value, with zero connection to `PremiumAccount`'s override, since embedding creates no mechanism for a value typed as the embedded type to ever reach 'upward' toward whatever might be embedding it."
+ },
+ {
+  "course": "go",
+  "id": "go-struct-embedding-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport \"fmt\"\n\ntype Store interface {\n\tGet(key string) string\n\tSet(key, value string)\n}\n\ntype FakeStore struct {\n\tStore   // embedded interface, meant to satisfy Set for us\n\tcanned  string\n}\n\nfunc (f *FakeStore) Get(key string) string {\n\treturn f.canned\n}\n\nfunc main() {\n\tfake := &FakeStore{canned: \"stub-value\"}\n\tfmt.Println(fake.Get(\"anything\"))\n\n\tfake.Set(\"key\", \"value\")   // meant to just be a harmless no-op forwarded call\n\tfmt.Println(\"done\")",
+  "expl": "`FakeStore` embeds the `Store` interface specifically so it satisfies `Store`'s full method set at compile time while only explicitly implementing `Get` -- `Set` was meant to fall through to the embedded interface field. The bug is that nothing in `main` ever assigns a real value into that embedded `Store` field, so it sits at its zero value, `nil`; calling `fake.Set(...)` forwards straight into that nil interface and panics with a nil pointer dereference, since there's no concrete implementation behind it to actually handle the call. The fix implements `Set` directly on `FakeStore` as an explicit no-op, exactly like `Get` already is, rather than relying on forwarding through an interface field that nothing ever populated -- this is generally the safer approach for a test double: implement every method you intend to actually call yourself, and only lean on embedding-for-forwarding when you're certain the embedded field will be assigned a real, working implementation before any of its methods are invoked."
+ },
+ {
+  "course": "go",
+  "id": "go-struct-embedding-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport \"fmt\"\n\ntype Store interface {\n\tGet(key string) string\n\tSet(key, value string)\n}\n\ntype FakeStore struct {\n\tStore\n\tcanned string\n}\n\nfunc (f *FakeStore) Get(key string) string {\n\treturn f.canned\n}\n\nfunc (f *FakeStore) Set(key, value string) {\n\t// intentionally a no-op for this fake -- no longer forwards to the (unset) embedded Store\n}\n\nfunc main() {\n\tfake := &FakeStore{canned: \"stub-value\"}\n\tfmt.Println(fake.Get(\"anything\"))\n\n\tfake.Set(\"key\", \"value\")\n\tfmt.Println(\"done\")",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-composition-over-inheritance#ex0",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport \"fmt\"\n\n// Reuse: any struct that embeds Timestamped gets CreatedAt and Age() for free.\ntype Timestamped struct{ CreatedAt int }\nfunc (t Timestamped) Age(now int) int { return now - t.CreatedAt }\n\n// Polymorphism: any type with a Notify method satisfies this, regardless of ancestry.\ntype Notifier interface{ Notify(message string) }\n\ntype EmailAlert struct {\n\tTimestamped\n\tTo string\n}\nfunc (e EmailAlert) Notify(message string) { fmt.Println(\"email to\", e.To+\":\", message) }\n\ntype SMSAlert struct {\n\tTimestamped\n\tPhone string\n}\nfunc (s SMSAlert) Notify(message string) { fmt.Println(\"sms to\", s.Phone+\":\", message) }\n\nfunc broadcast(notifiers []Notifier, message string) {\n\tfor _, n := range notifiers {\n\t\tn.Notify(message)\n\t}\n}\n\nfunc main() {\n\talerts := []Notifier{\n\t\tEmailAlert{Timestamped: Timestamped{CreatedAt: 10}, To: \"amy@example.com\"},\n\t\tSMSAlert{Timestamped: Timestamped{CreatedAt: 12}, Phone: \"555-0100\"},\n\t}\n\tbroadcast(alerts, \"system maintenance at midnight\")",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-composition-over-inheritance#ex1",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport \"fmt\"\n\ntype Cache interface {\n\tGet(key string) (string, bool)\n}\n\ntype memoryCache struct{ data map[string]string }\nfunc (m *memoryCache) Get(key string) (string, bool) { v, ok := m.data[key]; return v, ok }\n\ntype alwaysMissCache struct{}\nfunc (alwaysMissCache) Get(key string) (string, bool) { return \"\", false }\n\ntype Service struct {\n\tCache   // embedded interface -- whichever implementation is supplied, promoted directly\n\tName string\n}\n\nfunc main() {\n\treal := Service{Cache: &memoryCache{data: map[string]string{\"a\": \"1\"}}, Name: \"prod\"}\n\tv, ok := real.Get(\"a\")\n\tfmt.Println(v, ok)   // 1 true\n\n\ttest := Service{Cache: alwaysMissCache{}, Name: \"test\"}\n\tv, ok = test.Get(\"a\")\n\tfmt.Println(v, ok)   // '' false",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-composition-over-inheritance#ex2",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "// Anti-pattern: mimicking a class hierarchy through nested embedding.\ntype Base struct{ ID int }\ntype Named struct { Base; Name string }\ntype Timestamped struct { Named; CreatedAt int }\ntype FullRecord struct { Timestamped; Notes string }\n// FullRecord now promotes through three layers -- ID, Name, CreatedAt, and Notes --\n// but each layer is rigidly, sequentially dependent on the one directly beneath it.\n\n// Flatter alternative: one level, composed of a few independent, named pieces.\ntype Record struct {\n\tID        int\n\tName      string\n\tCreatedAt int\n\tNotes     string\n}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-composition-over-inheritance-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "It prints 'deployment complete' and then 'deployment complete!!!'. Service's own definition never changes between the two -- only which concrete Formatter implementation is supplied for the embedded field differs, and Format() forwards to whichever one each Service instance actually holds.",
+  "st": "skip-lang",
+  "code": "package main\n\nimport \"fmt\"\n\ntype Formatter interface {\n\tFormat(msg string) string\n}\n\ntype plainFormatter struct{}\nfunc (plainFormatter) Format(msg string) string { return msg }\n\ntype shoutFormatter struct{}\nfunc (shoutFormatter) Format(msg string) string { return msg + \"!!!\" }\n\ntype Service struct {\n\tFormatter\n}\n\nfunc main() {\n\tquiet := Service{Formatter: plainFormatter{}}\n\tloud := Service{Formatter: shoutFormatter{}}\n\n\tfmt.Println(quiet.Format(\"deployment complete\"))\n\tfmt.Println(loud.Format(\"deployment complete\"))\n}",
+  "expl": "`quiet.Format(...)` forwards through the embedded `Formatter` field to `plainFormatter`'s `Format`, which returns the message unchanged, printing 'deployment complete'. `loud.Format(...)` forwards to `shoutFormatter`'s `Format` instead, which appends '!!!', printing 'deployment complete!!!'. Both calls go through the exact same promoted method on the exact same `Service` struct definition -- nothing about `Service` itself distinguishes 'quiet' from 'loud' behavior. The difference is entirely a function of which concrete value was supplied for the embedded interface field at construction time, which is precisely the composition payoff this concept describes: swapping behavior by supplying a different small, interface-satisfying piece, with the outer type's own definition never needing to change, branch, or know in advance which implementation it will eventually receive."
+ },
+ {
+  "course": "go",
+  "id": "go-composition-over-inheritance-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport \"fmt\"\n\ntype Employee struct {\n\tName string\n\tID   int\n}\n\ntype Manager struct {\n\tEmployee\n\tTeamSize int\n}\n\ntype Executive struct {\n\tManager\n\tStockOptions int\n}\n\nfunc main() {\n\texec := Executive{\n\t\tManager: Manager{\n\t\t\tEmployee: Employee{Name: \"Dana\", ID: 7},\n\t\t\tTeamSize: 12,\n\t\t},\n\t\tStockOptions: 5000,\n\t}\n\tfmt.Println(exec.Name, exec.TeamSize, exec.StockOptions)",
+  "expl": "The original chain forces `Executive` to be built *through* `Manager`, meaning `Executive` unavoidably carries `TeamSize` even if a given executive role has no team size of its own -- and it means `Executive` is rigidly, structurally dependent on `Manager`'s exact shape, so any future change to `Manager` (renaming or restructuring its fields) automatically ripples into `Executive` whether that's wanted or not, exactly the fragile-base-class coupling composition over inheritance is meant to avoid. The refactor flattens the design to one level: both `Manager` and `Executive` embed `Employee` directly (for the genuinely shared name/ID fields) and each declares its own `Department` field independently, alongside whichever role-specific fields it actually needs (`TeamSize` for `Manager`, `StockOptions` for `Executive`). This does introduce one small duplication -- `Department` is declared twice -- but that's a deliberate, honest trade: each type now stands on its own, changing one has no chance of rippling into the other, and reading either type's definition tells you its complete, real shape without needing to trace through an ancestor chain at all."
+ },
+ {
+  "course": "go",
+  "id": "go-composition-over-inheritance-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package main\n\nimport \"fmt\"\n\ntype Employee struct {\n\tName string\n\tID   int\n}\n\ntype Manager struct {\n\tEmployee\n\tDepartment string\n\tTeamSize   int\n}\n\ntype Executive struct {\n\tEmployee\n\tDepartment   string\n\tStockOptions int\n}\n\nfunc main() {\n\texec := Executive{\n\t\tEmployee:     Employee{Name: \"Dana\", ID: 7},\n\t\tDepartment:   \"Engineering\",\n\t\tStockOptions: 5000,\n\t}\n\tfmt.Println(exec.Name, exec.Department, exec.StockOptions)",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-testing-basics#ex0",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "// add.go\npackage mathutil\n\nfunc Add(a, b int) int {\n\treturn a + b\n}\n\n// add_test.go\npackage mathutil\n\nimport \"testing\"\n\nfunc TestAdd(t *testing.T) {\n\tgot := Add(2, 3)\n\twant := 5\n\tif got != want {\n\t\tt.Errorf(\"Add(2, 3) = %d, want %d\", got, want)\n\t}\n}\n\n// $ go test ./...\n// ok      example.com/mathutil   0.002s\n//\n// $ go test -v ./...\n// === RUN   TestAdd\n// --- PASS: TestAdd (0.00s)\n// PASS\n// ok      example.com/mathutil   0.002s",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-testing-basics#ex1",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package config\n\nimport \"testing\"\n\nfunc TestParseSettings(t *testing.T) {\n\tsettings, err := ParseSettings(`{\"timeout\": 30, \"retries\": 3}`)\n\tif err != nil {\n\t\tt.Fatalf(\"ParseSettings returned an unexpected error: %v\", err)\n\t}\n\n\tif settings.Timeout != 30 {\n\t\tt.Errorf(\"Timeout = %d, want 30\", settings.Timeout)\n\t}\n\tif settings.Retries != 3 {\n\t\tt.Errorf(\"Retries = %d, want 3\", settings.Retries)\n\t}\n}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-testing-basics#ex2",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package stringutil\n\nimport \"testing\"\n\nfunc assertEqual(t *testing.T, got, want string) {\n\tt.Helper()\n\tif got != want {\n\t\tt.Errorf(\"got %q, want %q\", got, want)\n\t}\n}\n\nfunc TestReverse(t *testing.T) {\n\tassertEqual(t, Reverse(\"abc\"), \"cba\")   // line 12\n\tassertEqual(t, Reverse(\"\"), \"\")           // line 13\n\tassertEqual(t, Reverse(\"go\"), \"go\")       // line 14 -- deliberately wrong expectation",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-testing-basics-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "--- FAIL: TestValues, with two error messages printed: the first check's message (2+2 != 5 is true, so it fails and calls Errorf) and the third check's message (4+4 != 9 is true, so it also fails). The second check's condition (3+3 != 6) is false, so that Errorf never runs. The overall test is reported as FAIL because at least one Errorf was called, even though execution reached and completed all three if statements.",
+  "st": "skip-lang",
+  "code": "package mathutil\n\nimport \"testing\"\n\nfunc TestValues(t *testing.T) {\n\tif 2+2 != 5 {\n\t\tt.Errorf(\"2+2 should equal 5 (deliberately wrong check #1)\")\n\t}\n\tif 3+3 != 6 {\n\t\tt.Errorf(\"3+3 should equal 6 (this check actually passes)\")\n\t}\n\tif 4+4 != 9 {\n\t\tt.Errorf(\"4+4 should equal 9 (deliberately wrong check #2)\")\n\t}\n}",
+  "expl": "Each `if` is evaluated independently: `2+2 != 5` is true (4 != 5), so its Errorf fires and records message #1. `3+3 != 6` is false (6 == 6), so nothing happens on that line -- no message. `4+4 != 9` is true (8 != 9), so its Errorf fires and records message #2. Because t.Errorf never stops execution, all three if statements run regardless of what happened on the previous ones, which is why both failing checks get to report their own message in the same run, rather than the first failure hiding the second. The test function's overall status is FAIL the moment even one Errorf call happens anywhere during its execution, regardless of how many other checks in the same function happened to pass."
+ },
+ {
+  "course": "go",
+  "id": "go-testing-basics-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package worker\n\nimport (\n\t\"testing\"\n)\n\nfunc TestProcessInvalidInput(t *testing.T) {\n\tdone := make(chan struct{})\n\tgo func() {\n\t\tdefer close(done)\n\t\tresult, err := Process(\"\")\n\t\tif err == nil {\n\t\t\tt.Fatalf(\"Process(\\\"\\\") = %v, nil; want a non-nil error\", result)\n\t\t}\n\t}()\n\t<-done\n}",
+  "expl": "The original code called t.Fatalf from inside a goroutine spawned by the test itself, which the testing package explicitly documents as unsupported: FailNow (which Fatal/Fatalf call) is only meaningful when it can unwind the goroutine actually running the test function via runtime.Goexit -- calling it from a different goroutine cannot correctly stop that other goroutine's test function, and in practice tends to either hang (the done channel never gets closed because Goexit unwinds the spawned goroutine without running the rest of its deferred cleanup as expected relative to the test) or produce a confusing runtime panic instead of a clean, reported test failure. The fix moves the actual reporting call back into the test function's own goroutine: the spawned goroutine only computes and stores the result and error, and TestProcessInvalidInput itself -- after receiving from done -- performs the check and calls t.Fatalf from the correct goroutine, where FailNow behaves exactly as documented."
+ },
+ {
+  "course": "go",
+  "id": "go-testing-basics-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package worker\n\nimport (\n\t\"testing\"\n)\n\nfunc TestProcessInvalidInput(t *testing.T) {\n\tdone := make(chan struct{})\n\tvar result string\n\tvar procErr error\n\tgo func() {\n\t\tdefer close(done)\n\t\tresult, procErr = Process(\"\")\n\t}()\n\t<-done\n\n\tif procErr == nil {\n\t\tt.Fatalf(\"Process(\\\"\\\") = %v, nil; want a non-nil error\", result)\n\t}\n}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-table-driven-tests#ex0",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package mathutil\n\nimport \"testing\"\n\nfunc TestAbs(t *testing.T) {\n\tcases := []struct {\n\t\tname  string\n\t\tinput int\n\t\twant  int\n\t}{\n\t\t{name: \"positive stays positive\", input: 5, want: 5},\n\t\t{name: \"negative becomes positive\", input: -5, want: 5},\n\t\t{name: \"zero stays zero\", input: 0, want: 0},\n\t}\n\n\tfor _, tc := range cases {\n\t\tt.Run(tc.name, func(t *testing.T) {\n\t\t\tgot := Abs(tc.input)\n\t\t\tif got != tc.want {\n\t\t\t\tt.Errorf(\"Abs(%d) = %d, want %d\", tc.input, got, tc.want)\n\t\t\t}\n\t\t})\n\t}\n}\n\n// $ go test -v\n// === RUN   TestAbs\n// === RUN   TestAbs/positive_stays_positive\n// --- PASS: TestAbs/positive_stays_positive (0.00s)\n// === RUN   TestAbs/negative_becomes_positive\n// --- PASS: TestAbs/negative_becomes_positive (0.00s)\n// === RUN   TestAbs/zero_stays_zero\n// --- PASS: TestAbs/zero_stays_zero (0.00s)\n// --- PASS: TestAbs (0.00s)",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-table-driven-tests#ex1",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package config\n\nimport \"testing\"\n\nfunc TestParsePort(t *testing.T) {\n\tcases := []struct {\n\t\tname    string\n\t\tinput   string\n\t\twant    int\n\t\twantErr bool\n\t}{\n\t\t{name: \"valid port\", input: \"8080\", want: 8080, wantErr: false},\n\t\t{name: \"empty string\", input: \"\", want: 0, wantErr: true},\n\t\t{name: \"non-numeric\", input: \"abc\", want: 0, wantErr: true},\n\t\t{name: \"negative number\", input: \"-1\", want: 0, wantErr: true},\n\t}\n\n\tfor _, tc := range cases {\n\t\tt.Run(tc.name, func(t *testing.T) {\n\t\t\tgot, err := ParsePort(tc.input)\n\t\t\tif (err != nil) != tc.wantErr {\n\t\t\t\tt.Fatalf(\"ParsePort(%q) error = %v, wantErr %v\", tc.input, err, tc.wantErr)\n\t\t\t}\n\t\t\tif err == nil && got != tc.want {\n\t\t\t\tt.Errorf(\"ParsePort(%q) = %d, want %d\", tc.input, got, tc.want)\n\t\t\t}\n\t\t})\n\t}\n}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-table-driven-tests#ex2",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "// Vulnerable on Go < 1.22 -- every parallel subtest may see the SAME, final tc\nfor _, tc := range cases {\n\tt.Run(tc.name, func(t *testing.T) {\n\t\tt.Parallel()\n\t\tgot := IsPalindrome(tc.input)   // tc might not be THIS iteration's value by the time this runs\n\t\tif got != tc.want {\n\t\t\tt.Errorf(\"IsPalindrome(%q) = %v, want %v\", tc.input, got, tc.want)\n\t\t}\n\t})\n}\n\n// Correct on every Go version -- tc is explicitly shadowed per iteration\nfor _, tc := range cases {\n\ttc := tc   // shadow: THIS subtest's own tc, frozen at this exact iteration\n\tt.Run(tc.name, func(t *testing.T) {\n\t\tt.Parallel()\n\t\tgot := IsPalindrome(tc.input)\n\t\tif got != tc.want {\n\t\t\tt.Errorf(\"IsPalindrome(%q) = %v, want %v\", tc.input, got, tc.want)\n\t\t}\n\t})\n}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-table-driven-tests-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "TestCapitalize/lowercase_word and TestCapitalize/already_capitalized both PASS. TestCapitalize/empty_string FAILS, reporting something like 'Capitalize(\"\") = \"\", want \"X\"'. The overall TestCapitalize is reported as FAIL because at least one of its subtests failed, even though two of the three passed.",
+  "st": "skip-lang",
+  "code": "package stringutil\n\nimport \"testing\"\n\nfunc TestCapitalize(t *testing.T) {\n\tcases := []struct {\n\t\tname  string\n\t\tinput string\n\t\twant  string\n\t}{\n\t\t{name: \"lowercase word\", input: \"hello\", want: \"Hello\"},\n\t\t{name: \"already capitalized\", input: \"World\", want: \"World\"},\n\t\t{name: \"empty string\", input: \"\", want: \"X\"},   // deliberately wrong expectation\n\t}\n\n\tfor _, tc := range cases {\n\t\ttc := tc\n\t\tt.Run(tc.name, func(t *testing.T) {\n\t\t\tgot := Capitalize(tc.input)\n\t\t\tif got != tc.want {\n\t\t\t\tt.Errorf(\"Capitalize(%q) = %q, want %q\", tc.input, got, tc.want)\n\t\t\t}\n\t\t})\n\t}\n}\n\n// Assume Capitalize(\"\") correctly returns \"\" (an empty string capitalized is still empty).",
+  "expl": "The first case expects Capitalize(\"hello\") to be \"Hello\", which matches correct capitalization behavior, so it passes. The second case expects Capitalize(\"World\") to remain \"World\" (already capitalized), which also matches correct behavior and passes. The third case expects Capitalize(\"\") to equal \"X\", but a correct Capitalize implementation applied to an empty string has nothing to capitalize and returns \"\" -- so got (\"\") does not equal want (\"X\"), and this subtest's t.Errorf fires, reporting the mismatch with the actual and wrong-expected values. Because t.Run gives each case its own independent *testing.T, the failing third case has no effect on the first two, which is why they still report PASS in the same run; the parent TestCapitalize is marked FAIL overall simply because at least one of its subtests failed, following the general rule that a test function fails if any Error/Errorf/Fatal/Fatalf fired anywhere within its own run, including within any of its subtests."
+ },
+ {
+  "course": "go",
+  "id": "go-table-driven-tests-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package stringutil\n\nimport \"testing\"\n\nfunc TestCountVowels(t *testing.T) {\n\tcases := []struct {\n\t\tname  string\n\t\tinput string\n\t\twant  int\n\t}{\n\t\t{name: \"case a\", input: \"aaa\", want: 3},\n\t\t{name: \"case b\", input: \"bbb\", want: 0},\n\t\t{name: \"case c\", input: \"ccc\", want: 0},\n\t}\n\n\tfor _, tc := range cases {\n\t\tt.Run(tc.name, func(t *testing.T) {\n\t\t\tt.Parallel()\n\t\t\tgot := CountVowels(tc.input)\n\t\t\tif got != tc.want {\n\t\t\t\tt.Errorf(\"CountVowels(%q) = %d, want %d\", tc.input, got, tc.want)\n\t\t\t}\n\t\t})\n\t}\n}",
+  "expl": "Because `t.Parallel()` is called inside each subtest, that subtest pauses and hands control back to the loop immediately, rather than running its body right away -- the loop reaches all three t.Run calls, and only afterward do the parallel subtests actually execute, once the parent test function finishes and waits for them. On a Go version (or toolchain configuration) without per-iteration loop variables, there is only one shared `tc`, so by the time any subtest's deferred body actually runs, `tc` typically holds the table's last entry (`{name: \"case c\", input: \"ccc\", want: 0}`) for all three -- which is exactly why every subtest appeared to test `\"ccc\"`, even the ones named \"case a\" and \"case b\". The fix, `tc := tc` immediately inside the loop body before `t.Run`, declares a brand-new variable scoped to that single iteration, which the subtest's closure then captures instead of the shared loop variable -- giving each of the three subtests its own, correctly distinct case data regardless of when its deferred body actually executes."
+ },
+ {
+  "course": "go",
+  "id": "go-table-driven-tests-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package stringutil\n\nimport \"testing\"\n\nfunc TestCountVowels(t *testing.T) {\n\tcases := []struct {\n\t\tname  string\n\t\tinput string\n\t\twant  int\n\t}{\n\t\t{name: \"case a\", input: \"aaa\", want: 3},\n\t\t{name: \"case b\", input: \"bbb\", want: 0},\n\t\t{name: \"case c\", input: \"ccc\", want: 0},\n\t}\n\n\tfor _, tc := range cases {\n\t\ttc := tc   // give this iteration's subtest its own independent copy of tc\n\t\tt.Run(tc.name, func(t *testing.T) {\n\t\t\tt.Parallel()\n\t\t\tgot := CountVowels(tc.input)\n\t\t\tif got != tc.want {\n\t\t\t\tt.Errorf(\"CountVowels(%q) = %d, want %d\", tc.input, got, tc.want)\n\t\t\t}\n\t\t})\n\t}\n}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-benchmarks#ex0",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package stringutil\n\nimport \"testing\"\n\nfunc BenchmarkConcat(b *testing.B) {\n\tfor i := 0; i < b.N; i++ {\n\t\t_ = \"hello\" + \" \" + \"world\"\n\t}\n}\n\nfunc BenchmarkSprintf(b *testing.B) {\n\tfor i := 0; i < b.N; i++ {\n\t\t_ = fmt.Sprintf(\"%s %s\", \"hello\", \"world\")\n\t}\n}\n\n// $ go test -bench=. -run=^$ -benchmem\n// BenchmarkConcat-8     1000000000         0.35 ns/op        0 B/op        0 allocs/op\n// BenchmarkSprintf-8      5000000          312 ns/op        32 B/op        2 allocs/op",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-benchmarks#ex1",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package mathutil\n\nimport \"testing\"\n\nfunc fib(n int) int {\n\tif n < 2 {\n\t\treturn n\n\t}\n\treturn fib(n-1) + fib(n-2)\n}\n\n// SUSPECT: result is discarded every iteration -- a smart-enough compiler MIGHT skip real work\nfunc BenchmarkFibBad(b *testing.B) {\n\tfor i := 0; i < b.N; i++ {\n\t\tfib(20)\n\t}\n}\n\nvar sink int\n\n// SAFE: result flows to a package-level variable, which the compiler cannot prove is unused\nfunc BenchmarkFibGood(b *testing.B) {\n\tvar r int\n\tfor i := 0; i < b.N; i++ {\n\t\tr = fib(20)\n\t}\n\tsink = r\n}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-benchmarks#ex2",
+  "type": "example",
+  "lang": "go",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package search\n\nimport (\n\t\"sort\"\n\t\"testing\"\n)\n\nfunc buildSortedSlice(n int) []int {\n\tdata := make([]int, n)\n\tfor i := range data {\n\t\tdata[i] = i * 2\n\t}\n\treturn data\n}\n\nfunc BenchmarkBinarySearch(b *testing.B) {\n\tdata := buildSortedSlice(1_000_000)   // one-time setup, irrelevant to the operation being measured\n\tb.ResetTimer()\n\n\tfor i := 0; i < b.N; i++ {\n\t\t_ = sort.SearchInts(data, 500_000)\n\t}\n}",
+  "expl": null
+ },
+ {
+  "course": "go",
+  "id": "go-benchmarks-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "BenchmarkHashA is the one likely to report a suspiciously fast, unreliable ns/op. Its loop calls hash(data) and discards the result every iteration, giving the compiler a potential opportunity to determine the call's result (and possibly the call itself, depending on inlining and optimization) is never used and eliminate some of that work. BenchmarkHashB assigns the result to r each iteration and then to the package-level sink at the end, which the compiler cannot prove is unused, so it must actually perform the real work every time.",
+  "st": "skip-lang",
+  "code": "func BenchmarkHashA(b *testing.B) {\n\tdata := []byte(\"some input data to hash\")\n\tfor i := 0; i < b.N; i++ {\n\t\thash(data)\n\t}\n}\n\nvar sink uint64\n\nfunc BenchmarkHashB(b *testing.B) {\n\tdata := []byte(\"some input data to hash\")\n\tvar r uint64\n\tfor i := 0; i < b.N; i++ {\n\t\tr = hash(data)\n\t}\n\tsink = r\n}",
+  "expl": "BenchmarkHashA's loop body is `hash(data)` with the return value completely discarded -- nothing in the function ever reads what hash returns. This is exactly the shape of code vulnerable to dead-code elimination: since the result is provably never observed by anything, an optimizing compiler is permitted, in principle, to skip performing (some or all of) the actual computation, especially if hash is small enough to be inlined at the call site, removing the function-call boundary that would otherwise obscure this from the compiler. BenchmarkHashB avoids this by capturing the result in a loop-local r on every iteration and then writing r into the package-level sink variable once, after the loop -- because sink is a package-level variable, the compiler has no way to prove nothing outside this function will ever read its value, so it cannot justify eliminating the work that produces it. If BenchmarkHashA reports a dramatically lower ns/op than BenchmarkHashB for what should be the identical underlying computation, that gap itself is strong evidence of exactly this kind of unintended optimization, not evidence that hash is somehow faster when called from HashA."
+ },
+ {
+  "course": "go",
+  "id": "go-benchmarks-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package mathutil\n\nimport \"testing\"\n\nfunc BenchmarkFactorial(b *testing.B) {\n\tfor i := 0; i < 100; i++ {\n\t\tFactorial(10)\n\t}\n}",
+  "expl": "The original loop always runs exactly 100 iterations, completely ignoring b.N -- so no matter what iteration count the benchmark runner decides to try during its calibration process, this function always does the same fixed, tiny amount of work, and the resulting elapsed time is dominated by measurement noise (timer resolution, scheduling jitter) rather than by Factorial's actual per-call cost, which is exactly why the reported numbers vary wildly and never settle down. The fix replaces the hardcoded `100` with `b.N`: now, when the runner tries a larger N to get a longer, more stable total measurement, the loop actually performs that many iterations, letting the elapsed-time-divided-by-N calculation converge on a meaningful, low-noise ns/op value instead of being swamped by fixed per-run overhead."
+ },
+ {
+  "course": "go",
+  "id": "go-benchmarks-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "package mathutil\n\nimport \"testing\"\n\nfunc BenchmarkFactorial(b *testing.B) {\n\tfor i := 0; i < b.N; i++ {\n\t\tFactorial(10)\n\t}\n}",
+  "expl": null
+ }
+]

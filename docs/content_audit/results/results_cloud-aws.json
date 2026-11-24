@@ -1,0 +1,1182 @@
+[
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-regions-azs-shared-responsibility#ex0",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "aws ec2 describe-availability-zones --region us-east-1 --query \"AvailabilityZones[].{Name:ZoneName,Id:ZoneId,State:State}\" --output table\n\n# -------------------------------------------------\n# |            DescribeAvailabilityZones           |\n# +-----------+---------------+---------------------+\n# |    Id     |     Name      |        State        |\n# +-----------+---------------+---------------------+\n# |  use1-az1 |  us-east-1a   |  available           |\n# |  use1-az2 |  us-east-1b   |  available           |\n# |  use1-az4 |  us-east-1d   |  available           |\n# |  use1-az6 |  us-east-1f   |  available           |\n# +-----------+---------------+---------------------+",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-regions-azs-shared-responsibility#ex1",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# Single-AZ: both instances launched into the same subnet -> the same AZ\naws ec2 run-instances --image-id ami-0abcd1234 --instance-type t3.micro \\\n  --subnet-id subnet-aaa111 --count 2   # subnet-aaa111 lives entirely in us-east-1a\n\n# Multi-AZ: one instance per subnet, each subnet in a different AZ\naws ec2 run-instances --image-id ami-0abcd1234 --instance-type t3.micro \\\n  --subnet-id subnet-aaa111 --count 1   # us-east-1a\naws ec2 run-instances --image-id ami-0abcd1234 --instance-type t3.micro \\\n  --subnet-id subnet-bbb222 --count 1   # us-east-1b",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-regions-azs-shared-responsibility#ex2",
+  "type": "example",
+  "lang": "json",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "{\n  \"Version\": \"2012-10-17\",\n  \"Statement\": [\n    {\n      \"Sid\": \"AccidentallyPublicRead\",\n      \"Effect\": \"Allow\",\n      \"Principal\": \"*\",\n      \"Action\": \"s3:GetObject\",\n      \"Resource\": \"arn:aws:s3:::customer-exports-bucket/*\"\n    }\n  ]\n}",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-regions-azs-shared-responsibility-ex1",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "{\n  \"targetGroup\": \"app-tg\",\n  \"instances\": [\n    { \"id\": \"i-0a1b2c3d\", \"subnet\": \"subnet-0f1e2d3c\", \"az\": \"us-east-1a\" },\n    { \"id\": \"i-0e5f6a7b\", \"subnet\": \"subnet-0f1e2d3c\", \"az\": \"us-east-1a\" }\n  ],\n  \"loadBalancer\": { \"name\": \"app-alb\", \"subnets\": [\"subnet-0f1e2d3c\"] }\n}",
+  "expl": "Both instances originally lived in `subnet-0f1e2d3c`, which is pinned to `us-east-1a` -- so despite there being two instances, there was only one real failure domain, and an `us-east-1a` outage would have taken both down simultaneously. The load balancer was in the same position, attached to only that one subnet. The fix moves the second instance into a new subnet, `subnet-0a9b8c7d`, that lives in `us-east-1b`, and adds that subnet to the load balancer's subnet list as well (in practice, AWS actually requires an Application Load Balancer to be associated with subnets in at least two AZs before it can even be created, precisely to prevent this exact single-AZ trap). Now an `us-east-1a` failure leaves the `us-east-1b` instance -- and the load balancer's path to it -- fully intact."
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-regions-azs-shared-responsibility-ex1",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "{\n  \"targetGroup\": \"app-tg\",\n  \"instances\": [\n    { \"id\": \"i-0a1b2c3d\", \"subnet\": \"subnet-0f1e2d3c\", \"az\": \"us-east-1a\" },\n    { \"id\": \"i-0e5f6a7b\", \"subnet\": \"subnet-0a9b8c7d\", \"az\": \"us-east-1b\" }\n  ],\n  \"loadBalancer\": { \"name\": \"app-alb\", \"subnets\": [\"subnet-0f1e2d3c\", \"subnet-0a9b8c7d\"] }\n}",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-regions-azs-shared-responsibility-ex2",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "(a) i-1, physically located in us-east-1a, becomes unreachable and effectively fails along with the rest of that AZ's power and network infrastructure. (b) i-2 and i-3, in us-east-1b and us-east-1c, are unaffected, since they run on independent power, cooling, and network infrastructure; the ALB's health checks detect that i-1 has stopped responding, mark it unhealthy, and stop routing new traffic to it, continuing to serve all traffic from i-2 and i-3. (c) The S3 data in the app-data bucket remains fully available and intact, because S3 (unlike an EC2 instance, which is launched into and stays tied to one specific AZ) stores object data redundantly across multiple AZs within the Region as an intrinsic part of how the service itself works, not as something the customer had to configure.",
+  "st": "skip-lang",
+  "code": "region: us-east-1\navailability_zones: [us-east-1a, us-east-1b, us-east-1c]\nec2_instances:\n  - { id: i-1, az: us-east-1a }\n  - { id: i-2, az: us-east-1b }\n  - { id: i-3, az: us-east-1c }\nload_balancer: { type: ALB, subnets: [us-east-1a, us-east-1b, us-east-1c] }\nstorage: { service: S3, bucket: app-data }\nevent: \"us-east-1a suffers a power failure\"",
+  "expl": "This scenario isolates the difference between AZ-pinned resources and Region-scoped, AWS-managed redundancy. EC2 instances are provisioned into a specific subnet, and a subnet lives in exactly one AZ -- so i-1 genuinely goes down with its AZ, with no automatic recovery of that specific instance. The ALB's job is precisely to paper over exactly this kind of partial failure: its health checks are running continuously in the background regardless of whether anything has gone wrong, so the moment i-1 stops responding, it's excluded from the routing pool within a couple of failed health-check intervals, and clients simply keep getting served -- now entirely by the two surviving AZs, at reduced total capacity rather than zero capacity. S3 sits in a different category entirely: you never chose an AZ when you created the bucket or wrote an object, because S3's durability design already spreads object data across multiple AZs within the Region behind the scenes as part of the base service -- this is exactly the kind of built-in resilience that the earlier explanation about durability vs. AZ-pinned compute resources is pointing at."
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-iam-fundamentals#ex0",
+  "type": "example",
+  "lang": "json",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "// Narrow: exactly what a report-reading service needs\n{\n  \"Version\": \"2012-10-17\",\n  \"Statement\": [{\n    \"Effect\": \"Allow\",\n    \"Action\": \"s3:GetObject\",\n    \"Resource\": \"arn:aws:s3:::app-data-bucket/*\"\n  }]\n}\n\n// Broad: a common \"just get it working\" shortcut\n{\n  \"Version\": \"2012-10-17\",\n  \"Statement\": [{\n    \"Effect\": \"Allow\",\n    \"Action\": \"s3:*\",\n    \"Resource\": \"*\"\n  }]\n}",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-iam-fundamentals#ex1",
+  "type": "example",
+  "lang": "json",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "// Trust policy (attached to the role itself): WHO can assume this role\n{\n  \"Version\": \"2012-10-17\",\n  \"Statement\": [{\n    \"Effect\": \"Allow\",\n    \"Principal\": { \"Service\": \"ec2.amazonaws.com\" },\n    \"Action\": \"sts:AssumeRole\"\n  }]\n}\n\n// Permissions policy (attached to the role): WHAT it can do once assumed\n{\n  \"Version\": \"2012-10-17\",\n  \"Statement\": [{\n    \"Effect\": \"Allow\",\n    \"Action\": [\"s3:GetObject\", \"s3:PutObject\"],\n    \"Resource\": \"arn:aws:s3:::app-uploads-bucket/*\"\n  }]\n}",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-iam-fundamentals#ex2",
+  "type": "example",
+  "lang": "json",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "// Policy A, attached to the role: broad S3 access\n{\n  \"Version\": \"2012-10-17\",\n  \"Statement\": [{ \"Effect\": \"Allow\", \"Action\": \"s3:*\", \"Resource\": \"*\" }]\n}\n\n// Policy B, also attached to the same role: an explicit safety-net deny\n{\n  \"Version\": \"2012-10-17\",\n  \"Statement\": [{ \"Effect\": \"Deny\", \"Action\": \"s3:DeleteBucket\", \"Resource\": \"*\" }]\n}",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-iam-fundamentals-ex1",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "{\n  \"Version\": \"2012-10-17\",\n  \"Statement\": [\n    {\n      \"Effect\": \"Allow\",\n      \"Action\": \"s3:GetObject\",\n      \"Resource\": \"*\"\n    }\n  ]\n}",
+  "expl": "The original `\"Resource\": \"*\"` is a wildcard that matches every resource ARN in existence, across every AWS service and every bucket in the account -- not just objects in one bucket. The fix scopes the Resource field to `arn:aws:s3:::reports-bucket/*`, an ARN pattern that only matches object keys within the reports-bucket bucket specifically. It's worth noting a companion mistake this same misunderstanding often produces: if the role also needed to call `s3:ListBucket` (to enumerate what's in the bucket, as opposed to reading a specific known object), that action applies to the bucket's own ARN without the `/*` suffix, since listing is an operation on the bucket resource itself, not on any individual object -- a second, separate statement with `\"Resource\": \"arn:aws:s3:::reports-bucket\"` would be needed for that, and it's a common follow-up bug to forget."
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-iam-fundamentals-ex1",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "{\n  \"Version\": \"2012-10-17\",\n  \"Statement\": [\n    {\n      \"Effect\": \"Allow\",\n      \"Action\": \"s3:GetObject\",\n      \"Resource\": \"arn:aws:s3:::reports-bucket/*\"\n    }\n  ]\n}",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-iam-fundamentals-ex2",
+  "type": "coding",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "// Fill in a policy that satisfies exactly this requirement -- no more, no less:\n// - Allowed: read and write objects under uploads/ in user-uploads-bucket\n// - Not allowed: deleting those objects\n// - Not allowed: anything outside the uploads/ prefix, or in any other bucket",
+  "expl": "The `Action` array lists only `s3:GetObject` and `s3:PutObject` -- omitting `s3:DeleteObject` entirely satisfies 'never delete' more robustly than granting it and then trying to cancel it out with a separate Deny statement, since simply never allowing an action in the first place can't be defeated by a mismatched or missing Deny elsewhere. The `Resource` ARN, `arn:aws:s3:::user-uploads-bucket/uploads/*`, scopes access to only object keys that begin with the `uploads/` prefix inside that one bucket -- an object like `user-uploads-bucket/exports/report.csv` would not match this pattern at all. The policy deliberately does not include `s3:ListBucket`, since that's a bucket-level action (it would need the bare bucket ARN, `arn:aws:s3:::user-uploads-bucket`, as its Resource, not the object-level ARN used here) and the exercise only asked for get/put access to objects under a prefix -- least privilege means resisting the temptation to add 'while I'm at it' permissions that weren't actually requested."
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-iam-fundamentals-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "{\n  \"Version\": \"2012-10-17\",\n  \"Statement\": [\n    {\n      \"Effect\": \"Allow\",\n      \"Action\": [\"s3:GetObject\", \"s3:PutObject\"],\n      \"Resource\": \"arn:aws:s3:::user-uploads-bucket/uploads/*\"\n    }\n  ]\n}",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-ec2-instance-types#ex0",
+  "type": "example",
+  "lang": "text",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "m6g.xlarge   -> m = general purpose, 6 = 6th gen, g = Graviton (ARM), xlarge size\n             -> balanced CPU/memory; good default for a typical web/app server\n\nc6i.2xlarge  -> c = compute optimized, 6 = 6th gen, i = Intel, 2xlarge size\n             -> CPU-heavy ratio; good for video encoding, batch computation, CI build fleets\n\nr5.large     -> r = memory optimized, 5 = 5th gen, (no extra flag = x86, non-Graviton), large size\n             -> high RAM-to-CPU ratio; good for in-memory caches, large in-memory databases",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-ec2-instance-types#ex1",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "aws ec2 run-instances \\\n  --image-id ami-0abcdef1234567890 \\\n  --instance-type m6g.large \\\n  --iam-instance-profile Name=app-server-role \\\n  --subnet-id subnet-0f1e2d3c \\\n  --security-group-ids sg-0123456789abcdef0 \\\n  --count 1",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-ec2-instance-types#ex2",
+  "type": "example",
+  "lang": "text",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "time      CPUUtilization   CPUCreditBalance   note\n09:00     15%               144                idle-ish, earning credits\n09:15     20%               150                still earning\n09:30     85%               140                burst begins, spending credits\n10:00     85%                60                sustained burst, balance dropping fast\n10:30     85%                 0                balance exhausted\n10:31     22%                 2                THROTTLED to baseline -- utilization capped, NOT by demand",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-ec2-instance-types-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "The instance spends credits continuously (since 80% is well above the 20% baseline), draining the starting balance of 144 over some number of hours until it hits zero. At that point, standard credit mode throttles the instance's CPU performance down to its 20% baseline -- CPUUtilization will drop sharply (not because load decreased, but because the instance can no longer deliver more), producing a sudden, confusing performance degradation with no corresponding drop in actual demand.",
+  "st": "skip-lang",
+  "code": "credit_mode: standard\nbaseline_performance_pct: 20\nstarting_credit_balance: 144\nobserved_utilization: 80%  (sustained for hours)",
+  "expl": "Running at 80% against a 20% baseline means the instance is spending CPU credits on every sample throughout the whole period, with no offsetting accumulation, so the 144-credit starting balance depletes steadily and predictably. Once it reaches zero, standard credit mode enforces the baseline as a hard ceiling -- the instance is throttled to roughly 20% utilization regardless of how much demand is actually waiting to be served, which from a monitoring dashboard looks like utilization suddenly falling even though nothing about the incoming load changed. This is exactly the scenario that argues for either switching this instance to unlimited credit mode (accepting extra charges to sustain the burst) or, if the load is genuinely sustained rather than occasional, moving it off the t-family entirely onto a fixed-performance family sized for that actual baseline."
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-ec2-instance-types-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "instance_type: c5.xlarge     # compute optimized, 4 vCPU / 8 GiB RAM\nworkload: in-memory-cache\nobserved_cpu_utilization: 12%\nobserved_symptom: frequent evictions, occasional OOM errors",
+  "expl": "12% CPU utilization alongside frequent evictions and OOM errors is a textbook memory bottleneck, not a compute one -- the instance is running out of RAM to hold the cache's working set long before it comes anywhere close to running out of CPU. The original c5.xlarge is compute optimized, meaning its 8 GiB of RAM is deliberately modest relative to its CPU allocation, which is exactly backwards for a workload whose entire purpose is holding as much data in memory as possible. Switching to r5.xlarge keeps the same vCPU count (so nothing about compute capacity changes) but roughly quadruples available RAM to 32 GiB, directly targeting the resource that was actually constrained. Simply moving to a bigger c-family instance (e.g. c5.2xlarge) would have thrown more money at more CPU the workload never needed, while only modestly improving the memory ceiling that was the real problem."
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-ec2-instance-types-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "instance_type: r5.xlarge      # memory optimized, 4 vCPU / 32 GiB RAM\nworkload: in-memory-cache\n# same vCPU count as before, ~4x the RAM -- targets the actual bottleneck directly",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-s3-object-storage#ex0",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "aws s3 mv s3://reports-bucket/2025-exports/ s3://reports-bucket/archive/2025-exports/ --recursive\n\n# Under the hood, for every single object matching the old prefix, the CLI issues:\n#   1. a CopyObject call to the new key\n#   2. a DeleteObject call on the old key\n# There is no single S3 API call that renames a prefix as one atomic operation.",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-s3-object-storage#ex1",
+  "type": "example",
+  "lang": "json",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "{\n  \"Rules\": [\n    {\n      \"ID\": \"logs-tiering\",\n      \"Filter\": { \"Prefix\": \"logs/\" },\n      \"Status\": \"Enabled\",\n      \"Transitions\": [\n        { \"Days\": 30, \"StorageClass\": \"STANDARD_IA\" },\n        { \"Days\": 90, \"StorageClass\": \"GLACIER\" }\n      ],\n      \"Expiration\": { \"Days\": 365 }\n    }\n  ]\n}",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-s3-object-storage#ex2",
+  "type": "example",
+  "lang": "json",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "// Accidentally public: no condition restricts who \"*\" actually is\n{\n  \"Version\": \"2012-10-17\",\n  \"Statement\": [{\n    \"Sid\": \"AllowPartnerRead\",\n    \"Effect\": \"Allow\",\n    \"Principal\": \"*\",\n    \"Action\": \"s3:GetObject\",\n    \"Resource\": \"arn:aws:s3:::partner-exports-bucket/*\"\n  }]\n}\n\n// Fixed: scoped to one specific AWS account instead of the entire internet\n{\n  \"Version\": \"2012-10-17\",\n  \"Statement\": [{\n    \"Sid\": \"AllowPartnerRead\",\n    \"Effect\": \"Allow\",\n    \"Principal\": { \"AWS\": \"arn:aws:iam::111122223333:root\" },\n    \"Action\": \"s3:GetObject\",\n    \"Resource\": \"arn:aws:s3:::partner-exports-bucket/*\"\n  }]\n}",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-s3-object-storage-ex1",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# pseudocode for the current nightly job\nfor key in list_all_objects_under_prefix(\"data/2026-01-14/\"):\n    copy_object(from=key, to=key.replace(\"data/2026-01-14/\", \"archive/2026-01-14/\"))\n    delete_object(key)\n# runs once per object, sequentially, for several million objects",
+  "expl": "The fundamental issue is that this job is making two full API calls (one copy, one delete) per object, sequentially, for several million objects -- there is no way to make that fast as a strictly sequential loop, because S3 simply has no bulk-rename primitive to fall back on; the per-object cost the naive loop pays is real, not an artifact of writing the loop poorly. The most scalable fix is S3 Batch Operations, a managed feature specifically built for exactly this class of problem: given a manifest of object keys, it performs a specified operation (like copy) across all of them with built-in parallelism, automatic retries on transient failures, and progress tracking, without the calling application needing to manage a slow sequential loop itself. An even better fix, when it's an option, is avoiding the need for a bulk move altogether -- for instance, writing new data directly under the eventual archive-style key structure from the start, so 'reorganizing' never has to touch millions of pre-existing objects at all. The core lesson is that any design assuming S3 prefixes can be cheaply restructured after the fact is fighting the object-store model rather than working with it."
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-s3-object-storage-ex1",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# Better: avoid needing a bulk move at all by naming keys with the archive\n# destination baked in from the start, OR at minimum parallelize the copy/delete\n# operations instead of running them one at a time, e.g. using S3 Batch Operations\n# to issue a single managed job that performs the copy+delete across millions of\n# keys with built-in concurrency, retries, and progress tracking.",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-s3-object-storage-ex2",
+  "type": "coding",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "// Fill in a lifecycle rule satisfying:\n// - objects under backups/\n// - Standard for days 0-14\n// - Standard-IA starting day 14\n// - deleted entirely at day 180",
+  "expl": "Objects need no explicit rule for their first 14 days, since S3 Standard is simply where every object starts by default -- the only thing that needs configuring is what happens *after* that. The single `Transitions` entry with `\"Days\": 14` moves objects to `STANDARD_IA` exactly at that age, matching the requirement that restore testing (which happens in the first 14 days) always finds objects in the faster, no-retrieval-fee Standard class, while older backups shift to cheaper storage since they're accessed far less often. `Expiration` at 180 days permanently deletes the object at that age, matching the stated fact that nothing past day 180 is ever restored -- there's no reason to keep paying for storage (even cheap Standard-IA storage) for data that's already established as never needed again. Adding a Glacier tier here would have been over-engineering relative to what was actually specified: two clearly defined access-pattern phases only need one transition and one expiration, not an additional tier that wasn't asked for."
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-s3-object-storage-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "{\n  \"Rules\": [\n    {\n      \"ID\": \"backups-tiering\",\n      \"Filter\": { \"Prefix\": \"backups/\" },\n      \"Status\": \"Enabled\",\n      \"Transitions\": [\n        { \"Days\": 14, \"StorageClass\": \"STANDARD_IA\" }\n      ],\n      \"Expiration\": { \"Days\": 180 }\n    }\n  ]\n}",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-rds-managed-relational#ex0",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# A Multi-AZ primary -- the standby is created and kept in sync automatically,\n# but is not available for read queries\naws rds create-db-instance \\\n  --db-instance-identifier orders-db \\\n  --engine postgres \\\n  --db-instance-class db.r6g.large \\\n  --allocated-storage 100 \\\n  --multi-az \\\n  --master-username admin \\\n  --master-user-password '**********'\n\n# A read replica of that same database, usable for live read queries,\n# receiving data asynchronously with some replication lag\naws rds create-db-instance-read-replica \\\n  --db-instance-identifier orders-db-read-1 \\\n  --source-db-instance-identifier orders-db",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-rds-managed-relational#ex1",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# A bad deployment ran an UPDATE without a WHERE clause at 14:17 UTC,\n# corrupting the orders table. Restore to just before that moment --\n# NOTE: this creates a brand-new instance, it does not modify orders-db in place.\naws rds restore-db-instance-to-point-in-time \\\n  --source-db-instance-identifier orders-db \\\n  --target-db-instance-identifier orders-db-restored-14-16 \\\n  --restore-time 2026-08-14T14:16:00Z",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-rds-managed-relational#ex2",
+  "type": "example",
+  "lang": "text",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "-- orders table: 40 million rows, no index on customer_id\nEXPLAIN ANALYZE\nSELECT * FROM orders WHERE customer_id = 48213;\n\n-- Seq Scan on orders  (cost=0.00..812000.00 rows=40000000)\n--   Filter: (customer_id = 48213)\n--   Execution Time: 4210.331 ms\n\n-- After: CREATE INDEX idx_orders_customer_id ON orders (customer_id);\n\nEXPLAIN ANALYZE\nSELECT * FROM orders WHERE customer_id = 48213;\n\n-- Index Scan using idx_orders_customer_id on orders  (cost=0.43..8.45 rows=12)\n--   Index Cond: (customer_id = 48213)\n--   Execution Time: 0.412 ms",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-rds-managed-relational-ex1",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "current_setup:\n  db_instance: orders-db\n  multi_az: true          # enabled specifically hoping to offload read traffic\n  read_replicas: []       # none configured\n  symptom: \"reporting dashboard queries still slow, no change after enabling Multi-AZ\"",
+  "expl": "Multi-AZ's standby instance is never available to serve query traffic during normal operation -- it exists solely as a synchronously replicated failover target, so enabling it changes nothing about read capacity or read latency, which is exactly why the dashboard saw no improvement. The correct fix is to add a read replica, a separate RDS feature that creates an additional, independently addressable instance receiving data asynchronously, and then point the reporting dashboard's queries specifically at that replica's endpoint instead of the primary's. Multi-AZ should stay enabled -- it's still doing its own separate job of protecting availability against an AZ or instance failure -- but it was never going to solve a read-throughput problem, because that was never the problem it was designed to address."
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-rds-managed-relational-ex1",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "fixed_setup:\n  db_instance: orders-db\n  multi_az: true                     # keep -- this still correctly protects availability\n  read_replicas: [\"orders-db-read-1\"]  # add -- this is what actually offloads read traffic\n  dashboard_queries_routed_to: \"orders-db-read-1\"",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-rds-managed-relational-ex2",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "Immediately after the restore command completes, catalog-db (the original instance) is still running and still serving live production traffic, with the corrupted pricing data from the 09:00 UPDATE still present -- the restore command did not touch it. A new, separate instance, catalog-db-restored, now exists with correct pricing data as of 08:59 UTC, but nothing is pointed at it yet. Real users are not yet seeing correct data. Manual steps remain: verify catalog-db-restored has the expected correct data, reconcile any legitimate writes that happened between 08:59 and 09:45 (which exist on catalog-db but not on the restored instance) so they aren't lost, and then either redirect the application to catalog-db-restored or selectively copy the corrected pricing rows back into catalog-db.",
+  "st": "skip-lang",
+  "code": "timeline:\n  09:00 UTC: bad UPDATE runs, corrupting pricing data\n  09:45 UTC: team notices, initiates PITR restore targeting 08:59 UTC\n  restore command: aws rds restore-db-instance-to-point-in-time --source-db-instance-identifier catalog-db --target-db-instance-identifier catalog-db-restored --restore-time 2026-08-14T08:59:00Z",
+  "expl": "The key fact driving this whole scenario is that `restore-db-instance-to-point-in-time` always creates a brand-new RDS instance rather than modifying the source instance in place -- so the instant the restore command finishes, there are simply two databases: the original `catalog-db`, unchanged and still serving traffic with the corrupted pricing data intact, and the new `catalog-db-restored`, containing a faithful snapshot of everything as of 08:59 UTC. Nothing about running the restore command automatically redirects any traffic, which is precisely why real users are still seeing the corrupted state immediately afterward -- the restore produced a correct *copy* of the data, not a live fix. The 46-minute gap between 08:59 and 09:45 also matters: any legitimate order or inventory change made on `catalog-db` during that window exists there but not on `catalog-db-restored`, so a full cutover without reconciling that gap would silently lose real, valid data alongside discarding the corruption -- which is exactly why 'restore and immediately redirect everything' is rarely the complete fix; verifying the restored data and reconciling the gap window are real, necessary manual steps, not a formality."
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-dynamodb-basics#ex0",
+  "type": "example",
+  "lang": "json",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "// Table: Orders, partition key: customerId, sort key: orderSortKey\n{\n  \"customerId\": \"CUST#48213\",\n  \"orderSortKey\": \"ORDER#2026-08-01#O-9911\",\n  \"status\": \"shipped\",\n  \"total\": 129.50,\n  \"items\": [{\"sku\": \"WIDGET-1\", \"qty\": 2}]\n}\n\n// A Query for this customer's orders in August 2026, sorted chronologically:\n// KeyConditionExpression: customerId = :cid AND begins_with(orderSortKey, :prefix)\n// :cid = \"CUST#48213\", :prefix = \"ORDER#2026-08\"",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-dynamodb-basics#ex1",
+  "type": "example",
+  "lang": "text",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "Table: Jobs   partition key: status   (values: \"pending\", \"processing\", \"done\")\n\nCloudWatch metrics:\n  Table-level ConsumedWriteCapacityUnits: well within provisioned capacity\n  ThrottledRequests for partition key \"pending\":  spiking heavily\n  ThrottledRequests for partition key \"done\":     near zero\n\nSymptom: workers polling for status=\"pending\" jobs get throttled constantly,\nwhile the table's overall metrics look healthy.",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-dynamodb-basics#ex2",
+  "type": "example",
+  "lang": "text",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "// FAST: uses the partition key directly, routed to exactly one partition\nQuery:\n  KeyConditionExpression: customerId = :cid\n  :cid = \"CUST#48213\"\n// -> reads only this customer's items, cost independent of total table size\n\n// SLOW: no partition key involved, has to examine items broadly\nScan:\n  FilterExpression: total > :amount\n  :amount = 100\n// -> reads through a large portion of the table's items to evaluate the filter,\n//    cost grows with total table size regardless of how few items actually match",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-dynamodb-basics-ex1",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "table: UsageEvents\npartition_key: tenantTier   # \"free\" | \"pro\" | \"enterprise\"\nsymptom: \"enterprise-tier writes throttled heavily; table-wide capacity metrics look healthy\"\ncontext: \"one very large enterprise customer accounts for most of all events system-wide\"",
+  "expl": "`tenantTier` only ever has three possible values in this table, so every single item -- across every tenant that happens to share a tier -- hashes to one of only three physical partitions, and one giant enterprise customer's traffic is entirely confined to whichever single partition `\"enterprise\"` hashes to, no matter how much total capacity the table has been provisioned with overall. That's a textbook hot partition: the throttling is real and specific to that one partition's own throughput ceiling, even while table-wide metrics (which aggregate across all partitions, including the much lighter `\"free\"` and `\"pro\"` traffic) look healthy. Switching the partition key to `tenantId` gives every distinct tenant, including the large enterprise one, its own dedicated partition-key value, so traffic is distributed by actual tenant rather than collapsed onto three tier buckets -- the dominant enterprise tenant still generates a lot of traffic, but it's now isolated to its own partition rather than sharing one partition's throughput ceiling with every other enterprise-tier tenant combined. If 'all enterprise-tier events across every tenant' is still a genuinely needed query, that access pattern would now go through a secondary index on the `tenantTier` attribute rather than through the primary key, since the primary key's job has shifted to optimizing for the far more common per-tenant access pattern."
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-dynamodb-basics-ex1",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "table: UsageEvents\npartition_key: tenantId    # one distinct value per tenant, much higher cardinality\nsort_key: eventTimestamp#eventId\n# tenantTier moves to a regular (non-key) attribute, queryable via a\n# secondary index if \"all enterprise-tier events across tenants\" is\n# still a needed access pattern",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-dynamodb-basics-ex2",
+  "type": "coding",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "// requirement: fetch all messages in ONE chat room, ordered oldest-to-newest,\n// optionally restricted to a date range -- this is the only access pattern\n// that needs to be fast",
+  "expl": "`roomId` is the partition key because it's exactly what the required access pattern always filters down to first -- 'messages in a specific chat room' -- and because a real application has many, many chat rooms, this key has high cardinality and spreads traffic across many partitions rather than concentrating it, avoiding the hot-partition mistake from the previous exercise. The sort key, `sentAt#messageId`, puts an ISO-8601 timestamp at the front specifically so that items under the same `roomId` are physically stored in chronological order, which is exactly what 'ordered from oldest to newest' requires with no extra sorting step, and it makes a date-range restriction a direct `BETWEEN` condition on the sort key rather than something requiring a filter pass over unrelated items. The `messageId` suffix exists purely to guarantee uniqueness in case two messages in the same room land on the identical timestamp, which a pure timestamp sort key alone couldn't guarantee. This schema satisfies the one stated access pattern with a single, efficient `Query` -- because that access pattern was designed into the key structure from the start, exactly the DynamoDB modeling discipline the explanation described, rather than being bolted on afterward with a scan or a secondary index."
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-dynamodb-basics-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "// Table: ChatMessages\n// partition key: roomId       (one distinct value per chat room -- high cardinality)\n// sort key:      sentAt#messageId\n\n{\n  \"roomId\": \"ROOM#7734\",\n  \"sentAt#messageId\": \"2026-08-14T09:12:03Z#MSG-88291\",\n  \"senderId\": \"USER#4021\",\n  \"body\": \"see you at 3\"\n}\n\n// Query: roomId = \"ROOM#7734\" AND sentAt#messageId BETWEEN :start AND :end",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-choosing-a-data-store#ex0",
+  "type": "example",
+  "lang": "text",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "Feature: user-uploaded document processing pipeline\n\nS3        -> stores the actual uploaded file bytes\n             key: uploads/{userId}/{uploadId}.pdf\n\nDynamoDB  -> tracks per-upload processing status, a fixed, high-volume,\n             simple access pattern (\"get this upload's current status\")\n             partition key: uploadId\n             attributes: status, uploadedAt, s3Key\n\nRDS       -> stores user accounts, billing plans, and admin-facing\n             reporting joins (\"which users on the Pro plan uploaded\n             more than 10 files last month, grouped by category\")\n             tables: users, billing_plans, upload_metadata (foreign key to uploadId)",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-choosing-a-data-store#ex1",
+  "type": "example",
+  "lang": "text",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "Workload: ad-hoc, evolving analytics -- \"show me all orders over $500 placed\n by customers in California, grouped by product category, for any date\n range a business analyst picks in a dashboard tool\"\n\nForced into DynamoDB:\n  -> no partition key maps to \"any date range, any state, any amount\n     threshold, any category\" -- this is a different, unpredictable\n     filter combination every time an analyst uses the dashboard\n  -> every such query falls back to an expensive Scan across the\n     whole Orders table, reading far more data than it returns\n\nCorrectly placed in RDS:\n  -> SELECT category, SUM(total) FROM orders\n     JOIN customers ON orders.customer_id = customers.id\n     WHERE customers.state = 'CA' AND orders.total > 500\n       AND orders.order_date BETWEEN :start AND :end\n     GROUP BY category;\n  -> the query planner and appropriate indexes handle this efficiently\n     without needing the exact filter combination to be known in advance",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-choosing-a-data-store#ex2",
+  "type": "example",
+  "lang": "text",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "Original reasoning: \"DynamoDB is what modern, scalable teams use, so we built our\n new internal admin tool's data model on it.\"\n\nActual workload: a handful of internal staff, low request volume, and every\n week someone needs a genuinely new report -- filtered and grouped in ways\n nobody anticipated when the table was designed.\n\nSymptom: every new report request means either a new secondary index (a\n real, recurring engineering task) or an accepted expensive Scan, for a\n workload with low overall traffic that never actually needed DynamoDB's\n scaling properties in the first place.\n\nCorrected reasoning: low request volume + constantly evolving, unpredictable\n query needs -> RDS's query flexibility is the better fit; DynamoDB's\n scaling strength was never the actual bottleneck this workload had.",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-choosing-a-data-store-ex1",
+  "type": "coding",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "// workload 1: video file storage\n// workload 2: high-volume, fixed-shape leaderboard reads/writes\n// workload 3: ad-hoc, evolving analytical queries over transaction data",
+  "expl": "Each answer follows directly from asking what the workload's actual access pattern is, rather than from any property of the service names themselves. Workload 1's unit of access is an entire file with no need for field-level querying, which is squarely S3's strength and would be an awkward fit for either RDS (which would need to store large blobs inside a relational row, generally discouraged) or DynamoDB (which has a per-item size limit far smaller than a typical video file). Workload 2's two operations are exactly the kind of small, fixed, extremely high-volume access pattern DynamoDB is designed around -- a top-100 leaderboard read and a per-player score update both map cleanly onto a well-chosen partition/sort key design, and DynamoDB's flat latency profile as the leaderboard grows is exactly the property this workload needs at that request volume. Workload 3's defining trait -- genuinely new, unanticipated query shapes every week -- is the one profile DynamoDB structurally struggles with, since each new query shape either needs a new access pattern designed into the table ahead of time or falls back to an expensive Scan; RDS's query planner and indexing handle this kind of variability as a matter of course, which is exactly the flexibility this workload actually needs."
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-choosing-a-data-store-ex1",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "workload_1: S3\n  reason: \"The unit of access is the whole video file itself, retrieved by key at large scale and low per-GB cost -- there's no need to query individual fields within the file.\"\n\nworkload_2: DynamoDB\n  reason: \"Both access patterns are fixed, simple, and known in advance, at very high volume -- exactly the profile DynamoDB's partition-key model scales for with flat, predictable latency regardless of leaderboard size.\"\n\nworkload_3: RDS\n  reason: \"Query needs are ad-hoc and change weekly in ways not known in advance -- exactly the varied, evolving access pattern a relational query planner and indexing are built to handle, versus DynamoDB, which would require a new access pattern (and likely a new index or Scan) for every new report shape.\"",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-choosing-a-data-store-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "current_design:\n  store: DynamoDB (single table for everything)\n  workloads:\n    - product_catalog_lookup: \"fixed access pattern, high volume\"\n    - order_placement_and_status: \"fixed access pattern, high volume\"\n    - admin_reporting: \"ad-hoc filters, changes almost weekly\"\n  symptom: \"admin reporting keeps needing new Scans or new indexes; each new filter risks poor performance as data grows\"",
+  "expl": "The mismatch is that 'one store for everything' quietly assumed all three workloads shared the same access-pattern profile, when in fact only two of them (catalog lookups and order placement/status) actually have the fixed, known-in-advance, high-volume shape DynamoDB is built to reward -- the admin reporting workload's defining trait is exactly the opposite: new, unanticipated filter combinations on a recurring basis, which is precisely the profile that keeps forcing new Scans or new indexes onto the existing table, and which will keep getting slower and more operationally burdensome as the underlying data grows, regardless of how much indexing effort is thrown at it. The 'simplicity' of one store was illusory specifically for this one workload -- it wasn't actually simpler once the recurring Scan/index churn is counted as real, ongoing cost. The corrected design keeps DynamoDB exactly where it was already working well (catalog and orders) and moves the reporting workload to RDS, where ad-hoc, evolving queries are a core strength rather than a recurring fight against the store's design. A common way to keep both stores in sync is streaming changes from DynamoDB (via DynamoDB Streams) into the RDS-based reporting store, accepting some eventual-consistency lag for reporting purposes in exchange for reporting queries that no longer require redesigning the primary transactional table every time a manager asks a new question."
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-choosing-a-data-store-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "corrected_design:\n  store_for_catalog_and_orders: DynamoDB\n    reason: \"fixed, known, high-volume access patterns -- exactly DynamoDB's strength, unchanged from before\"\n  store_for_admin_reporting: RDS\n    reason: \"ad-hoc, evolving filter needs -- matches a relational query planner far better than repeated new Scans/indexes\"\n  data_flow: \"order and catalog events stream (e.g. via DynamoDB Streams) into the RDS reporting store, kept eventually consistent for reporting purposes\"",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-console-clickops-limits#ex0",
+  "type": "example",
+  "lang": "text",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "Console way:\n  1. Open EC2 console -> Security Groups -> select 'app-sg'\n  2. Click 'Edit inbound rules'\n  3. Click 'Add rule', type 443, select 'Anywhere-IPv4', click 'Save rules'\n  (no record of why, no review step, no diff -- the change simply takes effect)\n\nCode way (a snippet of the underlying template):\n  - Type: AWS::EC2::SecurityGroupIngress\n    Properties:\n      GroupId: !Ref AppSecurityGroup\n      IpProtocol: tcp\n      FromPort: 443\n      ToPort: 443\n      CidrIp: 0.0.0.0/0\n  # proposed via a pull request, with a diff, a reviewer, and a commit message\n  # explaining why 443 needed to be opened",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-console-clickops-limits#ex1",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "aws cloudformation detect-stack-drift --stack-name app-network-stack\n\n# after it completes:\naws cloudformation describe-stack-resource-drifts \\\n  --stack-name app-network-stack \\\n  --query \"StackResourceDrifts[?StackResourceDriftStatus=='MODIFIED']\"\n\n# example result (abbreviated)\n[\n  {\n    \"LogicalResourceId\": \"AppSecurityGroup\",\n    \"StackResourceDriftStatus\": \"MODIFIED\",\n    \"PropertyDifferences\": [\n      { \"PropertyPath\": \"/SecurityGroupIngress/1/CidrIp\", \"ExpectedValue\": \"10.0.0.0/16\", \"ActualValue\": \"0.0.0.0/0\" }\n    ]\n  }\n]",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-console-clickops-limits#ex2",
+  "type": "example",
+  "lang": "json",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "{\n  \"eventTime\": \"2026-08-10T02:14:07Z\",\n  \"eventName\": \"AuthorizeSecurityGroupIngress\",\n  \"userIdentity\": { \"arn\": \"arn:aws:sts::111122223333:assumed-role/OnCallEngineer/j.smith\" },\n  \"requestParameters\": {\n    \"groupId\": \"sg-0abc123456789\",\n    \"ipPermissions\": {\n      \"items\": [{ \"ipProtocol\": \"tcp\", \"fromPort\": 443, \"toPort\": 443, \"ipRanges\": { \"items\": [{ \"cidrIp\": \"0.0.0.0/0\" }] } }]\n    }\n  }\n}",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-console-clickops-limits-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "Someone changed the RDS instance's automated backup retention from 7 days (what the template specifies) down to 0 (disabled) directly outside of CloudFormation -- likely to work around some issue during an incident, such as backup-related I/O contention. Left unaddressed, this means the database currently has no automated backups at all, a serious data-loss risk that isn't visible unless someone specifically runs drift detection, since the live database otherwise appears to be working fine.",
+  "st": "skip-lang",
+  "code": "{\n  \"LogicalResourceId\": \"AppDbInstance\",\n  \"StackResourceDriftStatus\": \"MODIFIED\",\n  \"PropertyDifferences\": [\n    { \"PropertyPath\": \"/BackupRetentionPeriod\", \"ExpectedValue\": \"7\", \"ActualValue\": \"0\" }\n  ]\n}",
+  "expl": "The drift result isolates exactly one property difference: `BackupRetentionPeriod` is `7` in the template but `0` on the live resource, meaning automated backups have been disabled on the actual database even though the template -- the presumed source of truth -- still says they should be running with a 7-day retention window. This is a specific, serious instance of the general drift risk: unlike a cosmetic setting, a disabled backup silently removes a safety net that nobody would necessarily notice is missing until the moment a backup is actually needed and isn't there. The fix requires a human decision, not just an automated one: either this change was a deliberate, temporary workaround that should be reverted immediately by redeploying the template (restoring backups), or there's a real reason backups needed to be disabled, in which case the template itself should be updated to reflect that decision explicitly and reviewably, rather than leaving the live database quietly diverged from what anyone reading the template would assume is true."
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-console-clickops-limits-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "// The security group's CloudFormation template, unchanged since before the incident:\nSecurityGroupIngress:\n  - IpProtocol: tcp\n    FromPort: 443\n    ToPort: 443\n    CidrIp: 203.0.113.0/24   # partner's OLD IP range -- never updated after the incident\n\n// The live security group's actual rule at the time of the incident fix (added via console, not reflected above):\n#   FromPort: 443, ToPort: 443, CidrIp: 198.51.100.0/24   (partner's NEW range)",
+  "expl": "The missing step was backporting the emergency console change into the CloudFormation template immediately after the incident was resolved. Because the template was never updated, it still described the partner's old IP range as the source of truth, while the live security group had silently drifted to the correct new range via the console -- exactly the kind of divergence Concept 1's drift discussion describes. Two months later, a routine, unrelated stack update reapplied the template's (outdated) definition of the security group, and CloudFormation -- correctly, from its own point of view -- reconciled the live resource back to match what the template said it should be, overwriting the emergency fix nobody had ever recorded as a real, permanent change. The fix is to update the template's `CidrIp` to the partner's actual current range as its own deliberate, reviewed change right after the incident, so the next stack update reinforces the correct configuration instead of reverting it -- this is precisely the 'backport immediately' discipline that keeps a legitimate break-glass console change from becoming a time-delayed regression."
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-console-clickops-limits-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "SecurityGroupIngress:\n  - IpProtocol: tcp\n    FromPort: 443\n    ToPort: 443\n    CidrIp: 198.51.100.0/24   # updated to match the partner's actual current range,\n                              # backported into the template right after the incident,\n                              # not left as an un-tracked console-only change",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-cloudformation-cdk-basics#ex0",
+  "type": "example",
+  "lang": "yaml",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "AWSTemplateFormatVersion: '2010-09-09'\nParameters:\n  EnvironmentName:\n    Type: String\n    Default: dev\nResources:\n  AppDataBucket:\n    Type: AWS::S3::Bucket\n    DeletionPolicy: Retain\n    Properties:\n      BucketName: !Sub 'app-data-${EnvironmentName}'\nOutputs:\n  BucketArn:\n    Value: !GetAtt AppDataBucket.Arn",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-cloudformation-cdk-basics#ex1",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "aws cloudformation create-change-set \\\n  --stack-name orders-db-stack \\\n  --template-body file://template.yaml \\\n  --change-set-name rename-db-instance\n\naws cloudformation describe-change-set \\\n  --stack-name orders-db-stack \\\n  --change-set-name rename-db-instance \\\n  --query \"Changes[].ResourceChange.{Id:LogicalResourceId,Action:Action,Replacement:Replacement}\"\n\n# [\n#   { \"Id\": \"OrdersDatabase\", \"Action\": \"Modify\", \"Replacement\": \"True\" }\n# ]",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-cloudformation-cdk-basics#ex2",
+  "type": "example",
+  "lang": "python",
+  "exp": null,
+  "st": "error",
+  "out": "",
+  "err": "Traceback (most recent call last):\n  File \"C:\\Users\\Imran\\AppData\\Local\\Temp\\audit_run\\tmpg1ppd9gv\\main.py\", line 1, in <module>\n    from aws_cdk import Stack, RemovalPolicy\nModuleNotFoundError: No module named 'aws_cdk'\n",
+  "code": "from aws_cdk import Stack, RemovalPolicy\nfrom aws_cdk import aws_s3 as s3\n\nclass DataStack(Stack):\n    def __init__(self, scope, construct_id, environment_name: str, **kwargs):\n        super().__init__(scope, construct_id, **kwargs)\n        s3.Bucket(\n            self, \"AppDataBucket\",\n            bucket_name=f\"app-data-{environment_name}\",\n            removal_policy=RemovalPolicy.RETAIN,\n            versioned=True,\n            encryption=s3.BucketEncryption.S3_MANAGED,\n        )\n\n# cdk synth   -> generates the equivalent CloudFormation template\n# cdk diff    -> shows the CDK-level equivalent of a change set, before deploying\n# cdk deploy  -> synthesizes, then creates and executes a change set, same as raw CloudFormation",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-cloudformation-cdk-basics-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "Executing this change set would delete the existing OrdersDatabase RDS instance and create a brand-new one with the new storage type -- and because no DeletionPolicy override is set, the default Delete behavior applies, meaning the original instance's data is not preserved by CloudFormation during this replacement. Before executing, DeletionPolicy should be set to Snapshot (which takes a final RDS snapshot before deletion) or the property change should be reconsidered/avoided if an in-place-safe alternative exists, so the switch doesn't result in outright data loss.",
+  "st": "skip-lang",
+  "code": "Changes:\n  - LogicalResourceId: OrdersDatabase\n    Action: Modify\n    Replacement: \"True\"\n    Details:\n      - Target: { Attribute: Properties, Name: StorageType, RequiresRecreation: Always }",
+  "expl": "The `RequiresRecreation: Always` detail confirms this specific property (`StorageType`) cannot be changed in place for this resource type -- CloudFormation has no choice but to delete the old instance and create a new one to apply this change, which is exactly what `Replacement: True` at the top level is warning about. Combined with the default `DeletionPolicy` (Delete, since none was explicitly set), the old instance -- and all of its data -- would be deleted as part of this replacement, with nothing preserved automatically. The safe response is to add `DeletionPolicy: Snapshot` (and typically `UpdateReplacePolicy: Snapshot` as well, which specifically governs the replacement-during-update case) before executing, ensuring a final snapshot is taken and preserved even though the instance itself is being replaced -- or, if snapshotting and restoring from it afterward isn't acceptable operationally, treating this as a signal to find a different approach to the storage-type change entirely, such as a manual, carefully-sequenced migration outside of a change that CloudFormation itself flags as requiring recreation."
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-cloudformation-cdk-basics-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "Resources:\n  FinancialExportsBucket:\n    Type: AWS::S3::Bucket\n    Properties:\n      BucketName: financial-exports-prod\n      VersioningConfiguration:\n        Status: Enabled",
+  "expl": "The template never set `DeletionPolicy` on this bucket, which means it was relying on the default behavior (`Delete`) for a resource explicitly described as holding financial data that must never be accidentally deleted -- a direct mismatch between the resource's actual importance and its configured safety net. Adding `DeletionPolicy: Retain` doesn't prevent a bad merge from removing the resource block from the template again in the future, and it doesn't replace the need for careful review -- but it does mean that if this resource is ever removed from a template (by accident or otherwise) and the stack is updated, CloudFormation retains the real bucket and its data rather than deleting it, converting what would have been permanent, unrecoverable data loss into, at worst, an orphaned-but-intact bucket that can be identified and reattached or cleaned up deliberately. Pairing this kind of template-level safeguard with careful change-set review (specifically watching for unexpected Remove actions on stateful resources) is the layered defense this scenario calls for -- neither one alone would have been sufficient."
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-cloudformation-cdk-basics-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "Resources:\n  FinancialExportsBucket:\n    Type: AWS::S3::Bucket\n    DeletionPolicy: Retain\n    Properties:\n      BucketName: financial-exports-prod\n      VersioningConfiguration:\n        Status: Enabled",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-iac-deployment-pipeline#ex0",
+  "type": "example",
+  "lang": "yaml",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# Simplified CI pipeline stage (conceptual)\njobs:\n  plan:\n    steps:\n      - checkout: repo\n      - run: cdk synth\n      - run: cdk diff --app cdk.out > diff-output.txt\n      - post-comment:\n          target: pull_request\n          file: diff-output.txt\n  # merging only becomes possible once a human has approved,\n  # having actually seen diff-output.txt on the PR\n\n  apply-dev:\n    trigger: on_merge_to_main\n    steps:\n      - run: cdk deploy DevStack --require-approval never\n\n  apply-prod:\n    trigger: manual_approval_after(apply-dev)\n    steps:\n      - run: cdk deploy ProdStack --require-approval never",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-iac-deployment-pipeline#ex1",
+  "type": "example",
+  "lang": "yaml",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# GitHub Actions job assuming a scoped AWS role via OIDC -- no static access key anywhere\npermissions:\n  id-token: write\n  contents: read\n\njobs:\n  deploy:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: aws-actions/configure-aws-credentials@v4\n        with:\n          role-to-assume: arn:aws:iam::111122223333:role/GitHubActionsDeployRole\n          aws-region: us-east-1\n      - run: cdk deploy ProdStack --require-approval never",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-iac-deployment-pipeline#ex2",
+  "type": "example",
+  "lang": "json",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "// dev-parameters.json\n{ \"EnvironmentName\": \"dev\", \"InstanceType\": \"t3.micro\", \"MinCapacity\": 1, \"MaxCapacity\": 1 }\n\n// prod-parameters.json\n{ \"EnvironmentName\": \"prod\", \"InstanceType\": \"m6g.large\", \"MinCapacity\": 2, \"MaxCapacity\": 6 }\n\n// Same command, same template, different parameter file per environment:\n// aws cloudformation deploy --template-file template.yaml \\\n//   --stack-name app-<env>-stack --parameter-overrides file://<env>-parameters.json",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-iac-deployment-pipeline-ex1",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# current pipeline (simplified)\non: push to main\njobs:\n  deploy:\n    steps:\n      - uses: aws-actions/configure-aws-credentials@v4\n        with:\n          aws-access-key-id: ${{ secrets.PROD_AWS_ACCESS_KEY_ID }}\n          aws-secret-access-key: ${{ secrets.PROD_AWS_SECRET_ACCESS_KEY }}\n      - run: cdk deploy ProdStack --require-approval never",
+  "expl": "The original pipeline had two independent, compounding problems. First, it skipped straight from merge to a production apply with no lower-environment validation step and no approval gate at all -- meaning a change that would have been caught by even a few minutes of dev-environment observation, or by a human explicitly signing off on 'now is a good time to deploy this to prod,' instead reached real users within two minutes with zero opportunity to intervene. The fix splits this into an `apply-dev` stage that runs automatically on merge (the diff having already been reviewed on the originating pull request before merge, per the earlier example) followed by an `apply-prod` stage that depends on `apply-dev` succeeding and is gated behind a configured environment-level manual approval. Second, the pipeline authenticated using a long-lived static IAM user access key stored as a CI secret -- exactly the kind of standing, static credential that, if ever leaked from the CI system, remains dangerous indefinitely. The fix replaces it with OIDC-based role assumption, giving the pipeline short-lived, automatically-expiring credentials scoped to a role dedicated to deployment, with no static secret stored anywhere at all."
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-iac-deployment-pipeline-ex1",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "on: push to main\njobs:\n  apply-dev:\n    steps:\n      - uses: aws-actions/configure-aws-credentials@v4\n        with:\n          role-to-assume: arn:aws:iam::111122223333:role/GitHubActionsDeployRole\n          aws-region: us-east-1\n      - run: cdk diff DevStack   # posted/reviewed as part of the originating PR, before merge\n      - run: cdk deploy DevStack --require-approval never\n\n  apply-prod:\n    needs: apply-dev\n    environment:\n      name: production   # requires a configured manual approval gate\n    steps:\n      - uses: aws-actions/configure-aws-credentials@v4\n        with:\n          role-to-assume: arn:aws:iam::444455556666:role/GitHubActionsDeployRole\n          aws-region: us-east-1\n      - run: cdk deploy ProdStack --require-approval never",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-iac-deployment-pipeline-ex2",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "Whichever cdk deploy actually issues its update-stack call first (say, Engineer A's) transitions the stack into UPDATE_IN_PROGRESS. Engineer B's nearly-simultaneous update-stack call against the same stack is rejected by CloudFormation, since a stack only supports one update lifecycle at a time -- Engineer B's deploy fails outright rather than racing or corrupting anything. A pipeline avoids this scenario entirely (rather than just handling it safely after the fact) because a single merge queue feeding a single deploy stage means only one apply against a given environment is ever triggered at a time in the first place -- there's no possibility of two applies being kicked off concurrently to begin with.",
+  "st": "skip-lang",
+  "code": "# Engineer A's terminal, 10:03:00\n$ cdk deploy AppStack\n\n# Engineer B's terminal, 10:03:02 (two seconds later)\n$ cdk deploy AppStack",
+  "expl": "CloudFormation's own stack-level protection means this specific race doesn't corrupt anything -- only one update can be in progress against a given stack at a time, and a second concurrent attempt is simply rejected, with the rejected engineer needing to retry once the first update completes. This is a real safety net, but it's a reactive one: it prevents damage from the race, but the race (and the wasted attempt, the confusing rejected-command error, and the need to figure out who should retry and when) still happens. A pipeline with a single merge queue removes the race's precondition entirely, rather than just handling its consequences safely -- because merges (and the deploys they trigger) are processed one at a time through a single queue, there's structurally no way for two applies against the same environment to be triggered concurrently in the first place, which is a stronger guarantee than 'concurrent applies are handled safely if they happen.'"
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-cloudwatch-metrics-logs-alarms#ex0",
+  "type": "example",
+  "lang": "text",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "fields @timestamp, @message\n| filter @message like /ERROR/\n| stats count(*) as errorCount by bin(5m)\n| sort errorCount desc\n| limit 20",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-cloudwatch-metrics-logs-alarms#ex1",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "aws cloudwatch put-metric-alarm \\\n  --alarm-name \"api-p99-latency-high\" \\\n  --namespace \"AWS/ApplicationELB\" \\\n  --metric-name \"TargetResponseTime\" \\\n  --dimensions Name=LoadBalancer,Value=app/my-alb/1234567890abcdef \\\n  --extended-statistic \"p99\" \\\n  --period 60 \\\n  --evaluation-periods 5 \\\n  --datapoints-to-alarm 3 \\\n  --threshold 1.0 \\\n  --comparison-operator GreaterThanThreshold \\\n  --treat-missing-data notBreaching \\\n  --alarm-actions arn:aws:sns:us-east-1:111122223333:oncall-alerts",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-cloudwatch-metrics-logs-alarms#ex2",
+  "type": "example",
+  "lang": "python",
+  "exp": null,
+  "st": "skip-danger",
+  "code": "import boto3\n\ncloudwatch = boto3.client(\"cloudwatch\")\n\ndef report_queue_depth(queue_name, depth):\n    cloudwatch.put_metric_data(\n        Namespace=\"MyApp/Queues\",\n        MetricData=[\n            {\n                \"MetricName\": \"PendingJobs\",\n                \"Dimensions\": [{\"Name\": \"QueueName\", \"Value\": queue_name}],\n                \"Value\": depth,\n                \"Unit\": \"Count\",\n            }\n        ],\n    )\n\nreport_queue_depth(\"email-sender\", depth=142)",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-cloudwatch-metrics-logs-alarms-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "The alarm fires at minute 5. Looking at the rolling window of the 5 most recent periods (minutes 1-5), there are breaches at minutes 2, 4, and 5 -- exactly 3 breaching datapoints, which meets datapoints_to_alarm=3, so the alarm transitions to ALARM at minute 5, not earlier (only 2 breaches existed by minute 4) and not minute 6 (it had already fired by then).",
+  "st": "skip-lang",
+  "code": "alarm config: period=60s, evaluation_periods=5, datapoints_to_alarm=3, threshold=80 (GreaterThanThreshold), statistic=Average\n\nminute  CPUUtilization\n1       55\n2       82   (breach)\n3       60\n4       85   (breach)\n5       88   (breach)\n6       90   (breach)",
+  "expl": "datapoints_to_alarm=3 out of evaluation_periods=5 means CloudWatch evaluates a sliding window of the 5 most recent periods and checks whether at least 3 of them breached the threshold -- it does not require those 3 to be consecutive. By minute 4, the window covering minutes 1-4 (fewer than 5 periods exist yet, but CloudWatch evaluates what's available) contains breaches at minutes 2 and 4 -- only 2, not enough. By minute 5, the window of minutes 1-5 contains breaches at 2, 4, and 5 -- exactly 3, crossing the threshold, so the alarm fires at minute 5. Minute 6's breach is irrelevant to when the alarm first fired, since the transition to ALARM already happened one minute earlier."
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-cloudwatch-metrics-logs-alarms-ex2",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "// Log line actually written by the application:\n2026-08-14T10:15:22Z [WARN] payment_failed order_id=88291 reason=card_declined\n\n// Metric filter pattern configured in CloudWatch:\n\"ERROR payment_failed\"",
+  "expl": "The original pattern `\"ERROR payment_failed\"` requires both literal terms to be present in a log line for it to match. The application actually logs failed payments at `[WARN]`, not `[ERROR]` -- so the literal term `ERROR` never appears in any of these lines, and the filter matches zero lines despite failures happening constantly. The fix drops the dependency on a log-level term that doesn't reflect reality and matches on `payment_failed` alone, which is the term that's actually guaranteed to be present whenever this specific failure occurs. A more general lesson: metric filter patterns match literal text, not intent -- it's worth checking an actual sample log line, not just the code that appears to produce it, before trusting a pattern's assumptions about level or wording."
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-cloudwatch-metrics-logs-alarms-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "// Fixed metric filter pattern -- matches on the term that's actually guaranteed present\n\"payment_failed\"",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-alerting-without-fatigue#ex0",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "aws cloudwatch put-composite-alarm \\\n  --alarm-name \"checkout-service-real-outage\" \\\n  --alarm-rule \"ALARM(\\\"checkout-5xx-rate-high\\\") AND ALARM(\\\"checkout-healthy-hosts-low\\\")\" \\\n  --alarm-actions arn:aws:sns:us-east-1:111122223333:oncall-alerts",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-alerting-without-fatigue#ex1",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# Symptom-based: pages, because it's close to real user impact\naws cloudwatch put-metric-alarm \\\n  --alarm-name \"checkout-5xx-rate-high\" \\\n  --namespace \"AWS/ApplicationELB\" --metric-name \"HTTPCode_Target_5XX_Count\" \\\n  --statistic Sum --period 60 --evaluation-periods 3 --datapoints-to-alarm 2 \\\n  --threshold 10 --comparison-operator GreaterThanThreshold \\\n  --alarm-actions arn:aws:sns:us-east-1:111122223333:oncall-alerts\n\n# Cause-based: dashboard-only, no paging action attached\naws cloudwatch put-metric-alarm \\\n  --alarm-name \"checkout-instance-cpu-elevated\" \\\n  --namespace \"AWS/EC2\" --metric-name \"CPUUtilization\" \\\n  --dimensions Name=AutoScalingGroupName,Value=checkout-asg \\\n  --statistic Average --period 300 --evaluation-periods 3 --datapoints-to-alarm 3 \\\n  --threshold 75 --comparison-operator GreaterThanThreshold",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-alerting-without-fatigue#ex2",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "aws cloudwatch put-anomaly-detector \\\n  --namespace \"AWS/ApplicationELB\" --metric-name \"RequestCount\" \\\n  --dimensions Name=LoadBalancer,Value=app/my-alb/1234567890abcdef \\\n  --stat Average\n\naws cloudwatch put-metric-alarm \\\n  --alarm-name \"request-count-anomalous\" \\\n  --namespace \"AWS/ApplicationELB\" --metric-name \"RequestCount\" \\\n  --dimensions Name=LoadBalancer,Value=app/my-alb/1234567890abcdef \\\n  --statistic Average --period 300 --evaluation-periods 3 --datapoints-to-alarm 2 \\\n  --comparison-operator LessThanLowerOrGreaterThanUpperThreshold \\\n  --threshold-metric-id ad1 \\\n  --metrics 'file://anomaly-metric-math.json' \\\n  --alarm-actions arn:aws:sns:us-east-1:111122223333:oncall-alerts",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-alerting-without-fatigue-ex1",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "alarm: nightly-batch-cpu-high\nmetric: AWS/EC2 CPUUtilization, AutoScalingGroupName=batch-asg\nthreshold: > 70% average, period=300s, evaluation_periods=3, datapoints_to_alarm=3\naction: pages on-call via SNS -> PagerDuty, every single night around 1am",
+  "expl": "The original alarm is a cause-based signal (elevated CPU) being used as if it were a symptom-based one (something actually wrong), when in reality high CPU during this specific job is entirely expected and never itself indicates a problem -- it fires reliably every night purely because the job runs successfully, which is exactly the pattern that produces the habituation and eventual silencing described in the scenario. The fix removes the paging action from the CPU alarm (it can remain as a dashboard signal, useful context if something else does go wrong) and replaces the page trigger with a genuinely symptom-based signal: a custom metric the batch job itself publishes reporting its own duration, alarmed on directly exceeding an expected runtime, with `--treat-missing-data breaching` so that the job never even reporting a completion time at all (e.g. because it crashed outright) is treated as exactly the kind of failure that should page, rather than being silently ignored as merely 'no data.'"
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-alerting-without-fatigue-ex1",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# Remove the paging action from the CPU alarm entirely -- keep it as a dashboard-only signal\naws cloudwatch put-metric-alarm --alarm-name nightly-batch-cpu-high ... # (no --alarm-actions)\n\n# Add a symptom-based alarm on the actual thing that matters: did the batch job fail or run too long\naws cloudwatch put-metric-alarm \\\n  --alarm-name \"nightly-batch-job-failed-or-overran\" \\\n  --namespace \"MyApp/BatchJobs\" --metric-name \"JobDurationMinutes\" \\\n  --statistic Maximum --period 300 --evaluation-periods 1 --datapoints-to-alarm 1 \\\n  --threshold 120 --comparison-operator GreaterThanThreshold \\\n  --treat-missing-data breaching \\\n  --alarm-actions arn:aws:sns:us-east-1:111122223333:oncall-alerts",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-alerting-without-fatigue-ex2",
+  "type": "coding",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "// Fill in a put-composite-alarm command satisfying:\n// - only enters ALARM when api-5xx-high AND api-healthy-hosts-low are both in ALARM\n// - sends its own paging action to the on-call SNS topic\n// arn:aws:sns:us-east-1:111122223333:oncall-alerts",
+  "expl": "The `--alarm-rule` expression `ALARM(\"api-5xx-high\") AND ALARM(\"api-healthy-hosts-low\")` means this composite alarm only enters its own ALARM state when both underlying, independently-evaluated alarms are simultaneously in ALARM -- either one alone (a brief error blip with hosts otherwise healthy, or a host-count dip during a routine deploy with error rates unaffected) is not enough to trigger it. Only the composite alarm carries `--alarm-actions`, so the two underlying alarms remain fully visible and independently trackable (useful for diagnosis) but no longer independently page anyone -- collapsing what would have been up to two separate pages for the same real incident into exactly one, without losing any of the underlying signal."
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-alerting-without-fatigue-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "aws cloudwatch put-composite-alarm \\\n  --alarm-name \"api-real-outage\" \\\n  --alarm-rule \"ALARM(\\\"api-5xx-high\\\") AND ALARM(\\\"api-healthy-hosts-low\\\")\" \\\n  --alarm-actions arn:aws:sns:us-east-1:111122223333:oncall-alerts",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-cost-optimization-strategies#ex0",
+  "type": "example",
+  "lang": "python",
+  "exp": null,
+  "st": "skip-danger",
+  "code": "import boto3\n\nec2 = boto3.client(\"ec2\")\n\ndef lambda_handler(event, context):\n    # Triggered by an EventBridge scheduled rule, e.g. cron(0 19 ? * MON-FRI *)\n    instances = ec2.describe_instances(\n        Filters=[\n            {\"Name\": \"tag:Environment\", \"Values\": [\"dev\", \"test\"]},\n            {\"Name\": \"instance-state-name\", \"Values\": [\"running\"]},\n        ]\n    )\n    instance_ids = [\n        i[\"InstanceId\"]\n        for r in instances[\"Reservations\"]\n        for i in r[\"Instances\"]\n    ]\n    if instance_ids:\n        ec2.stop_instances(InstanceIds=instance_ids)\n    return {\"stopped\": instance_ids}",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-cost-optimization-strategies#ex1",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# Unattached EBS volumes -- still billing for storage, attached to nothing\naws ec2 describe-volumes --filters Name=status,Values=available \\\n  --query \"Volumes[].{Id:VolumeId,SizeGiB:Size,Created:CreateTime}\"\n\n# Elastic IPs not associated with any running instance -- billed for being idle\naws ec2 describe-addresses \\\n  --query \"Addresses[?AssociationId==null].{IP:PublicIp,AllocationId:AllocationId}\"\n\n# Snapshots older than 180 days -- candidates for review before assuming they're still needed\naws ec2 describe-snapshots --owner-ids self \\\n  --query \"Snapshots[?StartTime<='2026-02-14'].{Id:SnapshotId,SizeGiB:VolumeSize,Created:StartTime}\"",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-cost-optimization-strategies#ex2",
+  "type": "example",
+  "lang": "json",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "{\n  \"BudgetName\": \"dev-environment-monthly\",\n  \"BudgetLimit\": { \"Amount\": \"500\", \"Unit\": \"USD\" },\n  \"TimeUnit\": \"MONTHLY\",\n  \"CostFilters\": { \"TagKeyValue\": [\"user:Environment$dev\"] },\n  \"NotificationsWithSubscribers\": [\n    {\n      \"Notification\": {\n        \"ComparisonOperator\": \"GREATER_THAN\",\n        \"NotificationType\": \"ACTUAL\",\n        \"Threshold\": 100\n      },\n      \"Subscribers\": [{ \"SubscriptionType\": \"SNS\", \"Address\": \"arn:aws:sns:us-east-1:111122223333:cost-alerts\" }]\n    }\n  ]\n}",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-cost-optimization-strategies-ex1",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "environment  instance_hours_billed_per_month  monthly_cost\nprod         2 x 730 hours = 1460               $290\ndev          2 x 730 hours = 1460               $290\n# dev is only actually used ~45 hours/week x ~4.3 weeks/month = ~194 hours/month",
+  "expl": "Dev is billed for the exact same 1460 instance-hours per month as prod (2 instances running continuously, 730 hours each), despite only being genuinely used for roughly 194 of those hours -- about 13% of the billed time. This is the classic 24/7-for-a-9-to-6-workload pattern: nothing about the dev instances is necessarily oversized or misconfigured on a per-instance basis, they simply never stop running outside the hours anyone needs them. The fix is a scheduled automatic stop/start (an EventBridge-triggered Lambda, or AWS's Instance Scheduler) tagged to target exactly the dev environment, stopping instances each evening and starting them each morning on weekdays only. Since EC2 On-Demand billing is per-second while running and zero while stopped, cutting billed hours from 1460/month to roughly 194/month would be expected to cut dev's compute cost by a similar proportion -- from roughly $290/month toward something closer to $38/month, a meaningful, fully automatic saving that required no change to the instances themselves, only to when they're allowed to run."
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-cost-optimization-strategies-ex1",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# Automate a stop/start schedule for dev instances outside business hours,\n# e.g. via an EventBridge rule + Lambda (see the earlier example), or AWS's\n# Instance Scheduler solution, tagged Environment=dev\n\n# Rough savings estimate:\n# actual usage ~194 hours/month out of 1460 billed hours/month\n# -> billing roughly 194/1460 = ~13% of current dev hours instead of 100%\n# -> dev cost drops from ~$290/month toward roughly $290 * 0.13 ~= $38/month\n# (ignoring any per-instance-hour minimums or non-compute costs that don't scale down)",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-cost-optimization-strategies-ex2",
+  "type": "coding",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "// Fill in a script that:\n// - lists EBS volumes with status 'available' (unattached)\n// - for each, prints volume ID, size in GiB, and age in days since creation\nimport boto3\nfrom datetime import datetime, timezone\n\nec2 = boto3.client(\"ec2\")\n\n# your code here",
+  "expl": "The `Filters=[{\"Name\": \"status\", \"Values\": [\"available\"]}]` argument restricts `describe_volumes` to only volumes in the `available` state, which specifically means they exist and are billing for storage but are not currently attached to any instance -- exactly the unattached-volume waste pattern from the explanation. For each matching volume, `volume[\"Size\"]` gives its provisioned size in GiB (which is what determines its storage cost) and subtracting `volume[\"CreateTime\"]` from the current UTC time gives a `timedelta`, whose `.days` attribute is a simple whole-number age in days -- useful context for a team deciding whether a volume that's been sitting unattached for 400 days is obviously safe to delete versus one from yesterday that might still be mid-migration. This script deliberately only reports candidates rather than deleting anything automatically, since an unattached volume isn't necessarily safe to delete without a human confirming it -- automating discovery while keeping the actual deletion decision manual is a reasonable, conservative default for this kind of cleanup."
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-cost-optimization-strategies-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "import boto3\nfrom datetime import datetime, timezone\n\nec2 = boto3.client(\"ec2\")\n\ndef find_unattached_volumes():\n    response = ec2.describe_volumes(\n        Filters=[{\"Name\": \"status\", \"Values\": [\"available\"]}]\n    )\n    now = datetime.now(timezone.utc)\n    for volume in response[\"Volumes\"]:\n        age_days = (now - volume[\"CreateTime\"]).days\n        print(f\"{volume['VolumeId']}  {volume['Size']}GiB  age={age_days}d\")\n\nfind_unattached_volumes()",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-vpc-subnets-security#ex0",
+  "type": "example",
+  "lang": "text",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "VPC: 10.0.0.0/16\n\nus-east-1a:\n  public-subnet-a  10.0.0.0/24   route: 0.0.0.0/0 -> Internet Gateway\n  private-subnet-a 10.0.10.0/24  route: 0.0.0.0/0 -> NAT Gateway (in public-subnet-a)\n\nus-east-1b:\n  public-subnet-b  10.0.1.0/24   route: 0.0.0.0/0 -> Internet Gateway\n  private-subnet-b 10.0.11.0/24  route: 0.0.0.0/0 -> NAT Gateway (in public-subnet-b)\n\nALB:            spans public-subnet-a + public-subnet-b\nApp instances:  spread across private-subnet-a + private-subnet-b\nRDS database:   spans private-subnet-a + private-subnet-b (Multi-AZ)",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-vpc-subnets-security#ex1",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "aws ec2 authorize-security-group-ingress \\\n  --group-id sg-0db1234567890abcd \\\n  --protocol tcp --port 5432 \\\n  --source-group sg-0app9876543210fed",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-vpc-subnets-security#ex2",
+  "type": "example",
+  "lang": "text",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "NACL inbound rules:\n  rule 100: ALLOW  tcp  443  from 0.0.0.0/0\n  rule *  : DENY   all       from 0.0.0.0/0   (implicit default)\n\nNACL outbound rules:\n  rule *  : DENY   all       to 0.0.0.0/0      (implicit default -- no custom rule added)\n\nSecurity group (looks completely correct):\n  inbound:  ALLOW tcp 443 from 0.0.0.0/0\n  outbound: ALLOW all  to  0.0.0.0/0   (stateful default, and explicit rule)",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-vpc-subnets-security-ex1",
+  "type": "debugging",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "NACL inbound rules:\n  rule 100: ALLOW tcp 443 from 0.0.0.0/0\n  rule *  : DENY  all      from 0.0.0.0/0  (implicit default)\n\nNACL outbound rules:\n  rule *  : DENY  all      to 0.0.0.0/0  (implicit default -- no custom rules exist)",
+  "expl": "The inbound rule correctly lets the HTTPS request through, and the security group correctly allows it too (and, being stateful, would automatically permit the response back out on its own side) -- but the NACL had no outbound rules at all beyond the implicit default deny, and NACLs don't automatically permit return traffic the way security groups do. The response, addressed back to whatever ephemeral port the client's OS assigned for its end of the connection, gets silently dropped trying to leave the subnet through the NACL. Adding an outbound rule permitting traffic to the ephemeral port range (1024-65535) fixes this by explicitly allowing that return traffic through. This is exactly the kind of bug that's invisible if you only check the security group, since the security group's configuration was never actually wrong."
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-vpc-subnets-security-ex1",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "NACL inbound rules:\n  rule 100: ALLOW tcp 443 from 0.0.0.0/0\n  rule *  : DENY  all      from 0.0.0.0/0  (implicit default)\n\nNACL outbound rules:\n  rule 100: ALLOW tcp 1024-65535 to 0.0.0.0/0   # added: allow return traffic to ephemeral ports\n  rule *  : DENY  all           to 0.0.0.0/0  (implicit default)",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-vpc-subnets-security-ex2",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "subnet-A is public (its default route goes to an Internet Gateway, which supports inbound-initiated connections); subnet-B is private (its default route goes to a NAT Gateway, which only relays outbound-initiated traffic). An instance in subnet-A, if it also has a public IP assigned, can be reached directly from the internet. An instance in subnet-B can never be reached by a connection initiated from the internet, but can still reach out to the internet (e.g. for updates or external API calls) via the NAT Gateway sitting in subnet-A.",
+  "st": "skip-lang",
+  "code": "subnet-A route table:\n  10.0.0.0/16   -> local\n  0.0.0.0/0     -> igw-0abc123 (Internet Gateway)\n\nsubnet-B route table:\n  10.0.0.0/16   -> local\n  0.0.0.0/0     -> nat-0def456 (NAT Gateway, located in subnet-A)",
+  "expl": "The determining factor for both subnets is exactly where their 0.0.0.0/0 route points, since that's what public/private actually means for a subnet. subnet-A's default route goes to an Internet Gateway, which is bidirectional -- it can both send an instance's outbound traffic to the internet and deliver inbound connections initiated from the internet, provided the target instance has a public (or Elastic) IP address. subnet-B's default route instead goes to a NAT Gateway, which fundamentally only works in one direction: it relays traffic that originated from inside the VPC out to the internet and routes the corresponding replies back, but it has no mechanism to accept a brand-new inbound connection initiated from the internet side at all -- there's no listening service on the NAT Gateway for an external client to connect to. This is exactly why private subnets are considered safe from unsolicited inbound internet traffic while still being able to reach external resources when they need to."
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-alb-scaling-cost-reliability#ex0",
+  "type": "example",
+  "lang": "text",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "target group health check: path=/health, interval=15s, unhealthy_threshold=3, healthy_threshold=2\n\ntime    instance-A health check   instance-B health check   ALB routes traffic to\n10:00   200 OK                    200 OK                    A and B\n10:15   200 OK                    200 OK                    A and B\n10:30   200 OK                    500 Error  (1st failure)  A and B  (still under threshold)\n10:45   200 OK                    500 Error  (2nd failure)  A and B  (still under threshold)\n11:00   200 OK                    500 Error  (3rd failure)  A only   (B marked UNHEALTHY)\n11:15   200 OK                    200 OK     (1st success)  A only   (still under recovery threshold)\n11:30   200 OK                    200 OK     (2nd success)  A and B  (B marked HEALTHY again)",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-alb-scaling-cost-reliability#ex1",
+  "type": "example",
+  "lang": "text",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "Assume: 2 instances needed for current load, $0.10/instance-hour, ~730 hours/month\n\nSingle-AZ (2 instances, 1 AZ):     2 x $0.10 x 730 = $146.00/month\n                                    -> full outage risk on that AZ's failure\n\nMulti-AZ (2 instances, 2 AZs):     2 x $0.10 x 730 = $146.00/month\n                                    -> same cost; survives AZ failure at 50% capacity\n\nMulti-AZ N+1 (3 instances, 2 AZs): 3 x $0.10 x 730 = $219.00/month\n                                    -> +$73.00/month; survives AZ failure at FULL capacity",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-alb-scaling-cost-reliability#ex2",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# Three dependencies, each individually rated at 99.9% availability, none redundant\npython3 -c \"print(0.999 * 0.999 * 0.999)\"\n# 0.997002999...  -> effective ceiling is ~99.7%, not 99.9%",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-alb-scaling-cost-reliability-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "instance-C is marked unhealthy and removed from rotation at t=30s (the second consecutive failure, matching unhealthy_threshold=2). It is marked healthy and added back at t=70s (the third consecutive success after the failures stopped, matching healthy_threshold=3).",
+  "st": "skip-lang",
+  "code": "health check: interval=10s, unhealthy_threshold=2, healthy_threshold=3\n\nt=0s   instance-C: 200 OK\nt=10s  instance-C: 200 OK\nt=20s  instance-C: 500 Error   (failure 1)\nt=30s  instance-C: 500 Error   (failure 2)\nt=40s  instance-C: 500 Error   (failure 3, but already marked unhealthy by now)\nt=50s  instance-C: 200 OK      (success 1)\nt=60s  instance-C: 200 OK      (success 2)\nt=70s  instance-C: 200 OK      (success 3)",
+  "expl": "unhealthy_threshold=2 means the ALB needs to see two consecutive failing checks before flipping the target to unhealthy -- the first failure at t=20s isn't enough on its own, but the second consecutive failure at t=30s crosses the threshold, so removal happens exactly at t=30s, not at t=20s (too early, only one failure so far) or t=40s (too late -- the instance is already excluded from rotation by then, so the third failure at t=40s doesn't change anything, it's simply confirming what's already true). Recovery works the same way in the other direction: healthy_threshold=3 requires three consecutive passing checks, so the first success at t=50s and second at t=60s aren't sufficient on their own; only the third consecutive success at t=70s crosses the recovery threshold and returns the instance to rotation."
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-alb-scaling-cost-reliability-ex2",
+  "type": "coding",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "// current architecture\ninstances: 2\navailability_zones: 1\nsla_requirement: \"survive one AZ failure with zero loss of rated capacity\"",
+  "expl": "The stated requirement -- zero loss of rated capacity during an AZ failure, not merely 'survives' -- rules out a plain 2-instances-across-2-AZs design, because losing either AZ in that setup drops capacity to 1 instance, a 50% reduction, which fails 'zero loss.' The correct fix is an N+1 posture: 3 total instances spread so that no single AZ holds more than 1 of them relative to the 2 needed to meet current load (for example, 2 in one AZ and 1 in another, or ideally spread as evenly as the AZ count allows) -- so that whichever AZ fails, at least 2 instances remain running elsewhere, exactly matching the 2-instance capacity requirement with no shortfall. This directly costs one additional instance's worth of money, continuously, every hour regardless of whether an AZ failure ever actually happens -- the correct way to present this change isn't just the new instance count, but that explicit, continuous cost, since that's precisely the number a stakeholder would need in order to judge whether the SLA's 'zero loss' requirement is worth what it costs to actually guarantee, rather than presenting the fix as if it were free."
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-alb-scaling-cost-reliability-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "// required architecture\ninstances: 3\navailability_zones: 2  // e.g. 2 instances in AZ-a, 1 in AZ-b (or vice versa)\nrationale: \"losing either AZ still leaves at least 2 instances running elsewhere\"\ncost_impact: \"+1 instance's cost, continuously, every hour -- not just during a failure\"",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-lambda-event-driven-execution#ex0",
+  "type": "example",
+  "lang": "python",
+  "exp": null,
+  "st": "skip-danger",
+  "code": "# BAD: re-creates the SDK client and connection on every single invocation,\n# paying that setup cost even on warm invocations that didn't need to\ndef handler_bad(event, context):\n    import boto3\n    dynamodb = boto3.resource(\"dynamodb\")\n    table = dynamodb.Table(\"Orders\")\n    return table.get_item(Key={\"orderId\": event[\"orderId\"]})\n\n# GOOD: client construction happens once, during Init, and is reused by\n# every invocation that lands on this same warm execution environment\nimport boto3\ndynamodb = boto3.resource(\"dynamodb\")\ntable = dynamodb.Table(\"Orders\")\n\ndef handler_good(event, context):\n    return table.get_item(Key={\"orderId\": event[\"orderId\"]})",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-lambda-event-driven-execution#ex1",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# Publish an immutable version of the function to attach provisioned concurrency to\naws lambda publish-version --function-name checkout-api\n\n# Keep 5 execution environments permanently warm for that version\naws lambda put-provisioned-concurrency-config \\\n  --function-name checkout-api \\\n  --qualifier 3 \\\n  --provisioned-concurrent-executions 5",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-lambda-event-driven-execution#ex2",
+  "type": "example",
+  "lang": "python",
+  "exp": null,
+  "st": "ok",
+  "out": "",
+  "err": "",
+  "code": "# Module scope -- looks like a global request counter, but isn't one\nrequest_count = 0\n\ndef handler(event, context):\n    global request_count\n    request_count += 1\n    return {\"requestsHandledByThisEnvironment\": request_count}\n\n# 5 concurrent invocations arrive at once. Lambda spins up 3 separate\n# execution environments to handle them (2 land on env-A warm from earlier,\n# 2 land on freshly-created env-B, 1 lands on freshly-created env-C):\n#   env-A: request_count -> 3, 4   (already at 2 from earlier traffic)\n#   env-B: request_count -> 1, 2\n#   env-C: request_count -> 1\n# There is no invocation anywhere that reports \"5\" -- there is no shared 5 at all.",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-lambda-event-driven-execution-ex1",
+  "type": "predictOutput",
+  "lang": null,
+  "exp": "Invocation 1 is a cold start (no warm environment existed after an hour of idleness). Invocation 2 is very likely also a cold start (or lands on a second, newly created environment) if it arrives while invocation 1's single environment is still occupied handling invocation 1 -- Lambda creates a second environment to serve it concurrently rather than queuing it behind the first. Of invocations 3, 4, and 5, at most one or two can reuse whichever environment(s) survived from the first burst (if they're still warm 30 minutes later, which is plausible but not guaranteed), and the rest require newly created environments -- so at least one, and quite possibly all three, are cold starts.",
+  "st": "skip-lang",
+  "code": "t=0:00:00   idle for over an hour\nt=0:00:00   invocation 1 arrives\nt=0:00:00.2 invocation 2 arrives (200ms later)\nt=0:30:00   invocations 3, 4, 5 arrive simultaneously (idle in between)",
+  "expl": "The core rule is: a cold start occurs whenever an invocation needs an execution environment and no suitable warm one is currently idle and available. Invocation 1 has no prior environment at all, so it's unambiguously cold. Invocation 2 arrives only 200ms after invocation 1 -- if invocation 1 is still running (a very plausible timeframe for it still to be executing), that environment isn't free to take invocation 2, so Lambda spins up a second environment concurrently, which is also a cold start for that second environment specifically, even though the function itself already has one warm environment elsewhere. By the time invocations 3, 4, and 5 arrive, 30 minutes have passed with no traffic -- environments can be reclaimed after periods of inactivity, so it's entirely possible neither of the two earlier environments survived; even in the best case where one did survive, it can only serve one of the three simultaneous invocations, leaving at least two needing brand-new, cold environments. The general lesson: cold starts aren't simply a 'first request of the day' phenomenon -- they recur any time concurrency needs outpace the currently warm environment pool, including during otherwise sustained traffic."
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-lambda-event-driven-execution-ex2",
+  "type": "debugging",
+  "lang": "python",
+  "exp": null,
+  "st": "ok",
+  "out": "",
+  "err": "",
+  "code": "processed_today = 0\n\ndef handler(event, context):\n    global processed_today\n    processed_today += 1\n    return {\"statusCode\": 200, \"body\": f\"Processed today: {processed_today}\"}",
+  "expl": "The original code works under low traffic purely by coincidence: with requests spaced far apart, they almost always land on the same single warm environment, so incrementing its one copy of `processed_today` happens to behave like a real shared counter. Under real concurrent load, Lambda creates multiple execution environments to serve overlapping requests, and each one has its own independent process with its own independent `processed_today` starting from whatever that specific environment's own history happens to be -- there is no single number being incremented at all, so different requests correctly but confusingly report different, individually-too-low counts, none of which reflects the true total across every environment. The fix moves the counter into DynamoDB, using an atomic `ADD` update expression: every environment, regardless of which one handles a given request, increments the exact same item in the exact same table, so the count is genuinely shared and consistent no matter how many concurrent environments Lambda happens to be running behind the scenes."
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-lambda-event-driven-execution-ex2",
+  "type": "solution",
+  "lang": "python",
+  "exp": null,
+  "st": "skip-danger",
+  "code": "import boto3\n\ndynamodb = boto3.resource(\"dynamodb\")\ncounter_table = dynamodb.Table(\"DailyCounters\")\n\ndef handler(event, context):\n    response = counter_table.update_item(\n        Key={\"counterName\": \"processed_today\"},\n        UpdateExpression=\"ADD requestCount :incr\",\n        ExpressionAttributeValues={\":incr\": 1},\n        ReturnValues=\"UPDATED_NEW\",\n    )\n    return {\"statusCode\": 200, \"body\": f\"Processed today: {response['Attributes']['requestCount']}\"}",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-api-gateway-http-apis#ex0",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# 1. Create the HTTP API\naws apigatewayv2 create-api --name orders-api --protocol-type HTTP\n\n# 2. Create an integration pointing at the Lambda function\naws apigatewayv2 create-integration \\\n  --api-id abc123xyz \\\n  --integration-type AWS_PROXY \\\n  --integration-uri arn:aws:lambda:us-east-1:111122223333:function:get-order \\\n  --payload-format-version 2.0\n\n# 3. Create the route, pointing at that integration\naws apigatewayv2 create-route \\\n  --api-id abc123xyz \\\n  --route-key \"GET /orders/{orderId}\" \\\n  --target integrations/int-456def\n\n# 4. Grant API Gateway permission to actually invoke the function --\n#    easy to forget, and without it every request fails with an\n#    Internal Server Error even though everything above looks correct\naws lambda add-permission \\\n  --function-name get-order \\\n  --statement-id apigateway-invoke \\\n  --action lambda:InvokeFunction \\\n  --principal apigateway.amazonaws.com \\\n  --source-arn \"arn:aws:execute-api:us-east-1:111122223333:abc123xyz/*/*/orders/{orderId}\"",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-api-gateway-http-apis#ex1",
+  "type": "example",
+  "lang": "python",
+  "exp": null,
+  "st": "ok",
+  "out": "",
+  "err": "",
+  "code": "# MALFORMED: returns business data directly with no statusCode/body wrapper.\n# The function itself runs successfully and logs show no error at all --\n# but API Gateway can't turn this into an HTTP response, so the client\n# receives a 502 Internal Server Error.\ndef handler_malformed(event, context):\n    return {\"orderId\": \"42\", \"status\": \"shipped\"}\n\n# CORRECT: wraps the same business data in the shape API Gateway requires.\ndef handler_correct(event, context):\n    import json\n    return {\n        \"statusCode\": 200,\n        \"headers\": {\"Content-Type\": \"application/json\"},\n        \"body\": json.dumps({\"orderId\": \"42\", \"status\": \"shipped\"})\n    }",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-api-gateway-http-apis#ex2",
+  "type": "example",
+  "lang": "python",
+  "exp": null,
+  "st": "ok",
+  "out": "",
+  "err": "",
+  "code": "import json\n\ndef handler(event, context):\n    method = event[\"requestContext\"][\"http\"][\"method\"]\n    order_id = event.get(\"pathParameters\", {}).get(\"orderId\")\n    query = event.get(\"queryStringParameters\") or {}\n    expand_items = query.get(\"expand\") == \"items\"\n\n    if method != \"GET\" or not order_id:\n        return {\"statusCode\": 400, \"body\": json.dumps({\"error\": \"orderId path parameter required\"})}\n\n    order = {\"orderId\": order_id, \"status\": \"shipped\"}\n    if expand_items:\n        order[\"items\"] = [{\"sku\": \"WIDGET-1\", \"qty\": 2}]\n\n    return {\n        \"statusCode\": 200,\n        \"headers\": {\"Content-Type\": \"application/json\"},\n        \"body\": json.dumps(order)\n    }",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-api-gateway-http-apis-ex1",
+  "type": "debugging",
+  "lang": "python",
+  "exp": null,
+  "st": "ok",
+  "out": "",
+  "err": "",
+  "code": "def handler(event, context):\n    order_id = event[\"pathParameters\"][\"orderId\"]\n    return {\"orderId\": order_id, \"status\": \"shipped\"}",
+  "expl": "The original handler returns a plain dictionary of business data -- there's no `statusCode` and no `body` field, and even if there were, `body` must be a JSON string, not a nested object. API Gateway's proxy integration can only construct a real HTTP response from a return value that matches its expected shape; a return value that doesn't match it causes API Gateway to give up and return a 502 to the client, entirely independent of whether the Lambda function itself executed correctly, which is exactly why CloudWatch shows no error at all -- from Lambda's point of view, nothing went wrong. The fix wraps the same business data in the required shape: an explicit `statusCode`, a `body` produced by serializing the data to a JSON string, and (for clarity to the client) a `Content-Type` header."
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-api-gateway-http-apis-ex1",
+  "type": "solution",
+  "lang": "python",
+  "exp": null,
+  "st": "ok",
+  "out": "",
+  "err": "",
+  "code": "import json\n\ndef handler(event, context):\n    order_id = event[\"pathParameters\"][\"orderId\"]\n    return {\n        \"statusCode\": 200,\n        \"headers\": {\"Content-Type\": \"application/json\"},\n        \"body\": json.dumps({\"orderId\": order_id, \"status\": \"shipped\"})\n    }",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-api-gateway-http-apis-ex2",
+  "type": "coding",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "// aws apigatewayv2 create-api, create-integration, and create-route have\n// already succeeded. One more command is needed before requests will\n// actually reach the function.",
+  "expl": "Creating the API, the integration, and the route only configures API Gateway's own side of the connection -- it does not grant API Gateway any permission to actually invoke the target Lambda function, because that permission lives on the Lambda function's resource-based policy, a separate piece of configuration entirely. Without it, every request that reaches the route fails at the invoke step before the function's own code ever runs, which is exactly why CloudWatch shows no invocation at all, not even a failed one -- the failure happens one level upstream of the function itself. `aws lambda add-permission` adds a statement to that resource-based policy granting the `apigateway.amazonaws.com` service principal `lambda:InvokeFunction` rights, scoped via `--source-arn` to this specific API (and, in this pattern, this specific route), so that some other unrelated API in the account can't invoke this function simply because it also happens to be an API Gateway API."
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-api-gateway-http-apis-ex2",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "aws lambda add-permission \\\n  --function-name get-order \\\n  --statement-id apigateway-invoke \\\n  --action lambda:InvokeFunction \\\n  --principal apigateway.amazonaws.com \\\n  --source-arn \"arn:aws:execute-api:us-east-1:111122223333:abc123xyz/*/*/orders/{orderId}\"",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-managed-service-tradeoffs#ex0",
+  "type": "example",
+  "lang": "text",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "                          EC2 (self-managed)   ECS/Fargate         Lambda\nPatches the OS?           You                  AWS                 AWS\nConfigures scaling?       You (ASG policy)      You (service policy) AWS (automatic)\nCold starts?              N/A (always running)  Rare, on scale-out   Common, per-environment\nMax execution time?       Unbounded             Unbounded            15 minutes hard ceiling\nIdle cost?                Full instance cost     Full task cost       $0 -- billed per invocation\nPortability of the code   High (plain binary/    High (standard       Low (AWS-specific event\n  and its runtime model     process)              container image)     shapes and handler API)",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-managed-service-tradeoffs#ex1",
+  "type": "example",
+  "lang": "python",
+  "exp": null,
+  "st": "ok",
+  "out": "",
+  "err": "",
+  "code": "# Tightly coupled: business logic reads directly from the API Gateway event shape\ndef handler(event, context):\n    order_id = event[\"pathParameters\"][\"orderId\"]\n    expand = event.get(\"queryStringParameters\", {}).get(\"expand\") == \"items\"\n    order = look_up_order(order_id, expand_items=expand)\n    return {\"statusCode\": 200, \"body\": json.dumps(order)}\n\n# Decoupled: a thin adapter translates the platform-specific event into a\n# plain function call; the actual business logic knows nothing about Lambda,\n# API Gateway, or their event/response shapes at all\ndef look_up_order_request(order_id: str, expand_items: bool) -> dict:\n    return look_up_order(order_id, expand_items=expand_items)   # pure business logic\n\ndef handler(event, context):   # the ONLY part that's Lambda/API-Gateway-specific\n    order_id = event[\"pathParameters\"][\"orderId\"]\n    expand = event.get(\"queryStringParameters\", {}).get(\"expand\") == \"items\"\n    order = look_up_order_request(order_id, expand)\n    return {\"statusCode\": 200, \"body\": json.dumps(order)}",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-managed-service-tradeoffs#ex2",
+  "type": "example",
+  "lang": "bash",
+  "exp": null,
+  "st": "skip-lang",
+  "code": "# Rough illustration: Lambda pricing (us-east-1-like rates) vs. one always-on\n# t3.small Fargate/EC2-equivalent task, for a function that runs 200ms per\n# request at 512MB memory.\npython3 -c \"\nrequests_per_month = 50_000_000\nduration_sec = 0.2\nmemory_gb = 0.5\ngb_seconds = requests_per_month * duration_sec * memory_gb\nlambda_compute_cost = gb_seconds * 0.0000166667\nlambda_request_cost = requests_per_month / 1_000_000 * 0.20\nprint('Lambda: \\${:.2f}/month'.format(lambda_compute_cost + lambda_request_cost))\nprint('Always-on small fleet (approx): \\$60-100/month per instance, scaled to load')\n\"",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-managed-service-tradeoffs-ex1",
+  "type": "coding",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "// workload profile\naverage_requests_per_sec: 2\nburst_requests_per_sec: 150-200\nburst_duration: \"a few minutes, several times a day\"\nrequest_duration: \"under 1.5 seconds\"\nstate: \"none needed between requests\"",
+  "expl": "This workload profile matches almost exactly the case the framework identifies as Lambda's strongest fit: traffic that's spiky and unpredictable in timing (even though the burst magnitude is roughly known), well within Lambda's execution-time ceiling, latency-tolerant enough that occasional cold starts during a burst aren't a real problem, and free of any requirement for state to persist across requests. An EC2 or Fargate fleet sized to comfortably handle 150-200 req/s bursts would spend the overwhelming majority of every day serving only 2 req/s of actual traffic against capacity provisioned for 100x that load, which is exactly the 'paying for capacity that sits idle most of the time' cost pattern the framework's first question is built to surface. None of the reduced-control concerns from this concept's second section -- execution ceiling, opaque scaling, cold starts, limited debugging visibility -- apply with any real force here, since the workload's actual requirements (sub-2-second execution, tolerance for occasional latency blips, no shared state) sit comfortably inside what Lambda is built to handle well."
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-managed-service-tradeoffs-ex1",
+  "type": "solution",
+  "lang": null,
+  "exp": null,
+  "st": "skip-lang",
+  "code": "// recommendation\ncompute_choice: \"Lambda\"\nrationale:\n  - \"Traffic is extremely spiky (2 req/s average vs 150-200 req/s bursts) -- an always-on fleet would need to be sized for the burst and would sit mostly idle the rest of the day, paying full cost around the clock for capacity used only a few minutes at a time.\"\n  - \"Request duration (under 1.5s) is far inside Lambda's 15-minute ceiling, and this is not a use case where cold starts are unacceptable (a notification send delayed by a few hundred ms during a burst is tolerable), so Lambda's execution constraints are not a blocking concern.\"\n  - \"No state needs to persist between requests, which removes the one common objection (relying on in-process shared state) that would have pushed this toward a container or EC2-based design instead.\"\ncost_note: \"Lambda's per-invocation billing means the long low-traffic stretches cost nearly nothing, while the bursts are absorbed by automatic scaling rather than requiring pre-provisioned always-on capacity sized for the worst case.\"",
+  "expl": null
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-managed-service-tradeoffs-ex2",
+  "type": "debugging",
+  "lang": "python",
+  "exp": null,
+  "st": "ok",
+  "out": "",
+  "err": "",
+  "code": "# function A: triggered by API Gateway\ndef api_handler(event, context):\n    order_id = event[\"pathParameters\"][\"orderId\"]\n    amount = json.loads(event[\"body\"])[\"amount\"]\n    tax = amount * 0.0825\n    place_order(order_id, amount, tax)\n    return {\"statusCode\": 200, \"body\": json.dumps({\"orderId\": order_id})}\n\n# function B: triggered by SQS, copy-pasted and adapted, now diverged\ndef sqs_handler(event, context):\n    for record in event[\"Records\"]:\n        body = json.loads(record[\"body\"])\n        order_id = body[\"orderId\"]\n        amount = body[\"amount\"]\n        tax = amount * 0.08   # bug fixed in api_handler, never ported here\n        place_order(order_id, amount, tax)",
+  "expl": "The underlying design problem is that the tax calculation and order-placement logic -- genuine business logic with nothing to do with Lambda triggers -- was duplicated inline inside two separate trigger-specific handlers instead of being written once and called from two thin adapters. Once duplicated, there is no mechanism keeping the two copies in sync; a fix applied to one is simply absent from the other until someone notices, which is exactly what happened here. The fix extracts `place_order_with_tax` as a single shared function containing the actual business rule, leaving each handler responsible only for the platform-specific work of pulling `order_id` and `amount` out of its own event shape (API Gateway's `pathParameters`/`body`, or SQS's `Records` array) and calling the shared function. Any future tax-rate fix now needs to happen in exactly one place, and both triggers automatically get the fix, because both are thin call-throughs to the same underlying logic rather than independent copies of it. This is the same 'isolate the platform-specific glue' pattern from earlier in this concept, applied here to a multi-trigger scenario rather than a portability-across-clouds scenario -- the same discipline pays off in both cases."
+ },
+ {
+  "course": "cloud-aws",
+  "id": "cloud-aws-managed-service-tradeoffs-ex2",
+  "type": "solution",
+  "lang": "python",
+  "exp": null,
+  "st": "ok",
+  "out": "",
+  "err": "",
+  "code": "# shared business logic -- knows nothing about API Gateway or SQS\ndef place_order_with_tax(order_id: str, amount: float) -> None:\n    tax = amount * 0.0825\n    place_order(order_id, amount, tax)\n\n# function A: thin adapter for the API Gateway event shape\ndef api_handler(event, context):\n    order_id = event[\"pathParameters\"][\"orderId\"]\n    amount = json.loads(event[\"body\"])[\"amount\"]\n    place_order_with_tax(order_id, amount)\n    return {\"statusCode\": 200, \"body\": json.dumps({\"orderId\": order_id})}\n\n# function B: thin adapter for the SQS event shape\ndef sqs_handler(event, context):\n    for record in event[\"Records\"]:\n        body = json.loads(record[\"body\"])\n        place_order_with_tax(body[\"orderId\"], body[\"amount\"])",
+  "expl": null
+ }
+]
