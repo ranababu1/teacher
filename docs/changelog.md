@@ -11,7 +11,7 @@
     own key, and only after they have agreed to send that provider data.
   If the lookup fails (offline, unexpected response), the built-in
   default is used: `gemini-flash-latest`, `claude-sonnet-5-5`,
-  `gpt-5.6-terra`, `deepseek-v4-flash`.
+  `gpt-6.1-terra`, `deepseek-v4-flash`.
 - **Settings shows the model in use.** The Model row reads "Latest" with
   the model it currently resolves to; adding and selecting a model id in
   "Manage models" pins it.

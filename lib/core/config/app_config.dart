@@ -33,7 +33,7 @@ class AppConfig {
     this.geminiApiBaseUrl = 'https://generativelanguage.googleapis.com',
     this.geminiModel = 'gemini-flash-latest',
     this.openAiApiBaseUrl = 'https://api.openai.com/v1',
-    this.openAiModel = 'gpt-5.6-terra',
+    this.openAiModel = 'gpt-6.1-terra',
     this.anthropicApiBaseUrl = 'https://api.anthropic.com',
     this.anthropicModel = 'claude-sonnet-5-5',
     this.deepSeekApiBaseUrl = 'https://api.deepseek.com',
