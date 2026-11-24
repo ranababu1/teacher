@@ -31,11 +31,11 @@ class AppConfig {
     this.apiBaseUrl = '',
     this.featureFlags = const FeatureFlags(),
     this.geminiApiBaseUrl = 'https://generativelanguage.googleapis.com',
-    this.geminiModel = 'gemini-3.7-flash',
+    this.geminiModel = 'gemini-flash-latest',
     this.openAiApiBaseUrl = 'https://api.openai.com/v1',
-    this.openAiModel = 'gpt-5.6-luna',
+    this.openAiModel = 'gpt-5.6-terra',
     this.anthropicApiBaseUrl = 'https://api.anthropic.com',
-    this.anthropicModel = 'claude-sonnet-5',
+    this.anthropicModel = 'claude-sonnet-5-5',
     this.deepSeekApiBaseUrl = 'https://api.deepseek.com',
     this.deepSeekModel = 'deepseek-v4-flash',
   });
@@ -44,9 +44,13 @@ class AppConfig {
   final String apiBaseUrl;
   final FeatureFlags featureFlags;
 
-  /// Gemini REST API base URL and model id. Kept here, not hardcoded in
-  /// [features/ai_teacher], so bumping the model later is a one-line change.
-  /// See instructions.md section 28.
+  /// Gemini REST API base URL and model id. `gemini-flash-latest` is
+  /// Google's alias for the newest Flash model, so it doesn't go stale.
+  ///
+  /// The other providers' model ids are only fallbacks: the app looks up
+  /// the newest Claude Sonnet, GPT Terra and DeepSeek Flash model at
+  /// runtime (see `latest_model_providers.dart`) and uses these ids only
+  /// when that lookup fails. See instructions.md section 28.
   final String geminiApiBaseUrl;
   final String geminiModel;
 

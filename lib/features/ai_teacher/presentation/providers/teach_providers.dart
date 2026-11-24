@@ -25,6 +25,7 @@ import '../../domain/teaching_context_builder.dart';
 import '../../domain/test_ai_connection_use_case.dart';
 import 'ai_consent_providers.dart';
 import 'api_key_providers.dart';
+import 'latest_model_providers.dart';
 import 'misconception_providers.dart';
 
 /// Stands in for [AIProvider] before the selected provider's API key has
@@ -100,7 +101,11 @@ final aiProviderProvider = Provider<AIProvider>((ref) {
   final config = ref.watch(appConfigProvider);
   final settings = ref.watch(settingsControllerProvider).valueOrNull;
   final depth = settings?.explanationDepth ?? ExplanationDepth.standard;
-  final model = _effectiveModel(providerKind, settings, config);
+  final model = _effectiveModel(
+    providerKind,
+    settings,
+    ref.watch(automaticModelProvider(providerKind)),
+  );
 
   final consent = ref.watch(aiConsentServiceProvider);
   final provider = switch (providerKind) {
@@ -144,21 +149,18 @@ final aiProviderProvider = Provider<AIProvider>((ref) {
   );
 });
 
-/// The model to actually use for [provider] — the learner's selection if
-/// they've made one, otherwise [AppConfig]'s built-in default.
+/// The model to actually use for [provider]: the model the learner pinned
+/// in Settings if any, otherwise [automatic] (the newest model of the
+/// provider's family, or [AppConfig]'s built-in default when that can't
+/// be resolved; see `latest_model_providers.dart`).
 String _effectiveModel(
   AiProviderKind provider,
   AppSettings? settings,
-  AppConfig config,
+  String automatic,
 ) {
   final selected = settings?.selectedModelByProvider[provider];
   if (selected != null && selected.isNotEmpty) return selected;
-  return switch (provider) {
-    AiProviderKind.gemini => config.geminiModel,
-    AiProviderKind.openai => config.openAiModel,
-    AiProviderKind.anthropic => config.anthropicModel,
-    AiProviderKind.deepseek => config.deepSeekModel,
-  };
+  return automatic;
 }
 
 /// Shared by every AI Teacher use case so context assembly can't drift

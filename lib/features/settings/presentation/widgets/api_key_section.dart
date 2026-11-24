@@ -1,25 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/config/app_config.dart';
 import '../../../../core/config/app_config_provider.dart';
 import '../../../../core/errors/app_exception.dart';
 import '../../../../core/services/connectivity_provider.dart';
 import '../../../ai_teacher/presentation/providers/api_key_providers.dart';
+import '../../../ai_teacher/presentation/providers/latest_model_providers.dart';
 import '../../../ai_teacher/presentation/providers/teach_providers.dart';
 import '../../domain/settings_models.dart';
 import '../providers/settings_providers.dart';
 import 'manage_models_dialog.dart';
-
-/// The provider's built-in default model, from [AppConfig] — mirrors the
-/// switch in `teach_providers.dart`'s private `_effectiveModel` helper.
-String _baselineModel(AiProviderKind provider, AppConfig config) =>
-    switch (provider) {
-      AiProviderKind.gemini => config.geminiModel,
-      AiProviderKind.openai => config.openAiModel,
-      AiProviderKind.anthropic => config.anthropicModel,
-      AiProviderKind.deepseek => config.deepSeekModel,
-    };
 
 /// Lets the learner pick an AI provider and enter their own API key for it,
 /// stored via the platform's secure storage — never bundled with the app.
@@ -118,8 +108,12 @@ class _ApiKeySectionState extends ConsumerState<ApiKeySection> {
     final provider = settings?.aiProviderKind ?? AiProviderKind.gemini;
     final providerName = provider.displayName;
     final config = ref.watch(appConfigProvider);
-    final baselineModel = _baselineModel(provider, config);
-    final customModels = settings?.customModelsByProvider[provider] ?? const <String>[];
+    final baselineModel = defaultModelFor(provider, config);
+    final automaticModel = ref.watch(automaticModelProvider(provider));
+    final isAutomatic =
+        (settings?.selectedModelByProvider[provider] ?? '').isEmpty;
+    final customModels =
+        settings?.customModelsByProvider[provider] ?? const <String>[];
     final selectedModel =
         settings?.selectedModelByProvider[provider] ?? baselineModel;
 
@@ -162,6 +156,12 @@ class _ApiKeySectionState extends ConsumerState<ApiKeySection> {
         ListTile(
           contentPadding: EdgeInsets.zero,
           title: const Text('Model'),
+          subtitle: Text(
+            isAutomatic
+                ? 'Using $automaticModel. Follows the newest '
+                      '${provider.latestFamilyName} model automatically.'
+                : 'Pinned to $selectedModel.',
+          ),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -176,9 +176,15 @@ class _ApiKeySectionState extends ConsumerState<ApiKeySection> {
                         value == baselineModel ? '' : value,
                       );
                 },
-                items: [baselineModel, ...customModels]
-                    .map((m) => DropdownMenuItem(value: m, child: Text(m)))
-                    .toList(),
+                items: [
+                  DropdownMenuItem(
+                    value: baselineModel,
+                    child: const Text('Latest'),
+                  ),
+                  ...customModels
+                      .where((m) => m != baselineModel)
+                      .map((m) => DropdownMenuItem(value: m, child: Text(m))),
+                ],
               ),
               IconButton(
                 icon: const Icon(Icons.tune, size: 18),
@@ -187,7 +193,7 @@ class _ApiKeySectionState extends ConsumerState<ApiKeySection> {
                   context: context,
                   builder: (_) => ManageModelsDialog(
                     provider: provider,
-                    baselineModel: baselineModel,
+                    automaticModel: automaticModel,
                   ),
                 ),
               ),

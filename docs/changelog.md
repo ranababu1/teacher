@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-11-24 (AI models follow the newest release)
+
+### Changed
+- **AI models are no longer fixed.** Unless the learner pins a model,
+  the AI Teacher uses the newest model of each provider's family:
+  - Gemini Flash: through Google's `gemini-flash-latest` alias.
+  - Claude Sonnet, GPT Terra and DeepSeek Flash: looked up once per app
+    launch from the provider's list-models endpoint, using the learner's
+    own key, and only after they have agreed to send that provider data.
+  If the lookup fails (offline, unexpected response), the built-in
+  default is used: `gemini-flash-latest`, `claude-sonnet-5-5`,
+  `gpt-5.6-terra`, `deepseek-v4-flash`.
+- **Settings shows the model in use.** The Model row reads "Latest" with
+  the model it currently resolves to; adding and selecting a model id in
+  "Manage models" pins it.
+
 ## 2026-11-24 (release: v0.34.0 - accurate crash report wording)
 
 ### Changed

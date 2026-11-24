@@ -32,6 +32,14 @@ enum AiProviderKind {
     AiProviderKind.anthropic => 'Claude',
     AiProviderKind.deepseek => 'DeepSeek',
   };
+
+  /// The model family "Latest" follows for this provider.
+  String get latestFamilyName => switch (this) {
+    AiProviderKind.gemini => 'Gemini Flash',
+    AiProviderKind.openai => 'GPT Terra',
+    AiProviderKind.anthropic => 'Claude Sonnet',
+    AiProviderKind.deepseek => 'DeepSeek Flash',
+  };
 }
 
 /// All learner-configurable settings, typed and defaulted.
@@ -78,9 +86,9 @@ class AppSettings {
   final bool crashReportsEnabled;
   final AiProviderKind aiProviderKind;
 
-  /// The model selected for each provider, if the learner has picked one
-  /// other than that provider's built-in default. Absent = use
-  /// [AppConfig]'s hardcoded default for that provider.
+  /// The model pinned for each provider, if the learner has picked one.
+  /// Absent = "Latest": the newest model of the provider's family, or
+  /// [AppConfig]'s built-in default when that can't be looked up.
   final Map<AiProviderKind, String> selectedModelByProvider;
 
   /// User-added model ids per provider, beyond the built-in default.

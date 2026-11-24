@@ -5,22 +5,24 @@ import '../../domain/settings_models.dart';
 import '../providers/settings_providers.dart';
 
 /// Lets the learner add, rename, or remove custom model ids for one AI
-/// provider. The provider's built-in default (from `AppConfig`) is shown
-/// locked at the top and can never be edited or removed — only entries
-/// the learner has added themselves can be changed.
+/// provider. "Latest" (the newest model of the provider's family) is shown
+/// locked at the top and can't be edited or removed; only entries the
+/// learner has added themselves can be changed. Selecting one of those
+/// pins it.
 class ManageModelsDialog extends ConsumerStatefulWidget {
   const ManageModelsDialog({
     super.key,
     required this.provider,
-    required this.baselineModel,
+    required this.automaticModel,
   });
 
   final AiProviderKind provider;
-  final String baselineModel;
+
+  /// What "Latest" currently resolves to, shown for reference.
+  final String automaticModel;
 
   @override
-  ConsumerState<ManageModelsDialog> createState() =>
-      _ManageModelsDialogState();
+  ConsumerState<ManageModelsDialog> createState() => _ManageModelsDialogState();
 }
 
 class _ManageModelsDialogState extends ConsumerState<ManageModelsDialog> {
@@ -62,7 +64,10 @@ class _ManageModelsDialogState extends ConsumerState<ManageModelsDialog> {
   @override
   Widget build(BuildContext context) {
     final customModels =
-        ref.watch(settingsControllerProvider).valueOrNull?.customModelsByProvider[widget.provider] ??
+        ref
+            .watch(settingsControllerProvider)
+            .valueOrNull
+            ?.customModelsByProvider[widget.provider] ??
         const <String>[];
 
     return AlertDialog(
@@ -76,8 +81,11 @@ class _ManageModelsDialogState extends ConsumerState<ManageModelsDialog> {
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.lock_outline, size: 18),
-              title: Text(widget.baselineModel),
-              subtitle: const Text('Default — cannot be edited or removed'),
+              title: Text('Latest: ${widget.automaticModel}'),
+              subtitle: Text(
+                'Follows the newest ${widget.provider.latestFamilyName} '
+                'model. Add a model id below to pin a specific one.',
+              ),
             ),
             for (final model in customModels)
               ListTile(
