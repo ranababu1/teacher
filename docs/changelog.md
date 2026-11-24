@@ -4,7 +4,8 @@
 
 ### Changed
 - **AI/ML, AWS, Kubernetes, LLM Engineering, React, Statistics (descriptive statistics,
-  probability, information theory, limit theorems), Vector Databases, Node.js, Python, Go, Spring Boot,
+  probability, information theory, limit theorems, hypothesis testing,
+  statistical tests), Vector Databases, Node.js, Python, Go, Spring Boot,
   Java, Databases, System Design, DevOps and Docker lessons audited.** Tighter prose with the same structure and quizzes.
 
 ### Fixed
@@ -60,6 +61,10 @@
 - Statistics: a KL-divergence value (0.290 bits, not 0.397), the equality
   condition in Gibbs' inequality, a cross-entropy debugging exercise that
   did not fail, and the Lyapunov condition stated as an "iff".
+- Statistics: the Student vs Welch explanation was backwards (pooling is
+  too optimistic here, not diluted); a 2x2 chi-square table that fails
+  Cochran's rule; FWER figures that assumed independent tests; the BH
+  dependence condition.
 - Vector Databases: two debugging exercises whose buggy code already gave
   the right answer, a tied distance that made a "true top-3" depend on
   dict order, and wrong explanations of SKU matching and RRF.
