@@ -4,7 +4,7 @@
 
 ### Changed
 - **Python (oop, pythonic, tooling, async, web and data), Go, Spring Boot,
-  Java and Databases lessons audited.** Tighter prose with the same structure and quizzes.
+  Java, Databases and System Design lessons audited.** Tighter prose with the same structure and quizzes.
 
 ### Fixed
 - Go: the broken auth middleware example had a second, unintended compile
@@ -20,6 +20,8 @@
 - Databases: the booking write-skew exercise used a case REPEATABLE READ
   already stops; full-text and trigram outputs, sample plans and the
   PgBouncer reset-query advice corrected.
+- System Design: the thread-pool exhaustion timeline, rate-limit and cache
+  expiry answers, and a chat registry key that expired mid-connection.
 
 ## 2026-11-24 (release: v0.33.1 - Real AdMob IDs, Help & support)
 
