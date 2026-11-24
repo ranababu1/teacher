@@ -3,12 +3,10 @@
 ## 2026-11-24 (content audit)
 
 ### Changed
-- **AI/ML, AWS, Kubernetes, LLM Engineering, React, Statistics (descriptive statistics,
-  probability, random variables, distributions, information theory, limit
-  theorems, hypothesis testing, statistical tests, multivariate statistics,
-  regression, Bayesian statistics, stochastic processes and time series,
-  sampling and estimation, statistical learning theory), Vector Databases, Node.js, Python, Go, Spring Boot,
-  Java, Databases, System Design, DevOps and Docker lessons audited.** Tighter prose with the same structure and quizzes.
+- **All course content audited**: every lesson in all 16 courses, plus the
+  coding challenges, system design exercises and projects. Claims and
+  numbers were checked by running the code where possible, AI-style filler
+  was cut, and structure, quizzes and answer positions are unchanged.
 
 ### Fixed
 - Go: the broken auth middleware example had a second, unintended compile
