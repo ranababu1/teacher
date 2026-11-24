@@ -65,20 +65,29 @@ class ConceptExample extends Equatable {
 }
 
 class Misconception extends Equatable {
-  const Misconception({required this.description, required this.clarification});
+  const Misconception({
+    required this.description,
+    required this.clarification,
+    this.fact,
+  });
 
   final String description;
   final String clarification;
+
+  /// A correct statement on the same point, when there is one that stands
+  /// alone. Used so true/false questions are not always false.
+  final String? fact;
 
   factory Misconception.fromJson(Map<String, dynamic> json) {
     return Misconception(
       description: json['description'] as String,
       clarification: json['clarification'] as String,
+      fact: json['fact'] as String?,
     );
   }
 
   @override
-  List<Object?> get props => [description, clarification];
+  List<Object?> get props => [description, clarification, fact];
 }
 
 /// A single teachable unit — the core content model of the app.

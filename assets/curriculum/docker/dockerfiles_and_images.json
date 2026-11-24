@@ -68,7 +68,8 @@
       "misconceptions": [
         {
           "description": "The Docker build cache looks at whether the Dockerfile as a whole has changed -- if it has, everything reruns; if it hasn't, nothing reruns.",
-          "clarification": "The cache operates per instruction, in file order, not on the file as a single unit. Each instruction is checked independently against its own cached layer, matching instruction text plus, for COPY/ADD, matching file content checksums, and its specific parent layer. Editing line 8 of a 10-line Dockerfile reuses the cache for lines 1 through 7 exactly as before, and only lines 8 through 10 are re-executed -- it does not force a full rebuild from FROM, and conversely, an unchanged instruction can still be forced to rerun if something above it in the file changed, since its parent layer is now different."
+          "clarification": "The cache operates per instruction, in file order, not on the file as a single unit. Each instruction is checked independently against its own cached layer, matching instruction text plus, for COPY/ADD, matching file content checksums, and its specific parent layer. Editing line 8 of a 10-line Dockerfile reuses the cache for lines 1 through 7 exactly as before, and only lines 8 through 10 are re-executed -- it does not force a full rebuild from FROM, and conversely, an unchanged instruction can still be forced to rerun if something above it in the file changed, since its parent layer is now different.",
+          "fact": "The cache operates per instruction, in file order, not on the file as a single unit."
         },
         {
           "description": "Putting COPY . . right after FROM, before installing dependencies, is a harmless simplification -- it just means the files are available a bit earlier in the build.",
@@ -123,7 +124,7 @@
           "prompt": "Besides comparing instruction text, what additional check does Docker perform specifically for COPY and ADD instructions when deciding whether to reuse a cached layer?",
           "options": [
             "It always re-executes COPY and ADD on every build, since file operations can never be safely cached.",
-            "It computes a checksum over the actual content of the files being copied, and treats any change in that checksum as a cache miss, even if the COPY line's own text is byte-for-byte identical to last time.",
+            "It computes a checksum over the actual content of the files being copied.",
             "It checks whether the instruction appears at the same line number in the file as it did last time.",
             "It checks only the copied files' last-modified timestamps on the host, ignoring their actual content."
           ],
@@ -135,7 +136,7 @@
           "type": "multipleChoice",
           "prompt": "A Dockerfile uses `CMD node server.js` (shell form) instead of `CMD [\"node\", \"server.js\"]` (exec form). What concrete problem does this create when `docker stop` is run against a running container?",
           "options": [
-            "/bin/sh, not node, becomes PID 1, and since most shells don't forward SIGTERM to child processes by default, node never receives the signal, so docker stop waits out the full grace period before escalating to SIGKILL, skipping node's graceful-shutdown logic entirely.",
+            "/bin/sh, not node, becomes PID 1, and since most shells don't forward SIGTERM to child processes by default, node never receives the signal.",
             "docker stop fails outright with a permissions error and cannot stop the container.",
             "node receives SIGTERM immediately regardless of form, since Docker signals every process inside the container simultaneously, not just PID 1.",
             "Shell form causes the container to ignore docker stop entirely, requiring docker rm -f to remove it."
@@ -272,7 +273,7 @@
           "options": [
             "An error, because you cannot switch base images partway through a single Dockerfile.",
             "Only the compiled binary from the builder stage; everything else from both images is dropped automatically.",
-            "Only whatever alpine:3.19's own image normally provides -- nothing from the builder stage is present unless a later COPY --from=builder explicitly brings it in.",
+            "Only whatever alpine:3.19's own image normally provides.",
             "Everything from the builder stage, including the Go toolchain, source files, and compiled binary, plus everything alpine:3.19 normally provides."
           ],
           "correctOptionIndex": 2,
@@ -296,7 +297,7 @@
           "type": "multipleChoice",
           "prompt": "A Dockerfile has `FROM node:20-slim AS deps`, then `FROM deps AS build`, then later `FROM node:20-slim AS runtime`. What does the runtime stage inherit automatically from deps or build?",
           "options": [
-            "Nothing at all -- runtime starts completely fresh from node:20-slim's own filesystem, exactly like deps and build did initially, and only receives whatever an explicit COPY --from brings across.",
+            "Nothing at all -- runtime starts completely fresh from node:20-slim's own filesystem.",
             "Everything from deps, because runtime happens to reuse the identical base image tag deps used.",
             "Only node_modules, since that's the most commonly needed artifact in a Node.js project.",
             "Everything from build, since build is the most recently completed stage before runtime begins."
@@ -379,7 +380,8 @@
         },
         {
           "description": "A Docker volume is really just a folder that happens to live inside the container, so it's just as ephemeral as anything else written inside a container -- it disappears whenever the container is removed.",
-          "clarification": "A named volume, or a bind mount, deliberately lives OUTSIDE the container's own writable layer and has its own independent lifecycle, which is the entire point of using one. Removing the container that was using a named volume does not delete the volume itself -- the data persists and can be reattached to a brand-new, unrelated container simply by mounting the same volume name again. A volume is only actually deleted by an explicit, separate action, docker volume rm, or docker rm -v / docker compose down -v, which opt in to also removing associated volumes, never as an automatic side effect of removing whichever container happened to be using it most recently."
+          "clarification": "A named volume, or a bind mount, deliberately lives OUTSIDE the container's own writable layer and has its own independent lifecycle, which is the entire point of using one. Removing the container that was using a named volume does not delete the volume itself -- the data persists and can be reattached to a brand-new, unrelated container simply by mounting the same volume name again. A volume is only actually deleted by an explicit, separate action, docker volume rm, or docker rm -v / docker compose down -v, which opt in to also removing associated volumes, never as an automatic side effect of removing whichever container happened to be using it most recently.",
+          "fact": "A named volume, or a bind mount, deliberately lives OUTSIDE the container's own writable layer and has its own independent lifecycle, which is the entire point of using one."
         }
       ],
       "exercises": [
@@ -419,7 +421,7 @@
             "It fails with a permission error, because nginx needs root privileges to bind to port 80 on the host.",
             "It succeeds, but only for the first request, because Docker publishes the first connection attempt automatically.",
             "It succeeds, because EXPOSE 80 in the Dockerfile automatically publishes port 80 to the host.",
-            "It fails to connect, because no port was actually published to the host -- EXPOSE is documentation on the image, not a runtime publish action, and nginx is only reachable within its own container network namespace."
+            "It fails to connect, because no port was actually published to the host -- EXPOSE is documentation on the image."
           ],
           "correctOptionIndex": 3,
           "explanation": "EXPOSE is purely image metadata/documentation and never publishes a port on its own; only -p/--publish at docker run time, or -P to auto-publish every EXPOSEd port, actually creates the host-to-container port-forwarding rule, and none of those were used here. The “It succeeds, because EXPOSE 80…” option directly misstates what EXPOSE does. The “It succeeds, but only for the first…” option describes behavior Docker has no such 'first request' mechanism for -- it's invented. The “It fails with a permission error…” option is wrong for two reasons: it's not a permission issue, and more fundamentally the request never even reaches the container's network namespace to encounter any such issue, because nothing was published."
@@ -430,7 +432,7 @@
           "prompt": "A named volume `pgdata` is mounted into a Postgres container. The container is later removed with `docker rm -f`. What happens to the volume and its data?",
           "options": [
             "The volume persists only if the container was stopped gracefully before removal, not if -f (force) was used.",
-            "The volume and its data persist independently of the container's removal, and can be reattached to a brand-new container simply by mounting the same volume name again.",
+            "The volume and its data persist independently of the container's removal.",
             "The volume's data is preserved but becomes permanently read-only after the container that created it is removed.",
             "The volume is automatically deleted along with the container, since it was only ever used by that one container."
           ],

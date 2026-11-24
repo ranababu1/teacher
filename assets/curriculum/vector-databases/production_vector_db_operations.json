@@ -70,7 +70,8 @@
         },
         {
           "description": "Upserting new metadata for an existing ID and upserting a changed embedding vector for that ID are the same kind of operation, cost-wise and correctness-wise -- both just 'update the record.'",
-          "clarification": "A metadata-only patch (permissions, tags, a timestamp) doesn't touch the vector at all -- the semantic content hasn't changed, so there's nothing to re-embed, and the update is cheap and doesn't affect the vector's position in the index's structure. A content change is fundamentally different: the old vector describes content that no longer exists at that ID, and the only way to keep the index honest is to re-run the embedding model on the new content and upsert the resulting vector under the same ID. Treating a content change as if it were a metadata patch -- editing the stored text without recomputing the vector -- produces a record that looks completely valid (it has a vector, it has text) but is semantically inconsistent, and nothing in the system raises an error to flag that mismatch; it just silently returns stale, wrong similarity scores for that document from then on."
+          "clarification": "A metadata-only patch (permissions, tags, a timestamp) doesn't touch the vector at all -- the semantic content hasn't changed, so there's nothing to re-embed, and the update is cheap and doesn't affect the vector's position in the index's structure. A content change is fundamentally different: the old vector describes content that no longer exists at that ID, and the only way to keep the index honest is to re-run the embedding model on the new content and upsert the resulting vector under the same ID. Treating a content change as if it were a metadata patch -- editing the stored text without recomputing the vector -- produces a record that looks completely valid (it has a vector, it has text) but is semantically inconsistent, and nothing in the system raises an error to flag that mismatch; it just silently returns stale, wrong similarity scores for that document from then on.",
+          "fact": "A metadata-only patch (permissions, tags, a timestamp) doesn't touch the vector at all -- the semantic content hasn't changed, so there's nothing to re-embed, and the update is cheap and doesn't affect the vector's position in the index's structure."
         }
       ],
       "exercises": [
@@ -108,7 +109,7 @@
           "prompt": "Why do production vector databases typically mark a deleted vector with a tombstone rather than immediately excising it from the underlying HNSW graph or IVF cluster?",
           "options": [
             "Tombstones are required because vector databases cannot physically delete data for legal/compliance reasons.",
-            "Immediately removing a node can require repairing the graph edges or cluster assignments that depended on it, which is too expensive to do synchronously on every single delete; tombstoning defers that cost to periodic compaction.",
+            "Immediately removing a node can require repairing the graph edges or cluster assignments that depended on it.",
             "HNSW and IVF do not support deletion at all, so tombstoning is a workaround bolted on entirely outside the index.",
             "Tombstoning is purely a caching optimization with no relationship to the graph or cluster structure itself."
           ],
@@ -120,7 +121,7 @@
           "type": "multipleChoice",
           "prompt": "A document's permissions tag changes, but the document's actual text content stays exactly the same. What's the correct way to update its record in a vector database, and why?",
           "options": [
-            "Patch just the metadata field directly -- the vector encodes the document's semantic content, which hasn't changed at all, so there's nothing to re-embed.",
+            "Patch just the metadata field directly -- the vector encodes the document's semantic content, which hasn't changed at all.",
             "Delete the old record entirely and insert a brand-new record under a completely new, unique ID.",
             "Metadata can never be updated independently of the vector in a production vector database; both must always change together in the same operation.",
             "Always re-embed and re-upsert the vector on any update whatsoever, metadata or content, purely to be safe."
@@ -135,7 +136,7 @@
           "options": [
             "The extra cost is limited strictly to disk storage; query latency is completely unaffected by how many tombstoned vectors remain in the structure.",
             "The cost disappears automatically once the tombstone ratio exceeds roughly a third of the collection, since most systems auto-trigger compaction at that threshold with no configuration needed.",
-            "The collection is paying close to the full memory and traversal cost of the original 100% of vectors, even though only the live 60% has any chance of contributing a useful result to any query -- because tombstoned vectors still occupy memory and are still visited during search, just filtered out of the results actually returned.",
+            "The collection is paying close to the full memory and traversal cost of the original 100% of vectors.",
             "There is no ongoing cost -- tombstoned vectors are instantly and completely removed from memory and traversal, so the index already behaves exactly as if it only ever held the live 60%."
           ],
           "correctOptionIndex": 2,
@@ -149,7 +150,7 @@
             "This only causes a problem the very first time the job runs; every subsequent run correctly overwrites the previous entries.",
             "Nothing changes across runs -- len(store) happens to produce the same key for a given document every time, since the store's size is deterministic.",
             "The vector database automatically detects duplicate content during the next compaction pass and merges the redundant entries.",
-            "Every run re-inserts every document as a brand-new entry under a new key, so the collection grows without bound, accumulating stale duplicates of every document that remain fully live and compete against their own more current versions in every future query."
+            "Every run re-inserts every document as a brand-new entry under a new key."
           ],
           "correctOptionIndex": 3,
           "explanation": "This is exactly the broken_reindex pattern from the explanation: because the key is derived purely from how many entries already exist rather than from anything identifying the document itself, every run lands its writes on brand-new keys instead of the ones from the previous run, so the collection keeps growing, and every stale duplicate stays fully live and searchable indefinitely. The “Nothing changes across runs -- len(store) happens…” option is false -- len(store) grows after every insert, so it produces a different starting key on each run, not the same one. The “The vector database automatically detects duplicate content…” option invents an automatic deduplication capability that compaction doesn't provide; compaction reclaims tombstoned (explicitly deleted) entries, not undetected content duplicates. The “This only causes a problem the very…” option is wrong -- the bug recurs identically on every run, since the root cause (deriving the key from store size rather than document identity) never gets fixed on its own."
@@ -228,7 +229,8 @@
       "misconceptions": [
         {
           "description": "Since pre-filtering guarantees correctness (it never misses matching results the way naive post-filtering can), you should always pre-filter, and post-filtering has no place in a well-built production system.",
-          "clarification": "Pre-filtering's correctness comes with a real cost: it typically means scanning the filtered subset directly, bypassing whatever ANN speedup (HNSW's graph, IVF's clusters) the index would otherwise provide over the full collection. That's cheap and clearly the right call when the filter is highly selective -- a small subset relative to the whole collection. But for a low-selectivity filter that matches a large share of the collection, naive pre-filtering degenerates toward scanning most of the index by hand, which defeats the entire point of having built an ANN index in the first place. Post-filtering with proper oversampling (or adaptive expansion) is often the better-performing, still-correct choice for exactly those high-selectivity-in-the-other-direction cases -- the right strategy is a function of the specific filter's selectivity, not a blanket rule that one approach is always safer."
+          "clarification": "Pre-filtering's correctness comes with a real cost: it typically means scanning the filtered subset directly, bypassing whatever ANN speedup (HNSW's graph, IVF's clusters) the index would otherwise provide over the full collection. That's cheap and clearly the right call when the filter is highly selective -- a small subset relative to the whole collection. But for a low-selectivity filter that matches a large share of the collection, naive pre-filtering degenerates toward scanning most of the index by hand, which defeats the entire point of having built an ANN index in the first place. Post-filtering with proper oversampling (or adaptive expansion) is often the better-performing, still-correct choice for exactly those high-selectivity-in-the-other-direction cases -- the right strategy is a function of the specific filter's selectivity, not a blanket rule that one approach is always safer.",
+          "fact": "Pre-filtering's correctness comes with a real cost: it typically means scanning the filtered subset directly, bypassing whatever ANN speedup (HNSW's graph, IVF's clusters) the index would otherwise provide over the full collection."
         },
         {
           "description": "An oversampling factor for post-filtering that reliably returns k results in testing is safe to hardcode permanently, since it's a fixed property of how much bigger you need to fetch.",
@@ -283,7 +285,7 @@
           "prompt": "A team tuned their post-filter oversampling factor against their tenant_id filter alone, and it reliably returned enough results for months. After adding a mandatory 'not soft-deleted' filter and a recency window on top of the existing tenant filter, the same fixed oversampling factor starts silently returning fewer than k results for many queries. What's the most likely explanation?",
           "options": [
             "The recency filter should have replaced the similarity search entirely rather than being combined with it.",
-            "Combining multiple independent filters with AND multiplies their selectivities together, so the effective selectivity of tenant AND not-deleted AND recency is substantially lower than the tenant filter's selectivity alone -- the old factor was sized for a selectivity that no longer applies.",
+            "Combining multiple independent filters with AND multiplies their selectivities together.",
             "Post-filtering fundamentally cannot support more than one filter condition at a time.",
             "The ANN index became corrupted when the new filter conditions were added."
           ],
@@ -485,7 +487,7 @@
           "prompt": "In the overhead cost model, namespace_per_tenant_total pays a fixed baseline_overhead_bytes once PER tenant, while shared_index_total pays that same fixed cost exactly once in total, no matter how many tenants it holds. As the number of small tenants grows very large, what happens to the ratio between the two totals?",
           "options": [
             "The ratio is undefined once tenant count exceeds roughly 1,000, since the cost formulas only produce meaningful results below that count.",
-            "The ratio approaches a value set by how the fixed overhead compares to each tenant's own vector data size -- the shared index's overhead becomes negligible against its growing vector total, while namespace-per-tenant's overhead keeps scaling directly with tenant count, so the ratio stays elevated rather than shrinking toward 1.",
+            "The ratio approaches a value set by how the fixed overhead compares to each tenant's own vector data size.",
             "The ratio approaches 1, since both totals eventually become dominated by the actual vector data as tenant count grows, making the fixed overhead irrelevant either way.",
             "The ratio decreases toward 0, since a larger tenant population amortizes the fixed overhead equally well in both models."
           ],

@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-11-24 (Length and True/False giveaways removed)
+
+### Fixed
+- **Picking the longest option no longer passes any topic test** (it passed
+  103 of 113). Correct answers are the longest 47% of the time, down from
+  90%: 417 lost a justification the explanation already gives, and 185 more
+  were evened out by extending a wrong option or tightening the right one.
+- **"True or false?" checks and flashcards are no longer always False.**
+  Misconceptions can carry a reviewed `fact`, shown instead of the myth.
+  Flashcard backs now state True or False.
+
+### Verification
+- `test/content_coverage_test.dart` rejects topics passable by answer
+  length and courses without both kinds of statement.
+  `flutter analyze`, `flutter test`.
+
 ## 2026-11-24 (Answer options are shuffled)
 
 ### Fixed

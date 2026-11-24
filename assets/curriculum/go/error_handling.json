@@ -72,7 +72,8 @@
         },
         {
           "description": "Two error values built from the same message text, such as two separate calls to errors.New(\"not found\"), are equal when compared with ==.",
-          "clarification": "`errors.New` allocates and returns a distinct value on every single call, even when given identical text -- comparing two independently-constructed errors with `==` is false, regardless of whether their `Error()` strings happen to match exactly. The sentinel-error pattern works specifically because a package stores one error value once, in a package-level variable, and every code path that wants to signal that specific failure returns that same stored value rather than constructing a fresh one -- `==` then correctly recognizes the same value coming back, but it is never comparing message strings under the hood."
+          "clarification": "`errors.New` allocates and returns a distinct value on every single call, even when given identical text -- comparing two independently-constructed errors with `==` is false, regardless of whether their `Error()` strings happen to match exactly. The sentinel-error pattern works specifically because a package stores one error value once, in a package-level variable, and every code path that wants to signal that specific failure returns that same stored value rather than constructing a fresh one -- `==` then correctly recognizes the same value coming back, but it is never comparing message strings under the hood.",
+          "fact": "`errors.New` allocates and returns a distinct value on every single call, even when given identical text -- comparing two independently-constructed errors with `==` is false, regardless of whether their `Error()` strings happen to match exactly."
         }
       ],
       "exercises": [
@@ -109,7 +110,7 @@
           "type": "multipleChoice",
           "prompt": "A function returns (int, error). The caller writes `value, _ := riskyCall()` and then immediately uses `value` in a calculation, without checking whether the call actually failed. What happens?",
           "options": [
-            "Nothing stops it: execution continues normally, and value holds whatever riskyCall returned -- typically 0 (int's zero value) if it failed -- with no warning that anything went wrong.",
+            "Nothing stops it: execution continues normally, and value holds whatever riskyCall returned.",
             "go build refuses to compile, because discarding a returned error with _ is treated as a compile error.",
             "The program panics at runtime the moment the discarded error would have been non-nil.",
             "Go automatically substitutes the last successfully returned value from a previous call instead of the zero value."
@@ -138,7 +139,7 @@
             "That Result will always come back as its zero value whenever Parse is called, regardless of success or failure.",
             "That Parse will automatically retry internally on failure before ever returning control to its caller.",
             "That Parse is guaranteed to run slower than an equivalent function without an error return, due to the overhead of constructing error values.",
-            "That Parse might fail, and the caller is expected to receive and inspect that failure explicitly -- visibly, in the type signature itself -- rather than relying on hidden control flow that could jump out of the function unexpectedly."
+            "That Parse might fail, and the caller is expected to receive and inspect that failure explicitly."
           ],
           "correctOptionIndex": 3,
           "explanation": "Putting error in the return signature makes the possibility of failure part of the function's own visible contract -- any caller can see, just from the type signature, that this call can fail and that they'll receive a value to inspect if it does, with no separate documentation-reading required to discover which calls might abort control flow the way you'd need to with exceptions. The “That Parse is guaranteed to run slower…” option invents a performance claim the material never makes. The “That Parse will automatically retry internally…” option is wrong -- Go's error convention says nothing about automatic retries; the caller decides what to do with a returned error. The “That Result will always come back…” option is wrong -- Result is only guaranteed to be the zero value when err is non-nil; on success it holds the genuine, meaningful result."
@@ -150,7 +151,7 @@
           "options": [
             "It's actually more robust than comparing against the sentinel directly, since string comparison continues to work correctly even after the error has been wrapped by an intermediate layer, unlike a direct == check.",
             "This pattern is necessary because Go's == operator can never be used to compare two error interface values, under any circumstances.",
-            "It's fragile: it silently breaks (matching nothing, or matching the wrong thing) if the message text is ever reworded, or if some unrelated error happens to produce that exact same string -- whereas comparing against the sentinel value itself never depends on the wording at all.",
+            "It's fragile: it silently breaks (matching nothing, or matching the wrong thing) if the message text is ever reworded, or if some unrelated error happens to produce that exact same string.",
             "It doesn't compile -- comparing the result of Error() to a string literal isn't legal Go syntax."
           ],
           "correctOptionIndex": 2,
@@ -285,7 +286,7 @@
             "The original root error directly, skipping over the middle layer entirely, because Unwrap() always returns the deepest error in the chain in one call.",
             "The outer error's own formatted message as a plain string, rather than another error value.",
             "Nothing -- Unwrap() is only meant to be called internally by errors.Is and errors.As; ordinary code is not permitted to call it directly.",
-            "The middle error -- the very next error down the chain -- not the root error directly; reaching the root requires calling Unwrap() again on that result."
+            "The middle error -- the very next error down the chain -- not the root error directly."
           ],
           "correctOptionIndex": 3,
           "explanation": "Each layer's Unwrap() returns exactly one link down the chain -- the error it directly wraps -- not the ultimate root cause in one jump. Reaching the root from the outermost error requires calling Unwrap() on the outer error to get the middle error, then Unwrap() again on that to reach the root; this is exactly the repeated-Unwrap()-calling that errors.Is and errors.As perform internally so callers don't have to walk it by hand. The “The original root error directly, skipping over…” option describes a 'jump straight to the bottom' behavior Unwrap() does not have. The “Nothing -- Unwrap() is only meant…” option is wrong -- Unwrap() is an ordinary exported-by-convention method; any code can call it directly, though errors.Is/errors.As are usually more convenient. The “The outer error's own formatted message…” option is wrong -- Unwrap() returns an error value, not a string."
@@ -297,7 +298,7 @@
           "options": [
             "errors.As only works when the target type was created with errors.New, not with a custom struct definition.",
             "errors.As(err, ValidationError{}) -- pass a freshly-constructed zero-value instance of the type directly as the second argument.",
-            "var target *ValidationError; errors.As(err, &target) -- declare a nil pointer to the target type, and pass its address so errors.As can assign the matching error into it.",
+            "var target *ValidationError; errors.As(err, &target) -- declare a nil pointer to the target type.",
             "var target ValidationError; errors.As(err, target) -- declare the target by value and pass it directly, without taking its address."
           ],
           "correctOptionIndex": 2,
@@ -308,7 +309,7 @@
           "type": "multipleChoice",
           "prompt": "Package db defines an unexported sentinel, `var errConnLost = errors.New(\"connection lost\")`, and wraps it with %w whenever it's returned. Can code in a different package reliably detect this specific failure using errors.Is?",
           "options": [
-            "No -- an unexported sentinel can still be wrapped and returned across package boundaries, but no code outside package db can write errors.Is(err, errConnLost) at all, because outside code has no way to even refer to errConnLost by name.",
+            "No -- an unexported sentinel can still be wrapped and returned across package boundaries, but no code outside package db can write errors.Is(err, errConnLost) at all.",
             "No -- unexported error values cannot be wrapped with %w in the first place, so returning errConnLost this way would fail to compile.",
             "Yes -- errors.Is can find any error anywhere in a chain regardless of whether it's exported, since wrapping makes every error in the chain accessible from any package that receives it.",
             "Yes, but only by first converting err to a string with err.Error() and checking for the substring \"connection lost\"."
@@ -394,7 +395,8 @@
       "misconceptions": [
         {
           "description": "recover() stops an in-progress panic no matter where in the panicking function's call chain you call it, as long as it's called somewhere while that panic is happening.",
-          "clarification": "recover() only has any effect when it's called directly by a function that was itself deferred -- calling it in ordinary, non-deferred code does absolutely nothing, even while a panic is actively unwinding through that exact function. And even inside a deferred function, it must be that specific deferred function's own body calling recover() directly; a function that the deferred function goes on to call does not count. Called anywhere outside this exact position, recover() simply returns nil and has zero effect on any panic that might currently be unwinding."
+          "clarification": "recover() only has any effect when it's called directly by a function that was itself deferred -- calling it in ordinary, non-deferred code does absolutely nothing, even while a panic is actively unwinding through that exact function. And even inside a deferred function, it must be that specific deferred function's own body calling recover() directly; a function that the deferred function goes on to call does not count. Called anywhere outside this exact position, recover() simply returns nil and has zero effect on any panic that might currently be unwinding.",
+          "fact": "recover() only has any effect when it's called directly by a function that was itself deferred -- calling it in ordinary, non-deferred code does absolutely nothing, even while a panic is actively unwinding through that exact function."
         },
         {
           "description": "panic/recover is Go's version of try/catch, so it's a perfectly normal way to handle expected, routine failure conditions like a missing file or invalid user input, the same way exceptions are often used for those cases in other languages.",
@@ -462,7 +464,7 @@
           "prompt": "Based on the rule of thumb this concept describes for choosing between panic and returning an error, which of these is the best candidate for an idiomatic panic rather than an error return?",
           "options": [
             "A function receiving a network request payload that's missing a required field.",
-            "A slice index computed internally by a function's own logic that turns out to be out of range for that slice -- a state the function's own author never intended to be reachable.",
+            "A slice index computed internally by a function's own logic that turns out to be out of range for that slice.",
             "A database query that fails because the network connection to the database is temporarily slow or unreachable.",
             "A configuration file that a command-line tool tries to open, which turns out not to exist on disk."
           ],

@@ -52,8 +52,10 @@ class GenerateWeeklyFlashcardsUseCase {
             conceptTitle: concept.title,
             front:
                 'True or false — about ${concept.title}:\n'
-                '"${misconception.description}"',
-            back: misconception.clarification,
+                '"${misconception.fact ?? misconception.description}"',
+            back:
+                '${misconception.fact == null ? 'False' : 'True'}. '
+                '${misconception.clarification}',
           ),
         );
         remaining--;

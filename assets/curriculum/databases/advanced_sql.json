@@ -67,11 +67,13 @@
       "misconceptions": [
         {
           "description": "A window function with PARTITION BY works like GROUP BY -- it collapses all the rows in each partition down into one summary row.",
-          "clarification": "PARTITION BY only determines which rows a window function considers together when computing its result for each row -- it does not remove or merge any rows. Every row from the original table is still present in the output, one for one; each row simply gains an extra computed column reflecting something calculated across its partition. GROUP BY genuinely reduces N rows down to however many distinct groups exist; a window function with PARTITION BY still returns exactly N rows, no matter how many distinct partition values there are."
+          "clarification": "PARTITION BY only determines which rows a window function considers together when computing its result for each row -- it does not remove or merge any rows. Every row from the original table is still present in the output, one for one; each row simply gains an extra computed column reflecting something calculated across its partition. GROUP BY genuinely reduces N rows down to however many distinct groups exist; a window function with PARTITION BY still returns exactly N rows, no matter how many distinct partition values there are.",
+          "fact": "PARTITION BY only determines which rows a window function considers together when computing its result for each row -- it does not remove or merge any rows."
         },
         {
           "description": "You can filter on a window function's result directly in the WHERE clause of the same SELECT that computes it, the same way you'd filter on any other computed column.",
-          "clarification": "WHERE is evaluated before the SELECT list -- including any window functions in it -- is computed, following the same logical order-of-operations that makes HAVING (not WHERE) the clause required for filtering on aggregates. A window function's result genuinely does not exist yet at the point WHERE runs, so referencing it there raises a 'column does not exist' error. The fix is to compute the window function in a subquery or CTE first, then filter on it from an outer query, where it exists as an ordinary column by the time that outer WHERE clause runs."
+          "clarification": "WHERE is evaluated before the SELECT list -- including any window functions in it -- is computed, following the same logical order-of-operations that makes HAVING (not WHERE) the clause required for filtering on aggregates. A window function's result genuinely does not exist yet at the point WHERE runs, so referencing it there raises a 'column does not exist' error. The fix is to compute the window function in a subquery or CTE first, then filter on it from an outer query, where it exists as an ordinary column by the time that outer WHERE clause runs.",
+          "fact": "WHERE is evaluated before the SELECT list -- including any window functions in it -- is computed, following the same logical order-of-operations that makes HAVING (not WHERE) the clause required for filtering on aggregates."
         }
       ],
       "exercises": [
@@ -111,7 +113,7 @@
             "PARTITION BY without ORDER BY is a syntax error that Postgres silently ignores by falling back to a full-table sum.",
             "SUM() OVER() is broken for running totals and only AVG() OVER() can compute them.",
             "The query needs GROUP BY added alongside PARTITION BY to compute a running total correctly.",
-            "Without an ORDER BY inside OVER(), the default frame is the entire partition, so every row's SUM sees all of that customer's rows regardless of position -- adding ORDER BY inside OVER() would change the default frame to UNBOUNDED PRECEDING AND CURRENT ROW, producing a genuine running total instead."
+            "Without an ORDER BY inside OVER(), the default frame is the entire partition."
           ],
           "correctOptionIndex": 3,
           "explanation": "The correct answer identifies the actual mechanism: Postgres's default frame depends on whether ORDER BY appears inside OVER(). With no ORDER BY, the default frame is the whole partition, so every row's SUM is identical -- the customer's grand total, repeated on every row. Adding ORDER BY inside OVER() changes the default frame to 'from the start of the partition through the current row,' which is exactly what a running total needs. The “SUM() OVER() is broken for running totals…” option is false -- SUM() OVER() computes running totals correctly once ordered; the “PARTITION BY without ORDER BY…” option invents a nonexistent error/fallback; the “The query needs GROUP BY added alongside…” option is wrong because GROUP BY would collapse rows entirely, which is the opposite of what a per-row running total requires."
@@ -301,7 +303,7 @@
           "options": [
             "Postgres substitutes the full table as a fallback base case whenever the declared base case returns nothing.",
             "Postgres raises a runtime error, because a recursive CTE requires its base case to return at least one row to be valid.",
-            "The recursive case has no rows from a preceding iteration to join against, so it also immediately produces zero new rows, and the CTE's overall result is empty.",
+            "The recursive case has no rows from a preceding iteration to join against.",
             "The recursive case still runs once anyway, using the entire underlying table as an implicit starting point."
           ],
           "correctOptionIndex": 2,
@@ -445,7 +447,7 @@
           "type": "multipleChoice",
           "prompt": "`SELECT name, (SELECT COUNT(*) FROM orders WHERE orders.customer_id = customers.id) FROM customers` places a subquery directly in the SELECT list. Is this subquery correlated or uncorrelated, and why?",
           "options": [
-            "Correlated, because it references customers.id, a column belonging to the outer query -- whether a subquery is correlated depends only on whether it references an outer column, not on which clause (WHERE, FROM, or SELECT) it happens to appear in.",
+            "Correlated, because it references customers.id, a column belonging to the outer query.",
             "Uncorrelated, because scalar subqueries placed in the SELECT list are always evaluated exactly once regardless of their content.",
             "Uncorrelated, because COUNT(*) is an aggregate function, and aggregate functions can never appear inside a correlated subquery.",
             "It cannot be determined from the SQL text alone; correlation is a runtime property only visible by running EXPLAIN."
@@ -474,7 +476,7 @@
             "No -- DISTINCT can only be applied to numeric columns, not text columns such as name, so this rewritten query would fail to run at all.",
             "No -- the JOIN-plus-DISTINCT version can never produce the same set of customer names as the EXISTS version, regardless of the underlying data.",
             "Yes, and it's strictly more efficient, because DISTINCT is applied before the JOIN executes, which reduces how many rows the JOIN has to scan.",
-            "Yes, it would produce the same final set of names, but it does strictly more work than necessary -- the JOIN produces and then must deduplicate a row per matching order, whereas EXISTS can stop at the first match per customer without enumerating the rest."
+            "Yes, it would produce the same final set of names, but it does strictly more work than necessary."
           ],
           "correctOptionIndex": 3,
           "explanation": "After deduplication, the JOIN-plus-DISTINCT version does converge to the same set of qualifying customer names, but it gets there the long way -- generating one row per matching order (potentially many per customer) and then collapsing them back down, versus EXISTS, which never needs to enumerate more than one matching order per customer in the first place because it's only answering a yes/no question. The “No -- the JOIN-plus-DISTINCT version can never…” option is wrong -- both queries are answering the same underlying existence question, just via different mechanics, and do converge to the same result set. The “Yes, and it's strictly more efficient…” option is backwards; DISTINCT operates on the JOIN's output, not before it, so it cannot reduce the JOIN's own scanning work. The “No -- DISTINCT can only be applied…” option is fabricated -- DISTINCT works on any comparable column type, text included."

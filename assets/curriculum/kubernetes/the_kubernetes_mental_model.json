@@ -133,7 +133,7 @@
             "It would succeed, but only by first deleting and then recreating the object from scratch, causing a brief outage on every single run.",
             "It would succeed and change nothing, because apply diffs the file against the live state and the last-applied-configuration annotation, finds no difference, and effectively applies an empty patch.",
             "It would also fail with AlreadyExists, because both create and apply refuse to touch an object that already exists.",
-            "It would succeed only if a --force flag were also passed; without it, apply behaves identically to create when the object already exists."
+            "It would succeed only if a --force flag were also passed; without it, apply behaves identically to create when the object already exists, so the second run would fail with an AlreadyExists error."
           ],
           "correctOptionIndex": 1,
           "explanation": "This is exactly the idempotency property that distinguishes apply from create: create has no diffing logic at all and always attempts a raw insert, so it fails the moment an object with that name already exists. apply, by contrast, computes what actually needs to change and issues a no-op patch when nothing has changed, which is precisely why it's safe to run repeatedly in a CI pipeline. The “It would succeed, but only by first…” option describes a delete-and-recreate strategy that apply does not use for ordinary field changes, let alone a no-op; the “It would succeed only if a --force…” option is wrong because apply's idempotent behavior on an unchanged file requires no special flag."
@@ -143,7 +143,7 @@
           "type": "multipleChoice",
           "prompt": "A Deployment's YAML omits spec.replicas entirely, and a Horizontal Pod Autoscaler is separately adjusting the live replica count based on load. While the HPA currently has it scaled to 8, someone reapplies the exact same file (still with no replicas field). What happens to the replica count?",
           "options": [
-            "apply resets replicas back to the Kubernetes default of 1, since the field is absent from the file and the file is treated as the source of truth for everything.",
+            "apply resets replicas back to the Kubernetes default of 1, since the field is absent from the file and the file is treated as the source of truth for everything, and the autoscaler then has to scale the Deployment back up again.",
             "apply and the HPA immediately enter a fight, alternately setting replicas to 1 and then 8 on every reconciliation pass.",
             "apply leaves the HPA-managed replica count of 8 untouched, because the three-way merge sees that replicas was never part of the last-applied-configuration this file manages, so there is nothing to correct or remove.",
             "apply fails outright, refusing to proceed because the live object's replicas value doesn't match anything recorded in the file."
@@ -217,11 +217,13 @@
       "misconceptions": [
         {
           "description": "The scheduler actually creates and starts the Pod on the node it picks -- it's the component 'running' the workload.",
-          "clarification": "The scheduler's entire output is writing a node assignment (nodeName) back into the Pod object via the API server -- it never talks to any node directly, and it never starts a single container. Actually running the workload is exclusively the kubelet's and container runtime's job, and it happens as a fully separate, independent reaction: the kubelet on the chosen node is watching the API server for Pods bound to itself, notices the new binding on its own, and only then begins pulling images and starting containers. The scheduler is finished and has moved on to scheduling other Pods long before any container on that node has even started pulling its image."
+          "clarification": "The scheduler's entire output is writing a node assignment (nodeName) back into the Pod object via the API server -- it never talks to any node directly, and it never starts a single container. Actually running the workload is exclusively the kubelet's and container runtime's job, and it happens as a fully separate, independent reaction: the kubelet on the chosen node is watching the API server for Pods bound to itself, notices the new binding on its own, and only then begins pulling images and starting containers. The scheduler is finished and has moved on to scheduling other Pods long before any container on that node has even started pulling its image.",
+          "fact": "The scheduler's entire output is writing a node assignment (nodeName) back into the Pod object via the API server -- it never talks to any node directly, and it never starts a single container."
         },
         {
           "description": "The controllers inside controller-manager coordinate by calling each other directly -- for example, the ReplicaSet controller calls into the Deployment controller to know when to act.",
-          "clarification": "Controllers never call each other directly, even when they're compiled into the same controller-manager binary for operational convenience. Each one is an entirely independent loop that only watches the API server for the object kinds it cares about. The Deployment controller creates a ReplicaSet object and is then completely done with that action; the ReplicaSet controller, which has no awareness whatsoever that the Deployment controller exists, happens to be watching ReplicaSet objects too, and reacts on its own to that ReplicaSet appearing or changing. All coordination between controllers is indirect, mediated entirely by objects persisted in etcd -- never by a direct function call or network request between the controllers themselves."
+          "clarification": "Controllers never call each other directly, even when they're compiled into the same controller-manager binary for operational convenience. Each one is an entirely independent loop that only watches the API server for the object kinds it cares about. The Deployment controller creates a ReplicaSet object and is then completely done with that action; the ReplicaSet controller, which has no awareness whatsoever that the Deployment controller exists, happens to be watching ReplicaSet objects too, and reacts on its own to that ReplicaSet appearing or changing. All coordination between controllers is indirect, mediated entirely by objects persisted in etcd -- never by a direct function call or network request between the controllers themselves.",
+          "fact": "Controllers never call each other directly, even when they're compiled into the same controller-manager binary for operational convenience."
         }
       ],
       "exercises": [
@@ -259,7 +261,7 @@
           "prompt": "Which statement correctly describes the division of responsibility between the Kubernetes scheduler and the kubelet?",
           "options": [
             "The scheduler decides which node a Pod should run on; the kubelet on that node is responsible for actually starting the containers via the container runtime.",
-            "The kubelet decides which node to run on by querying nearby kubelets for available capacity, and the scheduler merely records that decision afterward.",
+            "The kubelet decides which node to run on by querying nearby kubelets for available capacity, and the scheduler merely records that decision afterward in etcd.",
             "The scheduler both selects the node and directly instructs that node's kubelet over a persistent connection to start the containers.",
             "There's no meaningful separation of concerns -- 'scheduler' and 'kubelet' are just two names describing the same control plane process."
           ],
@@ -448,7 +450,7 @@
           "prompt": "A single container inside a running, multi-container Pod crashes due to an unhandled exception, while the rest of the Pod is unaffected. Assuming a normal restartPolicy, what happens to the Pod's identity (its name and IP address) as a result?",
           "options": [
             "The Pod's IP changes but its name stays the same, because IP addresses are reassigned to a Pod every time any of its containers restart, for security isolation.",
-            "The kubelet restarts just that one container in place, within the same Pod object -- the Pod keeps its original name and IP throughout, unlike what happens when the Pod object itself is deleted or evicted.",
+            "The kubelet restarts just that one container in place, within the same Pod object -- the Pod keeps its original name and IP throughout.",
             "The whole Pod is deleted and a brand-new Pod is created with a new name and new IP, since any single container's failure is treated as a failure of the entire Pod.",
             "Nothing restarts automatically at all; a human must manually delete the Pod before any controller will create a working replacement."
           ],

@@ -67,11 +67,13 @@
       "misconceptions": [
         {
           "description": "Because Lambda is \"serverless\" and stateless by design, every single invocation runs in a brand new, completely fresh environment with no state surviving from any previous invocation.",
-          "clarification": "A warm execution environment genuinely can and does carry state between invocations that happen to land on it -- module-scope variables, open connections, files written to /tmp all persist across those invocations. What's actually true is narrower and more specific: there's no guarantee about which invocations, if any, will share an environment, no guarantee about how long an environment stays warm, and no way to observe or control this from your code. Treat reuse as a possible performance optimization for a single environment's own repeat work, never as a mechanism your function's correctness depends on -- especially not for anything that needs to be consistent across concurrent invocations, which routinely run in entirely separate environments simultaneously."
+          "clarification": "A warm execution environment genuinely can and does carry state between invocations that happen to land on it -- module-scope variables, open connections, files written to /tmp all persist across those invocations. What's actually true is narrower and more specific: there's no guarantee about which invocations, if any, will share an environment, no guarantee about how long an environment stays warm, and no way to observe or control this from your code. Treat reuse as a possible performance optimization for a single environment's own repeat work, never as a mechanism your function's correctness depends on -- especially not for anything that needs to be consistent across concurrent invocations, which routinely run in entirely separate environments simultaneously.",
+          "fact": "A warm execution environment genuinely can and does carry state between invocations that happen to land on it -- module-scope variables, open connections, files written to /tmp all persist across those invocations."
         },
         {
           "description": "Increasing a Lambda function's memory setting only affects how much RAM it's allowed to use, so it's irrelevant for a function that was never running out of memory in the first place.",
-          "clarification": "Lambda allocates CPU power (and network bandwidth) proportionally to the configured memory setting, not just RAM -- a full vCPU becomes available only once memory crosses a specific threshold, with more vCPUs unlocked at higher memory tiers. For a CPU-bound function, raising memory can meaningfully reduce execution duration by giving it more compute, and because billing is GB-seconds (memory times duration), a shorter duration can offset or even outweigh the higher per-millisecond rate, sometimes making a higher memory setting both faster and cheaper overall. This relationship plateaus once the workload is no longer CPU-bound (e.g., it's waiting on network I/O), at which point further memory increases stop helping."
+          "clarification": "Lambda allocates CPU power (and network bandwidth) proportionally to the configured memory setting, not just RAM -- a full vCPU becomes available only once memory crosses a specific threshold, with more vCPUs unlocked at higher memory tiers. For a CPU-bound function, raising memory can meaningfully reduce execution duration by giving it more compute, and because billing is GB-seconds (memory times duration), a shorter duration can offset or even outweigh the higher per-millisecond rate, sometimes making a higher memory setting both faster and cheaper overall. This relationship plateaus once the workload is no longer CPU-bound (e.g., it's waiting on network I/O), at which point further memory increases stop helping.",
+          "fact": "Lambda allocates CPU power (and network bandwidth) proportionally to the configured memory setting, not just RAM -- a full vCPU becomes available only once memory crosses a specific threshold, with more vCPUs unlocked at higher memory tiers."
         }
       ],
       "exercises": [
@@ -111,7 +113,7 @@
             "No effect at all, since Lambda's automatic scaling is instantaneous and invisible to callers under any increase in concurrency.",
             "A noticeable share of the burst's requests experience cold starts, because the number of concurrently needed execution environments now exceeds what was previously warm, even though the function has been running steadily for hours.",
             "Latency is unaffected because being warm for hours guarantees enough environments exist for any future burst, no matter how large.",
-            "The function will return errors for all requests beyond the previous peak, since Lambda enforces a hard concurrency ceiling equal to the highest concurrency seen so far."
+            "The function will return errors for all requests beyond the previous peak, since Lambda enforces a hard concurrency ceiling equal to the highest concurrency seen so far, and raising that ceiling requires the function to be redeployed before the launch rather than scaling on its own."
           ],
           "correctOptionIndex": 1,
           "explanation": "Being warm and steady for hours only guarantees enough environments existed for the *concurrency level already seen* -- it says nothing about a sudden 4x jump in simultaneous invocations, which requires roughly 4x as many concurrent execution environments as before. Whatever fraction of that new concurrency exceeds the previously warm pool has to be served by newly created environments, each paying a cold start. The “No effect at all, since Lambda's automatic…” option is wrong because scaling to new environments is not instantaneous or invisible -- that's precisely what a cold start's added latency is. The “The function will return errors for all…” option invents a hard ceiling tied to 'highest concurrency seen so far' that doesn't reflect how Lambda scaling actually works (the real limits are the account/region concurrency limit and any configured reserved concurrency, not a ratchet based on historical peak). The “Latency is unaffected because being warm…” option is simply the misconception being tested -- duration of warmth doesn't scale the *number* of warm environments to match a new, larger burst."
@@ -135,7 +137,7 @@
           "prompt": "A Lambda function's timeout is set to 10 seconds. At 9.8 seconds into an invocation, the handler is midway through writing a record to a database and hasn't yet flushed its final log line. What happens when the 10-second mark is reached?",
           "options": [
             "Lambda forcibly terminates the execution at the 10-second mark regardless of what the code is doing at that instant, potentially leaving the database write partially applied and the log line unflushed.",
-            "Lambda queues the invocation for a retry that preserves the in-progress database write while only discarding the unflushed log line.",
+            "Lambda queues the invocation for a retry that preserves the in-progress database write while only discarding the unflushed log line, so the second attempt resumes from the exact line of code where the first attempt was stopped.",
             "The current line of code is allowed to finish, but the function is blocked from making any further database calls after that.",
             "Lambda automatically extends the timeout slightly to let the in-progress database write finish cleanly before terminating."
           ],
@@ -147,7 +149,7 @@
           "type": "multipleChoice",
           "prompt": "Which statement accurately describes the difference in how API Gateway and S3 event notifications invoke a Lambda function?",
           "options": [
-            "SQS messages require the Lambda function itself to actively poll the queue in a loop, since Lambda provides no built-in mechanism for retrieving queued messages.",
+            "SQS messages require the Lambda function itself to actively poll the queue in a loop, since Lambda provides no built-in mechanism for retrieving queued messages, whereas API Gateway and S3 both place every event on a hidden queue that the function has to poll.",
             "EventBridge can only invoke Lambda synchronously and has no support for cron-like scheduled invocations.",
             "API Gateway invokes Lambda synchronously and waits for the function's response to return it to the caller, while S3 event notifications invoke Lambda asynchronously, with Lambda automatically managing retries on failure.",
             "API Gateway invokes Lambda asynchronously and returns a generic acknowledgment to the client without waiting for the function's actual response."
@@ -268,7 +270,7 @@
           "prompt": "A new internal microservice needs to expose a small number of routes backed by Lambda functions, with no need for usage plans, API keys, or request-transformation templates. Which API Gateway choice, and why, best fits this requirement?",
           "options": [
             "A REST API, because REST APIs are the more mature, more feature-complete product and are therefore the safer default for any new API.",
-            "Neither -- Lambda functions should be invoked directly by clients using the Lambda Invoke API instead of going through API Gateway at all.",
+            "Neither -- Lambda functions should be invoked directly by clients using the Lambda Invoke API instead of going through API Gateway at all, since a gateway of either type only adds cost when the API has no usage plans.",
             "An HTTP API, because it's simpler to configure and typically cheaper per request, and none of the described requirements depend on REST-API-specific features like usage plans or transformation templates.",
             "A REST API, because only REST APIs support Lambda proxy integrations."
           ],
@@ -372,7 +374,8 @@
       "misconceptions": [
         {
           "description": "Serverless (Lambda) is a strictly more advanced, strictly better technology than running EC2 instances or containers, so a well-designed modern system should migrate everything to Lambda given the chance.",
-          "clarification": "Lambda is a different point on a genuine trade-off curve, not a strict upgrade -- it trades away execution-time and control guarantees (the 15-minute hard ceiling, opaque scaling internals, no host-level access) for reduced operational burden. Sustained high-throughput workloads, workloads that routinely need more than 15 minutes to complete a unit of work, and workloads that depend on OS-level control or specific runtime tuning are all workloads where EC2 or containers remain the better technical fit, independent of how modern either option is perceived to be."
+          "clarification": "Lambda is a different point on a genuine trade-off curve, not a strict upgrade -- it trades away execution-time and control guarantees (the 15-minute hard ceiling, opaque scaling internals, no host-level access) for reduced operational burden. Sustained high-throughput workloads, workloads that routinely need more than 15 minutes to complete a unit of work, and workloads that depend on OS-level control or specific runtime tuning are all workloads where EC2 or containers remain the better technical fit, independent of how modern either option is perceived to be.",
+          "fact": "Lambda is a different point on a genuine trade-off curve, not a strict upgrade -- it trades away execution-time and control guarantees (the 15-minute hard ceiling, opaque scaling internals, no host-level access) for reduced operational burden."
         },
         {
           "description": "Building an abstraction layer over AWS-specific services to avoid vendor lock-in is always the responsible, professional engineering choice, regardless of the specific project.",
@@ -415,7 +418,7 @@
           "options": [
             "Any option is equally suitable, since the specific numbers given don't meaningfully affect which compute model is appropriate.",
             "Lambda, because its automatic scaling means it will always match capacity to demand more precisely than a fixed EC2 or Fargate fleet could.",
-            "Lambda, with Provisioned Concurrency configured high enough to avoid cold starts, since that fully resolves any concerns about the 30-second model load time.",
+            "Lambda, with Provisioned Concurrency configured high enough to avoid cold starts, since that fully resolves any concerns about the 30-second model load time, and paying for that concurrency around the clock costs the same as a fixed fleet at any traffic level.",
             "EC2 or Fargate running a fixed, well-utilized fleet sized for the steady 500 req/s load, since the traffic is continuous and predictable rather than spiky, and the expensive model-loading cost is paid once per long-lived process rather than repeatedly."
           ],
           "correctOptionIndex": 3,

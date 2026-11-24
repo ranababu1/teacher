@@ -91,6 +91,42 @@ void main() {
     }
   });
 
+  test('no topic can be passed by picking the longest or shortest option', () {
+    for (final course in courses) {
+      for (final f in course.listSync().whereType<File>()) {
+        if (!f.path.endsWith('.json')) continue;
+        final module = jsonDecode(f.readAsStringSync()) as Map<String, dynamic>;
+        var longest = 0, shortest = 0, total = 0;
+        for (final c in module['concepts'] as List) {
+          for (final a in c['assessments'] as List) {
+            if (a['type'] != 'multipleChoice') continue;
+            final lengths = [
+              for (final o in a['options'] as List) (o as String).length,
+            ];
+            final correct = lengths[a['correctOptionIndex'] as int];
+            total++;
+            if (lengths.every((l) => l <= correct)) longest++;
+            if (lengths.every((l) => l >= correct)) shortest++;
+          }
+        }
+        // Topic tests pass at 70%.
+        expect(longest / total, lessThan(0.7), reason: f.path);
+        expect(shortest / total, lessThan(0.7), reason: f.path);
+      }
+    }
+  });
+
+  test('every course has both true and false statements', () {
+    for (final course in courses) {
+      final facts = [
+        for (final c in conceptsOf(course))
+          for (final m in c['misconceptions'] as List) m['fact'] != null,
+      ];
+      final share = facts.where((f) => f).length / facts.length;
+      expect(share, inInclusiveRange(0.2, 0.8), reason: course.path);
+    }
+  });
+
   test('a shortened option quote identifies exactly one wrong option', () {
     String plain(String s) => s
         .replaceAll('```', ' ')

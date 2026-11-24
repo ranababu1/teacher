@@ -67,7 +67,8 @@
       "misconceptions": [
         {
           "description": "A subnet is inherently public or private, as some fixed property of the subnet resource itself.",
-          "clarification": "Publicness is entirely determined by the subnet's associated route table -- specifically, whether its route table sends 0.0.0.0/0 traffic to an Internet Gateway. The exact same subnet CIDR block and resource becomes private the moment its route table association changes to remove that route (or point elsewhere, like a NAT Gateway), with no change to the subnet itself at all. There's no separate 'make this subnet public' setting independent of its routing configuration."
+          "clarification": "Publicness is entirely determined by the subnet's associated route table -- specifically, whether its route table sends 0.0.0.0/0 traffic to an Internet Gateway. The exact same subnet CIDR block and resource becomes private the moment its route table association changes to remove that route (or point elsewhere, like a NAT Gateway), with no change to the subnet itself at all. There's no separate 'make this subnet public' setting independent of its routing configuration.",
+          "fact": "Publicness is entirely determined by the subnet's associated route table -- specifically, whether its route table sends 0.0.0.0/0 traffic to an Internet Gateway."
         },
         {
           "description": "Security groups and NACLs are functionally redundant -- just two names for the same firewall layer, so configuring both is unnecessary duplicated effort.",
@@ -109,7 +110,7 @@
           "prompt": "An EC2 instance's security group allows inbound traffic on port 22 (SSH) from a specific IP address, and outbound is left at its stateful default. No custom NACL has been created for the subnet (it's still using the default NACL, which allows all traffic in both directions). An SSH connection from that IP succeeds without any additional configuration. Why does this work without any explicit outbound rule anywhere?",
           "options": [
             "SSH is a special protocol that AWS exempts from all firewall evaluation by default.",
-            "The default NACL allowing all traffic in both directions is solely responsible for the response reaching the client; the security group is irrelevant to the response path.",
+            "The default NACL allowing all traffic in both directions is solely responsible for the response reaching the client; the security group is irrelevant to the response path, because security groups only ever evaluate inbound packets and have no record of any connection already made.",
             "The security group is stateful, so the inbound-allowed connection's response traffic is automatically permitted outbound; combined with the default NACL currently allowing all traffic in both directions anyway, nothing blocks the return path.",
             "It doesn't actually work; SSH sessions would fail without an explicit outbound rule permitting the response traffic."
           ],
@@ -123,7 +124,7 @@
           "options": [
             "Nothing changes; a subnet's public/private status is a fixed attribute set permanently at creation time.",
             "The subnet becomes private, because publicness is determined entirely by where the route table's default route points, not by any inherent property of the subnet resource itself.",
-            "The subnet remains public, because once an Internet Gateway route has ever been associated with a subnet, that status persists even after the route table changes.",
+            "The subnet remains public, because once an Internet Gateway route has ever been associated with a subnet, that status persists even after the route table changes to point somewhere else.",
             "The subnet becomes unreachable entirely, since a subnet's route table association cannot legally be changed after creation."
           ],
           "correctOptionIndex": 1,
@@ -137,7 +138,7 @@
             "3 subnets, since public subnets can be shared across multiple AZs while private subnets cannot.",
             "2 subnets -- one public, one private -- since a single subnet's route table can apply different rules per Availability Zone.",
             "1 subnet, since AWS automatically replicates a subnet's configuration across every AZ in the Region.",
-            "4 subnets -- a public and a private subnet in each of the two AZs -- because a subnet is permanently bound to exactly one Availability Zone at creation, so no single subnet can serve two AZs or provide two different visibility levels at once."
+            "4 subnets -- one public and one private in each AZ, because a subnet belongs to exactly one Availability Zone."
           ],
           "correctOptionIndex": 3,
           "explanation": "A subnet is created inside exactly one Availability Zone, permanently, and a single subnet also can't be 'half public, half private' since its visibility is a single route-table property applying to the whole subnet. Covering two AZs times two visibility levels therefore requires one subnet per combination -- four total -- with no way to collapse that number by sharing a subnet across AZs or visibility levels, since AWS provides no such capability for either dimension. The “2 subnets -- one public, one private…”, “1 subnet, since AWS automatically replicates…”, and “3 subnets, since public subnets can…” options each imagine some form of subnet sharing across AZs or visibility levels that doesn't exist in the VPC model."
@@ -161,7 +162,7 @@
           "prompt": "A subnet's NACL inbound rules are: rule 100 DENY tcp 22 from 203.0.113.0/24; rule 200 ALLOW tcp 22 from 0.0.0.0/0; rule * DENY all (implicit default). A packet arrives on port 22 from 203.0.113.5. What happens to it?",
           "options": [
             "It is allowed, because rule 200 grants access from 0.0.0.0/0, which includes 203.0.113.5.",
-            "It is denied only if the attached security group also denies it, since NACL rules are merged together rather than evaluated in order.",
+            "It is denied only if the attached security group also denies it, since NACL rules are merged together rather than evaluated in order, so a later, broader ALLOW rule always takes priority over an earlier and narrower DENY rule.",
             "It is denied, because NACL rules are evaluated in ascending numeric order and rule 100 -- the first rule that matches this traffic -- denies it; rule 200 is never reached for this specific packet.",
             "It is allowed, because a more specific CIDR range is always evaluated ahead of a broader one regardless of its assigned rule number."
           ],
@@ -243,7 +244,8 @@
         },
         {
           "description": "Horizontal scaling behind a load balancer works for any application, as long as enough instances are added.",
-          "clarification": "Horizontal scaling behind a load balancer depends on any instance being able to handle any request, which only holds for stateless applications or ones with externalized state (a shared database, cache, or object store). An application holding meaningful state locally on one instance breaks that assumption regardless of how many total instances exist; sticky sessions are a workaround for the symptom, not a fix for the underlying issue, and they reintroduce a single point of failure for whichever specific instance a given user's session happens to be pinned to."
+          "clarification": "Horizontal scaling behind a load balancer depends on any instance being able to handle any request, which only holds for stateless applications or ones with externalized state (a shared database, cache, or object store). An application holding meaningful state locally on one instance breaks that assumption regardless of how many total instances exist; sticky sessions are a workaround for the symptom, not a fix for the underlying issue, and they reintroduce a single point of failure for whichever specific instance a given user's session happens to be pinned to.",
+          "fact": "Horizontal scaling behind a load balancer depends on any instance being able to handle any request, which only holds for stateless applications or ones with externalized state (a shared database, cache, or object store)."
         }
       ],
       "exercises": [
@@ -283,7 +285,7 @@
             "Replace the ALB with a Network Load Balancer for lower latency.",
             "Enable RDS Multi-AZ so the database has an automatically-failed-over standby in a different Availability Zone.",
             "Upgrade the existing EC2 instances to a larger instance type.",
-            "Add more EC2 instances to the web tier to increase overall capacity."
+            "Add more EC2 instances to the web tier to increase overall capacity, so that a brief database interruption is absorbed by the larger fleet."
           ],
           "correctOptionIndex": 1,
           "explanation": "The described outages correlate specifically with database maintenance and AZ-level issues, and the web tier is already multi-AZ -- the described symptom points directly at the single-AZ database as the weakest link in the dependency chain, exactly the pattern the explanation warns is common (a carefully redundant compute tier sitting in front of a database that never got the same treatment). Enabling RDS Multi-AZ directly closes that specific gap by giving the database an automatically-failed-over standby in another AZ. Adding more EC2 instances (“Add more EC2 instances to the web…”) or a bigger instance type (“Upgrade the existing EC2 instances…”) addresses capacity, not availability, and doesn't touch the database single point of failure at all. Switching to an NLB (“Replace the ALB with a Network Load…”) is a Layer-4-vs-Layer-7 and latency/throughput decision, unrelated to the AZ-failure and maintenance-window symptoms described."

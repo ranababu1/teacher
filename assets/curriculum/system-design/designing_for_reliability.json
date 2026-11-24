@@ -67,7 +67,8 @@
       "misconceptions": [
         {
           "description": "Having a backup or replica of a component automatically means that component is no longer a single point of failure.",
-          "clarification": "A backup only removes a SPOF if it can fail independently of the primary -- for a genuinely different reason, on a genuinely different schedule. A replica in the same rack, same availability zone, sharing the same power or network path, or deployed via the same script as the primary, is still exposed to whatever failure would take out the shared dependency, at which point both go down together and the 'backup' provided zero protection for that failure mode. Real redundancy requires explicitly tracing shared dependencies (power, network, physical location, deploy pipeline, config) and deliberately placing redundant components outside of them, not just provisioning a second copy and assuming independence."
+          "clarification": "A backup only removes a SPOF if it can fail independently of the primary -- for a genuinely different reason, on a genuinely different schedule. A replica in the same rack, same availability zone, sharing the same power or network path, or deployed via the same script as the primary, is still exposed to whatever failure would take out the shared dependency, at which point both go down together and the 'backup' provided zero protection for that failure mode. Real redundancy requires explicitly tracing shared dependencies (power, network, physical location, deploy pipeline, config) and deliberately placing redundant components outside of them, not just provisioning a second copy and assuming independence.",
+          "fact": "A backup only removes a SPOF if it can fail independently of the primary -- for a genuinely different reason, on a genuinely different schedule."
         },
         {
           "description": "Active-active is strictly better than active-passive, so it should always be preferred when redundancy is being designed.",
@@ -142,7 +143,7 @@
           "options": [
             "Because stateless services always use active-passive redundancy, which fails over faster than active-active.",
             "Because stateless services do not require health checks to detect a failure.",
-            "Because a stateless service has no state-recovery step to wait on -- any surviving instance can correctly serve a request with no data to recover or reconcile, whereas a promoted database replica needs to actually be caught up before it can serve correctly.",
+            "Because a stateless service has no state-recovery step to wait on.",
             "Because stateless services are always hosted on faster hardware than stateful ones."
           ],
           "correctOptionIndex": 2,
@@ -154,7 +155,7 @@
           "prompt": "Per the concept's discussion of the 'hidden trap' of shared fate, what is the key diagnostic question to ask when evaluating whether two redundant components are actually independent?",
           "options": [
             "\"Do the two components run the exact same version of the software?\"",
-            "\"What has to go wrong for BOTH of these to fail at the same time?\" -- traced down through the actual infrastructure (rack, AZ, region, deploy pipeline, shared config) rather than stopping at the first layer that looks redundant.",
+            "\"What has to go wrong for BOTH of these to fail at the same time?\".",
             "\"How many total requests per second can each component handle individually?\"",
             "\"Which of the two components is more expensive to operate?\""
           ],
@@ -226,11 +227,13 @@
       "misconceptions": [
         {
           "description": "A circuit breaker is basically the same thing as a timeout -- both are just about not waiting too long for a slow dependency.",
-          "clarification": "A timeout bounds a single call's wait time and operates independently, call by call, with no memory of past calls. A circuit breaker operates on the aggregate pattern across many calls over a window of time, and makes a system-wide decision to stop attempting calls entirely for a while once that pattern looks unhealthy -- it has state and memory that a timeout doesn't. In practice they're complementary, not substitutes: a call still needs its own timeout (to bound how long any individual attempt can hang) even when wrapped in a circuit breaker, because the breaker only trips after enough failures have already been observed -- the first several failing/hanging calls before the threshold is reached still need a timeout to bound their own cost."
+          "clarification": "A timeout bounds a single call's wait time and operates independently, call by call, with no memory of past calls. A circuit breaker operates on the aggregate pattern across many calls over a window of time, and makes a system-wide decision to stop attempting calls entirely for a while once that pattern looks unhealthy -- it has state and memory that a timeout doesn't. In practice they're complementary, not substitutes: a call still needs its own timeout (to bound how long any individual attempt can hang) even when wrapped in a circuit breaker, because the breaker only trips after enough failures have already been observed -- the first several failing/hanging calls before the threshold is reached still need a timeout to bound their own cost.",
+          "fact": "A timeout bounds a single call's wait time and operates independently, call by call, with no memory of past calls."
         },
         {
           "description": "Tripping a circuit breaker open means the system has failed -- it's a sign something has gone wrong that should be avoided.",
-          "clarification": "The circuit tripping open IS the reliability mechanism working as intended, not a failure of it -- the actual failure is whatever made the downstream dependency unhealthy in the first place, which happened regardless of whether a circuit breaker existed. Without the breaker, that same underlying failure would still occur, just with the added damage of every caller hanging on full timeouts and potentially cascading into their own outages. A tripped circuit breaker should be treated as a useful signal (something downstream needs attention) and a sign the caller is protecting itself correctly, not as evidence the caller's own design is broken."
+          "clarification": "The circuit tripping open IS the reliability mechanism working as intended, not a failure of it -- the actual failure is whatever made the downstream dependency unhealthy in the first place, which happened regardless of whether a circuit breaker existed. Without the breaker, that same underlying failure would still occur, just with the added damage of every caller hanging on full timeouts and potentially cascading into their own outages. A tripped circuit breaker should be treated as a useful signal (something downstream needs attention) and a sign the caller is protecting itself correctly, not as evidence the caller's own design is broken.",
+          "fact": "The circuit tripping open IS the reliability mechanism working as intended, not a failure of it -- the actual failure is whatever made the downstream dependency unhealthy in the first place, which happened regardless of whether a circuit breaker existed."
         }
       ],
       "exercises": [
@@ -267,7 +270,7 @@
           "type": "multipleChoice",
           "prompt": "A service's calls to a downstream dependency are wrapped in a circuit breaker that is currently in the open state. What should happen when a new request needs to call that dependency, and why?",
           "options": [
-            "The call should be attempted normally, since the circuit breaker only affects logging, not actual call behavior.",
+            "The call should be attempted normally, since the circuit breaker only affects logging, not actual call behavior, and refusing to make the call would hide the dependency's true error rate from the team that is responsible for it.",
             "The circuit breaker should immediately close again to give the dependency a chance to prove it has recovered.",
             "The call should be retried up to 10 times with exponential backoff before giving up.",
             "The call should be rejected immediately without attempting the real dependency, using a pre-defined fallback, so the caller doesn't pay the cost (time, threads, connections) of an attempt very likely to fail or hang."
@@ -288,7 +291,7 @@
           "options": [
             "It doubles the cooldown period and waits again before allowing any calls.",
             "It transitions to half-open and allows a small number of trial calls through to test whether the dependency has recovered, closing again on success or reopening for another full cooldown on failure.",
-            "It immediately closes and resumes full traffic without any verification that the dependency has recovered.",
+            "It immediately closes and resumes full traffic without any verification that the dependency has recovered, because the cooldown period is always chosen to be longer than the dependency's worst possible outage.",
             "It stays open permanently until an engineer manually resets it."
           ],
           "correctOptionIndex": 1,
@@ -301,7 +304,7 @@
           "options": [
             "Because only recommendation services are allowed to have fallbacks; financial services must always attempt the real call regardless of circuit state.",
             "Because circuit breakers should never have a fallback at all -- they should simply raise an unhandled exception.",
-            "Because what counts as a safe fallback depends on the actual cost of being wrong for that specific feature -- omitting a recommendations section costs little, but fabricating an 'approved' or 'declined' payment result when the real answer is unknown can cause real financial harm.",
+            "Because what counts as a safe fallback depends on the actual cost of being wrong for that specific feature.",
             "Because fallback functions are always slower to execute than the real dependency call, defeating the purpose of failing fast."
           ],
           "correctOptionIndex": 2,
@@ -312,7 +315,7 @@
           "type": "multipleChoice",
           "prompt": "Per the concept's explanation of how a downstream failure becomes an upstream outage, why is a degraded, hanging dependency actually more dangerous than one that is cleanly, fully down?",
           "options": [
-            "A cleanly down dependency is comparatively easy to detect and route around, whereas a slow/hanging one causes calls to sit and wait until the caller's own timeout fires, consuming threads or connections the whole time.",
+            "A cleanly down dependency is comparatively easy to detect and route around.",
             "There is no meaningful difference -- both failure modes are described as equally dangerous and equally fast to detect.",
             "A degraded dependency always returns incorrect data silently, while a fully down dependency never does.",
             "A cleanly down dependency causes more total network traffic than a degraded one."
@@ -385,7 +388,8 @@
       "misconceptions": [
         {
           "description": "Rate limiting and backpressure are the same mechanism with two different names.",
-          "clarification": "Rate limiting is typically an externally imposed cap applied at a system's edge -- per client, per API key -- that rejects requests once a limit is crossed, often for fairness or abuse-prevention reasons as much as pure self-protection. Backpressure is an internal signal flowing backward between cooperating components in the same pipeline (a slow consumer signaling a fast producer to slow down, often via a filling queue or a blocked write), aimed specifically at preventing one internal stage from overwhelming another it's directly connected to. They frequently appear together in the same system, solving related but distinct problems at different layers, rather than being interchangeable terms for one idea."
+          "clarification": "Rate limiting is typically an externally imposed cap applied at a system's edge -- per client, per API key -- that rejects requests once a limit is crossed, often for fairness or abuse-prevention reasons as much as pure self-protection. Backpressure is an internal signal flowing backward between cooperating components in the same pipeline (a slow consumer signaling a fast producer to slow down, often via a filling queue or a blocked write), aimed specifically at preventing one internal stage from overwhelming another it's directly connected to. They frequently appear together in the same system, solving related but distinct problems at different layers, rather than being interchangeable terms for one idea.",
+          "fact": "Rate limiting is typically an externally imposed cap applied at a system's edge -- per client, per API key -- that rejects requests once a limit is crossed, often for fairness or abuse-prevention reasons as much as pure self-protection."
         },
         {
           "description": "Under heavy load, the fairest thing a system can do is let every request degrade by roughly the same amount, rather than singling any of them out.",

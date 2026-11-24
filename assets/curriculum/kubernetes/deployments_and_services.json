@@ -68,11 +68,13 @@
       "misconceptions": [
         {
           "description": "Deployments manage Pods directly -- the Deployment object is the 'owner' of the Pods it creates.",
-          "clarification": "The ownership chain is Deployment -> ReplicaSet -> Pod, and a Pod's actual ownerReferences entry points to the ReplicaSet, never to the Deployment. You can confirm this directly: kubectl get pod <name> -o yaml shows ownerReferences with kind: ReplicaSet. This isn't a pedantic detail -- during a rollout, you will genuinely see two ReplicaSets simultaneously owning nonzero counts of Pods for the same Deployment, which only makes sense once you know the Deployment itself was never the direct owner of any Pod in the first place; it only ever owns ReplicaSets."
+          "clarification": "The ownership chain is Deployment -> ReplicaSet -> Pod, and a Pod's actual ownerReferences entry points to the ReplicaSet, never to the Deployment. You can confirm this directly: kubectl get pod <name> -o yaml shows ownerReferences with kind: ReplicaSet. This isn't a pedantic detail -- during a rollout, you will genuinely see two ReplicaSets simultaneously owning nonzero counts of Pods for the same Deployment, which only makes sense once you know the Deployment itself was never the direct owner of any Pod in the first place; it only ever owns ReplicaSets.",
+          "fact": "The ownership chain is Deployment -> ReplicaSet -> Pod, and a Pod's actual ownerReferences entry points to the ReplicaSet, never to the Deployment."
         },
         {
           "description": "Editing a running ReplicaSet's Pod template YAML directly, or deleting individual Pods it owns, is a normal way to push out a new version of an application.",
-          "clarification": "A ReplicaSet has no update or versioning logic whatsoever -- editing its template only affects Pods it creates after the edit; every already-running Pod is left completely untouched. And if that ReplicaSet is owned by a Deployment, the Deployment controller doesn't treat your mutated template as its own current desired state at all, so the next Deployment-driven change is likely to overwrite your edit entirely, or create a separate new ReplicaSet alongside it. The supported path for shipping a new version is always changing the Deployment's own .spec.template, which deliberately triggers the create-a-new-ReplicaSet-and-shift-traffic sequence -- that sequence is the feature, not something to route around."
+          "clarification": "A ReplicaSet has no update or versioning logic whatsoever -- editing its template only affects Pods it creates after the edit; every already-running Pod is left completely untouched. And if that ReplicaSet is owned by a Deployment, the Deployment controller doesn't treat your mutated template as its own current desired state at all, so the next Deployment-driven change is likely to overwrite your edit entirely, or create a separate new ReplicaSet alongside it. The supported path for shipping a new version is always changing the Deployment's own .spec.template, which deliberately triggers the create-a-new-ReplicaSet-and-shift-traffic sequence -- that sequence is the feature, not something to route around.",
+          "fact": "A ReplicaSet has no update or versioning logic whatsoever -- editing its template only affects Pods it creates after the edit; every already-running Pod is left completely untouched."
         }
       ],
       "exercises": [
@@ -124,7 +126,7 @@
           "options": [
             "The Deployment immediately detects the drift and reverts the ReplicaSet's template back to match its own .spec.template within seconds.",
             "All existing Pods are immediately deleted and recreated with the new image, exactly as a Deployment-driven rollout would do.",
-            "None of the already-running Pods change at all -- the edit only affects Pods the ReplicaSet creates from that point forward, because a ReplicaSet reconciles count against its existing Pods, not content.",
+            "None of the already-running Pods change at all -- the edit only affects Pods the ReplicaSet creates from that point forward.",
             "The API server rejects the edit outright, since a ReplicaSet's template becomes immutable once any Pods matching its selector exist."
           ],
           "correctOptionIndex": 2,
@@ -284,7 +286,7 @@
           "options": [
             "A standard ClusterIP Service -- DNS resolution behaves identically to any other Service, since kube-proxy always resolves individual Pod identities transparently underneath the shared virtual IP.",
             "A NodePort Service -- NodePort's fixed port-per-node model is specifically what lets clients address individual Pods instead of a virtual IP.",
-            "A headless Service (clusterIP: None) -- it skips the virtual IP and kube-proxy packet rewriting entirely, so DNS lookups for the Service return each individual backing Pod's IP directly, rather than one shared virtual address.",
+            "A headless Service (clusterIP: None) -- it skips the virtual IP and kube-proxy packet rewriting entirely, so DNS lookups for the Service return each individual backing Pod's IP directly.",
             "No Service configuration supports this; StatefulSet Pods must always be addressed by hardcoding their current Pod IPs directly."
           ],
           "correctOptionIndex": 2,
@@ -298,7 +300,7 @@
             "Yes -- an omitted targetPort silently defaults to port 80 regardless of what port is set to, so traffic is being routed to port 80 on Pods that aren't listening there.",
             "No -- targetPort has no effect on routing whatsoever; it is purely a documentation field with no bearing on how kube-proxy rewrites packets.",
             "Yes -- targetPort must always be explicitly set, or the Service is invalid and would never populate Endpoints at all.",
-            "No -- when targetPort is omitted, it defaults to the same value as port (9000), which matches the container's actual listening port here, so this specific field is not the problem; the real cause lies elsewhere (application error, NetworkPolicy, etc)."
+            "No -- when targetPort is omitted, it defaults to the same value as port (9000), which matches the container's actual listening port here."
           ],
           "correctOptionIndex": 3,
           "explanation": "This tests the precise defaulting rule: when targetPort is left unset, Kubernetes defaults it to whatever port is set to -- not to some other fixed value, and not making the Service invalid. Since port is 9000 here and the container genuinely listens on 9000, the effective targetPort (9000) already matches reality, so this specific configuration is not the bug; the failure must come from something else entirely (a NetworkPolicy blocking traffic, an application-level error, a firewall). This is exactly the kind of question where jumping to 'must be a port mismatch' without checking the actual values would lead you to the wrong fix -- the debugging checklist in this concept is meant to be followed by actually reading the numbers, not applied as a reflex."
@@ -381,7 +383,8 @@
         },
         {
           "description": "Updating a ConfigMap that a running Deployment already references will immediately update the live application's configuration, the same way updating the Deployment's image field triggers a rolling update.",
-          "clarification": "Whether and how fast a running Pod picks up a ConfigMap change depends entirely on how it's consumed, and in neither case does Kubernetes push the new value into the running process for you. Environment-variable consumption is resolved once, at container start, and never re-checked afterward -- a running container simply never sees a ConfigMap update at all until its Pod is replaced by some other event (a new rollout, a manual restart). Mounted-volume consumption does get updated on disk by the kubelet within roughly a minute, but it only actually changes the application's behavior if that application is specifically written to notice the file changed and re-read it -- unlike an image change, a ConfigMap change never triggers a rollout or a Pod restart by itself, for either consumption style."
+          "clarification": "Whether and how fast a running Pod picks up a ConfigMap change depends entirely on how it's consumed, and in neither case does Kubernetes push the new value into the running process for you. Environment-variable consumption is resolved once, at container start, and never re-checked afterward -- a running container simply never sees a ConfigMap update at all until its Pod is replaced by some other event (a new rollout, a manual restart). Mounted-volume consumption does get updated on disk by the kubelet within roughly a minute, but it only actually changes the application's behavior if that application is specifically written to notice the file changed and re-read it -- unlike an image change, a ConfigMap change never triggers a rollout or a Pod restart by itself, for either consumption style.",
+          "fact": "Whether and how fast a running Pod picks up a ConfigMap change depends entirely on how it's consumed, and in neither case does Kubernetes push the new value into the running process for you."
         }
       ],
       "exercises": [
@@ -418,7 +421,7 @@
           "type": "multipleChoice",
           "prompt": "What is the most accurate description of the difference between a ConfigMap and a Secret in a vanilla Kubernetes cluster, with no additional tooling installed?",
           "options": [
-            "They are structurally almost identical -- both are key-value objects consumable as environment variables or mounted files -- and Secrets add conventions like base64 storage and not printing values by default, but neither is encrypted at rest unless the cluster operator explicitly configures that.",
+            "They are structurally almost identical -- both are key-value objects consumable as environment variables or mounted files.",
             "ConfigMaps can only be consumed as environment variables, while Secrets can only be consumed as mounted files.",
             "Secrets are strongly encrypted at rest by default, while ConfigMaps are never encrypted at all.",
             "Secrets are stored in a separate, access-controlled datastore entirely apart from etcd, while ConfigMaps are stored in etcd."
@@ -433,7 +436,7 @@
           "options": [
             "etcd encryption at rest, which is enabled by default on every Kubernetes distribution out of the box.",
             "Nothing at all by default -- Kubernetes intentionally ships with zero access control on Secret objects until an external secrets manager is installed.",
-            "RBAC rules controlling which users and ServiceAccounts are permitted to get/list Secret objects through the API server -- this access boundary applies by default, whereas etcd encryption at rest must be explicitly configured via an EncryptionConfiguration.",
+            "RBAC rules controlling which users and ServiceAccounts are permitted to get/list Secret objects through the API server.",
             "The base64 encoding itself, which functions as a lightweight cipher requiring a decode key that only cluster administrators possess."
           ],
           "correctOptionIndex": 2,
@@ -447,7 +450,7 @@
             "Neither the file nor the application's behavior changes until the Pod itself is deleted and replaced, exactly like environment-variable consumption.",
             "The file updates immediately, and the kubelet automatically sends a SIGHUP to the container's main process to force it to reload its configuration.",
             "The mounted file is read-only and immutable for the entire lifetime of the Pod, so the ConfigMap update has no effect on it at all, ever.",
-            "The file on disk is updated by the kubelet within roughly a minute, but the application's behavior does not change, because it never re-reads the file after its own startup -- Kubernetes updates the file, it does not force the application to notice."
+            "The file on disk is updated by the kubelet within roughly a minute, but the application's behavior does not change."
           ],
           "correctOptionIndex": 3,
           "explanation": "Mounted-volume consumption and environment-variable consumption behave differently at the file-system layer, but identically in terms of forcing application behavior: the kubelet really does sync the file on disk to the ConfigMap's current contents within roughly its sync period (about a minute), regardless of whether any application ever looks at it again. But Kubernetes has no way to force an application to re-read a file -- that requires the application itself to implement a watch (inotify) or periodic re-read, which this application deliberately doesn't have. So the file changes, but observable application behavior does not, until something else (a restart, a new deploy) causes the process to re-read it fresh. The “Neither the file nor the application's behavior…” option is wrong specifically because it conflates mounted-volume behavior with env-var behavior -- the file genuinely does update on disk, unlike an environment variable. The “The file updates immediately, and the kubelet…” and “The mounted file is read-only and immutable…” options describe mechanisms Kubernetes does not implement."

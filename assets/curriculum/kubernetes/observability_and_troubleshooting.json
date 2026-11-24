@@ -110,7 +110,7 @@
           "prompt": "A Pod shows `STATUS: Pending` with `RESTARTS: 0` and has been in that state for 10 minutes. What is the most appropriate next debugging command, and why?",
           "options": [
             "kubectl describe pod <pod>, to read the Events section and see why the Pod hasn't been scheduled or started yet.",
-            "kubectl port-forward pod/<pod> 8080:80, to test connectivity directly against the Pod.",
+            "kubectl port-forward pod/<pod> 8080:80, to test connectivity directly against the Pod, and confirm the application is listening.",
             "kubectl logs <pod> --previous, to see what caused the most recent crash.",
             "kubectl exec -it <pod> -- sh, to inspect the container's environment directly."
           ],
@@ -123,7 +123,7 @@
           "prompt": "A Pod shows `STATUS: Running` with `RESTARTS: 14`, and the number keeps climbing. What does this actually indicate?",
           "options": [
             "Running with any nonzero RESTARTS count always means a human operator manually restarted the container via kubectl, never the kubelet acting automatically.",
-            "The Pod is functionally in the same broken category as one showing CrashLoopBackOff -- it's currently caught mid-cycle between one crash and the next, and happens to display Running at this exact instant, not a Pod that's stably healthy.",
+            "The Pod is functionally in the same broken category as one showing CrashLoopBackOff -- it's currently caught mid-cycle between one crash and the next.",
             "RESTARTS only increments when a Pod is deleted and replaced by its own controller, so a high, climbing count here actually indicates a ReplicaSet functioning correctly.",
             "The Pod is healthy -- Running is the only status that matters, and RESTARTS is purely a historical counter with no bearing on current health."
           ],
@@ -151,7 +151,7 @@
             "The problem must be inside the Pod's own application code, since port-forward and the Service ultimately reach the same container either way.",
             "The problem must be a liveness probe misconfiguration, since only a liveness failure could cause a Service to fail while direct Pod access still succeeds.",
             "The comparison is meaningless, since port-forward and Services always use fundamentally different, incompatible port numbering schemes.",
-            "The problem lies in the Service/Endpoints/kube-proxy layer sitting in front of the Pod, not in the Pod itself -- port-forward bypasses the Service entirely and talks directly to this one specific Pod, so a working port-forward alongside a failing Service points squarely at the networking layer between them."
+            "The problem lies in the Service/Endpoints/kube-proxy layer sitting in front of the Pod, not in the Pod itself."
           ],
           "correctOptionIndex": 3,
           "explanation": "This concept describes port-forward as the tool for exactly this question: 'is the problem inside this one Pod itself, or is it somewhere in the Service/networking layer sitting in front of it?' A successful port-forward proves the Pod itself is functioning and reachable directly, which means a simultaneously failing Service points at the selector/Endpoints/kube-proxy layer instead. The “The problem must be inside the Pod's…” option draws the opposite conclusion from the evidence. The “The comparison is meaningless, since port-forward…” option is a made-up constraint -- port-forward simply maps an arbitrary local port to the Pod's own container port, with no special incompatibility with Service port numbers. The “The problem must be a liveness probe…” option incorrectly narrows the cause to one specific probe type when the actual evidence points at the networking layer, not any probe."
@@ -272,7 +272,7 @@
             "The kubelet restarts the container, since any failing probe eventually triggers a restart.",
             "The Pod is deleted entirely and a replacement is scheduled by its controller.",
             "The container keeps running untouched, but the Pod is removed from any Service's Endpoints until readiness starts passing again.",
-            "Nothing happens at all -- only liveness probe results have any observable effect on the cluster."
+            "Nothing happens at all -- only liveness probe results have any observable effect on the cluster, and readiness is used purely for display in kubectl."
           ],
           "correctOptionIndex": 2,
           "explanation": "A failing readiness probe, on its own, never triggers a restart or a deletion -- its entire effect is on Service routing: the Pod is excluded from the relevant Endpoints/EndpointSlice objects, so kube-proxy stops sending it new traffic, while the container itself keeps running completely untouched, and can resume receiving traffic automatically the moment readiness starts passing again. The “The kubelet restarts the container, since any…” option conflates the two probe types' consequences -- only a failing liveness probe causes a restart. The “The Pod is deleted entirely…” option describes something no probe on its own ever does (that's a controller/replica-count concern, unrelated to probe results). The “Nothing happens at all -- only liveness…” option is false and is exactly the misconception this concept corrects -- a failing readiness probe absolutely has an observable effect, just a non-destructive, traffic-routing one rather than a restart."
@@ -283,7 +283,7 @@
           "prompt": "A team configures a livenessProbe with `tcpSocket: { port: 5432 }` for a Postgres container. The process inside has deadlocked internally -- it still accepts new TCP connections but never actually responds to any query -- yet the liveness probe keeps reporting success indefinitely. Why?",
           "options": [
             "tcpSocket probes are broken by design and never actually execute; the container would need an httpGet or exec probe to have any liveness protection at all.",
-            "tcpSocket only verifies that a TCP connection can be opened to the given port -- it has no awareness of anything at the application layer above that, so a process that accepts connections but never processes anything correctly still passes, since successfully opening the connection is the entire extent of what this probe type checks.",
+            "tcpSocket only verifies that a TCP connection can be opened to the given port -- it has no awareness of anything at the application layer above that.",
             "tcpSocket probes only run once, at container startup, and never repeat -- so a deadlock occurring after that first successful check would never be detected by design.",
             "tcpSocket probes require a correspondingly-configured readinessProbe of the same type before they will ever report a failure."
           ],
@@ -437,7 +437,7 @@
           "options": [
             "Guaranteed, because memory requests equal memory limits.",
             "This is an invalid configuration and the Pod will be rejected by the API server.",
-            "BestEffort, because at least one resource type (cpu) has a gap between requests and limits.",
+            "BestEffort, because at least one resource type (cpu) has a gap between requests and limits, and any such gap drops it to the lowest class.",
             "Burstable, because cpu requests (200m) do not equal cpu limits (400m), even though memory requests equal memory limits."
           ],
           "correctOptionIndex": 3,

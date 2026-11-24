@@ -60,11 +60,13 @@
       "misconceptions": [
         {
           "description": "As long as the generation LLM has a huge context window (128k tokens or more), you don't need to chunk documents for RAG at all -- just embed and retrieve whole documents.",
-          "clarification": "The generation model's context window and the embedding model's context window are two independent limits enforced by two different models. A generation model accepting 128k tokens says nothing about how many tokens the separate embedding model -- the one that has to turn each document into a searchable vector in the first place -- can accept before it starts silently truncating. And even for a hypothetical embedding model with no length limit whatsoever, the retrieval-granularity problem still applies: one vector representing an entire multi-topic document is a blurrier, less discriminating representation of any single one of its topics than a vector built from that topic alone would be. Chunking addresses both problems; solving the generation model's context window addresses neither."
+          "clarification": "The generation model's context window and the embedding model's context window are two independent limits enforced by two different models. A generation model accepting 128k tokens says nothing about how many tokens the separate embedding model -- the one that has to turn each document into a searchable vector in the first place -- can accept before it starts silently truncating. And even for a hypothetical embedding model with no length limit whatsoever, the retrieval-granularity problem still applies: one vector representing an entire multi-topic document is a blurrier, less discriminating representation of any single one of its topics than a vector built from that topic alone would be. Chunking addresses both problems; solving the generation model's context window addresses neither.",
+          "fact": "The generation model's context window and the embedding model's context window are two independent limits enforced by two different models."
         },
         {
           "description": "If a document is too long for the embedding model, truncating it just gives you a slightly less complete, slightly lower-quality vector -- still roughly representative of the whole document.",
-          "clarification": "Truncation doesn't degrade the vector's fidelity to the whole document -- it produces a vector for a different, shorter document: whatever text happened to fall before the cutoff. Content past that point isn't represented approximately; it isn't represented at all, and no later step (reranking, filtering, or anything else) can recover information that was never encoded into a vector to begin with. This is precisely why the failure is dangerous: the resulting vector looks completely ordinary, and nothing about it signals that a large fraction of the source document was silently discarded before the embedding call ever ran."
+          "clarification": "Truncation doesn't degrade the vector's fidelity to the whole document -- it produces a vector for a different, shorter document: whatever text happened to fall before the cutoff. Content past that point isn't represented approximately; it isn't represented at all, and no later step (reranking, filtering, or anything else) can recover information that was never encoded into a vector to begin with. This is precisely why the failure is dangerous: the resulting vector looks completely ordinary, and nothing about it signals that a large fraction of the source document was silently discarded before the embedding call ever ran.",
+          "fact": "Truncation doesn't degrade the vector's fidelity to the whole document -- it produces a vector for a different, shorter document: whatever text happened to fall before the cutoff."
         }
       ],
       "exercises": [
@@ -114,7 +116,7 @@
           "type": "multipleChoice",
           "prompt": "A document gets silently truncated by an embedding model's token limit before being embedded. Which statement best describes what happened to the resulting vector?",
           "options": [
-            "The vector represents an entirely different, shorter document -- whatever text happened to fall before the cutoff -- and content past that point isn't represented approximately, it isn't represented at all.",
+            "The vector represents an entirely different, shorter document -- whatever text happened to fall before the cutoff.",
             "The vector still represents the whole document, just with slightly reduced fidelity for content near the end.",
             "The vector's dimensionality is automatically reduced to reflect the shorter effective input, making it incompatible with un-truncated vectors stored in the same index.",
             "The vector will contain a special marker value flagging that truncation occurred, which downstream code can check for and handle."
@@ -129,7 +131,7 @@
           "options": [
             "There is no mistake -- chunking has no effect on what a single search result actually represents.",
             "The mistake is purely cosmetic and has no bearing on which content actually gets embedded, searched, or ranked.",
-            "Once chunking happens, retrieval, ranking, and filtering all operate at the chunk level -- a search result is one chunk out of potentially dozens belonging to the same source document, not the document as a whole -- and code built around 'one document equals one result' no longer matches reality.",
+            "Once chunking happens, retrieval, ranking, and filtering all operate at the chunk level.",
             "This pattern indicates the embedding model was never actually given any chunked text, and is still embedding whole documents."
           ],
           "correctOptionIndex": 2,
@@ -143,7 +145,7 @@
             "The security-related content in the document must be lower quality or less detailed than the billing and onboarding content.",
             "The gap only appears because cosine similarity happens to be the metric used here; a different distance metric would show no meaningful difference between the two comparisons.",
             "The whole-document vector is mathematically incorrect, reflecting a bug in how the pooling step was implemented.",
-            "Averaging together vectors representing three different topics pulls the resulting vector toward the geometric middle of all three, making it less closely aligned with any single one of them than a vector built from just that one topic would be."
+            "Averaging together vectors representing three different topics pulls the resulting vector toward the geometric middle of all three."
           ],
           "correctOptionIndex": 3,
           "explanation": "The whole-document vector is literally computed as the coordinate-wise average of the three topic vectors, so geometrically it sits roughly in the middle of all three -- closer to each one than a totally unrelated vector would be, but measurably less aligned with any single one than a vector built purely from that topic. That dilution, not a bug, is exactly the mechanism the example is demonstrating, ruling out the “The whole-document vector is mathematically incorrect, reflecting…” option. The “The gap only appears because cosine similarity…” option is wrong -- the dilution effect comes from how the vector itself was constructed (averaging), not from which similarity formula is used to measure it afterward; a different metric would still show a gap, just possibly a different-looking number. The “The security-related content in the document must…” option introduces an assumption about content quality that has nothing to do with the actual mechanism at play, which is purely geometric."
@@ -286,7 +288,7 @@
           "options": [
             "It automatically detects and avoids cutting through Markdown code blocks or other structured content.",
             "It requires no dependencies, runs fast enough over an enormous corpus without a second thought, and is fully deterministic -- the same text and size always produce exactly the same chunks.",
-            "It improves its cut points over time by training a small classifier on which boundaries produced better retrieval results.",
+            "It improves its cut points over time by training a small classifier on which boundaries produced better retrieval results, so the chunks it produces keep getting better as more queries are answered.",
             "It always produces chunks that are more semantically coherent than recursive chunking would produce on the same text."
           ],
           "correctOptionIndex": 1,
@@ -440,7 +442,7 @@
           "prompt": "A retrieved chunk contains only the sentence \"The request was ultimately denied.\" with no surrounding text -- a reader has no way to tell which request, or why. What specific failure mode does this illustrate?",
           "options": [
             "This is evidence that the embedding model silently truncated the input before embedding it.",
-            "This specifically indicates the overlap setting was too high, causing excessive redundant retrieval.",
+            "This specifically indicates the overlap setting was too high, causing excessive redundant retrieval, so lowering that setting until no two chunks share any text would fix this problem.",
             "The chunk is too large, causing its pooled vector to dilute across too many unrelated topics.",
             "The chunk is too small to be self-contained -- it's sharply on-topic (it really is about a denial), but severed from the context that actually gives the fact its meaning."
           ],
@@ -454,7 +456,7 @@
           "options": [
             "The chunk count stays exactly the same regardless of overlap, since overlap changes what each chunk contains, not how many chunks there are.",
             "The chunk count decreases, since a larger overlap means fewer distinct chunks are needed to cover the same document.",
-            "The chunk count increases substantially (potentially nearly doubling), because the window between consecutive chunk starts advances by only size-minus-overlap per step -- meaning more embeddings to compute and store, and a higher chance that a top-k retrieval surfaces several heavily redundant, overlapping chunks instead of distinct information.",
+            "The chunk count increases substantially (potentially nearly doubling).",
             "The chunk count increases, but only for documents that are shorter than the configured chunk size itself."
           ],
           "correctOptionIndex": 2,

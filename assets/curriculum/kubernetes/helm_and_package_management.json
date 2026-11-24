@@ -72,7 +72,8 @@
         },
         {
           "description": "A file under templates/ that looks like valid, complete Kubernetes YAML (aside from the {{ }} placeholders) could be applied directly with kubectl apply -f, since the {{ }} bits are just extra annotations Kubernetes would ignore.",
-          "clarification": "Files under templates/ are Go template source, not Kubernetes manifests -- the {{ }} syntax has no meaning to the Kubernetes API server at all. Applying such a file directly would send literal text like `{{ .Values.replicaCount }}` as the value of a field expecting an integer, and the API server would reject it outright as malformed. Only Helm's own rendering step (invoked internally by helm install/upgrade, or explicitly via helm template) actually substitutes real values and produces genuine YAML -- nothing under templates/ is meant to be read by anything other than Helm's template engine first."
+          "clarification": "Files under templates/ are Go template source, not Kubernetes manifests -- the {{ }} syntax has no meaning to the Kubernetes API server at all. Applying such a file directly would send literal text like `{{ .Values.replicaCount }}` as the value of a field expecting an integer, and the API server would reject it outright as malformed. Only Helm's own rendering step (invoked internally by helm install/upgrade, or explicitly via helm template) actually substitutes real values and produces genuine YAML -- nothing under templates/ is meant to be read by anything other than Helm's template engine first.",
+          "fact": "Files under templates/ are Go template source, not Kubernetes manifests -- the {{ }} syntax has no meaning to the Kubernetes API server at all."
         }
       ],
       "exercises": [
@@ -109,7 +110,7 @@
           "type": "multipleChoice",
           "prompt": "A chart's values.yaml sets `image.tag: \"1.0\"`. You run `helm install web ./my-app -f values-a.yaml --set image.tag=2.0`, where values-a.yaml sets `image.tag: \"1.5\"`. What image tag ends up in the rendered manifest?",
           "options": [
-            "1.0, because the chart's own values.yaml is always treated as the final source of truth.",
+            "1.0, because the chart's own values.yaml is always treated as the final source of truth and overrides every other layer.",
             "1.5, because -f files are applied last, after --set flags are evaluated.",
             "Helm raises an error because the same key is defined in three different places.",
             "2.0, because --set has the highest precedence, overriding both the -f file and the chart's own values.yaml."
@@ -161,7 +162,7 @@
           "type": "multipleChoice",
           "prompt": "A chart's values.yaml defines `resources: { requests: { cpu: 100m, memory: 128Mi } }`. An override values file sets only `resources.requests.memory: 512Mi`. What does the merged, final value of `resources.requests` end up being?",
           "options": [
-            "{ memory: 512Mi } -- specifying any key under requests in an override file replaces the entire requests map wholesale, discarding cpu entirely.",
+            "{ memory: 512Mi } -- specifying any key under requests in an override file replaces the entire requests map wholesale, discarding cpu entirely along with any other key the chart had set.",
             "{ cpu: 100m, memory: 128Mi } -- the override is ignored entirely because it only sets a nested key rather than the whole resources block.",
             "{ cpu: 100m, memory: 512Mi } -- the deep merge replaces only the specific key the override sets, preserving cpu from the chart's default since the override never mentioned it.",
             "Helm raises an error, since resources.requests is defined in two different sources and can't be automatically reconciled."
@@ -309,7 +310,7 @@
           "prompt": "The same chart `my-app` is installed twice: once as release `team-a-web` and once as release `team-b-web`, each with its own values file. `team-a-web` is then rolled back to an earlier revision. What happens to `team-b-web` as a result?",
           "options": [
             "Helm refuses to roll back team-a-web at all unless team-b-web is rolled back in the same operation.",
-            "Nothing happens to team-b-web at all -- each release has its own independent revision history and its own live objects; the two releases only share the chart template they both happened to be installed from, nothing more.",
+            "Nothing happens to team-b-web at all -- each release has its own independent revision history and its own live objects.",
             "team-b-web is also rolled back automatically, since both releases share the same underlying chart and Helm keeps sibling releases derived from it synchronized.",
             "team-b-web's own revision counter resets to 1, since rolling back any release derived from a shared chart resets version tracking cluster-wide."
           ],
@@ -337,7 +338,7 @@
             "No -- rollback is only ever possible to the single immediately preceding revision, regardless of what history-max is set to.",
             "Yes, because Helm always guarantees revision 1 and every subsequent even-numbered revision are retained regardless of history-max.",
             "Yes, always -- history-max only limits how many revisions helm history displays on screen; it never actually deletes any revision's underlying stored data.",
-            "Not necessarily -- history-max caps how many old revisions Helm actually retains before pruning the oldest ones, so if revision 2 has already been pruned to stay within the limit of 10, its stored manifests are simply gone and a rollback to it can no longer succeed."
+            "Not necessarily -- history-max caps how many old revisions Helm actually retains before pruning the oldest ones."
           ],
           "correctOptionIndex": 3,
           "explanation": "This concept states plainly that revision Secrets 'accumulate over time and are not deleted automatically,' and that history-max 'caps how many old revisions Helm retains before pruning the oldest' -- with the direct consequence that 'retaining fewer revisions ... limits how far back helm rollback can reach, since a pruned revision's manifests are simply gone.' With 15 upgrades and a cap of 10, early revisions (potentially including revision 2) may already have been pruned, making that specific rollback target unavailable. The “Yes, always -- history-max only limits how…” option misdescribes history-max as a display-only limit rather than an actual retention/pruning policy. The “Yes, because Helm always guarantees revision 1…” option invents an even/odd retention guarantee that doesn't exist. The “No -- rollback is only ever possible…” option is false -- helm rollback can target any retained revision, not just the immediately preceding one."
@@ -349,7 +350,7 @@
           "options": [
             "It succeeds and performs a first-time install automatically, since helm upgrade silently falls back to install behavior whenever no prior release exists.",
             "It succeeds, but creates the release starting at revision number 0 instead of 1, to signal that it took the upgrade code path.",
-            "It fails, because there is no existing release named web yet for helm upgrade to act on -- helm upgrade expects a release to already exist, which is exactly the gap the --install flag exists to close.",
+            "It fails, because there is no existing release named web yet for helm upgrade to act on -- helm upgrade expects a release to already exist.",
             "It always succeeds identically to helm install, since upgrade and install have been fully interchangeable commands since Helm 3."
           ],
           "correctOptionIndex": 2,
@@ -361,7 +362,7 @@
           "prompt": "A team decides that instead of debugging a confusing `helm upgrade`, they'll just run `helm uninstall web` followed by `helm install web ./my-app`. Besides the brief availability gap, what specific capability do they lose by doing this instead of fixing the upgrade?",
           "options": [
             "The application's persistent data is always deleted as a direct, guaranteed consequence of running helm uninstall, regardless of what storage mechanism backs it.",
-            "The entire revision history built up by every prior install and upgrade, since uninstalling deletes the release's tracked revision Secrets entirely -- meaning helm rollback can no longer reach any of those earlier states once the fresh install starts a brand-new history at revision 1.",
+            "The entire revision history built up by every prior install and upgrade.",
             "Nothing meaningful -- uninstalling and reinstalling preserves the release's revision history internally, so helm rollback to any earlier revision still works afterward.",
             "Only the single most recent revision is lost; every earlier revision remains rollback-able after the reinstall completes."
           ],

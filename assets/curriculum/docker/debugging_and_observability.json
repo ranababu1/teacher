@@ -67,11 +67,13 @@
       "misconceptions": [
         {
           "description": "docker logs shows everything my application has logged, no matter where inside the container it actually wrote that output.",
-          "clarification": "docker logs only ever shows captured stdout and stderr. An application that writes to its own log file, pipes output to a separate process, or uses a logging framework configured to write to disk produces output that is completely invisible to docker logs, regardless of how much of it there is or how recently it was written -- not because of a missing flag, but because Docker never captures anything beyond those two specific streams. Making that output visible to docker logs requires either changing the application's logging target to stdout/stderr directly, or symlinking its log file's path to /dev/stdout inside the image."
+          "clarification": "docker logs only ever shows captured stdout and stderr. An application that writes to its own log file, pipes output to a separate process, or uses a logging framework configured to write to disk produces output that is completely invisible to docker logs, regardless of how much of it there is or how recently it was written -- not because of a missing flag, but because Docker never captures anything beyond those two specific streams. Making that output visible to docker logs requires either changing the application's logging target to stdout/stderr directly, or symlinking its log file's path to /dev/stdout inside the image.",
+          "fact": "docker logs only ever shows captured stdout and stderr."
         },
         {
           "description": "Docker automatically rotates and caps container log files by default, so a runaway or crash-looping container can't fill up the host's disk with logs.",
-          "clarification": "The default json-file logging driver has no size limit and no rotation at all unless max-size and max-file are explicitly configured, either per-container via --log-opt at docker run time or as a host-wide default in /etc/docker/daemon.json. Left unconfigured, a container's captured stdout/stderr can grow completely unbounded on the host disk for as long as the container keeps running and producing output -- which is exactly the scenario that makes a crash-restart loop printing the same stack trace repeatedly a genuine disk-exhaustion risk, not just a noisy annoyance."
+          "clarification": "The default json-file logging driver has no size limit and no rotation at all unless max-size and max-file are explicitly configured, either per-container via --log-opt at docker run time or as a host-wide default in /etc/docker/daemon.json. Left unconfigured, a container's captured stdout/stderr can grow completely unbounded on the host disk for as long as the container keeps running and producing output -- which is exactly the scenario that makes a crash-restart loop printing the same stack trace repeatedly a genuine disk-exhaustion risk, not just a noisy annoyance.",
+          "fact": "The default json-file logging driver has no size limit and no rotation at all unless max-size and max-file are explicitly configured, either per-container via --log-opt at docker run time or as a host-wide default in /etc/docker/daemon.json."
         }
       ],
       "exercises": [
@@ -135,7 +137,7 @@
           "prompt": "A container is started with `--log-driver=awslogs`, shipping its captured output to CloudWatch Logs. Running `docker logs` against this container afterward typically results in what?",
           "options": [
             "An empty but successful result, since awslogs is specifically designed to suppress all local output.",
-            "An explicit error indicating the configured logging driver does not support local read-back, because the daemon never kept a locally readable copy for drivers like awslogs.",
+            "An explicit error indicating the configured logging driver does not support local read-back.",
             "Docker automatically detects the awslogs driver and transparently fetches the output from CloudWatch on your behalf.",
             "The exact same output as if json-file were used, since docker logs works identically regardless of which driver is configured."
           ],
@@ -222,11 +224,13 @@
       "misconceptions": [
         {
           "description": "docker exec -it <container> bash lets me interact directly with the container's actual running application process (PID 1).",
-          "clarification": "docker exec always starts a brand-new, independent process inside the container's existing namespaces -- it never attaches to or takes over the container's existing PID 1. The shell you get is a separate process running alongside PID 1, not a window directly into it; exiting that shell, or even killing it, has no effect on PID 1 or the container's overall running state. docker attach is the different command that connects to PID 1's own stdio directly, without creating any new process."
+          "clarification": "docker exec always starts a brand-new, independent process inside the container's existing namespaces -- it never attaches to or takes over the container's existing PID 1. The shell you get is a separate process running alongside PID 1, not a window directly into it; exiting that shell, or even killing it, has no effect on PID 1 or the container's overall running state. docker attach is the different command that connects to PID 1's own stdio directly, without creating any new process.",
+          "fact": "docker exec always starts a brand-new, independent process inside the container's existing namespaces -- it never attaches to or takes over the container's existing PID 1."
         },
         {
           "description": "If a container's image has no shell installed, there's no practical way to debug what's happening inside it.",
-          "clarification": "A missing shell only rules out docker exec starting one inside that specific image -- it doesn't rule out debugging entirely. Attaching a separate, throwaway container into the target's pid and network namespaces (docker run --pid=container:<name> --network=container:<name> ... sh), building a temporary debug-tagged variant of the image with a shell added, or using purpose-built tooling like docker debug all provide a real interactive shell with visibility into the target container, without requiring the target image itself to contain a shell or ever be modified."
+          "clarification": "A missing shell only rules out docker exec starting one inside that specific image -- it doesn't rule out debugging entirely. Attaching a separate, throwaway container into the target's pid and network namespaces (docker run --pid=container:<name> --network=container:<name> ... sh), building a temporary debug-tagged variant of the image with a shell added, or using purpose-built tooling like docker debug all provide a real interactive shell with visibility into the target container, without requiring the target image itself to contain a shell or ever be modified.",
+          "fact": "A missing shell only rules out docker exec starting one inside that specific image -- it doesn't rule out debugging entirely."
         }
       ],
       "exercises": [
@@ -290,7 +294,7 @@
           "prompt": "Someone execs into a running container and manually starts a background diagnostic script with `docker exec -d`. They later run `docker restart` on that container. What happens to the manually-started script?",
           "options": [
             "It automatically restarts along with the container, since exec'd processes inherit the container's own restart policy.",
-            "It does not come back -- it was never registered as part of the container's actual startup command, so only the container's real CMD/ENTRYPOINT process restarts; the manually-started script simply ceases to exist with no trace.",
+            "It does not come back -- it was never registered as part of the container's actual startup command.",
             "The restart fails with an error until the manually-started process is explicitly stopped first.",
             "Docker pauses the script during the restart and transparently resumes it once the container is back up."
           ],
@@ -372,7 +376,8 @@
         },
         {
           "description": "depends_on in a docker-compose.yml file automatically waits for a dependency to be fully ready before starting the dependent service, with no extra configuration needed.",
-          "clarification": "A plain depends_on: - servicename only waits for that dependency's container process to start -- it does not wait for whatever that dependency is doing internally to finish initializing. Actually waiting for readiness requires the dependency to define its own HEALTHCHECK and the dependent service to specify depends_on: <name>: condition: service_healthy explicitly; without both pieces in place, depends_on only sequences container starts, not application-level readiness, leaving a real race-condition window a dependent service can hit on startup."
+          "clarification": "A plain depends_on: - servicename only waits for that dependency's container process to start -- it does not wait for whatever that dependency is doing internally to finish initializing. Actually waiting for readiness requires the dependency to define its own HEALTHCHECK and the dependent service to specify depends_on: <name>: condition: service_healthy explicitly; without both pieces in place, depends_on only sequences container starts, not application-level readiness, leaving a real race-condition window a dependent service can hit on startup.",
+          "fact": "A plain depends_on: - servicename only waits for that dependency's container process to start -- it does not wait for whatever that dependency is doing internally to finish initializing."
         }
       ],
       "exercises": [
@@ -410,7 +415,7 @@
           "prompt": "A container's HEALTHCHECK has --retries=3. Its check has failed twice in a row so far. What is the container's current health status?",
           "options": [
             "There is no way to know without also knowing the --interval value.",
-            "starting, regardless of how many checks have run, until the container is manually marked healthy.",
+            "starting, regardless of how many checks have run, until the container is manually marked healthy once.",
             "unhealthy, because any failures at all immediately flip the status.",
             "healthy, because the failing streak (2) has not yet reached the configured retries threshold (3)."
           ],

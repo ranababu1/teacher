@@ -69,17 +69,17 @@ class LessonStepBuilder {
   }
 
   /// Quick checks drawn only from the concept's own data, in content order:
-  /// each misconception becomes a true/false statement (the answer is
-  /// always False, the clarification is the feedback), followed by the
-  /// well-formed multiple-choice assessments. Nothing is invented.
+  /// each misconception becomes a true/false statement (its fact when it
+  /// has one, so the answer is True, otherwise the misconception itself;
+  /// the clarification is the feedback), followed by the well-formed multiple-choice assessments. Nothing is invented.
   static List<QuickCheck> quickChecksFor(Concept concept) {
     return [
       for (final m in concept.misconceptions)
         if (m.description.trim().isNotEmpty)
           QuickCheck(
-            prompt: 'True or false? ${m.description.trim()}',
+            prompt: 'True or false? ${(m.fact ?? m.description).trim()}',
             options: const ['True', 'False'],
-            correctIndex: 1,
+            correctIndex: m.fact == null ? 1 : 0,
             feedback: m.clarification,
           ),
       for (final a in concept.assessments)

@@ -63,7 +63,8 @@
       "misconceptions": [
         {
           "description": "Node.js being 'single-threaded' means it can only ever do one thing at a time, including I/O -- so lots of concurrent requests must secretly be queued up and handled one after another.",
-          "clarification": "JavaScript execution is single-threaded, but I/O work itself is delegated to the operating system's asynchronous facilities or to libuv's thread pool, both of which genuinely run concurrently, outside that one JS thread entirely. Only the (typically tiny) work of running your callback in response to a finished I/O operation is scheduled onto the single thread, one callback at a time. That's why a server juggling many concurrent slow database calls can still feel snappy: the actual waiting is not consuming your one thread's time at all -- it's happening elsewhere, and your thread is free to handle other callbacks in the meantime."
+          "clarification": "JavaScript execution is single-threaded, but I/O work itself is delegated to the operating system's asynchronous facilities or to libuv's thread pool, both of which genuinely run concurrently, outside that one JS thread entirely. Only the (typically tiny) work of running your callback in response to a finished I/O operation is scheduled onto the single thread, one callback at a time. That's why a server juggling many concurrent slow database calls can still feel snappy: the actual waiting is not consuming your one thread's time at all -- it's happening elsewhere, and your thread is free to handle other callbacks in the meantime.",
+          "fact": "JavaScript execution is single-threaded, but I/O work itself is delegated to the operating system's asynchronous facilities or to libuv's thread pool, both of which genuinely run concurrently, outside that one JS thread entirely."
         },
         {
           "description": "setTimeout(fn, 0) means fn runs immediately, essentially at time zero, ahead of anything else.",
@@ -106,7 +107,7 @@
           "options": [
             "All twenty run fully in parallel immediately, since there are far more CPU cores than operations.",
             "They run one at a time, always, because pbkdf2 blocks the event loop directly.",
-            "Only as many run in parallel as there are threads in libuv's thread pool (four by default) -- the rest queue, waiting for a free thread, regardless of how many CPU cores are idle.",
+            "Only as many run in parallel as there are threads in libuv's thread pool (four by default).",
             "None of them can run until the main JS thread is completely idle, since libuv borrows the main thread for CPU-heavy work."
           ],
           "correctOptionIndex": 2,
@@ -146,7 +147,7 @@
             "Switching to fs.promises.readFile made things worse, because it always runs on a separate thread that contends with JSON.parse for CPU time.",
             "fs.promises.readFile doesn't actually use libuv's thread pool, so it's just as blocking as the Sync version was.",
             "The event loop's poll phase automatically blocks whenever any JSON parsing occurs, regardless of payload size.",
-            "JSON.parse is itself a synchronous, CPU-bound operation running entirely on the main JS thread -- non-blocking APIs solve blocking I/O specifically, not CPU-heavy computation, which still monopolizes the single thread for as long as it takes to run."
+            "JSON.parse is itself a synchronous, CPU-bound operation running entirely on the main JS thread."
           ],
           "correctOptionIndex": 3,
           "explanation": "'Non-blocking' specifically refers to I/O -- waiting on a disk, a network response, a timer -- not to CPU-heavy computation. A large JSON.parse call is ordinary synchronous JavaScript that runs to completion on the single main thread, blocking every other request exactly as thoroughly as a synchronous I/O call would, and switching the file read to a non-blocking API does nothing to change that, since the read was never the bottleneck in this scenario. The “fs.promises.readFile doesn't actually use libuv's thread pool…” option is wrong -- fs.promises.readFile is genuinely non-blocking. The “The event loop's poll phase automatically blocks…” option is wrong -- the poll phase has no special-cased blocking behavior tied to JSON parsing. The “Switching to fs.promises.readFile made things worse…” option is wrong -- fs.promises.readFile's I/O work happens via the thread pool, but the CPU-bound JSON.parse call itself still runs on the main thread regardless."
@@ -224,11 +225,13 @@
       "misconceptions": [
         {
           "description": "Marking a function async makes it run on a separate thread, in parallel with the rest of the program.",
-          "clarification": "async is Promise syntax sugar only -- it introduces no new threads and no new concurrency mechanism. An async function's own synchronous statements still execute on the single main thread, in order, exactly like any other function; the only reason execution can appear to 'jump away' to other code is that hitting an await genuinely pauses that specific function and hands control back to the event loop, which may then run something else while waiting. Concurrency only ever comes from operations that do real I/O yielding control back to the event loop, never from the async keyword itself creating threads or parallel execution of your JS."
+          "clarification": "async is Promise syntax sugar only -- it introduces no new threads and no new concurrency mechanism. An async function's own synchronous statements still execute on the single main thread, in order, exactly like any other function; the only reason execution can appear to 'jump away' to other code is that hitting an await genuinely pauses that specific function and hands control back to the event loop, which may then run something else while waiting. Concurrency only ever comes from operations that do real I/O yielding control back to the event loop, never from the async keyword itself creating threads or parallel execution of your JS.",
+          "fact": "async is Promise syntax sugar only -- it introduces no new threads and no new concurrency mechanism."
         },
         {
           "description": "await pauses the entire program -- it blocks the event loop until the Promise resolves.",
-          "clarification": "await only suspends the one async function it's written in; the event loop keeps right on running everything else -- other timers, other I/O callbacks, other async functions' continuations -- while that particular function waits its turn to resume. It's cooperative, local suspension of a single call, not a global freeze, which is exactly the point: if await genuinely blocked the whole event loop, it would defeat the entire purpose of using non-blocking, asynchronous I/O in the first place, and would be no better than the Sync functions covered in the previous concept."
+          "clarification": "await only suspends the one async function it's written in; the event loop keeps right on running everything else -- other timers, other I/O callbacks, other async functions' continuations -- while that particular function waits its turn to resume. It's cooperative, local suspension of a single call, not a global freeze, which is exactly the point: if await genuinely blocked the whole event loop, it would defeat the entire purpose of using non-blocking, asynchronous I/O in the first place, and would be no better than the Sync functions covered in the previous concept.",
+          "fact": "await only suspends the one async function it's written in; the event loop keeps right on running everything else -- other timers, other I/O callbacks, other async functions' continuations -- while that particular function waits its turn to resume."
         }
       ],
       "exercises": [
@@ -294,7 +297,7 @@
             "async functions do run on separate threads, but only during the specific line where an I/O operation is awaited, not during ordinary synchronous statements.",
             "async functions run on libuv's worker thread pool, the same pool used for fs and crypto operations.",
             "Nothing -- this is exactly how async functions behave in Node.",
-            "async is Promise syntax sugar only; it creates no new threads. An async function's synchronous statements still run on the single main thread in the usual order, one at a time -- execution only appears to 'jump away' because hitting an await pauses that specific function and hands control back to the event loop, which may run other code while it waits."
+            "async is Promise syntax sugar only; it creates no new threads."
           ],
           "correctOptionIndex": 3,
           "explanation": "The async keyword only changes what a function returns (always a Promise) and grants access to await inside its body -- it introduces no new concurrency mechanism and no new thread. Every synchronous statement in an async function's body still executes on the single main JS thread, in order, exactly like any other function; the illusion of 'jumping away' comes entirely from await voluntarily pausing that one function and returning control to the event loop, which is free to run other pending work in the meantime. The “async functions do run on separate threads…” and “async functions run on libuv's worker thread…” options both invent a thread-based mechanism that doesn't exist -- await never hands JS execution off to another thread, whether during I/O or otherwise; the I/O itself may be handled elsewhere (by the OS or libuv's pool), but the async function's own JS code never runs anywhere but the main thread."
@@ -448,7 +451,7 @@
           "options": [
             "It's arbitrary; both systems could equally support either behavior.",
             ".mjs files cannot have their extension omitted because they are always precompiled ahead of time, unlike ordinary .js files.",
-            "CommonJS's require() runs its own resolution algorithm that automatically tries several extensions and directory-based lookups, while standard ES Module resolution requires the full, explicit file extension in the specifier -- there's no equivalent automatic extension-guessing step in ESM.",
+            "CommonJS's require() runs its own resolution algorithm that automatically tries several extensions and directory-based lookups.",
             "Node only added extension-omission support to CommonJS in a later version, and deliberately never backported it to ESM for security reasons."
           ],
           "correctOptionIndex": 2,
@@ -462,7 +465,7 @@
             "__dirname is automatically available in ESM files too, since Node injects it as a global regardless of which module system is in use.",
             "process.cwd() is a reliable substitute for __dirname, since it always returns the directory containing the currently executing module file.",
             "There is no way to determine a module's own file location from within an ES Module; the value must be hardcoded or passed in as a parameter.",
-            "import.meta.url gives the current module's own location as a file:// URL string, which fileURLToPath can convert into a native filesystem path, and path.dirname on that result gives the equivalent of __dirname."
+            "import.meta.url gives the current module's own location as a file:// URL string."
           ],
           "correctOptionIndex": 3,
           "explanation": "import.meta.url is the ESM-native primitive that exposes a module's own location as a file:// URL. Running it through fileURLToPath (from Node's 'url' core module) converts that URL to an ordinary OS-native path, and path.dirname on the result reconstructs exactly what __dirname would have given in CommonJS. The “process.cwd() is a reliable substitute for __dirname…” option is a common but incorrect assumption -- process.cwd() returns wherever the process happened to be launched from, which is frequently a different directory than where the source file itself lives, and relying on it for file-relative paths breaks the moment the launch directory changes. The “__dirname is automatically available in ESM files…” option is wrong -- __dirname is a CommonJS-only convenience that simply doesn't exist in ESM's scope. The “There is no way to determine…” option is wrong -- import.meta.url plus the reconstruction shown is the standard, well-supported idiom for exactly this purpose."

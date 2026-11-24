@@ -63,11 +63,13 @@
       "misconceptions": [
         {
           "description": "If I launch multiple EC2 instances for my application, it's automatically fault-tolerant against infrastructure failures.",
-          "clarification": "Fault tolerance comes from diversifying across independent failure domains, not merely from having more than one instance. If every instance lives in the same Availability Zone, they all share the same power, cooling, and physical network -- an AZ-level event takes all of them down together regardless of count. Real fault tolerance against an AZ failure requires spreading instances across at least two AZs (which in turn requires at least two subnets, since a subnet is pinned to one AZ), typically behind a load balancer that can route around whichever AZ is currently unhealthy."
+          "clarification": "Fault tolerance comes from diversifying across independent failure domains, not merely from having more than one instance. If every instance lives in the same Availability Zone, they all share the same power, cooling, and physical network -- an AZ-level event takes all of them down together regardless of count. Real fault tolerance against an AZ failure requires spreading instances across at least two AZs (which in turn requires at least two subnets, since a subnet is pinned to one AZ), typically behind a load balancer that can route around whichever AZ is currently unhealthy.",
+          "fact": "Fault tolerance comes from diversifying across independent failure domains, not merely from having more than one instance."
         },
         {
           "description": "Because AWS is responsible for 'security of the cloud,' AWS will notice and fix things like an overly permissive IAM policy or a publicly readable S3 bucket that I configured.",
-          "clarification": "AWS's side of the shared responsibility line covers the physical infrastructure, hardware, network backbone, and hypervisor -- not the correctness of resources and permissions you configure on top of that infrastructure. A misconfigured bucket policy or an overly broad IAM policy is a customer-side ('in the cloud') responsibility; AWS provides tools such as IAM Access Analyzer and S3 Block Public Access to help you find and prevent these mistakes, but it does not take over the responsibility of getting your own configuration right, and it generally will not silently override a policy you explicitly and validly wrote."
+          "clarification": "AWS's side of the shared responsibility line covers the physical infrastructure, hardware, network backbone, and hypervisor -- not the correctness of resources and permissions you configure on top of that infrastructure. A misconfigured bucket policy or an overly broad IAM policy is a customer-side ('in the cloud') responsibility; AWS provides tools such as IAM Access Analyzer and S3 Block Public Access to help you find and prevent these mistakes, but it does not take over the responsibility of getting your own configuration right, and it generally will not silently override a policy you explicitly and validly wrote.",
+          "fact": "AWS's side of the shared responsibility line covers the physical infrastructure, hardware, network backbone, and hypervisor -- not the correctness of resources and permissions you configure on top of that infrastructure."
         }
       ],
       "exercises": [
@@ -105,7 +107,7 @@
           "prompt": "A company runs a single EC2 instance in us-east-1a serving production traffic. Which change most directly improves its resilience against an Availability-Zone-level failure?",
           "options": [
             "Resize the existing EC2 instance to a larger instance type, still in us-east-1a.",
-            "Launch a second EC2 instance in a different Availability Zone, such as us-east-1b, and place both instances behind a load balancer spanning both AZs.",
+            "Launch a second EC2 instance in a different Availability Zone, such as us-east-1b.",
             "Launch a second, identical EC2 instance also in us-east-1a and register both with a target group.",
             "Migrate the instance to an entirely different AWS Region."
           ],
@@ -213,7 +215,8 @@
         },
         {
           "description": "As long as a policy statement has Effect: Allow for a given action, that action is permitted.",
-          "clarification": "An Allow only takes effect if there is no applicable explicit Deny anywhere else in scope -- across the principal's own identity-based policies, any relevant resource-based policy, any permissions boundary, and any AWS Organizations Service Control Policy. Because everything is denied by default and an explicit Deny always overrides any Allow no matter where it's defined, a seemingly sufficient Allow can still result in an access-denied outcome if any other applicable policy explicitly denies that same action or resource."
+          "clarification": "An Allow only takes effect if there is no applicable explicit Deny anywhere else in scope -- across the principal's own identity-based policies, any relevant resource-based policy, any permissions boundary, and any AWS Organizations Service Control Policy. Because everything is denied by default and an explicit Deny always overrides any Allow no matter where it's defined, a seemingly sufficient Allow can still result in an access-denied outcome if any other applicable policy explicitly denies that same action or resource.",
+          "fact": "An Allow only takes effect if there is no applicable explicit Deny anywhere else in scope -- across the principal's own identity-based policies, any relevant resource-based policy, any permissions boundary, and any AWS Organizations Service Control Policy."
         }
       ],
       "exercises": [
@@ -250,7 +253,7 @@
           "type": "multipleChoice",
           "prompt": "An engineer attaches two policies to the same IAM role: Policy A allows `s3:*` on `Resource: *`. Policy B explicitly denies `s3:DeleteObject` on `Resource: *`. What can the role actually do?",
           "options": [
-            "Only DeleteObject is blocked temporarily until an administrator manually resolves the conflict between the two policies.",
+            "Only DeleteObject is blocked temporarily until an administrator manually resolves the conflict between the two policies attached to the role.",
             "Everything s3:* allows, including DeleteObject, because Policy A was attached first.",
             "Everything s3:* allows except DeleteObject, because an explicit Deny always overrides an Allow regardless of attachment order.",
             "Nothing at all, because the two conflicting policies cancel each other out entirely."
@@ -265,7 +268,7 @@
           "options": [
             "Nothing -- any AWS service can assume any role automatically, regardless of what its trust policy's Principal says.",
             "The role's permissions policy, by adding `lambda:InvokeFunction` to its Action list.",
-            "The role's trust policy, updating its Principal to include `lambda.amazonaws.com`, since the trust policy -- not the permissions policy -- controls which service or principal is allowed to call sts:AssumeRole on the role.",
+            "The role's trust policy, updating its Principal to include `lambda.amazonaws.com`.",
             "Nothing can be changed -- a role's trust policy is permanently fixed to whichever service it was originally created for."
           ],
           "correctOptionIndex": 2,
@@ -405,7 +408,7 @@
             "A c-family (compute optimized) instance, to maximize CPU throughput per dollar for this CPU-bound workload.",
             "An r-family (memory optimized) instance, to comfortably hold each file in memory during processing.",
             "A t-family (burstable) instance, since the job only runs briefly once per night.",
-            "The cheapest available instance type regardless of family, since batch jobs are not latency-sensitive."
+            "The cheapest available instance type regardless of family, since batch jobs are not latency-sensitive, so any will do."
           ],
           "correctOptionIndex": 0,
           "explanation": "The workload is explicitly described as CPU-bound (finishes faster with more cores) with low, predictable memory usage -- that's precisely the profile a compute-optimized c-family instance targets, maximizing CPU per dollar rather than paying for memory headroom the job doesn't use (which rules out the “An r-family (memory optimized) instance, to comfortably…” option). The “A t-family (burstable) instance, since the job…” option is a trap: 'runs briefly once per night' sounds like it matches burstable instances' occasional-use pricing model, but a nightly batch job sustaining high CPU for its entire duration is exactly the sustained-load pattern that exhausts t-family CPU credits and triggers throttling -- brief-but-sustained-at-full-intensity is not the same as brief-but-idle-most-of-the-time. The “The cheapest available instance type regardless…” option ignores the workload profile entirely; the cheapest instance type is only a good choice if it also happens to match the actual bottleneck, which for a CPU-bound job is what the c-family is specifically built for."
@@ -418,7 +421,7 @@
             "Graviton instances only run Windows Server, so this migration only matters if the fleet currently runs Windows.",
             "They must move up to a larger size, such as 4xlarge, to compensate for a slower clock speed on Graviton hardware.",
             "Nothing needs to change -- the letters after the generation number are purely cosmetic and never affect compatibility.",
-            "Their application (or its container images) must support the ARM architecture, since the 'g' flag indicates AWS's Graviton (ARM-based) processor, while the 'i' flag indicates an Intel x86 chip."
+            "Their application (or its container images) must support the ARM architecture."
           ],
           "correctOptionIndex": 3,
           "explanation": "The lowercase letters after the generation number are capability flags, not decoration -- 'g' specifically means the instance runs on AWS's Graviton (ARM) processor rather than an x86 chip like the 'i' (Intel) variant. Since ARM and x86 are different instruction set architectures, software (or container images) built only for x86 will not run unmodified on Graviton; the migration is only safe once the application is confirmed to run on ARM, whether natively or via multi-architecture images. The “Nothing needs to change -- the letters…” option misreads capability flags as meaningless, the “They must move up to a larger…” option invents a clock-speed compensation requirement that isn't how instance sizing works, and the “Graviton instances only run Windows Server…” option fabricates an OS restriction that doesn't exist -- Graviton instances run Linux (and increasingly Windows) just as x86 instances do, the real constraint is architecture compatibility, not OS."
@@ -429,7 +432,7 @@
           "prompt": "Two teams each run a t3.medium instance that occasionally exceeds its baseline CPU performance. Team A's instance uses 'standard' credit mode; Team B's uses 'unlimited' credit mode. Both instances exhaust their CPU credit balance during a sustained traffic spike. What happens to each?",
           "options": [
             "Team A's instance is throttled down to its baseline performance level; Team B's instance keeps performing above baseline but starts incurring additional charges for the extra CPU usage beyond what its credits covered.",
-            "Both instances are throttled identically back to baseline performance, since credit mode only changes how fast credits are earned, not what happens when they run out.",
+            "Both instances are throttled identically back to baseline performance, since credit mode only changes how fast credits are earned, not what happens when they run out, so both teams see the same performance and neither team is billed for any additional usage.",
             "Both instances continue performing above baseline indefinitely at no extra charge, because credit balances regenerate instantly once they hit zero.",
             "Team A's instance is automatically terminated when its credit balance reaches zero; Team B's instance is throttled instead."
           ],
@@ -507,7 +510,8 @@
       "misconceptions": [
         {
           "description": "S3 has real folders and directories, so listing or renaming 'a folder' is a cheap, near-instant operation regardless of how many objects it contains.",
-          "clarification": "S3 has a flat key namespace inside each bucket; what the console displays as folders is a rendering convenience based on shared key prefixes containing `/` characters, not an actual directory structure. Listing by prefix scans and filters keys rather than doing a directory lookup, and there is no atomic rename operation at all -- 'renaming a folder' is implemented as an individual copy-then-delete for every single object that happens to share that prefix, which can be slow and can incur real per-request cost at scale."
+          "clarification": "S3 has a flat key namespace inside each bucket; what the console displays as folders is a rendering convenience based on shared key prefixes containing `/` characters, not an actual directory structure. Listing by prefix scans and filters keys rather than doing a directory lookup, and there is no atomic rename operation at all -- 'renaming a folder' is implemented as an individual copy-then-delete for every single object that happens to share that prefix, which can be slow and can incur real per-request cost at scale.",
+          "fact": "S3 has a flat key namespace inside each bucket; what the console displays as folders is a rendering convenience based on shared key prefixes containing `/` characters, not an actual directory structure."
         },
         {
           "description": "S3's 'eleven nines of durability' means requests to S3 will essentially never fail.",

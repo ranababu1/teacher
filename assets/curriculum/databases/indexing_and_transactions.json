@@ -71,7 +71,8 @@
         },
         {
           "description": "You should index every column 'just in case' -- more indexes can only help, never hurt.",
-          "clarification": "Every index must be updated on every INSERT, UPDATE, and DELETE that touches the table, so more indexes mean strictly slower writes and more storage consumed, regardless of whether those indexes ever end up used by a real query. An index that never matches any actual query's WHERE, JOIN, or ORDER BY pattern imposes pure ongoing cost with zero corresponding benefit. The sound default is to index deliberately based on your table's actual, observed query patterns, confirm the index is genuinely used via EXPLAIN, and periodically audit for unused indexes (via `pg_stat_user_indexes`) that are safe to drop."
+          "clarification": "Every index must be updated on every INSERT, UPDATE, and DELETE that touches the table, so more indexes mean strictly slower writes and more storage consumed, regardless of whether those indexes ever end up used by a real query. An index that never matches any actual query's WHERE, JOIN, or ORDER BY pattern imposes pure ongoing cost with zero corresponding benefit. The sound default is to index deliberately based on your table's actual, observed query patterns, confirm the index is genuinely used via EXPLAIN, and periodically audit for unused indexes (via `pg_stat_user_indexes`) that are safe to drop.",
+          "fact": "Every index must be updated on every INSERT, UPDATE, and DELETE that touches the table, so more indexes mean strictly slower writes and more storage consumed, regardless of whether those indexes ever end up used by a real query."
         }
       ],
       "exercises": [
@@ -142,7 +143,7 @@
           "options": [
             "WHERE first_name = 'Amara' OR last_name = 'Chen', an OR across the two columns.",
             "WHERE first_name = 'Amara', filtering by first name alone.",
-            "No query can use this index unless it filters on every indexed column simultaneously with equality.",
+            "No query can use this index unless it filters on every indexed column simultaneously with equality, in any order.",
             "WHERE last_name = 'Chen' AND first_name = 'Amara', filtering on both columns in the index's declared order."
           ],
           "correctOptionIndex": 3,
@@ -155,7 +156,7 @@
           "options": [
             "Only the primary key's index is updated immediately; the other four secondary indexes are updated lazily the next time VACUUM runs.",
             "None -- indexes only affect the performance of SELECT queries, never INSERT, UPDATE, or DELETE.",
-            "The INSERT must also add a corresponding new entry to each of the five indexes, so write cost scales up with the number of indexes defined on the table, in addition to the storage each index occupies on disk.",
+            "The INSERT must also add a corresponding new entry to each of the five indexes, so write cost scales up with the number of indexes defined on the table.",
             "The cost is fixed at exactly one extra write regardless of how many indexes exist, because PostgreSQL batches every index update into a single write-ahead log record."
           ],
           "correctOptionIndex": 2,
@@ -270,7 +271,7 @@
             "Durability only applies to single-statement transactions, not to explicit multi-statement BEGIN/COMMIT blocks.",
             "Nothing is guaranteed -- durability only applies if the client stays connected and receives confirmation of the commit after the fact.",
             "The changes are guaranteed to survive only if autovacuum had already run on the affected tables before the crash.",
-            "The changes are guaranteed to survive the crash and be present when the database restarts, because COMMIT does not report success until the changes are flushed to persistent storage (the write-ahead log)."
+            "The changes are guaranteed to survive the crash and be present when the database restarts."
           ],
           "correctOptionIndex": 3,
           "explanation": "PostgreSQL does not report a successful COMMIT to the client until the transaction's changes have been written and flushed to the write-ahead log on durable storage, specifically so that a crash occurring at any point afterward -- even immediately after, even if the client itself disconnects -- cannot lose data the client was already told had committed. The “Nothing is guaranteed -- durability only applies…” option is wrong because durability doesn't depend on the client remaining connected; the guarantee is about the server's persisted state, not about client-side notification. The “The changes are guaranteed to survive only…” option confuses durability with an unrelated maintenance process (autovacuum handles statistics and dead-row cleanup, not commit durability). The “Durability only applies to single-statement transactions…” option is wrong -- durability applies identically to single-statement implicit transactions and explicit multi-statement ones."
@@ -301,7 +302,7 @@
           "options": [
             "PostgreSQL automatically wraps every standalone statement in an implicit, single-statement transaction, so Atomicity and Durability still apply -- the change survives the crash exactly as it would inside an explicit BEGIN/COMMIT block.",
             "PostgreSQL requires an explicit BEGIN before any write statement, so the UPDATE would never have been allowed to run in the first place.",
-            "It applies only to some of the matching rows, since there is no transaction boundary guaranteeing all-or-nothing behavior for a bare statement.",
+            "It applies only to some of the matching rows, since there is no transaction boundary guaranteeing all-or-nothing behavior for a bare statement, so a crash can leave the table with a mixture of updated and untouched rows until it is repaired by hand.",
             "It is lost, since no explicit transaction was ever started to make it durable."
           ],
           "correctOptionIndex": 0,
@@ -428,7 +429,7 @@
           "options": [
             "A phantom read, because a new row appeared to match T1's query condition between two runs of the identical query, due to another transaction's committed insert.",
             "A dirty read, because T1 saw data from T2's transaction.",
-            "This is not a recognized isolation anomaly, because T2's insert was fully committed before T1's second read.",
+            "This is not a recognized isolation anomaly, because T2's insert was fully committed before T1's second read, and a committed row can never count as an anomaly.",
             "A non-repeatable read, because the same specific row's value changed between two reads."
           ],
           "correctOptionIndex": 0,
@@ -446,7 +447,7 @@
           "prompt": "A developer explicitly starts a transaction with `BEGIN ISOLATION LEVEL READ UNCOMMITTED` in PostgreSQL, hoping to observe another concurrent transaction's uncommitted changes. What actually happens?",
           "options": [
             "PostgreSQL allows dirty reads under this setting, but only between statements within the same session, never across separate concurrent sessions.",
-            "PostgreSQL accepts the syntax but internally treats it identically to READ COMMITTED, so the transaction still never sees another transaction's uncommitted changes -- a genuine dirty read is not reproducible in PostgreSQL at any isolation level.",
+            "PostgreSQL accepts the syntax but internally treats it identically to READ COMMITTED, so the transaction still never sees another transaction's uncommitted changes.",
             "PostgreSQL rejects the ISOLATION LEVEL clause outright with a syntax error, since READ UNCOMMITTED isn't a recognized keyword.",
             "PostgreSQL honors the request literally, and the transaction sees uncommitted changes from concurrently running transactions, exactly as the SQL standard describes for this level."
           ],

@@ -67,7 +67,8 @@
         },
         {
           "description": "If a fine-tune measurably improves accuracy on the target task, it's a pure win -- there's no meaningful downside to worry about as long as that one number went up.",
-          "clarification": "Training loss and target-task accuracy going up are exactly what the training process was directly optimizing for, so they will very reliably look good -- that tells you nothing about capabilities the training data wasn't reinforcing. Catastrophic forgetting is silent: it doesn't throw an error, and it won't show up unless you specifically evaluate a broad regression suite covering tasks unrelated to the fine-tune, comparing against the pre-fine-tune baseline model. Judging a fine-tune solely by the metric it was trained to improve is the single most common way teams ship a regression without noticing until users report it."
+          "clarification": "Training loss and target-task accuracy going up are exactly what the training process was directly optimizing for, so they will very reliably look good -- that tells you nothing about capabilities the training data wasn't reinforcing. Catastrophic forgetting is silent: it doesn't throw an error, and it won't show up unless you specifically evaluate a broad regression suite covering tasks unrelated to the fine-tune, comparing against the pre-fine-tune baseline model. Judging a fine-tune solely by the metric it was trained to improve is the single most common way teams ship a regression without noticing until users report it.",
+          "fact": "Training loss and target-task accuracy going up are exactly what the training process was directly optimizing for, so they will very reliably look good -- that tells you nothing about capabilities the training data wasn't reinforcing."
         }
       ],
       "exercises": [
@@ -125,7 +126,7 @@
           "options": [
             "The forward pass, loss computation, and backward pass all run, but the optimizer step is skipped to save time.",
             "All four steps -- forward pass, loss computation, backward pass, and optimizer step -- run on every inference call, just using a very small learning rate.",
-            "Only the forward pass -- logits are computed and a token is selected from the resulting distribution; no loss is computed, and no backward pass or optimizer step ever runs.",
+            "Only the forward pass -- logits are computed and a token is selected from the resulting distribution; no loss is computed.",
             "The forward pass and loss computation both run, but the backward pass and optimizer step are skipped."
           ],
           "correctOptionIndex": 2,
@@ -139,7 +140,7 @@
             "Because forgetting only ever happens during the very first epoch of training, before most logging frameworks are typically initialized.",
             "Because it only ever affects models that are deployed without any monitoring dashboard configured.",
             "Because catastrophic forgetting always throws a specific, named exception that many teams accidentally catch and silently swallow in their training scripts.",
-            "Because training loss on the target dataset keeps looking good -- it's the exact metric being directly optimized -- while performance on unrelated, untested capabilities can degrade with no error, warning, or signal from the training process itself; it's only detected by deliberately evaluating those other capabilities before and after."
+            "Because training loss on the target dataset keeps looking good -- it's the exact metric being directly optimized."
           ],
           "correctOptionIndex": 3,
           "explanation": "The module is explicit that nothing about the fine-tuning process throws an error or warning when forgetting happens -- the target metric being trained for will reliably look good since it's exactly what's being optimized, while unrelated capabilities can quietly degrade, detectable only through deliberate evaluation of tasks outside the training objective. The “Because it only ever affects models…”, “Because forgetting only ever happens during…”, and “Because catastrophic forgetting always throws a specific…” options all invent specific mechanisms or triggers -- missing dashboards, a first-epoch-only timing, a swallowed exception -- that the module never describes; the actual reason is simply that nothing in the training loop checks or reports on capabilities it isn't currently optimizing for."
@@ -150,7 +151,7 @@
           "prompt": "Per this module, what's the specific flaw in gating a fine-tune's deployment purely on whether it improved the one metric it was trained for?",
           "options": [
             "The flaw is that target-metric-only gating requires re-running the full training job twice, which needlessly doubles compute cost without any real benefit.",
-            "The target metric will reliably look good precisely because the training process was directly optimizing exactly that number, while telling you nothing about whether unrelated capabilities silently regressed -- only a broader before/after evaluation across other tasks, against the retained base-model baseline, can reveal that.",
+            "The target metric will reliably look good precisely because the training process was directly optimizing exactly that number.",
             "There's no real flaw -- if the target metric improved, that alone is sufficient evidence the fine-tune is safe to ship.",
             "The flaw is that target-metric evaluation is always less accurate than LLM-as-judge evaluation, regardless of what specific capability is being measured."
           ],
@@ -222,7 +223,8 @@
       "misconceptions": [
         {
           "description": "LoRA fine-tunes the whole model, just in a faster, more memory-efficient way.",
-          "clarification": "LoRA does not train the model's original weight matrices at all -- it freezes them completely and trains only a separate, much smaller pair of low-rank matrices that get added to the frozen weights at inference time. The base model's own weights, numerically, never change during a LoRA fine-tuning run. This is precisely why a single base model deployment can serve many different LoRA adapters interchangeably: the shared, frozen part is identical across all of them, and only the small adapter differs."
+          "clarification": "LoRA does not train the model's original weight matrices at all -- it freezes them completely and trains only a separate, much smaller pair of low-rank matrices that get added to the frozen weights at inference time. The base model's own weights, numerically, never change during a LoRA fine-tuning run. This is precisely why a single base model deployment can serve many different LoRA adapters interchangeably: the shared, frozen part is identical across all of them, and only the small adapter differs.",
+          "fact": "LoRA does not train the model's original weight matrices at all -- it freezes them completely and trains only a separate, much smaller pair of low-rank matrices that get added to the frozen weights at inference time."
         },
         {
           "description": "A higher LoRA rank is always strictly better, since it gives the adapter more capacity to learn the target behavior.",
@@ -266,7 +268,7 @@
             "The original weight matrices are frozen and never updated; a separate, much smaller pair of low-rank matrices is trained and added to them at inference time.",
             "The original weight matrices are trained normally; LoRA only changes how the tokenizer processes input to save memory.",
             "The original weight matrices are deleted and replaced entirely by the low-rank matrices, which become the new model.",
-            "The original weight matrices are trained at a lower numerical precision to save memory; nothing new is added to the model."
+            "The original weight matrices are trained at a lower numerical precision to save memory; nothing new is added to the model at training or at inference time."
           ],
           "correctOptionIndex": 0,
           "explanation": "LoRA's entire mechanism rests on freezing the original weight matrices completely -- no gradients are computed for them, and their values never change -- while training a separate, additive low-rank update (the product of two small matrices, A and B) alongside them. The “The original weight matrices are trained at…” option describes quantization, a different and unrelated memory-saving technique. The “The original weight matrices are trained normally…” option incorrectly claims the original weights are trained normally, which would just be full fine-tuning and defeats the entire purpose of the low-rank adapter. The “The original weight matrices are deleted…” option is wrong because the original weights are never deleted or replaced -- they remain fully intact and are combined with the adapter's output at inference time, which is exactly what allows the same frozen base weights to be reused underneath many different adapters."
@@ -309,7 +311,7 @@
           "prompt": "Per this module, what specifically makes it operationally feasible to serve many customers their own custom fine-tuned behavior using LoRA, in a way that full fine-tuning would not support as cheaply?",
           "options": [
             "LoRA adapters eliminate the need to load the base model at all, so no shared infrastructure is required for any customer.",
-            "Only the small adapter (the trained A and B matrices) differs per customer and can be swapped cheaply onto one shared, frozen base model loaded exactly once, whereas full fine-tuning would require storing and loading a separate full-size model copy per customer.",
+            "Only the small adapter (the trained A and B matrices) differs per customer and can be swapped cheaply onto one shared, frozen base model loaded exactly once.",
             "Full fine-tuning and LoRA cost exactly the same to serve at scale; the only feasibility difference between them is in training time, not serving cost.",
             "LoRA adapters automatically merge every customer's behavior into a single blended response, so only one adapter is ever needed regardless of how many customers exist."
           ],
@@ -422,7 +424,7 @@
           "type": "multipleChoice",
           "prompt": "A team is choosing between fine-tuning on 50,000 examples scraped automatically from old support logs with an estimated 8% mislabeling rate, or 2,000 examples that were individually hand-verified for correct labels. Which is more likely to produce a better fine-tune, and why?",
           "options": [
-            "They are roughly equivalent, since gradient descent naturally discounts a small minority of incorrect examples during training regardless of dataset size.",
+            "They are roughly equivalent, since gradient descent naturally discounts a small minority of incorrect examples during training regardless of dataset size, and a larger set always produces a better result.",
             "The 50,000-example set, because a larger validation split can always be carved out of it afterward to compensate for the mislabeling.",
             "The 50,000-example set, because fine-tuning quality is primarily a function of dataset size, and a mislabeling rate under 10% is negligible at that scale.",
             "The 2,000-example set, because mislabeled examples actively teach the wrong association rather than merely diluting the signal, and 8% of 50,000 is a large, systematic amount of actively-wrong training signal."

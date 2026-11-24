@@ -110,7 +110,7 @@
           "options": [
             "Goroutines don't actually run real code concurrently -- they're simulated sequentially by the runtime, so there's no real scheduling overhead at all.",
             "Goroutines are lightweight because Go silently limits every program to a maximum of a few dozen goroutines at once, keeping total resource usage low.",
-            "Goroutines start with a small (around 2KB), dynamically-growable stack and are scheduled by the Go runtime onto a small number of OS threads, whereas OS threads typically reserve a large fixed-size stack (often 1MB+) and are scheduled directly by the operating system.",
+            "Goroutines start with a small (around 2KB), dynamically-growable stack and are scheduled by the Go runtime onto a small number of OS threads.",
             "Goroutines use less memory because they cannot access any heap-allocated data, only their own local stack variables."
           ],
           "correctOptionIndex": 2,
@@ -135,7 +135,7 @@
           "prompt": "What does this program most likely print?\n\n```go\nfunc main() {\n\tgo fmt.Println(\"background work\")\n\tfmt.Println(\"main done\")\n}\n```",
           "options": [
             "Both lines always print, in the order shown, because Go guarantees main finishes running its own remaining statements before any other queued goroutine gets a turn.",
-            "Just \"main done\" is by far the most likely single output, because main typically reaches its end -- and the whole process exits immediately when it does -- before the scheduler ever gives the background goroutine a chance to run, though no outcome here is strictly guaranteed either way.",
+            "Just \"main done\" is by far the most likely single output, because main typically reaches its end -- and the whole process exits immediately when it does.",
             "Only \"background work\" prints, because starting a goroutine with `go` pauses main until that goroutine finishes.",
             "The program deadlocks, since main is not allowed to return while another goroutine is still queued to run."
           ],
@@ -232,11 +232,13 @@
       "misconceptions": [
         {
           "description": "Sending a value into a buffered channel, like `make(chan int, 5)`, never blocks -- that's the whole point of giving it a buffer.",
-          "clarification": "A buffered channel only avoids blocking on a send while the buffer has free capacity. Once the buffer is completely full -- all 5 slots occupied by unreceived values, in this example -- the very next send blocks exactly like an unbuffered channel would, waiting until some goroutine performs a receive to free up a slot. Buffering shifts *when* blocking kicks in (after N values are already in flight, rather than immediately), and can smooth over short bursts of timing mismatch between producer and consumer, but it does not remove the possibility of blocking altogether for a producer that's consistently faster than its consumer."
+          "clarification": "A buffered channel only avoids blocking on a send while the buffer has free capacity. Once the buffer is completely full -- all 5 slots occupied by unreceived values, in this example -- the very next send blocks exactly like an unbuffered channel would, waiting until some goroutine performs a receive to free up a slot. Buffering shifts *when* blocking kicks in (after N values are already in flight, rather than immediately), and can smooth over short bursts of timing mismatch between producer and consumer, but it does not remove the possibility of blocking altogether for a producer that's consistently faster than its consumer.",
+          "fact": "A buffered channel only avoids blocking on a send while the buffer has free capacity."
         },
         {
           "description": "If several goroutines are all blocked waiting to receive from a channel, and one goroutine sends a single value, all of the waiting goroutines receive a copy of that value.",
-          "clarification": "A single sent value satisfies exactly one waiting receiver -- Go channels are point-to-point for actual sent values, not a broadcast mechanism; the runtime picks one of the waiting receivers to hand that value to, and the rest remain blocked, still waiting. Broadcasting to every current and future waiter simultaneously requires closing the channel instead of sending a value -- a closed channel returns its zero value to every receive, present and future, which is exactly the mechanism used for 'release everyone waiting on this signal at once,' as opposed to 'hand this one specific value to whichever one receiver happens to be selected.'"
+          "clarification": "A single sent value satisfies exactly one waiting receiver -- Go channels are point-to-point for actual sent values, not a broadcast mechanism; the runtime picks one of the waiting receivers to hand that value to, and the rest remain blocked, still waiting. Broadcasting to every current and future waiter simultaneously requires closing the channel instead of sending a value -- a closed channel returns its zero value to every receive, present and future, which is exactly the mechanism used for 'release everyone waiting on this signal at once,' as opposed to 'hand this one specific value to whichever one receiver happens to be selected.'",
+          "fact": "A single sent value satisfies exactly one waiting receiver -- Go channels are point-to-point for actual sent values, not a broadcast mechanism; the runtime picks one of the waiting receivers to hand that value to, and the rest remain blocked, still waiting."
         }
       ],
       "exercises": [
@@ -275,7 +277,7 @@
           "options": [
             "It only picks randomly when exactly two cases are ready; with three or more ready cases, it always picks the first one in source order.",
             "Randomizing improves raw performance by letting the runtime skip checking later cases once an earlier one is found ready.",
-            "It's a deliberate design choice that prevents code from accidentally depending on the order cases happen to be written in, forcing each case to be treated as genuinely independent rather than implicitly prioritized.",
+            "It's a deliberate design choice that prevents code from accidentally depending on the order cases happen to be written in.",
             "It's an unavoidable limitation of how the Go runtime schedules goroutines, not a deliberate design choice."
           ],
           "correctOptionIndex": 2,
@@ -287,7 +289,7 @@
           "prompt": "Which of the following correctly describes close(ch) in Go?",
           "options": [
             "Closing a channel automatically discards any values still sitting unread in its buffer, so a subsequent `range` over it receives nothing at all.",
-            "Sending on a channel after it has already been closed panics immediately, and closing an already-closed channel also panics -- close is not idempotent, and there's no built-in way to check whether a channel is already closed before attempting to close it.",
+            "Sending on a channel after it has already been closed panics immediately, and closing an already-closed channel also panics -- close is not idempotent.",
             "Either the sender or the receiver side may safely call close(ch) at any point, since which goroutine owns the channel has no bearing on who is allowed to close it.",
             "Calling close(ch) a second time on the same channel is a harmless no-op, just like calling it once."
           ],
@@ -391,7 +393,8 @@
       "misconceptions": [
         {
           "description": "A data race in Go just means you might occasionally read a slightly outdated value -- annoying, but generally harmless, similar to eventual consistency in a distributed system.",
-          "clarification": "A data race is genuine undefined behavior in the Go memory model, not merely a staleness issue. The language specification makes no guarantee at all about what value a racing read observes -- it is not guaranteed to be 'the old value' or 'the new value'; on real hardware, for values larger than a single machine word, a race can produce a torn value that was never actually written by any goroutine at all, a corrupted mix of bytes from two separate writes. Beyond incorrect values, the Go compiler is also permitted to apply optimizations that assume the absence of data races, meaning racy code can behave in ways that seem to defy the program's literal source order entirely. Treating a known data race as 'probably fine most of the time' is a real correctness bug waiting to surface unpredictably, not a harmless staleness trade-off."
+          "clarification": "A data race is genuine undefined behavior in the Go memory model, not merely a staleness issue. The language specification makes no guarantee at all about what value a racing read observes -- it is not guaranteed to be 'the old value' or 'the new value'; on real hardware, for values larger than a single machine word, a race can produce a torn value that was never actually written by any goroutine at all, a corrupted mix of bytes from two separate writes. Beyond incorrect values, the Go compiler is also permitted to apply optimizations that assume the absence of data races, meaning racy code can behave in ways that seem to defy the program's literal source order entirely. Treating a known data race as 'probably fine most of the time' is a real correctness bug waiting to surface unpredictably, not a harmless staleness trade-off.",
+          "fact": "A data race is genuine undefined behavior in the Go memory model, not merely a staleness issue."
         },
         {
           "description": "It doesn't matter whether `wg.Add(1)` is called just before launching a goroutine or as the first line inside that goroutine -- either way, the counter gets incremented before the goroutine finishes, so wg.Wait() will work correctly.",
@@ -447,7 +450,7 @@
           "options": [
             "Nothing is wrong with it -- that's an accurate description of what a data race causes in Go.",
             "A data race only ever affects program performance, slowing execution down, but it can never affect the correctness of any value that gets read.",
-            "A data race is undefined behavior: the language specification makes no guarantee at all about what value a racing read observes, and for values larger than a single machine word, a race can produce a corrupted, torn value that no goroutine ever actually wrote -- not merely an old-but-otherwise-valid one.",
+            "A data race is undefined behavior: the language specification makes no guarantee at all about what value a racing read observes.",
             "Data races are actually impossible in Go, since the runtime automatically serializes every memory access across goroutines behind the scenes."
           ],
           "correctOptionIndex": 2,
@@ -461,7 +464,7 @@
             "sync.Mutex is a reference type under the hood, similar to a slice or a map, so copying a struct that contains one never actually duplicates the lock.",
             "go vet is guaranteed to catch every single case of a copied mutex, so this isn't something a developer needs to reason about manually.",
             "It's always safe to copy such a struct freely, at any point, since Go automatically shares the underlying lock state across every copy of the same original value.",
-            "The struct should always be passed around and referenced via a pointer from that point on -- copying it duplicates the mutex's internal state, so the copy no longer protects the same critical section as the original, silently defeating the mutex's entire purpose."
+            "The struct should always be passed around and referenced via a pointer from that point on -- copying it duplicates the mutex's internal state."
           ],
           "correctOptionIndex": 3,
           "explanation": "sync.Mutex (like most types in the sync package) must never be copied after first use. Copying duplicates its internal state, producing an independent lock that has nothing to do with the original -- goroutines locking the copy provide zero protection for whatever the original mutex was actually guarding. The practical rule is to pass such a struct by pointer once it's in use. The “It's always safe to copy such…” and “sync.Mutex is a reference type under…” options both wrongly assume some kind of automatic sharing or reference semantics that sync.Mutex simply does not have -- it's an ordinary struct value like any other, which is exactly why copying it is dangerous. The “go vet is guaranteed to catch every…” option overstates go vet's coverage -- the material explicitly notes vet catches some, but not all, cases of this mistake, so it can't be relied on as a complete safety net."

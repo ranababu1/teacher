@@ -71,7 +71,8 @@
         },
         {
           "description": "The node with the highest total cost or actual time at the top of the plan is always the bottleneck.",
-          "clarification": "Every node's reported total cost and actual time is cumulative -- it already includes everything every child node beneath it did, plus whatever that node adds on top. The topmost node in any plan will therefore always show the largest total numbers, by construction, regardless of where the real problem is. The node actually responsible for the slowness is the one with large *exclusive* time -- its own total minus its children's totals -- which is frequently found several levels down the tree, sometimes hidden behind a large `loops` count that makes a small per-execution number add up to something significant only once multiplied out."
+          "clarification": "Every node's reported total cost and actual time is cumulative -- it already includes everything every child node beneath it did, plus whatever that node adds on top. The topmost node in any plan will therefore always show the largest total numbers, by construction, regardless of where the real problem is. The node actually responsible for the slowness is the one with large *exclusive* time -- its own total minus its children's totals -- which is frequently found several levels down the tree, sometimes hidden behind a large `loops` count that makes a small per-execution number add up to something significant only once multiplied out.",
+          "fact": "Every node's reported total cost and actual time is cumulative -- it already includes everything every child node beneath it did, plus whatever that node adds on top."
         }
       ],
       "exercises": [
@@ -110,7 +111,7 @@
           "options": [
             "It cannot be determined from this information alone.",
             "About 0.062 milliseconds total, since that's the actual time shown.",
-            "About 0.062 milliseconds multiplied by 2 (rows), roughly 0.124 milliseconds total.",
+            "About 0.062 milliseconds multiplied by 2 (rows), roughly 0.124 milliseconds total for the node.",
             "About 0.062 milliseconds multiplied by 8000 (loops), roughly 496 milliseconds total."
           ],
           "correctOptionIndex": 3,
@@ -129,7 +130,7 @@
           "options": [
             "The planner always prefers Hash Join over every other algorithm regardless of indexes or table size, reserving Nested Loop exclusively for single-row lookups.",
             "Hash Join is only ever chosen when the two tables being joined happen to have exactly the same number of rows.",
-            "Without a usable index on the join column, a Nested Loop's inner side would need a full scan repeated once per outer row, whereas Hash Join builds one in-memory hash table from the smaller input and scans the larger input just once, giving a cost close to linear in the combined size of both inputs.",
+            "Without a usable index on the join column, a Nested Loop's inner side would need a full scan repeated once per outer row.",
             "Hash Join requires both inputs to already be sorted, which makes it categorically faster than any other join algorithm whenever it's chosen."
           ],
           "correctOptionIndex": 2,
@@ -276,7 +277,7 @@
             "EXPLAIN ANALYZE cannot be run on SELECT queries that include a WHERE clause referencing a loop variable.",
             "EXPLAIN ANALYZE always underreports actual time for queries run in a loop, so the real per-query time is higher than shown.",
             "The developer needs to add BUFFERS to see the N+1 cost, since BUFFERS specifically tracks repeated query execution.",
-            "N+1's cost is the sheer number of round trips multiplied by a per-query fixed overhead, which is invisible when examining any single query's plan in isolation -- the problem only appears when counting total queries issued per logical operation."
+            "N+1's cost is the sheer number of round trips multiplied by a per-query fixed overhead."
           ],
           "correctOptionIndex": 3,
           "explanation": "The correct answer identifies the core reason N+1 is hard to catch via query-level tools: each individual query in the pattern genuinely is fast and well-planned, so there's nothing for EXPLAIN ANALYZE to flag on any one of them -- the cost is entirely in how many times that fast query gets run for one logical operation, a fact visible only at the aggregate, per-request level. The “EXPLAIN ANALYZE always underreports actual time…” option is fabricated; EXPLAIN ANALYZE reports accurate per-execution timing regardless of whether the query happens to be one of many similar calls. The “EXPLAIN ANALYZE cannot be run on SELECT…” option is false -- there's no such restriction. The “The developer needs to add BUFFERS…” option is wrong; BUFFERS reports cache hit/read information for a single query's execution, not a count of how many times a similar query ran elsewhere in the request."
@@ -292,7 +293,7 @@
           "type": "multipleChoice",
           "prompt": "A single query LEFT JOINs authors to both posts and tags (via a post_tags junction) to fetch everything in one round trip. One particular author has written 4 posts, and each of those posts has 2 tags. How many result rows does this one author contribute?",
           "options": [
-            "4 x 2 = 8 rows -- one row per (post, tag) combination, since two independent one-to-many relationships are joined together into the same flat result.",
+            "4 x 2 = 8 rows -- one row per (post, tag) combination.",
             "4 rows, one per post, with all of that post's tags listed together inside a single column.",
             "4 + 2 = 6 rows -- one row per post, plus one row per tag.",
             "Exactly 1 row, since a JOIN never duplicates the 'one' side of any relationship."
@@ -391,7 +392,8 @@
       "misconceptions": [
         {
           "description": "Connection pooling is mainly about saving a few milliseconds of TCP handshake time, so it's a minor, optional optimization for high-traffic sites only.",
-          "clarification": "In PostgreSQL specifically, the larger cost isn't the handshake -- it's the dedicated backend OS process forked per connection, which carries real memory overhead and a hard `max_connections` ceiling shared across the whole server. Exceeding that ceiling doesn't cause queries to run slowly; it causes new connections to be refused outright, an availability failure, not merely a performance one. Pooling is as much about staying under a hard resource ceiling safely as it is about shaving latency, which is why it matters even for moderate-traffic applications, not just the highest-traffic ones."
+          "clarification": "In PostgreSQL specifically, the larger cost isn't the handshake -- it's the dedicated backend OS process forked per connection, which carries real memory overhead and a hard `max_connections` ceiling shared across the whole server. Exceeding that ceiling doesn't cause queries to run slowly; it causes new connections to be refused outright, an availability failure, not merely a performance one. Pooling is as much about staying under a hard resource ceiling safely as it is about shaving latency, which is why it matters even for moderate-traffic applications, not just the highest-traffic ones.",
+          "fact": "In PostgreSQL specifically, the larger cost isn't the handshake -- it's the dedicated backend OS process forked per connection, which carries real memory overhead and a hard `max_connections` ceiling shared across the whole server."
         },
         {
           "description": "Adding a connection pool inside each application server instance fully solves the connection-scaling problem.",
@@ -433,7 +435,7 @@
           "prompt": "Why is a naive 'open one connection per request' pattern riskier in PostgreSQL specifically than the phrase 'TCP handshake overhead' alone would suggest?",
           "options": [
             "There is no additional risk beyond handshake time -- pooling is purely a latency optimization with no availability implications.",
-            "PostgreSQL forks a dedicated backend OS process per connection with real memory cost, and enforces a hard max_connections ceiling -- so a traffic spike opening many connections at once can exhaust that ceiling and cause PostgreSQL to outright refuse new connections, not merely respond slowly.",
+            "PostgreSQL forks a dedicated backend OS process per connection with real memory cost.",
             "PostgreSQL closes idle connections automatically after one second, forcing constant reconnection regardless of pooling.",
             "TCP handshakes in PostgreSQL take significantly longer than in other databases due to a nonstandard protocol."
           ],
@@ -466,7 +468,7 @@
           "options": [
             "It forcibly closes and reopens whichever of the 20 connections has been open the longest, regardless of whether that connection is still actively in use.",
             "It immediately rejects the request with an unrecoverable error, identical to how PostgreSQL itself responds when max_connections is exceeded.",
-            "It makes the new request wait (queue) briefly until one of the 20 connections is returned to the pool, rather than opening an unbounded number of additional connections beyond its configured maximum.",
+            "It makes the new request wait (queue) briefly until one of the 20 connections is returned to the pool.",
             "It immediately opens a 21st connection to satisfy the new request, silently ignoring its own configured maximum."
           ],
           "correctOptionIndex": 2,

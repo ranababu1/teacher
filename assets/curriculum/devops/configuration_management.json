@@ -63,11 +63,13 @@
       "misconceptions": [
         {
           "description": "Ansible playbooks are just remote shell scripts that happen to be run over SSH -- YAML formatting aside, they work the same way.",
-          "clarification": "A shell script executes a fixed sequence of commands unconditionally, every time it runs, with whatever idempotency exists (if any) hand-coded by whoever wrote it. An Ansible playbook built from purpose-built modules (`apt`, `service`, `template`, `lineinfile`, and so on) instead declares a target state per task, and each module internally checks current state against that target before deciding whether to act at all -- the check-then-act logic is the module's responsibility, not something the playbook author has to write. SSH is simply the transport Ansible happens to use to reach the target machine; it says nothing about whether what's being executed there behaves declaratively or imperatively. The moment a playbook leans on `shell:`/`command:` for something a proper module could do instead, that specific task genuinely does become 'just a remote command run over SSH,' with none of the declarative guarantees -- which is exactly why that pattern is treated as an escape hatch to minimize, not the norm."
+          "clarification": "A shell script executes a fixed sequence of commands unconditionally, every time it runs, with whatever idempotency exists (if any) hand-coded by whoever wrote it. An Ansible playbook built from purpose-built modules (`apt`, `service`, `template`, `lineinfile`, and so on) instead declares a target state per task, and each module internally checks current state against that target before deciding whether to act at all -- the check-then-act logic is the module's responsibility, not something the playbook author has to write. SSH is simply the transport Ansible happens to use to reach the target machine; it says nothing about whether what's being executed there behaves declaratively or imperatively. The moment a playbook leans on `shell:`/`command:` for something a proper module could do instead, that specific task genuinely does become 'just a remote command run over SSH,' with none of the declarative guarantees -- which is exactly why that pattern is treated as an escape hatch to minimize, not the norm.",
+          "fact": "A shell script executes a fixed sequence of commands unconditionally, every time it runs, with whatever idempotency exists (if any) hand-coded by whoever wrote it."
         },
         {
           "description": "Because a playbook is declarative, the order tasks appear in doesn't actually matter -- Ansible figures out the correct order to satisfy dependencies automatically.",
-          "clarification": "Tasks within a single playbook execute strictly top to bottom, in the exact order they're written -- there is no automatic dependency resolution reordering them. 'Declarative' describes what an individual task asserts (a state to converge to), not the playbook's execution order, which remains sequential and entirely the author's responsibility to get right. A task that starts a service before an earlier task has installed the package it depends on will fail for the ordinary, imperative reason: the dependency wasn't satisfied yet when that step ran, regardless of how declaratively each individual task itself behaves."
+          "clarification": "Tasks within a single playbook execute strictly top to bottom, in the exact order they're written -- there is no automatic dependency resolution reordering them. 'Declarative' describes what an individual task asserts (a state to converge to), not the playbook's execution order, which remains sequential and entirely the author's responsibility to get right. A task that starts a service before an earlier task has installed the package it depends on will fail for the ordinary, imperative reason: the dependency wasn't satisfied yet when that step ran, regardless of how declaratively each individual task itself behaves.",
+          "fact": "Tasks within a single playbook execute strictly top to bottom, in the exact order they're written -- there is no automatic dependency resolution reordering them."
         }
       ],
       "exercises": [
@@ -105,7 +107,7 @@
           "prompt": "What is the key practical difference between an Ansible task using the `apt` module with `state: present` and a raw `shell: apt-get install nginx` task?",
           "options": [
             "The `apt` module checks whether the package is already installed before acting, and only installs it if it isn't, while the shell command runs unconditionally every time the task executes.",
-            "The `apt` module can only be used on Debian-based systems, while `shell` works on every operating system.",
+            "The `apt` module can only be used on Debian-based systems, while `shell` works on every operating system, and the two are otherwise equivalent because `shell` also checks the package state first.",
             "The `apt` module is faster purely because it is written in Python instead of Bash.",
             "There is no real difference -- both eventually just call apt-get on the target machine."
           ],
@@ -146,7 +148,7 @@
             "None -- shell tasks behave identically to purpose-built modules as long as the YAML syntax itself is correct.",
             "The ability for this specific task to be included in a playbook alongside other, non-shell tasks.",
             "Only the ability to run over a remote SSH connection, since shell commands require a different transport mechanism.",
-            "The check-then-act, idempotent convergence behavior that purpose-built modules provide -- running this task twice re-executes the raw sed command each time, which can error, corrupt the file, or do nothing useful on a second run, entirely outside the tool's convergence guarantees."
+            "The check-then-act, idempotent convergence behavior that purpose-built modules provide."
           ],
           "correctOptionIndex": 3,
           "explanation": "The concept names `shell:`/`command:` as genuine escape hatches that run an arbitrary command exactly as written, with none of the check-then-act behavior of purpose-built modules -- a task like this isn't idempotent at all, and running it repeatedly can produce inconsistent or broken results depending on the file's current content. The “None -- shell tasks behave identically…” option ignores this explicitly stated loss of guarantees. The “Only the ability to run over…” option invents a transport-layer restriction that doesn't exist -- shell tasks use the same SSH connection as any other task. The “The ability for this specific task…” option is false; shell tasks can freely coexist with other task types in the same playbook."
@@ -222,7 +224,8 @@
         },
         {
           "description": "Idempotency means the playbook does nothing on a second run.",
-          "clarification": "Idempotency means the playbook does nothing *when nothing needs to change* -- it does not mean the playbook is inert or that a second run is always a no-op unconditionally. If something has genuinely drifted since the last run (a config file was manually edited, a service was manually stopped), an idempotent playbook run against that machine absolutely should report `changed` and correct it back to the declared desired state -- that corrective behavior on drift is exactly what makes the tool useful for ongoing reconciliation, not a violation of idempotency. The guarantee is about the *relationship* between current state and desired state determining the outcome consistently, not about every run always producing zero changes regardless of what's actually true on the machine."
+          "clarification": "Idempotency means the playbook does nothing *when nothing needs to change* -- it does not mean the playbook is inert or that a second run is always a no-op unconditionally. If something has genuinely drifted since the last run (a config file was manually edited, a service was manually stopped), an idempotent playbook run against that machine absolutely should report `changed` and correct it back to the declared desired state -- that corrective behavior on drift is exactly what makes the tool useful for ongoing reconciliation, not a violation of idempotency. The guarantee is about the *relationship* between current state and desired state determining the outcome consistently, not about every run always producing zero changes regardless of what's actually true on the machine.",
+          "fact": "Idempotency means the playbook does nothing *when nothing needs to change* -- it does not mean the playbook is inert or that a second run is always a no-op unconditionally."
         }
       ],
       "exercises": [
@@ -261,7 +264,7 @@
           "options": [
             "It's actually idempotent, since idempotency only requires the absence of errors on repeated execution.",
             "It's not idempotent because shell commands can never be used safely in Ansible under any circumstances.",
-            "It's not idempotent because it appends the line unconditionally every run, so running the playbook multiple times produces multiple duplicate lines instead of converging to one consistent end state.",
+            "It's not idempotent because it appends the line unconditionally every run.",
             "It's not idempotent only because it modifies a dotfile instead of a system-wide configuration file."
           ],
           "correctOptionIndex": 2,
@@ -288,7 +291,7 @@
             "Exactly once -- Ansible deduplicates notifications to a given handler and runs it at most once per play, after all regular tasks complete, regardless of how many tasks notified it.",
             "Twice -- once independently for each task that notified the handler.",
             "It restarts continuously in a loop until no task reports changed anymore.",
-            "Zero times -- handlers never run automatically and must always be triggered by a separate, manual step."
+            "Zero times -- handlers never run automatically and must always be triggered by a separate, manual step, which is how Ansible avoids restarting a service more often than an operator actually intended."
           ],
           "correctOptionIndex": 0,
           "explanation": "The concept states this explicitly: Ansible deduplicates notifications and runs each distinct handler at most once per play, after all regular tasks complete, so even if both config files changed in the same run, the app restarts exactly once, not twice back to back. The “Twice -- once independently for each task…” option misunderstands the deduplication behavior the concept describes. The “Zero times -- handlers never run automatically…” option is false -- a handler fires automatically once notified by a changed task. The “It restarts continuously in a loop until…” option invents looping behavior that doesn't exist in how handlers work."
@@ -301,7 +304,7 @@
             "No, but only because handlers were not involved in triggering this particular task.",
             "Yes -- a genuinely idempotent playbook should never report changed or modify anything on a second run, under any circumstances.",
             "Yes, because a truly idempotent tool would have somehow prevented the manual edit from happening in the first place.",
-            "No -- idempotency means the outcome is determined consistently by the relationship between current and desired state, not that every run is unconditionally a no-op; correcting genuine drift back to the declared state is exactly the reconciliation behavior that makes the tool useful."
+            "No -- idempotency means the outcome is determined consistently by the relationship between current and desired state."
           ],
           "correctOptionIndex": 3,
           "explanation": "The concept directly addresses this misconception: idempotency means the playbook does nothing when nothing needs to change, not that it's inert regardless of what's actually true on the machine -- if something has genuinely drifted, an idempotent run correctly reports changed and corrects it, which is exactly what makes the tool useful for ongoing reconciliation. The “Yes -- a genuinely idempotent playbook should…” option treats a legitimate correction as a violation. The “Yes, because a truly idempotent tool would…” option imagines a capability (preventing external edits) that has nothing to do with idempotency as defined here. The “No, but only because handlers were…” option is an irrelevant, unsupported qualifier."
@@ -377,11 +380,13 @@
       "misconceptions": [
         {
           "description": "As long as the repository is private, committing secrets to it is safe enough.",
-          "clarification": "A private repository is a smaller blast radius than a public one, not a safe one. It is still cloned onto every contributor's laptop, every CI runner that builds it, and potentially forked by current or former collaborators or contractors -- any of whom retains a full copy of history, including any secret ever committed, regardless of whether the repository itself later gets made public, is accidentally misconfigured, or simply has its access list change over time as people join and leave a team. None of that requires the repository to ever become public for the secret to already be exposed to everyone who had legitimate access at some point. Treating 'private' as equivalent to 'safe to store secrets in' also does nothing to address the core issue: a secret that has ever been committed should be treated as compromised and rotated, independent of the repository's visibility setting."
+          "clarification": "A private repository is a smaller blast radius than a public one, not a safe one. It is still cloned onto every contributor's laptop, every CI runner that builds it, and potentially forked by current or former collaborators or contractors -- any of whom retains a full copy of history, including any secret ever committed, regardless of whether the repository itself later gets made public, is accidentally misconfigured, or simply has its access list change over time as people join and leave a team. None of that requires the repository to ever become public for the secret to already be exposed to everyone who had legitimate access at some point. Treating 'private' as equivalent to 'safe to store secrets in' also does nothing to address the core issue: a secret that has ever been committed should be treated as compromised and rotated, independent of the repository's visibility setting.",
+          "fact": "A private repository is a smaller blast radius than a public one, not a safe one."
         },
         {
           "description": "A secrets manager's main job is encrypting secrets at rest -- once they're encrypted, the problem is basically solved.",
-          "clarification": "Encryption at rest is necessary but genuinely table-stakes -- Ansible Vault and similar repository-level tools already provide it, without needing a dedicated secrets manager at all. The actual value a dedicated secrets manager adds on top is fine-grained access control (which specific identity can read which specific secret, not an all-or-nothing shared key), audit logging (a record of exactly who or what retrieved a secret and when), and dynamic or short-lived credentials that limit how long a leaked value stays useful. A vault that holds encrypted secrets but grants broad, unscoped access to anyone with the master key, keeps every credential valid indefinitely, and logs nothing about who read what barely improves on a single shared encrypted file checked into git -- the meaningful upgrade is in the access model and lifecycle around the secret, not merely in the fact that it's encrypted while stored."
+          "clarification": "Encryption at rest is necessary but genuinely table-stakes -- Ansible Vault and similar repository-level tools already provide it, without needing a dedicated secrets manager at all. The actual value a dedicated secrets manager adds on top is fine-grained access control (which specific identity can read which specific secret, not an all-or-nothing shared key), audit logging (a record of exactly who or what retrieved a secret and when), and dynamic or short-lived credentials that limit how long a leaked value stays useful. A vault that holds encrypted secrets but grants broad, unscoped access to anyone with the master key, keeps every credential valid indefinitely, and logs nothing about who read what barely improves on a single shared encrypted file checked into git -- the meaningful upgrade is in the access model and lifecycle around the secret, not merely in the fact that it's encrypted while stored.",
+          "fact": "Encryption at rest is necessary but genuinely table-stakes -- Ansible Vault and similar repository-level tools already provide it, without needing a dedicated secrets manager at all."
         }
       ],
       "exercises": [
@@ -418,7 +423,7 @@
           "type": "multipleChoice",
           "prompt": "A developer commits a plaintext API key to a git repository, then immediately commits a second change that removes it. What is the correct assessment of the situation?",
           "options": [
-            "The problem only matters if the repository is public; a private repository fully protects the key even after this sequence of commits.",
+            "The problem only matters if the repository is public; a private repository fully protects the key even after this sequence of commits, because only anonymous visitors are able to read earlier commits in its history.",
             "Git automatically purges old blob data once a file is modified, so the key is no longer retrievable after the second commit.",
             "The problem is fully resolved, since the current version of the file no longer contains the key.",
             "The key must be treated as compromised and rotated, because it still exists in the repository's git history and was already exposed to anyone with clone access, regardless of the follow-up commit."

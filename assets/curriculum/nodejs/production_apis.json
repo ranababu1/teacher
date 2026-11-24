@@ -101,7 +101,7 @@
             "It isn't actually necessary -- Node automatically throws a clear error the moment any code reads an undefined property from process.env.",
             "Environment variables can only be read once per process lifetime, so checking early is the only way to read them at all.",
             "It's purely a stylistic preference with no practical difference in behavior -- both approaches produce the same error at the same point in execution.",
-            "Validating at startup converts a potentially delayed, confusing failure (deep inside unrelated code, possibly after the server has already started accepting traffic) into an immediate, specific, actionable one that clearly names the missing variable before any real damage or confusion occurs."
+            "It turns a delayed, confusing failure into an immediate, specific one that names the missing variable."
           ],
           "correctOptionIndex": 3,
           "explanation": "Letting a missing environment variable go undetected until some deep piece of code actually tries to use it produces a failure whose symptom (often a cryptic error from a database driver or third-party library) is disconnected from its real cause (a missing variable), and that failure might not even surface until well after the server has started accepting real traffic. Validating explicitly at startup, and calling process.exit(1) with a clear message when something required is missing, guarantees the failure happens immediately, before the server ever starts, with a message that names the actual problem directly. The “It isn't actually necessary -- Node automatically…” option is false -- reading an undefined property from process.env just silently yields undefined, no error is thrown automatically. The “Environment variables can only be read once…” option is false -- process.env can be read as many times as needed throughout a process's lifetime. The “It's purely a stylistic preference…” option is false -- the timing and clarity of the failure differ substantially between the two approaches, which is the entire point of validating early."
@@ -112,7 +112,7 @@
           "prompt": "A .env file contains the line MAX_CONNECTIONS=10. After require('dotenv').config() runs, what is the actual type and value of process.env.MAX_CONNECTIONS?",
           "options": [
             "undefined, because dotenv only loads values that are already explicitly typed as strings in the .env file.",
-            "The string \"10\" -- every value in process.env is a string, unconditionally, regardless of what it looks like; using it directly in arithmetic without an explicit Number()/parseInt() conversion produces string concatenation rather than numeric addition.",
+            "The string \"10\" -- every value in process.env is a string, unconditionally.",
             "The boolean true, since any non-zero numeric-looking environment variable is automatically coerced to true.",
             "The number 10, since dotenv automatically parses numeric-looking values into actual JavaScript numbers."
           ],
@@ -126,7 +126,7 @@
           "options": [
             "The app throws a SyntaxError at startup, since dotenv's config() call is required to be the literal first line of the entire project's entry file.",
             "None -- dotenv retroactively back-fills process.env for any code that already ran, regardless of require order.",
-            "That other module likely captures undefined for DATABASE_URL, since it read process.env before dotenv had a chance to populate it from the .env file -- require('dotenv').config() must run before any code that reads the values it's responsible for populating.",
+            "That module likely captures undefined, since it read process.env before dotenv populated it from the .env file.",
             "Node automatically defers all process.env reads until after the entire module graph has finished loading, so require order never matters."
           ],
           "correctOptionIndex": 2,
@@ -361,7 +361,8 @@
       "misconceptions": [
         {
           "description": "CORS is a security feature that protects your server from unauthorized requests, similar to authentication -- if your CORS config is strict, attackers can't reach your API.",
-          "clarification": "CORS is enforced entirely by the requesting BROWSER, on behalf of JavaScript running on a web page -- it restricts whether a browser page's own script can READ a cross-origin response, not whether a request can be sent or reach your server at all. A server-to-server request (curl, another backend service, a script, a modified browser extension bypassing normal fetch/XHR restrictions) is not a browser enforcing same-origin policy at all, so CORS headers have zero effect on it -- the request goes through and your server still processes it and returns a real response, CORS or not. CORS is not a substitute for authentication or authorization; it specifically protects against one particular scenario -- an unrelated web page's script silently reading your API's response inside a user's browser -- and nothing broader than that."
+          "clarification": "CORS is enforced entirely by the requesting BROWSER, on behalf of JavaScript running on a web page -- it restricts whether a browser page's own script can READ a cross-origin response, not whether a request can be sent or reach your server at all. A server-to-server request (curl, another backend service, a script, a modified browser extension bypassing normal fetch/XHR restrictions) is not a browser enforcing same-origin policy at all, so CORS headers have zero effect on it -- the request goes through and your server still processes it and returns a real response, CORS or not. CORS is not a substitute for authentication or authorization; it specifically protects against one particular scenario -- an unrelated web page's script silently reading your API's response inside a user's browser -- and nothing broader than that.",
+          "fact": "CORS is enforced entirely by the requesting BROWSER, on behalf of JavaScript running on a web page -- it restricts whether a browser page's own script can READ a cross-origin response, not whether a request can be sent or reach your server at all."
         },
         {
           "description": "Rate limiting is really only necessary for very large, high-traffic public APIs -- a smaller internal or early-stage API doesn't need it.",
@@ -402,7 +403,7 @@
           "type": "multipleChoice",
           "prompt": "A developer configures `app.use(cors())` with no options (defaulting to Access-Control-Allow-Origin: *) to quickly fix a CORS error blocking their frontend during development, intending to restrict it before shipping to production -- but it ships to production unchanged. What is the most accurate description of the resulting risk?",
           "options": [
-            "Any website's JavaScript, running in a browser where the user happens to be logged into this API (e.g. via cookies), can now make requests to this API and read the responses -- reopening exactly the kind of cross-origin data exposure the browser's same-origin policy exists to prevent, for every user, on every route this CORS config applies to.",
+            "Any website's JavaScript, running in a browser where the user happens to be logged into this API (e.g. via cookies), can now make requests to this API and read the responses.",
             "This only affects server-to-server requests, so browser-based users are unaffected.",
             "There is no real risk, since CORS only controls response headers and has no effect on what data the server actually returns.",
             "The risk is purely theoretical, because Access-Control-Allow-Credentials would need to also be set to true for any actual harm to be possible, and that requires a separate, deliberate configuration step."
@@ -430,7 +431,7 @@
           "options": [
             "Brute-force password guessing against a login form.",
             "Cross-origin data exfiltration by a malicious page's own JavaScript reading your API's responses.",
-            "Clickjacking -- tricking a user into clicking something on your real site that's invisibly framed underneath a different, malicious page's UI -- by preventing your pages from being loaded inside an <iframe> on another site at all.",
+            "Clickjacking -- it stops your pages from being loaded in an <iframe> on another site.",
             "SQL injection, by sanitizing form inputs before they ever reach the database."
           ],
           "correctOptionIndex": 2,
@@ -442,7 +443,7 @@
           "prompt": "A fixed-window rate limiter allows 100 requests per 15-minute window per client. What is the specific, known edge case this design has, as discussed in this concept?",
           "options": [
             "Fixed-window limiters cannot be scoped to specific routes individually; they only work when applied globally to an entire app.",
-            "A client could send its full 100-request quota right at the very end of one window and another full 100-request quota right at the very start of the next window, effectively achieving close to double the intended rate over a short interval straddling the boundary.",
+            "A client could send 100 requests at the end of one window and 100 more at the start of the next.",
             "The limiter actually resets its counter on every single request rather than every window, making it far stricter than intended.",
             "It's mathematically impossible to exceed 100 requests in any 15-minute period under this configuration, under any circumstances."
           ],

@@ -63,7 +63,8 @@
       "misconceptions": [
         {
           "description": "Docker containers must always be split as granularly as possible -- strictly one OS process per container, no exceptions, or you're \"doing Docker wrong.\"",
-          "clarification": "\"One process per container\" is shorthand for a more precise underlying principle: one *independent reason to restart, scale, or deploy* per container. It's a convention that follows from the operational benefits described in this concept, not a rule Docker enforces or that applies with zero exceptions. A tightly coupled helper process that only ever makes sense running alongside a specific main process -- a lightweight log-shipping sidecar with no independent lifecycle of its own, for instance -- can reasonably share a container in some setups. The test isn't literally counting OS processes; it's asking whether the pieces you're considering bundling together actually have different restart, scaling, or upgrade needs. App, database, and cache clearly do -- which is why this concept argues for splitting those three specifically, not for splitting everything down to the last individual process on principle."
+          "clarification": "\"One process per container\" is shorthand for a more precise underlying principle: one *independent reason to restart, scale, or deploy* per container. It's a convention that follows from the operational benefits described in this concept, not a rule Docker enforces or that applies with zero exceptions. A tightly coupled helper process that only ever makes sense running alongside a specific main process -- a lightweight log-shipping sidecar with no independent lifecycle of its own, for instance -- can reasonably share a container in some setups. The test isn't literally counting OS processes; it's asking whether the pieces you're considering bundling together actually have different restart, scaling, or upgrade needs. App, database, and cache clearly do -- which is why this concept argues for splitting those three specifically, not for splitting everything down to the last individual process on principle.",
+          "fact": "\"One process per container\" is shorthand for a more precise underlying principle: one *independent reason to restart, scale, or deploy* per container."
         },
         {
           "description": "Running the app, database, and cache in separate containers means they're running on separate machines, or at least more physically isolated hardware, than if they were bundled together.",
@@ -130,7 +131,7 @@
           "type": "multipleChoice",
           "prompt": "A team bundles a stateless app process and a Redis cache into a single container \"for simplicity,\" then tries to scale to three replicas to handle more traffic. What breaks?",
           "options": [
-            "Each replica ends up with its own separate, independent, empty Redis instance, so a cache hit recorded by one replica is invisible to the other two, defeating the entire purpose of caching.",
+            "Each replica ends up with its own separate, independent, empty Redis instance.",
             "The replicas fail to start because two containers cannot both bind Redis's default port on the same host.",
             "Nothing breaks -- Redis automatically forms a shared cluster across all three replicas' bundled instances.",
             "Docker refuses to scale any container that includes a database or cache process, and the scale command fails outright."
@@ -145,7 +146,7 @@
           "options": [
             "Yes -- each container automatically gets its own dedicated, virtualized CPU and memory hardware.",
             "Yes, but only if each container is also given its own explicit --network flag at run time.",
-            "No -- all the containers still share that one host's single kernel, CPU, and memory; splitting into multiple containers is about separating lifecycles (independent restart, scaling, versioning), not about separating hardware.",
+            "No -- all the containers still share that one host's single kernel, CPU, and memory.",
             "No, because Docker requires every container on a host to run inside one shared virtual machine regardless of how services are split."
           ],
           "correctOptionIndex": 2,
@@ -275,7 +276,7 @@
             "Only if both services explicitly list an identical top-level networks: entry, even though Compose already places them on a shared network by default.",
             "Only if db is restarted after app has already started.",
             "No -- without a ports: entry, db is completely unreachable from anywhere, including other services defined in the same file.",
-            "Yes -- ports: only governs reachability from OUTSIDE the Compose-managed network (the host, external clients); services already sharing that network can reach each other's container-internal ports directly by service name, with no ports: entry required."
+            "Yes -- ports: only governs reachability from OUTSIDE the Compose-managed network (the host, external clients)."
           ],
           "correctOptionIndex": 3,
           "explanation": "Every service in a Compose file shares one default network unless configured otherwise, and any service on that network can reach any other service's container-internal port directly by service name -- ports: is strictly about exposing a port to something outside that shared network, not a prerequisite for internal reachability. The “No -- without a ports: entry, db…” option is wrong and is exactly the misconception this concept warns against. The “Only if db is restarted after app…” option is wrong -- restart order has nothing to do with whether a ports: entry exists. The “Only if both services explicitly list…” option is wrong -- an explicit top-level networks: section is unnecessary here; Compose's automatic default network already provides this connectivity with zero extra configuration."
@@ -364,7 +365,8 @@
         },
         {
           "description": "Adding a healthcheck: block to a service is enough by itself to make other services wait for it to become healthy before they start.",
-          "clarification": "A healthcheck: block only affects how Docker/Compose reports and tracks that one service's own health status (visible via docker compose ps and docker inspect) -- it does not automatically change any other service's startup behavior. A dependent service's depends_on entry must explicitly opt in with condition: service_healthy for that service's startup to actually be gated on the dependency's healthcheck; leaving depends_on in its plain list form alongside an otherwise-correct healthcheck silently keeps the default service_started behavior, and the healthcheck, while genuinely running and genuinely accurate, has no effect on anyone else's startup ordering at all."
+          "clarification": "A healthcheck: block only affects how Docker/Compose reports and tracks that one service's own health status (visible via docker compose ps and docker inspect) -- it does not automatically change any other service's startup behavior. A dependent service's depends_on entry must explicitly opt in with condition: service_healthy for that service's startup to actually be gated on the dependency's healthcheck; leaving depends_on in its plain list form alongside an otherwise-correct healthcheck silently keeps the default service_started behavior, and the healthcheck, while genuinely running and genuinely accurate, has no effect on anyone else's startup ordering at all.",
+          "fact": "A healthcheck: block only affects how Docker/Compose reports and tracks that one service's own health status (visible via docker compose ps and docker inspect) -- it does not automatically change any other service's startup behavior."
         }
       ],
       "exercises": [
@@ -402,7 +404,7 @@
           "prompt": "By default (a plain list-form depends_on entry, with no condition specified), what does depends_on actually guarantee about the order two services start in?",
           "options": [
             "That the dependency's application process has fully initialized and is ready to accept requests before the dependent service starts.",
-            "That the dependency's container process has started before the dependent service's container starts -- nothing about whether the application inside is actually ready yet.",
+            "That the dependency's container process has started before the dependent service's container starts.",
             "Nothing at all -- depends_on only affects the order services are listed in docker compose ps output.",
             "That the dependency's healthcheck, if one exists, has passed at least once before the dependent service starts."
           ],
@@ -415,7 +417,7 @@
           "prompt": "Service `db` has a correctly-configured `healthcheck:` block, and `docker compose ps` correctly shows it transitioning to healthy. A dependent service `app` still crashes intermittently on startup because its `depends_on` is written in the plain list form, `depends_on: [db]`. Why doesn't db's healthcheck help here?",
           "options": [
             "Healthchecks configured in a Compose file only take effect for docker run invocations, not for docker compose up.",
-            "A plain list-form depends_on entry implicitly uses the default condition, service_started, which never consults the target's health status at all -- a healthcheck existing on a service has no effect on anyone else's startup ordering unless something explicitly opts in with condition: service_healthy.",
+            "A plain list-form depends_on entry implicitly uses the default condition, service_started.",
             "The healthcheck must actually be broken, since docker compose ps reporting \"healthy\" can't be trusted on its own.",
             "Compose only respects a service's healthcheck if no other service has any depends_on relationship pointing at it."
           ],

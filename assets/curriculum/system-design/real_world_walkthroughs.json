@@ -109,7 +109,7 @@
           "prompt": "Which caching pattern and TTL choice best fits the short_code -> long_url redirect lookup in a URL shortener, and why?",
           "options": [
             "Write-through caching with a 5-second TTL, because the data changes frequently and must always be immediately fresh.",
-            "Cache-aside with a long TTL (e.g. hours to a day), because the mapping is close to immutable once created and access is heavily read-skewed, so a high cache hit rate removes the vast majority of traffic from the database at minimal staleness risk.",
+            "Cache-aside with a long TTL, because the mapping almost never changes and access is heavily read-skewed.",
             "Write-back (write-behind) caching, because redirect lookups are the write-heavy part of this workload.",
             "No caching at all, because database reads on an indexed short_code column are already fast enough on their own."
           ],
@@ -153,7 +153,7 @@
           "type": "multipleChoice",
           "prompt": "Per the concept's discussion of click-analytics logging, what specifically goes wrong if the analytics write happens synchronously, in the same request, before the redirect response is sent?",
           "options": [
-            "A slowdown or transient failure in the analytics write directly delays or breaks the redirect response, even though the user waiting for their redirect has no stake in whether the analytics row has been recorded yet.",
+            "A slowdown or transient failure in the analytics write directly delays or breaks the redirect response.",
             "The redirect would be sent to the wrong long_url as a direct result of the analytics write occurring first.",
             "Synchronous analytics writes make the short_code lookup itself impossible to cache.",
             "Nothing goes wrong -- synchronous analytics writes are described as the recommended default for this system."
@@ -168,7 +168,7 @@
           "options": [
             "Because hashing the lookup key itself distributes load evenly across shards and matches the dominant query pattern exactly, since every redirect read is already keyed by short_code.",
             "Because short_code values are numeric, and only numeric fields can be used as shard keys.",
-            "Because hash(short_code) guarantees that no caching layer is ever needed once sharding is in place.",
+            "Because hash(short_code) guarantees that no caching layer is ever needed once sharding is in place, since every shard can keep its complete share of the mapping in memory at all times.",
             "Because hashing short_code is the only shard key that any database technology supports."
           ],
           "correctOptionIndex": 0,
@@ -315,7 +315,7 @@
             "Because the recipient's connection server needs to read the message from the store before it is allowed to accept any live connection at all.",
             "Because durable writes are always faster to execute than live-delivery attempts, so ordering them first improves latency.",
             "Because live delivery is only attempted for messages that fail to persist, as a fallback mechanism.",
-            "Because durability is the actual guarantee the system provides -- if the persist succeeds first, a subsequent live-delivery failure (e.g., the recipient's connection server being down) cannot cause the message to be lost, only delay when the recipient sees it."
+            "Because durability is the actual guarantee the system provides."
           ],
           "correctOptionIndex": 3,
           "explanation": "The concept's example states this directly: \"durability happens first and unconditionally, and live delivery is attempted only afterward, as a best-effort optimization layered on top of a guarantee that doesn't actually depend on it succeeding... If deliver_live fails... nothing is lost -- the message already exists in message_store.\" The “Because durable writes are always faster…” option invents an unsupported latency-comparison claim. The “Because the recipient's connection server needs…” option fabricates a connection-acceptance dependency not described anywhere. The “Because live delivery is only attempted…” option inverts the actual relationship -- live delivery is attempted after persistence regardless of outcome, not only when persistence fails."
@@ -328,7 +328,7 @@
             "Because per-conversation sequence numbers automatically produce a valid global ordering as a side effect, making a separate global mechanism redundant.",
             "Because global ordering across all conversations is technically impossible to implement in any database.",
             "Because chat systems are legally required to keep each conversation's data completely isolated from every other conversation.",
-            "Because users only need to see messages within one conversation in a consistent relative order; a system-wide ordering across unrelated conversations would require an expensive, tightly coordinated write path for a guarantee users would never notice or benefit from, echoing the 'match, don't maximize' principle from the consistency-tradeoffs concept."
+            "Because users only need to see messages within one conversation in a consistent relative order."
           ],
           "correctOptionIndex": 3,
           "explanation": "The concept states this directly: there's \"no need for a single global ordering across every conversation in the entire system -- that would demand exactly the kind of expensive, coordinated, strongly-consistent write path... that the consistency-tradeoffs concept warned against reaching for by default,\" since what's needed is ordering scoped to \"exactly what users would actually notice being wrong.\" The “Because global ordering across all conversations…” option overstates the claim -- the concept never says global ordering is technically impossible, only that it's unnecessary and expensive. The “Because chat systems are legally required…” option invents a legal requirement not discussed anywhere. The “Because per-conversation sequence numbers automatically produce…” option is false -- per-conversation sequence numbers say nothing about relative order across different conversations; no such global ordering falls out as a side effect."

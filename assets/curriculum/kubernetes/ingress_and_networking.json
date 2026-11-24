@@ -112,7 +112,7 @@
           "options": [
             "It doesn't actually solve the underlying problem -- Services still can't express host-based routing no matter what fronts them.",
             "It's strictly worse than giving every application its own LoadBalancer Service, since it introduces a single point of failure with no compensating benefit.",
-            "It genuinely solves the same structural problem Ingress solves (one external IP, one place for certs, HTTP-aware routing), but requires hand-writing and maintaining that proxy configuration entirely outside Kubernetes' own object model, with no standard way for other tooling to read or generate it.",
+            "It genuinely solves the same structural problem Ingress solves (one external IP, one place for certs, HTTP-aware routing).",
             "It only works for path-based routing, never host-based routing, since nginx cannot inspect a Host header without a Kubernetes Ingress object present."
           ],
           "correctOptionIndex": 2,
@@ -216,7 +216,8 @@
       "misconceptions": [
         {
           "description": "Applying an Ingress resource is sufficient, on its own, to make an application reachable via HTTP from outside the cluster -- the same way applying a LoadBalancer Service is.",
-          "clarification": "An Ingress is purely a declared set of routing rules, persisted as an object -- Kubernetes core ships no built-in controller that implements it. Without a separately-installed Ingress controller actually watching that Ingress (and, in a multi-controller cluster, without a matching IngressClass), the object does nothing at all: no proxy is configured, no load balancer exists because of it, and `kubectl get ingress` will show a permanently blank ADDRESS. A LoadBalancer Service, by contrast, is implemented directly by the cloud-controller-manager as a built-in part of the platform, which is exactly why it doesn't have this same 'nothing is watching it' failure mode."
+          "clarification": "An Ingress is purely a declared set of routing rules, persisted as an object -- Kubernetes core ships no built-in controller that implements it. Without a separately-installed Ingress controller actually watching that Ingress (and, in a multi-controller cluster, without a matching IngressClass), the object does nothing at all: no proxy is configured, no load balancer exists because of it, and `kubectl get ingress` will show a permanently blank ADDRESS. A LoadBalancer Service, by contrast, is implemented directly by the cloud-controller-manager as a built-in part of the platform, which is exactly why it doesn't have this same 'nothing is watching it' failure mode.",
+          "fact": "An Ingress is purely a declared set of routing rules, persisted as an object -- Kubernetes core ships no built-in controller that implements it."
         },
         {
           "description": "pathType: Prefix does a plain string-prefix comparison, so a rule for path /orders would also match a request to /ordersarchive.",
@@ -258,7 +259,7 @@
           "prompt": "A team applies a syntactically valid Ingress object in a brand-new cluster that has never had any Ingress-related component installed. What is the most likely observed result?",
           "options": [
             "The Ingress works immediately -- Kubernetes includes a built-in default Ingress controller that activates automatically whenever an Ingress object is created.",
-            "kubectl get ingress shows the object with a permanently blank ADDRESS, and no request from any client ever reaches any backend through it, because nothing is watching Ingress objects to implement the rules.",
+            "kubectl get ingress shows the object with a permanently blank ADDRESS, and no request from any client ever reaches any backend through it.",
             "The API server rejects the Ingress at apply time with an error, since Ingress objects require a controller to be installed first as a precondition of validation.",
             "The Ingress automatically falls back to behaving like a plain ClusterIP Service for each backend named in its rules."
           ],
@@ -283,7 +284,7 @@
           "type": "multipleChoice",
           "prompt": "A client gets a 404 directly from the Ingress controller (not from any backend application) for a request whose host/path combination no Ingress rule declares at all. What does this specifically indicate, compared to what a 502 for a different request would indicate?",
           "options": [
-            "A 404 here means the controller itself found no Ingress rule matching the request's host/path, so it never even attempted to select a backend; a 502, by contrast, indicates a rule DID match but the controller couldn't successfully reach a healthy backend behind the matched Service.",
+            "A 404 here means the controller itself found no Ingress rule matching the request's host/path.",
             "Both status codes are interchangeable in an Ingress controller and can represent any routing failure equally.",
             "A 404 here means the controller found a matching rule but the backend Service had no Ready Pods; a 502 would mean no rule matched at all.",
             "A 404 always originates from the backend application itself, having received the request but found no matching route of its own."
@@ -299,7 +300,7 @@
             "The API server rejects the Ingress object outright at apply time, since ingressClassName must reference an existing IngressClass to pass schema validation.",
             "The controller automatically renames the typo'd class to the closest matching real IngressClass name via fuzzy string matching.",
             "The controller treats any unrecognized class name as its own default and implements the rules anyway, logging only a warning.",
-            "The Ingress sits inert -- ADDRESS stays blank and no traffic is ever routed through it -- even though the controller itself is healthy and actively serving other, correctly-classed Ingress objects just fine; both the object and the running controller can look completely normal in isolation."
+            "The Ingress sits inert -- ADDRESS stays blank and no traffic is ever routed through it."
           ],
           "correctOptionIndex": 3,
           "explanation": "This is precisely the subtler failure mode this concept calls out: most controllers only watch Ingress objects naming their own class, so a class name that doesn't match anything real means nothing claims this specific Ingress, even while the very same controller is correctly serving every other Ingress in the cluster. Nothing about the Ingress object or the controller's own health looks wrong in isolation -- the mismatch is only visible by explicitly cross-checking ingressClassName against kubectl get ingressclass. The “The controller treats any unrecognized class name…” option invents fallback behavior most controllers don't implement. The “The API server rejects the Ingress object…” option is false -- the API server doesn't validate that ingressClassName references an object that actually exists at apply time. The “The controller automatically renames the typo'd class…” option invents a fuzzy-matching feature that doesn't exist."
@@ -419,7 +420,7 @@
             "Neither returns anything useful without also querying an accompanying SRV record first.",
             "A normal Service returns a list of backing Pod IPs for the client to choose from; a headless Service returns just one aggregate virtual IP.",
             "Both return the same thing -- a single virtual IP -- since all Services, headless or not, are assigned a ClusterIP by Kubernetes.",
-            "A normal Service returns its one stable ClusterIP; a headless Service, having no ClusterIP at all, returns a set of A records -- one per currently-Ready backing Pod's own IP."
+            "A normal Service returns its one stable ClusterIP; a headless Service, having no ClusterIP at all, returns a set of A records."
           ],
           "correctOptionIndex": 3,
           "explanation": "This is exactly backwards from a common intuition, which is why it's worth stating precisely: a normal Service resolves to one stable virtual IP (its ClusterIP), with the actual spreading of traffic across replicas handled later by kube-proxy, not by DNS. A headless Service (clusterIP: None) has no virtual IP for DNS to return at all, so CoreDNS instead hands back the individual IPs of every currently-Ready backing Pod directly -- making DNS itself the discovery mechanism in that specific case. The “Both return the same thing…” option is false because headless Services are explicitly defined by NOT having a ClusterIP. The “A normal Service returns a list…” option swaps the two behaviors entirely backwards. The “Neither returns anything useful without also querying…” option invents a hard dependency on SRV records that doesn't exist for basic A-record resolution of either Service type."
@@ -430,7 +431,7 @@
           "prompt": "A Deployment-managed Pod named `web-7d9f8c9b7-4x2lp` runs behind a ClusterIP Service named `web`. Does this specific Pod have its own individual DNS record that another Pod could look up directly?",
           "options": [
             "No, but only because this Pod's name contains a randomly generated hash suffix; a Deployment using a fixed, non-random Pod name would get one.",
-            "No -- an ordinary Deployment-managed Pod has no individual DNS record of its own under any Service configuration; only the Service in front of it is addressable by name. Per-Pod DNS records are specifically a feature of the StatefulSet-plus-headless-Service pairing, not a general property of Pods.",
+            "No -- an ordinary Deployment-managed Pod has no individual DNS record of its own under any Service configuration.",
             "Yes, but only because this specific Pod's name happens to be longer than the Service's own name.",
             "Yes -- every Pod behind any Service automatically receives a per-Pod DNS record of this form, the same way a StatefulSet Pod does."
           ],

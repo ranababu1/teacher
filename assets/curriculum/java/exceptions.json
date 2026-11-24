@@ -62,7 +62,8 @@
         },
         {
           "description": "Wrapping a checked exception in a try/catch with an empty or purely log-and-continue catch block is a safe, harmless way to satisfy the compiler when you don't want to deal with it right now.",
-          "clarification": "An empty or log-only catch block for a checked exception silences the compiler while throwing away the entire reason the exception existed: the program continues executing as if the operation had succeeded, even though it didn't. This is especially dangerous for checked exceptions specifically, because the compiler's insistence on handling them was a deliberate signal that this failure mode is real and worth thinking about -- swallowing it defeats that signal completely and tends to produce bugs that surface much later, far from the code that actually failed, and with no trace of the original cause left behind."
+          "clarification": "An empty or log-only catch block for a checked exception silences the compiler while throwing away the entire reason the exception existed: the program continues executing as if the operation had succeeded, even though it didn't. This is especially dangerous for checked exceptions specifically, because the compiler's insistence on handling them was a deliberate signal that this failure mode is real and worth thinking about -- swallowing it defeats that signal completely and tends to produce bugs that surface much later, far from the code that actually failed, and with no trace of the original cause left behind.",
+          "fact": "An empty or log-only catch block for a checked exception silences the compiler while throwing away the entire reason the exception existed: the program continues executing as if the operation had succeeded, even though it didn't."
         }
       ],
       "exercises": [
@@ -102,7 +103,7 @@
             "Checked exceptions are checked by the JVM at run time, while unchecked exceptions are only checked by the compiler.",
             "Any exception you create yourself with a custom class is automatically unchecked, while only exceptions from the standard library can be checked.",
             "Checked exceptions represent more severe failures than unchecked exceptions.",
-            "An exception is unchecked if it extends RuntimeException (or is an Error); every other subclass of Exception is checked, and the compiler enforces handling only for the checked ones."
+            "An exception is unchecked if it extends RuntimeException (or is an Error); every other subclass of Exception is checked."
           ],
           "correctOptionIndex": 3,
           "explanation": "The correct answer states the actual rule precisely: the checked/unchecked label is determined entirely by where a class sits in the Throwable hierarchy -- specifically whether it descends from RuntimeException (or is an Error), not by severity. The “Checked exceptions represent more severe failures than unchecked exceptions” option is the classic misconception this concept directly addresses; Error, which is unchecked, covers some of the most severe failures in the JVM. The “Any exception you create yourself…” option is wrong -- a custom exception class is checked or unchecked based purely on which class it extends (Exception vs RuntimeException), regardless of who wrote it. The “Checked exceptions are checked by the JVM…” option has the terminology backwards: it's precisely the OPPOSITE of what 'checked' means here -- checked exceptions are checked by the COMPILER (at compile time, via javac), while unchecked exceptions receive no such compile-time enforcement at all, though both kinds are of course still capable of being thrown and caught at run time."
@@ -120,7 +121,7 @@
           "options": [
             "This change is illegal, and javac refuses to compile the library itself, since a throws clause can never be modified once a method has been published.",
             "Existing already-compiled .class files calling the old version will start throwing SQLException automatically at run time, without needing to recompile at all.",
-            "Every existing caller that doesn't already catch or declare SQLException now fails to compile, because throws is part of a method's public contract, and adding a new checked exception is a breaking change for code compiled against the old signature.",
+            "Every existing caller that doesn't already catch or declare SQLException now fails to compile.",
             "None -- adding a new checked exception to a throws clause is always fully backward compatible with existing code."
           ],
           "correctOptionIndex": 2,
@@ -132,7 +133,7 @@
           "prompt": "try { loadConfig(\"app.config\"); } catch (IOException e) { } What is the most accurate critique of this code?",
           "options": [
             "It fails to compile, because a catch block handling a checked exception must contain at least one executable statement.",
-            "It compiles and technically satisfies javac's requirement, but it silently discards the entire reason the checked exception existed -- the program continues in a broken state (config never actually loaded) with no trace of why, which is exactly the anti-pattern checked exceptions are meant to prevent.",
+            "It compiles and technically satisfies javac's requirement, but it silently discards the entire reason the checked exception existed.",
             "It's a fully safe way to satisfy the compiler when a method can't recover from a checked exception -- there's no real downside, since the exception type is at least named in the catch clause.",
             "It's functionally equivalent to declaring throws IOException on the enclosing method, since both approaches satisfy the compiler in the same way."
           ],
@@ -219,7 +220,8 @@
       "misconceptions": [
         {
           "description": "Since only one catch block can ever run for a given exception, the order the catch clauses are written in doesn't really matter -- Java will find the right one regardless.",
-          "clarification": "Order matters critically, precisely because only one catch block runs: Java checks catch clauses strictly top to bottom and executes the body of the FIRST one whose type matches, then stops looking entirely. If a broader supertype is listed before a narrower subtype of it, the narrower catch block becomes permanently unreachable -- every exception it could ever match was already claimed by the broader clause above it -- and this specific situation is caught by the compiler as an error, not silently accepted. The safe rule is to always order catch clauses from most specific to least specific."
+          "clarification": "Order matters critically, precisely because only one catch block runs: Java checks catch clauses strictly top to bottom and executes the body of the FIRST one whose type matches, then stops looking entirely. If a broader supertype is listed before a narrower subtype of it, the narrower catch block becomes permanently unreachable -- every exception it could ever match was already claimed by the broader clause above it -- and this specific situation is caught by the compiler as an error, not silently accepted. The safe rule is to always order catch clauses from most specific to least specific.",
+          "fact": "Order matters critically, precisely because only one catch block runs: Java checks catch clauses strictly top to bottom and executes the body of the FIRST one whose type matches, then stops looking entirely."
           },
         {
           "description": "finally is basically just a place for cleanup code that runs after the try/catch finishes -- equivalent to writing that same code right after the whole try/catch statement.",
@@ -292,7 +294,7 @@
           "type": "multipleChoice",
           "prompt": "try { Object[] items = new String[3]; items[0] = 42; } catch (ArrayStoreException e) { System.out.println(\"store error\"); } catch (RuntimeException e) { System.out.println(\"runtime error\"); } catch (Exception e) { System.out.println(\"general error\"); } Given that ArrayStoreException extends RuntimeException, what happens when this is compiled and run?",
           "options": [
-            "It compiles fine but prints \"runtime error\" instead, because RuntimeException is always checked before any of its subtypes at run time, regardless of catch order.",
+            "It compiles fine but prints \"runtime error\" instead, because RuntimeException is always checked before any of its subtypes at run time, regardless of catch order they happen to be written in.",
             "It compiles fine and prints \"store error\", because ArrayStoreException is listed first and is the most specific type matching the exception actually thrown by storing an int into a String array.",
             "It throws an uncaught exception at run time, since none of the three catch clauses can actually match a store error.",
             "It fails to compile, because listing ArrayStoreException before RuntimeException before Exception, in that order, makes the later clauses unreachable."
@@ -305,7 +307,7 @@
           "type": "multipleChoice",
           "prompt": "A class is designed to signal that a withdrawal amount exceeds an account's balance -- a normal, anticipated business condition callers should be able to handle. Which custom exception design is most appropriate?",
           "options": [
-            "class InsufficientFundsException extends Exception { ... }, with constructors accepting a message and, separately, a message plus a Throwable cause -- since this is an anticipated, recoverable external condition, making a checked exception appropriate, with both constructors delegating to super(...) for proper messages and cause-chaining.",
+            "class InsufficientFundsException extends Exception { ... }, with constructors accepting a message and, separately, a message plus a Throwable cause.",
             "class InsufficientFundsException extends Error { ... } -- since running out of funds is a serious problem for the account holder.",
             "class InsufficientFundsException extends RuntimeException { ... } -- since callers should never be forced by the compiler to acknowledge an ordinary business condition.",
             "class InsufficientFundsException extends Throwable { ... } directly, bypassing both Exception and Error entirely for maximum design flexibility."
@@ -448,7 +450,7 @@
           "prompt": "class CleanResource implements AutoCloseable { void doWork() { System.out.println(\"working\"); } public void close() { throw new IllegalStateException(\"close failed\"); } } try (CleanResource r = new CleanResource()) { r.doWork(); } What happens?",
           "options": [
             "The exception from close() is automatically suppressed and discarded, since suppression applies to any exception thrown by an automatic close() call.",
-            "IllegalStateException(\"close failed\") propagates out of the try statement as an ordinary, unsuppressed exception -- since the body completed normally, there's no earlier exception for close()'s failure to be attached to as suppressed; it simply is the exception that propagates.",
+            "IllegalStateException(\"close failed\") propagates out of the try statement as an ordinary, unsuppressed exception.",
             "The try statement completes with no visible effect at all, since the body itself never threw anything.",
             "This throws a NullPointerException, because a resource cannot be closed unless something in the try body already failed first."
           ],

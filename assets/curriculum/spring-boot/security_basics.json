@@ -67,7 +67,8 @@
         },
         {
           "description": "Spring Security only actually takes effect once a request reaches your controller method, so an if-check inside the method body is a reliable way to fully secure an endpoint.",
-          "clarification": "Spring Security is implemented as a chain of servlet filters that runs at the servlet-container level, strictly BEFORE DispatcherServlet -- and therefore before ANY controller method -- ever gets a chance to execute. A request that fails authentication or authorization is turned away by the filter chain itself; the controller method's body never runs at all in that case, so there's nothing for an if-check inside it to even guard against for that particular failure. Relying on manual in-method checks as the primary security mechanism is strictly weaker than configuring the filter chain correctly (the subject of the next concept), because it's trivially easy to forget the check on some new endpoint, whereas a correctly configured, centralized filter-chain rule applies automatically to every request that matches it, with no per-method code required at all."
+          "clarification": "Spring Security is implemented as a chain of servlet filters that runs at the servlet-container level, strictly BEFORE DispatcherServlet -- and therefore before ANY controller method -- ever gets a chance to execute. A request that fails authentication or authorization is turned away by the filter chain itself; the controller method's body never runs at all in that case, so there's nothing for an if-check inside it to even guard against for that particular failure. Relying on manual in-method checks as the primary security mechanism is strictly weaker than configuring the filter chain correctly (the subject of the next concept), because it's trivially easy to forget the check on some new endpoint, whereas a correctly configured, centralized filter-chain rule applies automatically to every request that matches it, with no per-method code required at all.",
+          "fact": "Spring Security is implemented as a chain of servlet filters that runs at the servlet-container level, strictly BEFORE DispatcherServlet -- and therefore before ANY controller method -- ever gets a chance to execute."
         }
       ],
       "exercises": [
@@ -106,7 +107,7 @@
           "options": [
             "401 Unauthorized, because the user is still not permitted to complete the request, which is what 'unauthorized' means.",
             "200 OK with an error message in the response body, since the request itself was well-formed and reached a real endpoint.",
-            "500 Internal Server Error, because a mismatch between a user's role and the requested action indicates a server-side configuration bug.",
+            "500 Internal Server Error, because a mismatch between a user's role and the requested action indicates a server-side configuration bug, so it should be reported as a server fault to be fixed.",
             "403 Forbidden, because authentication succeeded (the identity is genuinely known and verified) but authorization failed -- the known identity simply isn't permitted to perform this action."
           ],
           "correctOptionIndex": 3,
@@ -119,7 +120,7 @@
           "options": [
             "DispatcherServlet routes it to a special @ExceptionHandler-annotated controller method reserved specifically for security failures.",
             "It never reaches DispatcherServlet at all -- an exception-translation filter converts the authentication failure into a 401 response directly within the filter chain, before Spring MVC's own routing and handler mapping ever run.",
-            "It's forwarded to DispatcherServlet anyway, and the controller method is expected to inspect the Authentication object itself and reject invalid requests from inside the method body.",
+            "It's forwarded to DispatcherServlet anyway, and the controller method is expected to inspect the Authentication object itself and reject invalid requests from inside the method body, because the filter chain only records the failure.",
             "It's queued and automatically retried by the filter chain up to a fixed number of times before finally being rejected."
           ],
           "correctOptionIndex": 1,
@@ -259,7 +260,7 @@
           "type": "multipleChoice",
           "prompt": "A SecurityFilterChain declares, in this exact order: (1) requestMatchers(\"/api/orders/**\").hasRole(\"CUSTOMER\"), (2) requestMatchers(\"/api/orders/summary\").permitAll(), (3) anyRequest().authenticated(). A request arrives for GET /api/orders/summary. Which rule actually governs this request?",
           "options": [
-            "Rule 3, because anyRequest() is a more general, catch-all rule that Spring Security always evaluates last regardless of declaration order.",
+            "Rule 3, because anyRequest() is a more general, catch-all rule that Spring Security always evaluates last regardless of declaration order in the configuration.",
             "Rule 1, because it's declared first and its pattern (/api/orders/**) matches /api/orders/summary, and Spring Security stops at the first matching rule.",
             "Rule 2, because permitAll() always takes precedence over role-based rules regardless of where it's declared.",
             "All three rules are combined, and the request is permitted only if it satisfies every one of them simultaneously."
@@ -287,7 +288,7 @@
           "options": [
             "Spring automatically rewrites the self-invocation into a proxy-routed call at compile time via annotation processing.",
             "The @PreAuthorize check on sensitiveMethod() is still enforced correctly, rejecting the non-admin caller, because Spring intercepts every method call to an annotated method regardless of where the call originates.",
-            "The @PreAuthorize check is bypassed entirely for this particular call, because method security is implemented via an AOP proxy that can only intercept calls arriving from OUTSIDE the bean -- a self-invocation like this.sensitiveMethod() never actually passes through that proxy.",
+            "The @PreAuthorize check is bypassed entirely for this particular call.",
             "The application fails to start, because Spring detects this self-invocation pattern at startup and refuses to register the bean."
           ],
           "correctOptionIndex": 2,
@@ -377,7 +378,8 @@
         },
         {
           "description": "BCrypt being slow is a performance problem worth working around, for example by lowering its work factor (cost/strength) to make login endpoints respond faster.",
-          "clarification": "BCrypt's slowness is a deliberate, load-bearing security property, not an implementation inefficiency to be optimized away. The added computation cost per hash is negligible for a single genuine login attempt (a few extra milliseconds, unnoticeable to a real user) but becomes the dominant, crippling cost for an attacker attempting billions of guesses against a breached database of hashes -- lowering the work factor to shave milliseconds off a login endpoint directly and proportionally weakens that protection against offline brute-force attacks. The accepted, recommended practice is the opposite: periodically INCREASING the work factor over time as hardware gets faster, to keep the same effective level of protection rather than let it silently erode."
+          "clarification": "BCrypt's slowness is a deliberate, load-bearing security property, not an implementation inefficiency to be optimized away. The added computation cost per hash is negligible for a single genuine login attempt (a few extra milliseconds, unnoticeable to a real user) but becomes the dominant, crippling cost for an attacker attempting billions of guesses against a breached database of hashes -- lowering the work factor to shave milliseconds off a login endpoint directly and proportionally weakens that protection against offline brute-force attacks. The accepted, recommended practice is the opposite: periodically INCREASING the work factor over time as hardware gets faster, to keep the same effective level of protection rather than let it silently erode.",
+          "fact": "BCrypt's slowness is a deliberate, load-bearing security property, not an implementation inefficiency to be optimized away."
         }
       ],
       "exercises": [
@@ -416,7 +418,7 @@
           "options": [
             "It's a bug -- a correctly implemented password encoder should produce the identical hash for the identical input every time.",
             "It indicates the PasswordEncoder bean was misconfigured with an inconsistent work factor between the two calls.",
-            "It's expected, intended behavior -- each call generates a fresh, random salt that gets embedded in the output, so identical inputs produce different-looking hashes on purpose, specifically to defeat precomputed lookup-table attacks.",
+            "It's expected, intended behavior -- each call generates a fresh, random salt that gets embedded in the output.",
             "It's expected, but only because \"hunter2\" is a well-known example password that BCrypt specifically randomizes further as an extra precaution."
           ],
           "correctOptionIndex": 2,
@@ -441,7 +443,7 @@
           "prompt": "A BCrypt hash string looks like `$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy`, and BCrypt does not store a separate salt column anywhere. Given this, what does matches(rawPassword, storedHash) actually do to verify a password?",
           "options": [
             "It sends storedHash to a remote key-management service to have it decrypted before comparing against rawPassword.",
-            "It ignores the string's internal structure entirely and simply calls encode(rawPassword) again, comparing the two resulting strings directly.",
+            "It ignores the string's internal structure entirely and simply calls encode(rawPassword) again, comparing the two resulting strings directly, which works because encoding the same password always produces the same string as before.",
             "It strips the $2a$10$ prefix and treats the remainder as the plain, unhashed original password for a direct string comparison.",
             "It parses the salt (and work factor) already embedded directly within storedHash itself, re-hashes rawPassword using that exact same extracted salt, and compares the newly computed hash against the stored one."
           ],

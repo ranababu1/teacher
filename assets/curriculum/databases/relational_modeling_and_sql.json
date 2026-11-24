@@ -67,11 +67,13 @@
       "misconceptions": [
         {
           "description": "A table doesn't strictly need a primary key as long as the application code is careful to only ever write unique values.",
-          "clarification": "A convention enforced only in application code is not a guarantee -- it's a habit that a single bug, a direct database script, a bulk import, or simply a second service writing to the same table can violate without the database objecting at all. It gets worse under concurrency: two simultaneous inserts can each check 'does this value already exist?' and both see 'no' before either one has committed, then both insert the supposedly-unique value -- a race condition a database-level UNIQUE or PRIMARY KEY constraint closes completely, because the check and the insert happen atomically inside the database itself. There's a second, structural reason a primary key matters beyond uniqueness: it's the thing other tables' foreign keys point at. Without one, there is no dependable, guaranteed-unique target for a relationship to reference at all."
+          "clarification": "A convention enforced only in application code is not a guarantee -- it's a habit that a single bug, a direct database script, a bulk import, or simply a second service writing to the same table can violate without the database objecting at all. It gets worse under concurrency: two simultaneous inserts can each check 'does this value already exist?' and both see 'no' before either one has committed, then both insert the supposedly-unique value -- a race condition a database-level UNIQUE or PRIMARY KEY constraint closes completely, because the check and the insert happen atomically inside the database itself. There's a second, structural reason a primary key matters beyond uniqueness: it's the thing other tables' foreign keys point at. Without one, there is no dependable, guaranteed-unique target for a relationship to reference at all.",
+          "fact": "A convention enforced only in application code is not a guarantee -- it's a habit that a single bug, a direct database script, a bulk import, or simply a second service writing to the same table can violate without the database objecting at all."
         },
         {
           "description": "Normalizing all the way to 3NF is always strictly better, so any duplicated-looking data in a schema is automatically a design mistake.",
-          "clarification": "Normalization specifically targets redundancy that risks going *out of sync* -- a value that's supposed to always match its single source of truth, copied in multiple places where an update to one copy can be forgotten on another. Not all repeated-looking data fits that description. A shipment record that snapshots 'the warehouse address at the time this shipment went out' is duplicating warehouse data on purpose, and it should NOT automatically update if the warehouse later moves -- that snapshot is the correct model for a historical record, not an anomaly waiting to happen. The distinguishing question is always: is this value supposed to track its source going forward, or does it intentionally represent a fact frozen at a specific point in time? Only the first case is an anomaly that normalization should fix."
+          "clarification": "Normalization specifically targets redundancy that risks going *out of sync* -- a value that's supposed to always match its single source of truth, copied in multiple places where an update to one copy can be forgotten on another. Not all repeated-looking data fits that description. A shipment record that snapshots 'the warehouse address at the time this shipment went out' is duplicating warehouse data on purpose, and it should NOT automatically update if the warehouse later moves -- that snapshot is the correct model for a historical record, not an anomaly waiting to happen. The distinguishing question is always: is this value supposed to track its source going forward, or does it intentionally represent a fact frozen at a specific point in time? Only the first case is an anomaly that normalization should fix.",
+          "fact": "Normalization specifically targets redundancy that risks going *out of sync* -- a value that's supposed to always match its single source of truth, copied in multiple places where an update to one copy can be forgotten on another."
         }
       ],
       "exercises": [
@@ -130,7 +132,7 @@
             "The DELETE succeeds, and every order referencing that customer is deleted along with it.",
             "The DELETE succeeds, and every order referencing that customer has its customer_id set to NULL automatically.",
             "The DELETE succeeds for the customer row only, leaving orders rows whose customer_id points at a row that no longer exists.",
-            "The DELETE is rejected with a foreign key violation error, forcing whoever issued it to decide explicitly what should happen to the referencing orders first."
+            "The DELETE is rejected with a foreign key violation error."
           ],
           "correctOptionIndex": 3,
           "explanation": "RESTRICT is exactly the ON DELETE policy that refuses the delete outright rather than doing anything to the referencing rows -- it forces a human or an explicit piece of code to decide first whether the orders should be reassigned, deleted, or nulled out, rather than the database silently choosing for them. The “The DELETE succeeds, and every order referencing that customer has…” option describes ON DELETE SET NULL, and the “The DELETE succeeds, and every order referencing that customer is…” option describes ON DELETE CASCADE -- both are real, valid policies in PostgreSQL, but neither is what RESTRICT does. The “The DELETE succeeds for the customer row…” option describes exactly the orphaned-reference state that a foreign key constraint exists to make structurally impossible; PostgreSQL will never leave the database in that state, which is the entire point of enforcing the constraint at delete time as well as at insert/update time."
@@ -153,7 +155,7 @@
           "type": "multipleChoice",
           "prompt": "A team runs `CREATE MATERIALIZED VIEW monthly_sales AS SELECT ...` to speed up an expensive report. Months later, someone notices the report doesn't reflect orders placed in the last week. What's the most likely explanation?",
           "options": [
-            "The materialized view stores a physical snapshot of the query's result as of whenever it was last refreshed, and nobody has run REFRESH MATERIALIZED VIEW since before last week's orders were inserted.",
+            "The materialized view stores a physical snapshot of the query's result as of whenever it was last refreshed.",
             "PostgreSQL refreshes every materialized view automatically once every 24 hours, so the server must have been down for over a week.",
             "Materialized views silently drop any rows inserted after their creation, so this is expected, permanent behavior that a refresh cannot fix.",
             "Materialized views automatically stay synchronized with their underlying tables, so this must be a bug in the original query."
@@ -385,7 +387,8 @@
       "misconceptions": [
         {
           "description": "NULL is basically the same as an empty string or zero -- it's just a way of saying a column has 'no value.'",
-          "clarification": "An empty string and zero are specific, known values -- a string of length zero, and the number zero, respectively -- and comparisons or arithmetic against them behave exactly like comparisons or arithmetic against any other known value. NULL means the value is unknown, missing, or not applicable, and that changes the semantics of everything touching it: `NULL = NULL` is UNKNOWN (not TRUE), `NULL + 1` is NULL, and aggregate functions skip NULLs rather than treating them as zero. Treating NULL as 'the empty version of a value' leads directly to bugs like assuming `WHERE age != 30` includes people with an unknown age, or assuming `AVG(price)` treats a NULL price as a zero-cost item -- neither is true."
+          "clarification": "An empty string and zero are specific, known values -- a string of length zero, and the number zero, respectively -- and comparisons or arithmetic against them behave exactly like comparisons or arithmetic against any other known value. NULL means the value is unknown, missing, or not applicable, and that changes the semantics of everything touching it: `NULL = NULL` is UNKNOWN (not TRUE), `NULL + 1` is NULL, and aggregate functions skip NULLs rather than treating them as zero. Treating NULL as 'the empty version of a value' leads directly to bugs like assuming `WHERE age != 30` includes people with an unknown age, or assuming `AVG(price)` treats a NULL price as a zero-cost item -- neither is true.",
+          "fact": "An empty string and zero are specific, known values -- a string of length zero, and the number zero, respectively -- and comparisons or arithmetic against them behave exactly like comparisons or arithmetic against any other known value."
         },
         {
           "description": "`WHERE column = NULL` is a normal comparison that matches rows where the column happens to be NULL, the same way `WHERE column = 5` matches rows where the column is 5.",
@@ -446,7 +449,7 @@
           "prompt": "A `products` table declares `price NUMERIC(10,2) NOT NULL CHECK (price >= 0)`. A buggy application later issues `UPDATE products SET price = -10 WHERE id = 5`. What happens?",
           "options": [
             "PostgreSQL silently clamps the value to 0 instead of storing the out-of-range -10.",
-            "The UPDATE is rejected with a constraint violation error, because CHECK is evaluated on every write that would leave a row violating it, including UPDATE.",
+            "The UPDATE is rejected with a constraint violation error.",
             "The UPDATE succeeds, but PostgreSQL writes a warning to the server log that must be checked manually afterward.",
             "The UPDATE succeeds silently, because CHECK constraints are only evaluated on INSERT, never on UPDATE."
           ],
@@ -474,7 +477,7 @@
             "It's safe only if the outer column, id, also carries a NOT NULL constraint.",
             "It's unsafe regardless of the NOT NULL constraint, because NOT IN is deprecated in PostgreSQL and no longer guaranteed to execute correctly.",
             "It's unsafe because NOT IN always performs a slow sequential scan, independent of any constraint on the underlying column.",
-            "It's safe specifically because the NOT NULL constraint guarantees the subquery can never return a NULL -- the NOT IN/NULL trap only arises when the subquery's result set can itself contain a NULL value."
+            "It's safe specifically because the NOT NULL constraint guarantees the subquery can never return a NULL."
           ],
           "correctOptionIndex": 3,
           "explanation": "The NOT IN/NULL trap specifically depends on the subquery's *result set* containing a NULL value -- once even one comparison in the ANDed chain evaluates to UNKNOWN, the whole chain collapses to UNKNOWN. A NOT NULL constraint on manager_id guarantees the subquery can never produce that poisoning NULL in the first place, so in this specific case NOT IN is genuinely safe and behaves exactly as intuitively expected. The “It's unsafe regardless of the NOT NULL…” option is false -- NOT IN isn't deprecated; it's simply risky in the specific case where its subquery can contain NULL. The “It's unsafe because NOT IN always performs…” option confuses a performance concern (real, but separate) with the correctness trap being asked about. The “It's safe only if the outer column…” option is irrelevant -- whether the outer id column can be NULL doesn't affect whether the subquery's result set can poison the chain; what matters is NULL-ness on the side being IN-ed against."

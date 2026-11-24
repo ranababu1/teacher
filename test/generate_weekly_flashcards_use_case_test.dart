@@ -105,7 +105,7 @@ void main() {
     expect(cards, hasLength(1));
     expect(cards.single.conceptId, 'c1');
     expect(cards.single.front, contains('Closures copy the variable value.'));
-    expect(cards.single.back, 'They capture the variable by reference.');
+    expect(cards.single.back, 'False. They capture the variable by reference.');
   });
 
   test('adds an explanation-section card when room remains', () async {

@@ -68,7 +68,8 @@
         },
         {
           "description": "The persistence context is basically just a performance cache -- turning it off, or not thinking about it, would only make things slower, not change what your code actually does.",
-          "clarification": "The persistence context does provide caching (repeated lookups by id within one transaction avoid redundant SELECTs), but its identity-map and dirty-checking behavior are functional, not just performance optimizations. The identity guarantee -- two lookups for the same id inside one context return the literal same object -- affects correctness anywhere your code compares entity references or relies on one mutation being visible through every reference to 'the same' entity. Automatic dirty checking is what makes plain field mutations persist at all without any save() call; losing that (by operating on a detached entity, for instance) doesn't just run slower, it silently stops persisting changes altogether. Treating the persistence context as 'just a cache' is exactly the assumption that leads to the detached-entity bug above."
+          "clarification": "The persistence context does provide caching (repeated lookups by id within one transaction avoid redundant SELECTs), but its identity-map and dirty-checking behavior are functional, not just performance optimizations. The identity guarantee -- two lookups for the same id inside one context return the literal same object -- affects correctness anywhere your code compares entity references or relies on one mutation being visible through every reference to 'the same' entity. Automatic dirty checking is what makes plain field mutations persist at all without any save() call; losing that (by operating on a detached entity, for instance) doesn't just run slower, it silently stops persisting changes altogether. Treating the persistence context as 'just a cache' is exactly the assumption that leads to the detached-entity bug above.",
+          "fact": "The persistence context does provide caching (repeated lookups by id within one transaction avoid redundant SELECTs), but its identity-map and dirty-checking behavior are functional, not just performance optimizations."
         }
       ],
       "exercises": [
@@ -119,7 +120,7 @@
           "prompt": "A team is inserting 10,000 Order rows in a batch job and wants Hibernate to batch the inserts for throughput. The entity currently uses `@GeneratedValue(strategy = GenerationType.IDENTITY)`. What is the most accurate assessment of this setup?",
           "options": [
             "Insert batching is controlled entirely by JDBC driver configuration and has nothing to do with which @GeneratedValue strategy is chosen.",
-            "IDENTITY prevents Hibernate from batching these inserts at all, because the generated id is only known after each row is physically inserted; switching to GenerationType.SEQUENCE (on a database that supports sequences) would let Hibernate pre-allocate id values and batch the inserts instead.",
+            "IDENTITY prevents Hibernate from batching these inserts at all.",
             "GenerationType.AUTO always produces the best insert throughput, regardless of which database is being used.",
             "IDENTITY is the ideal choice for batched inserts, since it delegates id generation entirely to the database's own auto-increment column."
           ],
@@ -224,7 +225,8 @@
         },
         {
           "description": "JPQL is basically just SQL with a slightly different name -- you can freely reference actual table and column names in a @Query string when a derived method name isn't expressive enough.",
-          "clarification": "JPQL queries the entity model, not the database schema: `from Order o` refers to the Order entity by its class (or @Entity name), and property paths like `o.customer.email` navigate mapped Java fields and associations, not literal table and column names. Referring to a real table or column name inside a JPQL string generally just fails to resolve, because JPQL's parser is looking for entity and property names, not schema identifiers. Only a query explicitly marked nativeQuery = true is interpreted as literal SQL against the actual schema -- mixing the two mental models (schema-oriented thinking inside a plain @Query without nativeQuery = true) is a common, confusing mistake for anyone coming from writing raw SQL."
+          "clarification": "JPQL queries the entity model, not the database schema: `from Order o` refers to the Order entity by its class (or @Entity name), and property paths like `o.customer.email` navigate mapped Java fields and associations, not literal table and column names. Referring to a real table or column name inside a JPQL string generally just fails to resolve, because JPQL's parser is looking for entity and property names, not schema identifiers. Only a query explicitly marked nativeQuery = true is interpreted as literal SQL against the actual schema -- mixing the two mental models (schema-oriented thinking inside a plain @Query without nativeQuery = true) is a common, confusing mistake for anyone coming from writing raw SQL.",
+          "fact": "JPQL queries the entity model, not the database schema: `from Order o` refers to the Order entity by its class (or @Entity name), and property paths like `o.customer.email` navigate mapped Java fields and associations, not literal table and column names."
         }
       ],
       "exercises": [
@@ -276,7 +278,7 @@
           "options": [
             "It works identically to writing entity-and-property names, because JPQL is fundamentally just SQL under a different name.",
             "Hibernate automatically detects the table/column names and translates them back into the corresponding entity and property names before running the query.",
-            "It fails to resolve, because JPQL queries the entity model -- entity names and mapped property names -- not the database schema; 'orders' and 'customer_email' aren't recognized unless they happen to also be the exact entity name and property name.",
+            "It fails to resolve, because JPQL queries the entity model -- entity names and mapped property names -- not the database schema.",
             "The query parses and executes without error, but silently returns zero rows every time."
           ],
           "correctOptionIndex": 2,
@@ -290,7 +292,7 @@
             "Native queries cannot accept bound parameters at all, so :minTotal-style parameters have to be avoided entirely.",
             "Native queries always execute measurably slower than an equivalent JPQL query against the same schema.",
             "Native queries are incompatible with @Param-annotated method parameters and require positional parameters only.",
-            "LIMIT is not standard SQL interpreted identically by every database -- it's PostgreSQL/MySQL-style syntax -- so this query is tied to a specific database vendor's dialect, unlike JPQL, which Hibernate translates into the appropriate dialect automatically."
+            "LIMIT is not standard SQL interpreted identically by every database -- it's PostgreSQL/MySQL-style syntax."
           ],
           "correctOptionIndex": 3,
           "explanation": "Dropping to native SQL means the query now refers to literal table and column names and, often, vendor-specific syntax -- LIMIT being a concrete example, since it's PostgreSQL/MySQL syntax rather than something every SQL database supports identically. JPQL avoids this specific risk because Hibernate translates the same entity-oriented query into whatever dialect the configured database actually needs. The “Native queries cannot accept bound parameters…” and “Native queries are incompatible with @Param-annotated method…” options are factually wrong -- native queries fully support both @Param-based and positional parameter binding. The “Native queries always execute measurably slower…” option overgeneralizes; native queries aren't inherently slower, they're just less portable and lose some of JPA's automatic entity-graph handling."
@@ -434,7 +436,7 @@
           "type": "multipleChoice",
           "prompt": "Order.items is mapped `@OneToMany(mappedBy = \"order\")` and OrderItem.order is mapped `@ManyToOne @JoinColumn(name = \"order_id\")`. A developer adds a new item by calling only `order.getItems().add(newItem)`, without ever calling `newItem.setOrder(order)`. What happens when the transaction commits?",
           "options": [
-            "The order_id foreign key on newItem's row is never set correctly, because Order.items is the inverse side of the relationship -- only a change to the owning side, OrderItem.order, is what Hibernate actually persists.",
+            "The order_id foreign key on newItem's row is never set correctly.",
             "Hibernate automatically sets newItem's order field too, because it detects the addition on the mappedBy side's collection.",
             "Hibernate creates a separate join table to track the relationship instead of relying on order_id at all.",
             "An exception is thrown immediately, since a bidirectional relationship requires both sides to be updated in the same statement."
@@ -450,7 +452,7 @@
             "Only the first of the 4 items ends up loaded into the order's items collection; the remaining 3 are silently dropped.",
             "JPA always de-duplicates entities automatically, so distinct has no effect on this query's result either way.",
             "The query fails to execute, because join fetch syntactically requires distinct to be present.",
-            "That same Order entity may appear multiple times in the returned list -- once per matched item row -- because the underlying SQL join naturally produces one result row per matched child before any de-duplication happens."
+            "That same Order entity may appear multiple times in the returned list."
           ],
           "correctOptionIndex": 3,
           "explanation": "A join against a one-to-many association produces one row per matched child in the raw SQL result -- an order with 4 items naturally appears 4 times before de-duplication. `distinct` at the JPQL level is what tells Hibernate to filter that duplication out; omitting it lets the duplicate Order references leak into the returned list. The “The query fails to execute, because join…” option is false -- the query is syntactically valid without distinct, it just behaves differently. The “Only the first of the 4 items…” option invents data loss that doesn't happen -- all 4 items are still loaded, just with the parent Order repeated. The “JPA always de-duplicates entities automatically, so distinct…” option directly contradicts the point of adding distinct, which the module states explicitly matters for exactly this reason."
@@ -462,7 +464,7 @@
           "options": [
             "Only one of the two collections actually ends up populated; the other silently remains an unfetched lazy proxy regardless of the join fetch clause.",
             "This pattern is always safe and recommended, provided distinct is included in the query.",
-            "The two one-to-many joins multiply against each other in the underlying SQL, producing a Cartesian product -- a much larger, slower result set than intended, rather than the clean fix that fetching a single collection provides.",
+            "The two one-to-many joins multiply against each other in the underlying SQL, producing a Cartesian product.",
             "JPQL forbids more than one join fetch clause per query, so this fails to parse entirely."
           ],
           "correctOptionIndex": 2,

@@ -68,7 +68,8 @@
       "misconceptions": [
         {
           "description": "@RestController writes a method's return value to the response exactly as-is, similar to a raw servlet writing text directly -- there's no real conversion step happening.",
-          "clarification": "Every return value from a @RestController method passes through Spring MVC's HttpMessageConverter chain before it becomes bytes on the wire. For a domain object, that typically means MappingJackson2HttpMessageConverter serializing it to JSON; for a bare String, a different converter (StringHttpMessageConverter) writes it as literal text. Which converter gets used depends on the request's Accept header and the mapping's declared produces value, matched against which converters are actually registered (Jackson's, specifically, only exists because it was autoconfigured onto the classpath -- see the Core Concepts module). It is real, inspectable conversion work, not a bypass of any processing."
+          "clarification": "Every return value from a @RestController method passes through Spring MVC's HttpMessageConverter chain before it becomes bytes on the wire. For a domain object, that typically means MappingJackson2HttpMessageConverter serializing it to JSON; for a bare String, a different converter (StringHttpMessageConverter) writes it as literal text. Which converter gets used depends on the request's Accept header and the mapping's declared produces value, matched against which converters are actually registered (Jackson's, specifically, only exists because it was autoconfigured onto the classpath -- see the Core Concepts module). It is real, inspectable conversion work, not a bypass of any processing.",
+          "fact": "Every return value from a @RestController method passes through Spring MVC's HttpMessageConverter chain before it becomes bytes on the wire."
         },
         {
           "description": "Two handler methods with different parameter types or different parameter names can share the exact same path and HTTP method without conflicting, because Spring can tell them apart by their Java signatures.",
@@ -112,7 +113,7 @@
             "Spring disambiguates the two methods based on their different parameter types, similar to Java method overload resolution.",
             "The first-defined method silently wins and the second is ignored at runtime.",
             "Both methods run in sequence for every matching request, and their return values are merged.",
-            "The application fails to start with an ambiguous mapping error, because request mapping matches only on path pattern and HTTP method, not on Java method signatures."
+            "The application fails to start with an ambiguous mapping error."
           ],
           "correctOptionIndex": 3,
           "explanation": "Spring's request mapping matches based on path pattern shape, HTTP method, and any explicitly declared conditions like headers/params/consumes/produces -- it has no concept of Java method overload resolution and does not consider parameter types or names when deciding whether two mappings conflict. Because both mappings here are identical in every dimension Spring actually checks, this is detected as a genuine conflict while the handler index is built at startup, and the application fails to start with an Ambiguous mapping error. The “Spring disambiguates the two methods based…”, “The first-defined method silently wins…”, and “Both methods run in sequence for every…” options each describe behavior Spring MVC does not implement -- there's no overload-style disambiguation, no silent 'first one wins,' and no fan-out to multiple handlers for one request."
@@ -122,7 +123,7 @@
           "type": "multipleChoice",
           "prompt": "A handler is declared `@GetMapping(\"/orders\") public List<Order> listOrders(@RequestParam String status)`, with no `required` attribute set and no `defaultValue` given. A client sends `GET /orders` with no query string at all. What happens?",
           "options": [
-            "The request is rejected with a 400 Bad Request, because @RequestParam defaults to required = true and no defaultValue was supplied to cover the omitted case.",
+            "The request is rejected with a 400 Bad Request.",
             "status is bound to an empty string \"\", and listOrders executes normally.",
             "status is bound to null, and listOrders executes normally.",
             "Spring treats the missing parameter as a routing mismatch and returns 404 Not Found instead of invoking listOrders."
@@ -138,7 +139,7 @@
             "404 Not Found, because no registered handler's path pattern matches the request at all.",
             "405 Method Not Allowed, because a mapping's path matches, but no handler registered for that path accepts the GET method.",
             "400 Bad Request, because the request itself is considered malformed.",
-            "500 Internal Server Error, because DispatcherServlet cannot resolve any handler for the request."
+            "500 Internal Server Error, because DispatcherServlet cannot resolve any handler for the request, and reports that as a server error."
           ],
           "correctOptionIndex": 1,
           "explanation": "The module draws this distinction explicitly: a request path that matches no registered pattern at all gets a plain 404, but a path that DOES match -- just not for the HTTP method actually used -- gets the more specific 405 Method Not Allowed, since the resource clearly exists, just not for that verb. Here, /orders matches the registered @PostMapping's path exactly, so it's the method mismatch (GET vs the registered POST) that triggers 405, not a routing miss. The “404 Not Found, because no registered handler's…” option is wrong because the path genuinely does match something. The “400 Bad Request, because the request itself…” and “500 Internal Server Error, because DispatcherServlet cannot…” options describe failures unrelated to this specific mismatch between a matched path and an unsupported method."
@@ -150,7 +151,7 @@
           "options": [
             "@RestController is a completely separate mechanism unrelated to @Controller, built specifically for microservice architectures.",
             "@RestController disables Spring's HandlerMapping-based routing entirely, requiring requests to be dispatched manually.",
-            "@RestController is a meta-annotation combining @Controller with @ResponseBody, so every handler method's return value is written directly to the HTTP response body through the HttpMessageConverter chain, instead of being resolved as a logical view name.",
+            "@RestController is a meta-annotation combining @Controller with @ResponseBody.",
             "@RestController is only necessary when a controller class declares more than one handler method."
           ],
           "correctOptionIndex": 2,
@@ -271,7 +272,7 @@
           "options": [
             "The server returns a 500 Internal Server Error because this is an unhandled server-side bug.",
             "quantity is set to 0 (int's default value), and the controller method runs normally.",
-            "The request fails with a 400 Bad Request via HttpMessageNotReadableException, and the controller method body never executes.",
+            "The request fails with a 400 Bad Request via HttpMessageNotReadableException.",
             "A NumberFormatException is thrown inside the controller method when quantity is first used."
           ],
           "correctOptionIndex": 2,
@@ -298,7 +299,7 @@
             "Spring attempts to parse the XML body as if it were JSON, and the request likely fails with a deserialization error inside the handler.",
             "Spring automatically transcodes the XML body into an equivalent JSON structure before continuing to the handler.",
             "The request proceeds normally, since `consumes` only restricts what a mapping can produce as a response, not what it can accept as a request body.",
-            "The request is rejected with 415 Unsupported Media Type before any deserialization is attempted, because the request's declared Content-Type doesn't match the mapping's declared consumes value."
+            "The request is rejected with 415 Unsupported Media Type before any deserialization is attempted."
           ],
           "correctOptionIndex": 3,
           "explanation": "The `consumes` attribute on a mapping restricts which request Content-Types that handler will accept at all -- a mismatch is detected before Spring even attempts to select an HttpMessageConverter to read the body, and the client gets 415 Unsupported Media Type. The “Spring attempts to parse the XML body…” option is wrong because Spring never blindly attempts cross-format parsing; the content-type check happens first and short-circuits that entirely. The “Spring automatically transcodes the XML body into…” option describes automatic transcoding that Spring MVC does not perform. The “The request proceeds normally, since `consumes` only…” option inverts the actual roles of `consumes` (governs acceptable request bodies) and `produces` (governs response representation)."
@@ -388,7 +389,8 @@
       "misconceptions": [
         {
           "description": "An @ExceptionHandler method only catches exceptions thrown inside the exact same method it's declared alongside, similar to a try/catch wrapped tightly around one specific call.",
-          "clarification": "An @ExceptionHandler method declared inside a controller class applies to every handler method within that ENTIRE controller class, not just one. Declared inside a @ControllerAdvice (or @RestControllerAdvice) class instead, it applies GLOBALLY, to any matching exception thrown anywhere during request handling across the whole application -- including exceptions Spring itself throws internally, like MethodArgumentNotValidException during argument resolution, not only exceptions your own business logic explicitly throws. The scope is the whole class (controller-level) or the whole application (@ControllerAdvice-level), never a single method call."
+          "clarification": "An @ExceptionHandler method declared inside a controller class applies to every handler method within that ENTIRE controller class, not just one. Declared inside a @ControllerAdvice (or @RestControllerAdvice) class instead, it applies GLOBALLY, to any matching exception thrown anywhere during request handling across the whole application -- including exceptions Spring itself throws internally, like MethodArgumentNotValidException during argument resolution, not only exceptions your own business logic explicitly throws. The scope is the whole class (controller-level) or the whole application (@ControllerAdvice-level), never a single method call.",
+          "fact": "An @ExceptionHandler method declared inside a controller class applies to every handler method within that ENTIRE controller class, not just one."
         },
         {
           "description": "As long as there's a generic @ExceptionHandler(Exception.class) registered somewhere, it doesn't matter whether you also add a more specific handler for MethodArgumentNotValidException -- the generic one will catch it too, so the specific one is redundant.",

@@ -230,4 +230,27 @@ void main() {
     }
     expect(concepts, greaterThan(100));
   });
+
+  test('a misconception with a fact becomes a True statement', () {
+    final checks = LessonStepBuilder.quickChecksFor(
+      lessonConcept(
+        misconceptions: const [
+          Misconception(
+            description: 'Assignment copies the value.',
+            clarification: 'Assignment binds a name.',
+            fact: 'Assignment binds a name to an object.',
+          ),
+          Misconception(description: 'Myth.', clarification: 'No.'),
+        ],
+      ),
+    );
+    expect(
+      checks[0].prompt,
+      'True or false? Assignment binds a name to an object.',
+    );
+    expect(checks[0].correctIndex, 0);
+    expect(checks[0].feedback, 'Assignment binds a name.');
+    expect(checks[1].prompt, 'True or false? Myth.');
+    expect(checks[1].correctIndex, 1);
+  });
 }

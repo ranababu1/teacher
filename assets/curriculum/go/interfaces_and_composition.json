@@ -68,7 +68,8 @@
       "misconceptions": [
         {
           "description": "If a struct pointer variable is nil, then assigning it into an interface-typed variable (like error) also gives you a nil interface -- so comparing that interface to nil reliably tells you whether there's really a value there.",
-          "clarification": "An interface value is a (concrete type, concrete value) pair, not just a bare pointer. Assigning a nil pointer of some concrete type into an interface-typed variable populates the type half of that pair, even though the value half remains nil -- and comparing to nil checks both halves together. The result is an interface value that is NOT == nil, even though the pointer stored inside it is nil in every other respect. Reliably testing 'was there really a value here' after this has happened requires either avoiding the situation entirely (returning a bare, untyped nil instead of a possibly-nil concrete pointer) or using reflection to inspect the value half specifically -- == nil alone is not sufficient once a typed nil has entered the picture."
+          "clarification": "An interface value is a (concrete type, concrete value) pair, not just a bare pointer. Assigning a nil pointer of some concrete type into an interface-typed variable populates the type half of that pair, even though the value half remains nil -- and comparing to nil checks both halves together. The result is an interface value that is NOT == nil, even though the pointer stored inside it is nil in every other respect. Reliably testing 'was there really a value here' after this has happened requires either avoiding the situation entirely (returning a bare, untyped nil instead of a possibly-nil concrete pointer) or using reflection to inspect the value half specifically -- == nil alone is not sufficient once a typed nil has entered the picture.",
+          "fact": "An interface value is a (concrete type, concrete value) pair, not just a bare pointer."
         },
         {
           "description": "You must define an interface in the same package as the type(s) that will implement it, similar to how some languages require an implements clause to appear at the class's own definition site.",
@@ -122,7 +123,7 @@
           "type": "multipleChoice",
           "prompt": "A third-party package `weather`, written years ago, defines `type Forecaster struct{...}` with a method `Predict(city string) string`. In your own, much newer package, you write:\n\n```go\ntype Predictor interface {\n\tPredict(city string) string\n}\n```\n\nDoes weather.Forecaster satisfy your Predictor interface?",
           "options": [
-            "Yes, but only once you explicitly import the package where Predictor happens to be declared into the weather package's own source.",
+            "Yes, but only once you explicitly import the package where Predictor happens to be declared into the weather package's own source, because Go records which interfaces a type implements at the point where that type is compiled.",
             "No, it only satisfies Predictor if you first embed weather.Forecaster inside a new type declared in your own package.",
             "Yes, automatically -- its method set already matches Predictor's, and Go's structural typing requires no declared relationship at all; the weather package's author never needs to know your interface exists.",
             "No, not unless the weather package is modified to add an explicit declaration stating that Forecaster implements Predictor."
@@ -228,11 +229,13 @@
       "misconceptions": [
         {
           "description": "Embedding a type in Go is fundamentally the same mechanism as inheritance in a language like Java or C++ -- the outer struct 'is a' the embedded type, complete with polymorphic method overriding.",
-          "clarification": "Embedding only promotes fields and methods syntactically, resolved at compile time based on the outer struct's own static type -- there is no dynamic dispatch involved at all. A value or variable typed as the embedded type will always invoke that embedded type's own methods directly, with zero awareness that it might be embedded inside some other struct that defines an 'override' -- something a genuine base-class reference in classical inheritance would NOT do, since virtual dispatch there is specifically designed to reach a derived class's override even through a base-typed reference. Embedding is composition with convenient automatic promotion layered on top, not an is-a relationship in the inheritance sense."
+          "clarification": "Embedding only promotes fields and methods syntactically, resolved at compile time based on the outer struct's own static type -- there is no dynamic dispatch involved at all. A value or variable typed as the embedded type will always invoke that embedded type's own methods directly, with zero awareness that it might be embedded inside some other struct that defines an 'override' -- something a genuine base-class reference in classical inheritance would NOT do, since virtual dispatch there is specifically designed to reach a derived class's override even through a base-typed reference. Embedding is composition with convenient automatic promotion layered on top, not an is-a relationship in the inheritance sense.",
+          "fact": "Embedding only promotes fields and methods syntactically, resolved at compile time based on the outer struct's own static type -- there is no dynamic dispatch involved at all."
         },
         {
           "description": "If a struct embeds an interface type, it automatically gets a real, fully working implementation of every method that interface declares, since embedding the interface is what makes the struct satisfy it.",
-          "clarification": "Embedding an interface only satisfies that interface for compile-time type-checking purposes -- it makes the outer struct's type satisfy the interface's method set. It does nothing to guarantee there's an actual concrete value behind the embedded field at runtime. If that field is left at its zero value (nil, since that's every interface variable's zero value) and some code calls a promoted method the outer struct never separately implemented itself, the call forwards into a nil interface value and panics with a nil pointer dereference -- there being no real implementation for it to reach."
+          "clarification": "Embedding an interface only satisfies that interface for compile-time type-checking purposes -- it makes the outer struct's type satisfy the interface's method set. It does nothing to guarantee there's an actual concrete value behind the embedded field at runtime. If that field is left at its zero value (nil, since that's every interface variable's zero value) and some code calls a promoted method the outer struct never separately implemented itself, the call forwards into a nil interface value and panics with a nil pointer dereference -- there being no real implementation for it to reach.",
+          "fact": "Embedding an interface only satisfies that interface for compile-time type-checking purposes -- it makes the outer struct's type satisfy the interface's method set."
         }
       ],
       "exercises": [
@@ -272,7 +275,7 @@
             "It depends on whether Impl's Run() has a pointer or value receiver.",
             "The program fails to compile, because Base and Impl cannot both define a method with the same name.",
             "Impl's own Run(), because a value typed as Impl has no connection to Base at all -- shadowing only affects unqualified access on values typed as the outer struct itself.",
-            "Base's Run(), because embedding gives Impl-typed values a way to reach whichever struct embeds them."
+            "Base's Run(), because embedding gives Impl-typed values a way to reach whichever struct embeds them, and the promoted method table is shared by every value that was ever copied out."
           ],
           "correctOptionIndex": 2,
           "explanation": "Embedding promotes and allows shadowing only at the outer type's (Base's) own call sites -- it creates no mechanism for a value typed as the embedded type (Impl) to ever reach 'upward' toward whatever struct might embed it. A variable declared as plain Impl, regardless of where its value originally came from, always calls Impl's own methods directly, exactly as if embedding didn't exist at all. The “Base's Run(), because embedding gives Impl-typed values…” option describes behavior that would require dynamic/virtual dispatch, which Go's embedding does not provide. The “It depends on whether Impl's Run() has…” option is a red herring -- receiver kind doesn't change which type's method set is being resolved against. The “The program fails to compile, because Base…” option is wrong -- Go allows an outer struct and an embedded type to both define methods with the same name; that's exactly what shadowing handles, not a compile error."
@@ -309,7 +312,7 @@
           "prompt": "`type Wrapper struct { io.Writer }` is constructed as `w := Wrapper{}`, with no Writer ever assigned, and code then calls `w.Write([]byte(\"hi\"))`. What happens?",
           "options": [
             "It compiles and silently does nothing, since an unset embedded interface field defaults to a harmless no-op implementation.",
-            "It panics at runtime with a nil pointer dereference: the embedded io.Writer field is nil (an interface variable's zero value), and Write() forwards the call into that nil interface, which has no concrete implementation behind it to actually handle the call.",
+            "It panics at runtime with a nil pointer dereference: the embedded io.Writer field is nil (an interface variable's zero value).",
             "It automatically falls back to writing to os.Stdout, since that is io.Writer's documented default target whenever a Writer field is left unset.",
             "It fails to compile, since Go requires every embedded interface field to be explicitly initialized within the struct literal that constructs it."
           ],
@@ -388,7 +391,8 @@
       "misconceptions": [
         {
           "description": "Composition over inheritance means idiomatic Go code avoids struct embedding altogether, since embedding is basically just inheritance under a different name.",
-          "clarification": "Embedding is precisely the composition tool Go relies on for code reuse -- 'composition over inheritance' does not mean avoiding it. It means using embedding (for reuse) together with small interfaces (for polymorphism) as two separate, independently reachable-for tools, instead of relying on a single inheritance hierarchy that tries to provide both at once and couples subclasses tightly to their ancestors' internals in the process. Avoiding embedding entirely would throw away a genuinely useful, idiomatic tool for exactly the problem it's well suited to -- reuse without automatic promotion becomes far more verbose, requiring hand-written forwarding methods for anything you actually want to expose."
+          "clarification": "Embedding is precisely the composition tool Go relies on for code reuse -- 'composition over inheritance' does not mean avoiding it. It means using embedding (for reuse) together with small interfaces (for polymorphism) as two separate, independently reachable-for tools, instead of relying on a single inheritance hierarchy that tries to provide both at once and couples subclasses tightly to their ancestors' internals in the process. Avoiding embedding entirely would throw away a genuinely useful, idiomatic tool for exactly the problem it's well suited to -- reuse without automatic promotion becomes far more verbose, requiring hand-written forwarding methods for anything you actually want to expose.",
+          "fact": "Embedding is precisely the composition tool Go relies on for code reuse -- 'composition over inheritance' does not mean avoiding it."
         },
         {
           "description": "Since Go has no inheritance, it's fundamentally impossible to reuse code across multiple related types without duplicating that code in each one.",
@@ -431,7 +435,7 @@
           "options": [
             "Struct embedding alone provides both reuse and polymorphism -- interfaces are unrelated to this design philosophy.",
             "Go has no equivalent to either reuse or polymorphism, and expects each to be reimplemented manually for every type.",
-            "Go achieves both through goroutines and channels, since those are its primary mechanism for structuring program behavior.",
+            "Go achieves both through goroutines and channels, since those are its primary mechanism for structuring program behavior, with a goroutine standing in for each subclass and a channel standing in for each method that would be overridden.",
             "Struct embedding provides code reuse (promoting fields/methods), and interfaces provide polymorphism (letting different concrete types be used interchangeably) -- two separate tools instead of one combined mechanism."
           ],
           "correctOptionIndex": 3,
@@ -455,7 +459,7 @@
           "type": "multipleChoice",
           "prompt": "Why does this concept recommend adding sync.Mutex to a struct as a plain, unexported named field (`mu sync.Mutex`) rather than embedding it?",
           "options": [
-            "Embedding it would promote Lock() and Unlock() directly onto the outer type's own exported surface, letting any caller of that type bypass whatever internal locking discipline the type's own methods are trying to maintain -- a plain named field avoids leaking that control to outside callers.",
+            "Embedding it would promote Lock() and Unlock() directly onto the outer type's own exported surface.",
             "Embedding sync.Mutex is actually illegal Go syntax -- the compiler specifically rejects embedding any type from the sync package.",
             "A plain named field makes the mutex measurably faster at runtime, since methods reached through promotion carry extra dispatch overhead compared to methods reached through a named field.",
             "Embedding sync.Mutex would force the outer struct to also embed sync.WaitGroup, or the code would fail to compile."
@@ -469,7 +473,7 @@
           "prompt": "A team builds `type Base struct{...}`, `type Middle struct { Base; ... }`, and `type Top struct { Middle; ... }`, layering fields across three levels purely to mirror a class hierarchy from a previous project written in another language. Beyond looking unusual, what's the actual problem with this design according to this concept?",
           "options": [
             "Nested embedding like this carries no functional consequence at all -- idiomatic Go discourages it purely for aesthetic, stylistic reasons.",
-            "It reintroduces the same fragile, rigid coupling a classical inheritance chain would have -- each layer is tightly bound to the exact shape of the layer directly beneath it, so a change to Base can still ripple unpredictably up through Middle and Top, without gaining any of embedding's real benefit of independent, swappable pieces.",
+            "It reintroduces the same fragile, rigid coupling a classical inheritance chain would have.",
             "Each additional layer of embedding doubles the outer struct's memory footprint, regardless of which fields are actually involved.",
             "Go's compiler enforces a hard limit of two levels of struct embedding, so this specific three-level example would fail to build."
           ],

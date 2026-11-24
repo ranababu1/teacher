@@ -64,7 +64,8 @@
       "misconceptions": [
         {
           "description": "If a property is set in application.properties, that's the final, authoritative value -- command-line arguments or environment variables are only useful for setting values that AREN'T already in the file.",
-          "clarification": "application.properties sits relatively low in Spring Boot's precedence order, specifically so that more deployment-specific sources -- command-line arguments, environment variables, profile-specific files -- can override it. A property defined in BOTH the file and a higher-precedence source doesn't cause a conflict or an error; the higher-precedence source's value simply wins, with the file's value never actually being read for that key on that particular run. This is a deliberate design, not an edge case: it's exactly what lets the same built artifact behave differently across environments (different database URLs, different ports, different feature flags) without ever touching or rebuilding application.properties itself."
+          "clarification": "application.properties sits relatively low in Spring Boot's precedence order, specifically so that more deployment-specific sources -- command-line arguments, environment variables, profile-specific files -- can override it. A property defined in BOTH the file and a higher-precedence source doesn't cause a conflict or an error; the higher-precedence source's value simply wins, with the file's value never actually being read for that key on that particular run. This is a deliberate design, not an edge case: it's exactly what lets the same built artifact behave differently across environments (different database URLs, different ports, different feature flags) without ever touching or rebuilding application.properties itself.",
+          "fact": "application.properties sits relatively low in Spring Boot's precedence order, specifically so that more deployment-specific sources -- command-line arguments, environment variables, profile-specific files -- can override it."
         },
         {
           "description": "YAML and .properties are just two interchangeable syntaxes for writing the exact same file -- indentation in YAML is a style preference, similar to code formatting, not something that changes the file's meaning.",
@@ -105,7 +106,7 @@
           "type": "multipleChoice",
           "prompt": "A property is defined in both an OS environment variable and application.properties, with different values. Which value does Spring Boot's Environment resolve to?",
           "options": [
-            "application.properties always wins, because it's explicitly part of the application's own packaged configuration.",
+            "application.properties always wins, because it's explicitly part of the application's own packaged configuration, so it overrides anything set outside it.",
             "Whichever source was read first at startup wins, which is effectively random.",
             "Spring Boot throws a startup exception because the same property is defined in two conflicting places.",
             "The environment variable's value wins, because OS environment variables rank above application.properties in Spring Boot's property source precedence order."
@@ -147,7 +148,7 @@
             "Neither -- defining the same key in both the base file and a profile-specific file triggers a startup error.",
             "Whichever file happens to load last during startup, which is effectively non-deterministic run to run.",
             "application-prod.properties's value, because profile-specific files rank above the base application.properties in Spring Boot's property source precedence order.",
-            "application.properties's value, because the base file is always treated as authoritative regardless of which profile is active."
+            "application.properties's value, because the base file is always treated as authoritative regardless of which profile is active, and profile files can only add new keys."
           ],
           "correctOptionIndex": 2,
           "explanation": "The precedence list this concept lays out places profile-specific files above the base application.properties/.yml specifically because a profile-specific file represents a more deployment-specific override than the generic, build-time default in the base file -- so for a key both files define, the profile-specific file's value wins. The “application.properties's value, because the base file…” option inverts this relationship. The “Whichever file happens to load last during…” option is wrong -- resolution follows a fixed, deterministic order, not load timing. The “Neither -- defining the same key…” option is wrong -- a key appearing in both the base file and a profile overlay is completely normal and is exactly the mechanism profile-specific overrides rely on."
@@ -224,7 +225,8 @@
         },
         {
           "description": "Any class annotated @ConfigurationProperties is automatically registered as a bean and starts binding configuration immediately, the same way @Component works.",
-          "clarification": "@ConfigurationProperties by itself is only metadata describing what prefix a class should bind to and how -- it is not a stereotype annotation, and it does not, on its own, make Spring register the class as a bean. The class still needs to become a bean through some other mechanism: @Component on the class itself (if it's otherwise reachable by component scanning), @EnableConfigurationProperties(SomeProperties.class) declared on a @Configuration class, or @ConfigurationPropertiesScan on the main application class. Skip all three, and the class simply never gets bound to anything -- every field quietly reflects whatever default value was hardcoded in the Java class itself, with no error anywhere to reveal that binding never actually happened."
+          "clarification": "@ConfigurationProperties by itself is only metadata describing what prefix a class should bind to and how -- it is not a stereotype annotation, and it does not, on its own, make Spring register the class as a bean. The class still needs to become a bean through some other mechanism: @Component on the class itself (if it's otherwise reachable by component scanning), @EnableConfigurationProperties(SomeProperties.class) declared on a @Configuration class, or @ConfigurationPropertiesScan on the main application class. Skip all three, and the class simply never gets bound to anything -- every field quietly reflects whatever default value was hardcoded in the Java class itself, with no error anywhere to reveal that binding never actually happened.",
+          "fact": "@ConfigurationProperties by itself is only metadata describing what prefix a class should bind to and how -- it is not a stereotype annotation, and it does not, on its own, make Spring register the class as a bean."
         }
       ],
       "exercises": [
@@ -277,7 +279,7 @@
             "The field is silently left null, and the application starts normally.",
             "The application starts successfully, and a NullPointerException is thrown the first time application code reads the field.",
             "Spring automatically substitutes an empty string \"\" for the unresolved property.",
-            "Spring throws IllegalArgumentException: Could not resolve placeholder 'app.reports.cron-expression', and the application fails to start."
+            "Spring throws IllegalArgumentException: Could not resolve placeholder 'app.reports.cron-expression'."
           ],
           "correctOptionIndex": 3,
           "explanation": "A @Value placeholder with no colon-separated default has nothing to fall back on if the referenced property is missing everywhere -- Spring does not inject null in that case, it throws IllegalArgumentException while resolving the placeholder, which fails the whole application startup immediately, before the bean is even fully constructed. This fail-fast behavior is exactly why @Value is a reasonable choice for a required property with no sensible default. The “The field is silently left null…”, “Spring automatically substitutes an empty string \"\"…”, and “The application starts successfully, and a NullPointerException…” options all describe a silent or deferred failure that this specific, default-less placeholder does not exhibit -- those behaviors only resemble what happens when a default IS supplied and the real key is later typo'd."
@@ -289,7 +291,7 @@
           "options": [
             "The application fails to start, because @ConfigurationProperties always requires an explicit registration mechanism to be present.",
             "Spring Boot automatically detects and binds any @ConfigurationProperties class found anywhere on the classpath, similar to how @Entity classes are discovered.",
-            "The class is never registered as a Spring bean at all, so nothing ever binds real configuration values onto it -- every field simply keeps whatever default was hardcoded directly in the Java class.",
+            "The class is never registered as a Spring bean at all, so nothing ever binds real configuration values onto it.",
             "Spring falls back to binding its fields the same way @Value placeholders are resolved, without requiring bean registration."
           ],
           "correctOptionIndex": 2,
@@ -380,7 +382,8 @@
       "misconceptions": [
         {
           "description": "application-prod.properties replaces application.properties entirely when the prod profile is active -- only the values in the profile-specific file are actually used.",
-          "clarification": "Profile-specific files are loaded as a layered OVERLAY on top of the base application.properties, not a full replacement of it. Any key defined only in the base file remains fully in effect under any active profile; a profile-specific file only needs to define the handful of keys that genuinely differ for that environment. Only keys that are defined in BOTH files have their base-file value overridden by the profile-specific one -- everything else in the base file is untouched and still applies."
+          "clarification": "Profile-specific files are loaded as a layered OVERLAY on top of the base application.properties, not a full replacement of it. Any key defined only in the base file remains fully in effect under any active profile; a profile-specific file only needs to define the handful of keys that genuinely differ for that environment. Only keys that are defined in BOTH files have their base-file value overridden by the profile-specific one -- everything else in the base file is untouched and still applies.",
+          "fact": "Profile-specific files are loaded as a layered OVERLAY on top of the base application.properties, not a full replacement of it."
         },
         {
           "description": "It's fine to commit real production secrets into application.properties as long as the repository itself is private.",
@@ -434,7 +437,7 @@
           "type": "multipleChoice",
           "prompt": "Two beans implement Notifier: one annotated @Profile(\"dev\"), the other @Profile(\"prod\"). The application starts with spring.profiles.active=staging -- a third profile matching neither bean. What happens when something requires a Notifier bean?",
           "options": [
-            "The application fails to start with NoSuchBeanDefinitionException, because neither bean is eligible under the active staging profile, so no bean of type Notifier is available to inject at all.",
+            "The application fails to start with NoSuchBeanDefinitionException.",
             "Both beans are registered anyway, since @Profile only affects startup log output, not actual bean registration.",
             "Spring picks whichever bean happens to be declared first in the source code as a reasonable fallback.",
             "Spring Boot automatically constructs a default, no-op Notifier implementation whenever no profile-guarded bean matches the active profile."

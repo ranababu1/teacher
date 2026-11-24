@@ -63,7 +63,8 @@
       "misconceptions": [
         {
           "description": "Root inside a container is a separate, contained version of root that can't actually do anything dangerous outside the container, so it doesn't matter much whether an image runs as root or not.",
-          "clarification": "Containers share the host's one kernel -- there is no separate, sandboxed root identity invented just for containers. Root inside a container's default (unremapped) user namespace is the same UID 0 the kernel recognizes everywhere. The namespace boundary limits what that root process can SEE and directly interact with under normal operation, but the moment any other boundary has a gap -- a bind-mounted host path, an overly generous capability, a kernel vulnerability allowing a namespace escape -- root's actual kernel-level privilege is what determines how much damage crosses that gap. A non-root process hitting the exact same gap is limited by ordinary permission checks in a way root specifically is designed to bypass."
+          "clarification": "Containers share the host's one kernel -- there is no separate, sandboxed root identity invented just for containers. Root inside a container's default (unremapped) user namespace is the same UID 0 the kernel recognizes everywhere. The namespace boundary limits what that root process can SEE and directly interact with under normal operation, but the moment any other boundary has a gap -- a bind-mounted host path, an overly generous capability, a kernel vulnerability allowing a namespace escape -- root's actual kernel-level privilege is what determines how much damage crosses that gap. A non-root process hitting the exact same gap is limited by ordinary permission checks in a way root specifically is designed to bypass.",
+          "fact": "Containers share the host's one kernel -- there is no separate, sandboxed root identity invented just for containers."
         },
         {
           "description": "Adding a USER instruction to a Dockerfile is all you need to do, in any order, to get a working non-root container.",
@@ -118,7 +119,7 @@
           "prompt": "A container running as root writes output files into a bind-mounted host directory. What ownership do those files end up with on the host, and why?",
           "options": [
             "They're owned by a special \"nobody\" account, since Docker anonymizes all bind-mount writes for safety.",
-            "They're owned by the host user who ran docker run, because bind mounts always translate the container's UID to the calling host user's UID.",
+            "They're owned by the host user who ran docker run, because bind mounts always translate the container's UID to the calling host user's UID, so a file created by root in the container always appears to belong to an ordinary user there.",
             "Ownership is left completely undefined and varies unpredictably between otherwise identical runs.",
             "They're owned by root on the host, because bind mounts apply host filesystem permissions directly with no UID translation by default, and the process writing them inside the container is genuinely UID 0."
           ],
@@ -133,7 +134,7 @@
             "The chown step fails or is effectively denied, because by that point the build is running as the unprivileged appuser, which lacks permission to change ownership of files it doesn't already own.",
             "chown automatically runs as root regardless of the currently active USER, specifically to support this exact ordering pattern.",
             "The build succeeds, but file ownership silently reverts back to root the moment the container actually starts.",
-            "It builds fine, since USER only affects the container's runtime process, not any RUN instructions that come after it in the build."
+            "It builds fine, since USER only affects the container's runtime process, not any RUN instructions that come after it in the build, and file ownership changes during a build always run as root."
           ],
           "correctOptionIndex": 0,
           "explanation": "USER changes which user every subsequent instruction in the build runs as, including RUN -- so a chown placed after USER appuser executes as appuser, which typically lacks the privilege to change ownership of files, especially ones it doesn't already own. The “It builds fine, since USER only affects…” option is wrong -- USER affects every following instruction in the Dockerfile, not only the final CMD/ENTRYPOINT. The “chown automatically runs as root regardless…” option is wrong -- there's no special-case exemption that lets chown ignore the active USER; it runs with whatever privilege the current build context has. The “The build succeeds, but file ownership silently…” option is wrong -- there's no such automatic reversion; ownership is whatever the build steps actually set it to, and here the chown likely never fully succeeded in the first place."
@@ -145,7 +146,7 @@
           "options": [
             "It replaces namespaces entirely with a hardware-virtualized boundary functionally equivalent to a full separate VM kernel.",
             "It automatically drops every Linux capability from every container, with no configuration required and no exceptions possible.",
-            "It maps root inside a container's own user namespace to an unprivileged, ordinary UID on the host, so even a process that is genuinely root inside its own container namespace has very little actual privilege from the host's point of view if it manages to escape.",
+            "It maps root inside a container's own user namespace to an unprivileged, ordinary UID on the host.",
             "It disables cgroups entirely, so a compromised process can no longer consume unbounded host resources."
           ],
           "correctOptionIndex": 2,
@@ -281,7 +282,7 @@
             "Alpine-based images cannot run any Node.js application that uses native addons, under any circumstances.",
             "Alpine images always disable native code execution entirely, for security reasons, regardless of the package involved.",
             "The Alpine image is missing a required environment variable that node:20-bookworm-slim happens to set automatically.",
-            "The native addon ships a precompiled binary linked against glibc's dynamic linker, which doesn't exist on Alpine, since Alpine uses musl libc's differently-named dynamic linker instead."
+            "The native addon ships a precompiled binary linked against glibc's dynamic linker, which doesn't exist on Alpine."
           ],
           "correctOptionIndex": 3,
           "explanation": "The correct answer is exactly the musl/glibc compatibility gap the concept describes: a precompiled binary built assuming glibc's dynamic linker fails outright on Alpine, whose musl libc uses a different linker path entirely, even though the surrounding application code and dependency versions are otherwise identical. The “Alpine-based images cannot run any Node.js application…” option overstates the problem -- many native addons work fine on Alpine, particularly if they compile from source against musl rather than shipping a glibc-linked prebuilt binary. The “The Alpine image is missing a required…” option invents an unrelated environment-variable explanation not supported by the actual failure mode. The “Alpine images always disable native code execution…” option is false -- Alpine has no blanket restriction against native code; the issue is specifically a libc/linker mismatch for prebuilt glibc-linked binaries."
@@ -366,7 +367,8 @@
       "misconceptions": [
         {
           "description": "Once an image passes a vulnerability scan with a clean report, it's permanently verified safe -- there's no need to scan it again unless the Dockerfile itself changes.",
-          "clarification": "An image's own contents are frozen once built, but the universe of PUBLICLY KNOWN vulnerabilities against those exact package versions keeps growing over time, entirely independent of the image itself changing at all. A CVE can be disclosed against a package version that's already been sitting, unmodified, inside a deployed image for months -- the vulnerability was always technically present in that code, it simply hadn't been publicly discovered and reported yet at the time of the original clean scan. A durable practice re-scans images already sitting in a registry or already deployed on a recurring schedule, not only at the moment they're freshly built, precisely because a scan's result is a snapshot of current public knowledge at the moment it ran, not a permanent certificate."
+          "clarification": "An image's own contents are frozen once built, but the universe of PUBLICLY KNOWN vulnerabilities against those exact package versions keeps growing over time, entirely independent of the image itself changing at all. A CVE can be disclosed against a package version that's already been sitting, unmodified, inside a deployed image for months -- the vulnerability was always technically present in that code, it simply hadn't been publicly discovered and reported yet at the time of the original clean scan. A durable practice re-scans images already sitting in a registry or already deployed on a recurring schedule, not only at the moment they're freshly built, precisely because a scan's result is a snapshot of current public knowledge at the moment it ran, not a permanent certificate.",
+          "fact": "An image's own contents are frozen once built, but the universe of PUBLICLY KNOWN vulnerabilities against those exact package versions keeps growing over time, entirely independent of the image itself changing at all."
         },
         {
           "description": "The right policy for a vulnerability scanner in CI is to fail the build on any finding at all, at any severity, to be maximally safe.",
@@ -433,7 +435,7 @@
           "type": "multipleChoice",
           "prompt": "A team configures CI to fail the build on ANY vulnerability finding at all, regardless of severity or whether a fix is even available yet. What is the most likely practical consequence?",
           "options": [
-            "Builds start failing constantly over low-severity or currently-unfixable findings nobody can immediately act on, which tends to train the team to work around or stop trusting the gate entirely, undermining its actual value.",
+            "Builds start failing constantly over low-severity or currently-unfixable findings nobody can immediately act on.",
             "This configuration automatically causes the scanner itself to downgrade every finding to LOW severity so the pipeline keeps passing.",
             "This policy has no meaningful downside at all, since more aggressive scanning is always strictly better regardless of the policy wrapped around it.",
             "This guarantees the team's images are permanently free of every vulnerability that could ever be disclosed against them, forever."

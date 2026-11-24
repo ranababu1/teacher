@@ -71,7 +71,8 @@
         },
         {
           "description": "Bursty overload is best solved by provisioning more servers or a bigger thread pool for the synchronous path.",
-          "clarification": "Adding capacity raises the ceiling but doesn't change the fundamental shape of the problem: a synchronous architecture still has to complete every unit of work within the lifetime of its request, no matter how large the burst. You can provision for a bigger burst, but real bursts are, by definition, unpredictable and can still exceed whatever ceiling you picked -- and provisioning for the worst-case burst 24/7 is usually enormous waste, since that capacity sits idle the rest of the time. A queue solves the actual shape of the problem: it lets the *arrival* of a burst be cheap and instantaneous while the *processing* of it happens at a sustainable, much smaller, steady-state capacity -- which is a fundamentally different (and usually far cheaper) fix than just buying more servers for the synchronous path."
+          "clarification": "Adding capacity raises the ceiling but doesn't change the fundamental shape of the problem: a synchronous architecture still has to complete every unit of work within the lifetime of its request, no matter how large the burst. You can provision for a bigger burst, but real bursts are, by definition, unpredictable and can still exceed whatever ceiling you picked -- and provisioning for the worst-case burst 24/7 is usually enormous waste, since that capacity sits idle the rest of the time. A queue solves the actual shape of the problem: it lets the *arrival* of a burst be cheap and instantaneous while the *processing* of it happens at a sustainable, much smaller, steady-state capacity -- which is a fundamentally different (and usually far cheaper) fix than just buying more servers for the synchronous path.",
+          "fact": "Adding capacity raises the ceiling but doesn't change the fundamental shape of the problem: a synchronous architecture still has to complete every unit of work within the lifetime of its request, no matter how large the burst."
         }
       ],
       "exercises": [
@@ -127,7 +128,7 @@
           "type": "multipleChoice",
           "prompt": "A team rewrites a slow endpoint to use async/await internally, so the process no longer parks an OS thread while waiting on a downstream API. They claim this converts the endpoint into 'asynchronous processing' in the message-queue sense. Per the concept's first misconception, is this claim accurate?",
           "options": [
-            "No -- async/await changes how efficiently a process waits for I/O, but the caller of the HTTP request is still logically blocked, waiting for a response before it can consider the operation done; that is a different axis from the queue-based pattern, where the caller gets an immediate 'accepted' response.",
+            "No -- async/await changes how efficiently a process waits for I/O.",
             "Yes, but only if the async/await code also uses a connection pool.",
             "No -- async/await is strictly slower than a queue-based approach and should never be used for I/O-bound code.",
             "Yes -- async/await and message-queue-based decoupling solve the exact same problem, just with different syntax."
@@ -141,7 +142,7 @@
           "prompt": "Per the 'Failure Pattern One: Slow, Long-Tail Work' section, why can a single slow synchronous dependency degrade throughput on completely unrelated, normally-fast endpoints on the same service?",
           "options": [
             "Because synchronous calls always run on a single global thread shared by the entire process, regardless of endpoint.",
-            "Because threads (or connections) are a shared, finite resource across the whole service, so requests pinned waiting on the slow dependency can consume the entire pool, leaving no threads available to even begin handling requests on unrelated endpoints.",
+            "Because threads (or connections) are a shared, finite resource across the whole service.",
             "Because the slow dependency corrupts the service's database, which every endpoint reads from.",
             "Because the load balancer automatically routes all traffic away from a service once any single endpoint becomes slow."
           ],
@@ -156,7 +157,7 @@
             "A video transcoding job that takes several minutes to complete.",
             "A marketing email blast sent to ten thousand recipients at once.",
             "An authentication check that the very next line of code depends on, where the caller genuinely cannot proceed without the answer right now.",
-            "Recalculating a recommendation model across a user's entire historical purchase data."
+            "Recalculating a recommendation model across a user's entire historical purchase data, which takes many minutes and is read only the next day."
           ],
           "correctOptionIndex": 2,
           "explanation": "The concept states synchronous request/response \"is still the right default whenever the caller genuinely cannot proceed without the answer right now -- an authentication check, a read that the very next line of code depends on... 'come back later' isn't a valid response.\" The “A video transcoding job that takes several…”, “A marketing email blast sent to ten…”, and “Recalculating a recommendation model across a user's…” options all describe slow or bursty work explicitly identified elsewhere in the concept as good candidates for asynchronous, queue-based processing precisely because the caller can proceed, or doesn't need an immediate answer, while that work happens."
@@ -287,7 +288,7 @@
           "prompt": "A team scales out image-resize workers by having each of 5 new worker instances independently subscribe to a pub/sub topic of upload events, expecting the workload to be divided 5 ways. What actually happens, per the concept's second classic mistake?",
           "options": [
             "The broker rejects the 5th subscription because pub/sub topics have a maximum of 4 subscribers.",
-            "Each of the 5 workers receives its own full copy of every upload event, so each one resizes every single image -- producing 5x the total work for zero throughput gain, rather than dividing the workload.",
+            "Each of the 5 workers receives its own full copy of every upload event, so each one resizes every single image.",
             "The 5 workers correctly divide the images among themselves, resizing roughly 1/5 each.",
             "The workers automatically negotiate among themselves to split the workload evenly, the same way point-to-point consumers do."
           ],
@@ -427,7 +428,7 @@
           "prompt": "A topic is partitioned by `customer_id`. Two events for the same customer -- `AddressUpdated` then `OrderPlaced` (using the new address) -- are published moments apart. What ordering guarantee, if any, applies to how a consumer sees these two events relative to each other?",
           "options": [
             "No guarantee at all -- brokers never provide ordering guarantees of any kind.",
-            "The events are guaranteed to be delivered in order only if there is exactly one consumer for the entire topic, regardless of partition key.",
+            "The events are guaranteed to be delivered in order only if there is exactly one consumer for the entire topic, regardless of partition key, so a topic that has more than one consumer can never offer any ordering between two related events.",
             "Ordering is guaranteed globally across the whole topic by default, for every event regardless of key.",
             "Because both events share the same partition key (customer_id), they land in the same partition and are guaranteed to be delivered to a consumer in the order they were produced -- AddressUpdated before OrderPlaced."
           ],

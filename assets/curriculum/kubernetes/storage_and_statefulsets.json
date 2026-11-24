@@ -101,7 +101,7 @@
             "The emptyDir volume's contents survive, because the volume is scoped to the Pod, not to the individual container instance running inside it.",
             "The emptyDir volume's contents are wiped, because a new container instance always gets a fresh filesystem, including any mounted volumes.",
             "Kubernetes automatically copies the emptyDir contents to a new location before restarting the container, then copies them back.",
-            "The emptyDir volume's contents survive only if medium: Memory was set; otherwise they are wiped along with the container's writable layer."
+            "The emptyDir volume's contents survive only if medium: Memory was set; otherwise they are wiped along with the container's writable layer layer."
           ],
           "correctOptionIndex": 0,
           "explanation": "emptyDir is explicitly a Pod-scoped volume: the directory backing it lives on the node for as long as the Pod exists there, independent of any single container's lifecycle. A container restart replaces the container's own writable layer with a fresh one, but has no effect on the Pod-level emptyDir mount, which is exactly why it survives. The “The emptyDir volume's contents are wiped…” option conflates the container's own ephemeral writable layer (which genuinely is wiped on restart) with the separate emptyDir volume. The “The emptyDir volume's contents survive only…” option inverts the actual distinction, which is about backing medium (disk vs tmpfs) affecting node-reboot survival, not container-restart survival. The “Kubernetes automatically copies the emptyDir contents…” option describes a copy mechanism that doesn't exist -- nothing needs to be copied because the directory was never removed in the first place."
@@ -112,7 +112,7 @@
           "prompt": "A container writes its own application logs to a local file at /var/log/app.log instead of stdout, with no volume mounted at that path. The container crashes and the kubelet restarts it in place. Can `kubectl logs --previous` retrieve the pre-crash contents of /var/log/app.log?",
           "options": [
             "No -- kubectl logs --previous only works for Pods that have already been deleted, not for a container restarted in place within a still-running Pod.",
-            "No -- kubectl logs --previous only retrieves what the previous container instance wrote to stdout/stderr, which is entirely separate from its writable filesystem layer; a file written to local disk and never sent to stdout is already gone the moment that container instance exits, restart or not.",
+            "No -- kubectl logs --previous only retrieves what the previous container instance wrote to stdout/stderr.",
             "Yes, but only if the container's root filesystem was configured with medium: Memory.",
             "Yes -- kubectl logs --previous always retrieves the full filesystem state of the previous container instance, including any files it wrote to local disk."
           ],
@@ -127,7 +127,7 @@
             "It survives a node reboot, unlike a disk-backed emptyDir, because tmpfs contents are automatically checkpointed to disk before a controlled shutdown.",
             "It automatically converts into a PersistentVolume once the amount of data written exceeds a configurable size threshold.",
             "It behaves identically in every respect -- medium: Memory is purely a performance hint with no functional difference in durability.",
-            "The memory-backed volume's usage counts against the Pod's memory limit, and its data is lost even faster than a disk-backed emptyDir -- including on a full Pod-level tmpfs remount, and certainly on a node reboot -- since it's never written to persistent disk at all."
+            "The memory-backed volume's usage counts against the Pod's memory limit, and its data is lost even faster than a disk-backed emptyDir."
           ],
           "correctOptionIndex": 3,
           "explanation": "medium: Memory backs the emptyDir with tmpfs rather than the node's real disk, which is useful for latency-sensitive scratch data, but it comes with two real costs: that memory usage counts directly against the Pod's memory limit (unlike disk-backed emptyDir, which doesn't consume the Pod's memory budget), and the data is even more fragile than normal emptyDir, disappearing on events like a full remount and certainly never surviving a node reboot, since tmpfs by definition never touches persistent storage. The “It behaves identically in every respect…” option understates the real tradeoffs. The “It survives a node reboot, unlike…” option invents a checkpointing mechanism that doesn't exist. The “It automatically converts into a PersistentVolume once…” option invents an automatic-conversion behavior that has no basis in how emptyDir works."
@@ -211,11 +211,13 @@
       "misconceptions": [
         {
           "description": "ReadWriteOnce means only one Pod can mount the volume for writing at a time -- if two Pods both try to use it, one will be blocked.",
-          "clarification": "ReadWriteOnce restricts mounting to a single node, not a single Pod. Multiple Pods scheduled onto that same node can all mount and write to the same RWO volume concurrently with no conflict from Kubernetes' side (whether that's actually safe depends on the application and filesystem, not on the access mode). What RWO actually prevents is a second Pod on a *different* node from also mounting it read-write, which is a constraint of the underlying block-storage attachment mechanism, not an arbitrary Kubernetes-imposed limit."
+          "clarification": "ReadWriteOnce restricts mounting to a single node, not a single Pod. Multiple Pods scheduled onto that same node can all mount and write to the same RWO volume concurrently with no conflict from Kubernetes' side (whether that's actually safe depends on the application and filesystem, not on the access mode). What RWO actually prevents is a second Pod on a *different* node from also mounting it read-write, which is a constraint of the underlying block-storage attachment mechanism, not an arbitrary Kubernetes-imposed limit.",
+          "fact": "ReadWriteOnce restricts mounting to a single node, not a single Pod."
         },
         {
           "description": "A PersistentVolumeClaim is a lightweight, harmless pointer to a PersistentVolume -- deleting one is routine cleanup, not something to think twice about.",
-          "clarification": "Whether deleting a PVC is harmless depends entirely on its reclaim policy. With the common `Delete` reclaim policy (the default for many dynamically-provisioned StorageClasses), deleting the PVC triggers actual deletion of the real underlying storage -- the cloud disk itself -- which is an irreversible loss of whatever data was on it, not a no-op. Only under `Retain` does deleting the PVC leave the underlying PV and its data intact for manual recovery."
+          "clarification": "Whether deleting a PVC is harmless depends entirely on its reclaim policy. With the common `Delete` reclaim policy (the default for many dynamically-provisioned StorageClasses), deleting the PVC triggers actual deletion of the real underlying storage -- the cloud disk itself -- which is an irreversible loss of whatever data was on it, not a no-op. Only under `Retain` does deleting the PVC leave the underlying PV and its data intact for manual recovery.",
+          "fact": "Whether deleting a PVC is harmless depends entirely on its reclaim policy."
         }
       ],
       "exercises": [
@@ -255,7 +257,7 @@
             "Only one Pod, cluster-wide, may ever mount the volume, even read-only Pods on the same node as the writer.",
             "Only one namespace may contain PVCs that reference the underlying PersistentVolume.",
             "The volume may only be written to once, after which it becomes permanently read-only.",
-            "Only one node may mount the volume read-write at a time; multiple Pods co-located on that same node can all mount and write to it concurrently."
+            "Only one node may mount the volume read-write at a time."
           ],
           "correctOptionIndex": 3,
           "explanation": "ReadWriteOnce is a node-level restriction, not a Pod-level one -- it reflects the fact that the underlying technology (typically a block device) can only be attached to a single node's kernel at a time. Any number of Pods scheduled onto that one node can mount and write to it simultaneously without conflict. The “Only one Pod, cluster-wide, may ever mount…” option overstates the restriction to the Pod level, which is the single most common misreading of RWO. The “Only one namespace may contain PVCs…” option confuses access mode with namespace scoping, an unrelated concept. The “The volume may only be written…” option describes something closer to a write-once medium, which isn't what RWO means at all -- RWO volumes can be written to repeatedly for as long as they're mounted read-write."
@@ -266,7 +268,7 @@
           "prompt": "Why is a PersistentVolume a cluster-scoped resource (no namespace), while a PersistentVolumeClaim is namespaced?",
           "options": [
             "It's an arbitrary API design choice with no underlying reason -- either object could have been namespaced or cluster-scoped with no practical difference.",
-            "The real, physical storage a PV represents doesn't inherently belong to any one team's namespace, while a PVC is the application-facing request that naturally lives alongside the specific Pods and namespace that will actually consume it.",
+            "The real, physical storage a PV represents doesn't inherently belong to any one team's namespace.",
             "A PersistentVolume must be cluster-scoped because only cluster-scoped objects are permitted to trigger a StorageClass's provisioner.",
             "PersistentVolumes are actually namespaced too, but only become visible to users holding cluster-admin RBAC permissions."
           ],
@@ -369,7 +371,8 @@
         },
         {
           "description": "Deleting a StatefulSet-managed Pod (say, web-1) causes Kubernetes to create a brand-new, differently-identified replacement, the same way deleting a Deployment-managed Pod does.",
-          "clarification": "A StatefulSet's controller specifically recreates the same ordinal that was deleted -- the replacement is again named web-1, not some new generated name -- and reattaches it to the same PVC that ordinal has always owned, carrying its data forward. This is the opposite of a Deployment-managed Pod's replacement, which gets a fresh random name and, without volumeClaimTemplates (a StatefulSet-only feature), no durable per-replica storage identity to preserve in the first place."
+          "clarification": "A StatefulSet's controller specifically recreates the same ordinal that was deleted -- the replacement is again named web-1, not some new generated name -- and reattaches it to the same PVC that ordinal has always owned, carrying its data forward. This is the opposite of a Deployment-managed Pod's replacement, which gets a fresh random name and, without volumeClaimTemplates (a StatefulSet-only feature), no durable per-replica storage identity to preserve in the first place.",
+          "fact": "A StatefulSet's controller specifically recreates the same ordinal that was deleted -- the replacement is again named web-1, not some new generated name -- and reattaches it to the same PVC that ordinal has always owned, carrying its data forward."
         }
       ],
       "exercises": [

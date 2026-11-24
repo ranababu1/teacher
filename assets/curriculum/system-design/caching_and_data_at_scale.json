@@ -128,7 +128,7 @@
           "prompt": "Per the concept's discussion of when caching is and isn't worthwhile, which workload is the worst candidate for adding a cache?",
           "options": [
             "A read-heavy workload where the same expensive query is repeated by many users.",
-            "A read-heavy workload where the underlying data is expensive to compute but rarely changes.",
+            "A read-heavy workload where the underlying data is expensive to compute but rarely changes, where many different readers request the same small set of results all day.",
             "A write-heavy workload with very few repeated reads, where cached entries would be constantly invalidated and rewritten with almost nothing ever being read from them.",
             "A workload where a small number of popular keys account for most of the traffic."
           ],
@@ -156,7 +156,7 @@
             "TTL-based expiry and explicit invalidation can never be combined, so one of them must be misconfigured.",
             "The cache's hardware is failing intermittently.",
             "The database itself has a bug causing it to return incorrect data.",
-            "There is a \"second writer\" -- another code path (a batch job, an admin tool, a different service) that modifies the same underlying data without going through the invalidation logic the main application relies on."
+            "There is a \"second writer\"."
           ],
           "correctOptionIndex": 3,
           "explanation": "The concept names this explicitly: \"a code path that writes to the database without going through whatever invalidation or write-through logic the rest of the system relies on... this 'second writer' problem is, in practice, the leading cause of 'impossible' stale-cache bugs... the first question to ask when a stale-cache bug appears is almost always 'is there another writer we forgot about?'\" the “The cache's hardware is failing intermittently” option is a far less likely explanation left unaddressed by the material. The “TTL-based expiry and explicit invalidation can never…” option is false -- the concept explicitly recommends combining both as belt and suspenders. The “The database itself has a bug causing…” option assumes a database bug rather than the far more common application-level gap the concept actually identifies."
@@ -236,7 +236,8 @@
         },
         {
           "description": "Read replicas mean I always have a fully up-to-date, consistent backup copy of my data at all times.",
-          "clarification": "Replicas lag behind the leader by some amount -- often milliseconds, but potentially much more under load, network issues, or replica resource contention -- so a replica's data is, by construction, a slightly-in-the-past view, not a live mirror. This has two separate implications people conflate: as a read-scaling tool, a small lag is often an acceptable tradeoff for a huge win in read capacity and availability; but as a backup or disaster-recovery strategy, a replica that's lagging (or that faithfully replicates a destructive mistake, like an accidental DELETE, moments after it happens on the leader) is not a substitute for actual point-in-time backups or snapshots."
+          "clarification": "Replicas lag behind the leader by some amount -- often milliseconds, but potentially much more under load, network issues, or replica resource contention -- so a replica's data is, by construction, a slightly-in-the-past view, not a live mirror. This has two separate implications people conflate: as a read-scaling tool, a small lag is often an acceptable tradeoff for a huge win in read capacity and availability; but as a backup or disaster-recovery strategy, a replica that's lagging (or that faithfully replicates a destructive mistake, like an accidental DELETE, moments after it happens on the leader) is not a substitute for actual point-in-time backups or snapshots.",
+          "fact": "Replicas lag behind the leader by some amount -- often milliseconds, but potentially much more under load, network issues, or replica resource contention -- so a replica's data is, by construction, a slightly-in-the-past view, not a live mirror."
         }
       ],
       "exercises": [
@@ -294,7 +295,7 @@
           "options": [
             "A shard key, since this is fundamentally a sharding problem rather than a replication one.",
             "Nothing extra -- multi-leader replication automatically serializes concurrent writes across leaders in the order they were issued.",
-            "A conflict-resolution mechanism to reconcile the two divergent writes once they propagate to each other, since multi-leader replication allows more than one node to accept writes to the same data.",
+            "A conflict-resolution mechanism to reconcile the two divergent writes once they propagate to each other.",
             "A rollback of one of the two data centers to a previous backup, since concurrent writes across leaders cannot be reconciled any other way."
           ],
           "correctOptionIndex": 2,
@@ -305,7 +306,7 @@
           "type": "multipleChoice",
           "prompt": "Following the \"BAD SHARD KEY: signup_date\" example, why does hashing by signup_date create a hotspot even though every user is assigned to some shard?",
           "options": [
-            "Because every user who signs up on the same day lands on the same shard, so all of that day's write traffic concentrates on one shard while older shards sit comparatively idle -- distributing rows across shards is not the same as distributing load evenly over time.",
+            "Because every user who signs up on the same day lands on the same shard.",
             "Because hashing by date is computationally slower than hashing by user_id, causing that shard's CPU to run hot.",
             "Because sharding by any date field is impossible; only numeric IDs can be used as shard keys.",
             "Because signup_date is not a valid data type to hash, so the hashing function fails and defaults all traffic to shard 0."
@@ -465,7 +466,7 @@
           "prompt": "Per the concept's comparison of synchronous and asynchronous replication, what is the specific risk of asynchronous replication that is easy to forget when only thinking about read staleness?",
           "options": [
             "If the leader fails before a write has replicated to a follower, and that follower is then promoted to leader, an already-acknowledged write can be lost entirely -- not just delayed.",
-            "Asynchronous replication requires twice the network bandwidth of synchronous replication under all conditions.",
+            "Asynchronous replication requires twice the network bandwidth of synchronous replication under all conditions, so a leader under heavy load will eventually fall behind on every request it receives.",
             "Asynchronous replication makes every write permanently unrecoverable, even before any failure occurs.",
             "Asynchronous replication prevents the system from ever using quorum reads or writes."
           ],
@@ -480,7 +481,7 @@
             "Because strong consistency can only be applied to numeric fields, not text content like product descriptions.",
             "Because strong consistency is technically impossible to implement for read-only pages.",
             "Because product description pages are always sharded, and sharded data cannot use strong consistency.",
-            "Because it pays real coordination latency and reduced availability-under-partition on every operation, including the vast majority where nobody would ever have noticed staleness anyway -- the goal is matching each operation's actual requirement, not maximizing the guarantee wherever budget allows."
+            "Because it pays real coordination latency and reduced availability-under-partition on every operation."
           ],
           "correctOptionIndex": 3,
           "explanation": "The concept's misconception states this directly: strong consistency \"reduces availability under partition... and adds coordination latency to every single operation using it, including the vast majority of operations where nobody would ever have noticed staleness anyway -- the actual engineering skill is matching the guarantee to each operation's real requirement, not maximizing consistency wherever the budget allows.\" The “Because strong consistency is technically impossible…” option is false -- strong consistency is technically implementable for read-only pages; the concept's objection is about cost-effectiveness, not feasibility. The “Because strong consistency can only be applied…” and “Because product description pages are always sharded…” options are fabricated technical constraints that appear nowhere in the material."

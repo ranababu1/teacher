@@ -71,7 +71,8 @@
         },
         {
           "description": "JSONB columns are a good general substitute for adding new tables or columns whenever the 'proper' relational shape feels inconvenient or would require a migration.",
-          "clarification": "JSONB is the right tool specifically for attributes that are genuinely sparse or variable per row in a way a fixed set of columns can't gracefully express -- not a general escape hatch from schema design. Using it to store what is actually a fixed, well-known, structured relationship (a EAV-flavored table cushioned with cast operators, or foreign-key-like references buried inside a JSON blob) gives up real column typing, CHECK constraints, foreign key enforcement, and straightforward indexing on the affected fields, all for the sake of avoiding a migration -- a poor trade when the alternative is a normal, well-typed column or table that would have taken one `ALTER TABLE` or `CREATE TABLE` to add properly."
+          "clarification": "JSONB is the right tool specifically for attributes that are genuinely sparse or variable per row in a way a fixed set of columns can't gracefully express -- not a general escape hatch from schema design. Using it to store what is actually a fixed, well-known, structured relationship (a EAV-flavored table cushioned with cast operators, or foreign-key-like references buried inside a JSON blob) gives up real column typing, CHECK constraints, foreign key enforcement, and straightforward indexing on the affected fields, all for the sake of avoiding a migration -- a poor trade when the alternative is a normal, well-typed column or table that would have taken one `ALTER TABLE` or `CREATE TABLE` to add properly.",
+          "fact": "JSONB is the right tool specifically for attributes that are genuinely sparse or variable per row in a way a fixed set of columns can't gracefully express -- not a general escape hatch from schema design."
         }
       ],
       "exercises": [
@@ -109,7 +110,7 @@
           "prompt": "A schema is fully normalized to 3NF, but a page that displays each post's comment count is slow at scale because it computes COUNT(comments) via a JOIN for every post on every request. What does this situation best illustrate?",
           "options": [
             "This can only be fixed by adding more indexes to the comments table; schema-level changes are never appropriate for a performance problem.",
-            "Normalization guarantees correctness (no redundancy-driven anomalies), but says nothing about whether a given access pattern is cheap to serve -- a correctly normalized schema can still need a targeted, deliberate denormalization (like a counter column or materialized view) for a specific hot read path.",
+            "Normalization guarantees correctness (no redundancy-driven anomalies).",
             "The fix is always to abandon normalization entirely and store all data in one wide denormalized table.",
             "The schema must not actually be in 3NF, since a properly normalized schema is always fast for every query."
           ],
@@ -127,7 +128,7 @@
           "type": "multipleChoice",
           "prompt": "A `posts.comment_count` column is kept in sync by a trigger firing AFTER INSERT OR DELETE on `comments`. A bulk cleanup job runs `TRUNCATE comments` (with triggers still enabled) to wipe out test data. What happens to comment_count?",
           "options": [
-            "TRUNCATE does not fire per-row DELETE triggers at all, so comment_count is left completely unchanged even though every comment is now gone -- silently desynchronizing the counter from reality.",
+            "TRUNCATE does not fire per-row DELETE triggers at all, so comment_count is left completely unchanged even though every comment is now gone.",
             "TRUNCATE is automatically blocked by Postgres on any table that has a trigger referencing another table's column.",
             "comment_count is automatically recalculated via a fresh COUNT(*) the next time the posts table is queried.",
             "TRUNCATE fires the same row-level AFTER DELETE trigger once for every removed comment row, so comment_count correctly drops to 0 for every affected post."
@@ -143,7 +144,7 @@
             "Yes -- JSONB is always preferable to adding multiple columns, since it keeps the table's column count lower.",
             "Yes, but only once a GIN index is added on the column; without one, JSONB is always the wrong choice regardless of the data's actual shape.",
             "No -- JSONB columns are structurally incapable of storing text values like street names, only numbers and booleans.",
-            "No -- shipping_address's fields are fixed and known for every row, not sparse or variable across rows, so modeling them as real columns (or a separate addresses table) preserves typing, constraints, and straightforward indexing that JSONB gives up here for no corresponding benefit."
+            "No -- shipping_address's fields are fixed and known for every row, not sparse or variable across rows."
           ],
           "correctOptionIndex": 3,
           "explanation": "The correct answer applies the concept's central test: JSONB is justified when attributes are genuinely sparse or variable per row, not simply because adding columns feels like more upfront effort. Every order has the exact same shipping-address fields, with no category-driven variability at all, which is precisely the profile that calls for real, typed, constrained columns (or a dedicated addresses table) instead. The “Yes -- JSONB is always preferable…” option treats JSONB as a universal simplification, which the concept explicitly warns against ('a general escape hatch from schema design'). The “Yes, but only once a GIN index…” option invents a hard requirement -- a GIN index is about query performance on the JSONB column, not a precondition for JSONB being the right modeling choice at all. The “No -- JSONB columns are structurally incapable…” option is factually wrong; JSONB stores text values natively."
@@ -155,7 +156,7 @@
           "options": [
             "Postgres doesn't support composite indexes spanning more than one column, so this index would fail to be created at all.",
             "Indexes on TEXT columns are inherently slower than indexes on INT columns, regardless of how the surrounding schema is organized.",
-            "The one index has to serve every attribute of every entity type mixed together in a single structure, which is far less targeted than a dedicated index on a single, well-typed column specific to one attribute.",
+            "The one index has to serve every attribute of every entity type mixed together in a single structure.",
             "EAV-style tables cannot be indexed at all, under any circumstances, due to their generic column structure."
           ],
           "correctOptionIndex": 2,
@@ -226,11 +227,13 @@
       "misconceptions": [
         {
           "description": "Every migration should have a working down migration, so a team can always cleanly roll back any schema change if something goes wrong.",
-          "clarification": "A clean, lossless down migration is only possible for changes that don't destroy information -- adding a column, creating a table, and similar additive changes revert cleanly. Dropping a column, splitting or merging columns, or any change that discards or irreversibly transforms existing data has no down migration that can restore what was lost, because that data is genuinely gone the moment the up migration commits; a 'down' migration for such a change can at best restore the schema's shape, not the data that used to live there. Recovering from a bad lossy migration in practice usually relies on a pre-migration backup or a deliberate roll-forward fix, not a down migration that only pretends to be a true inverse."
+          "clarification": "A clean, lossless down migration is only possible for changes that don't destroy information -- adding a column, creating a table, and similar additive changes revert cleanly. Dropping a column, splitting or merging columns, or any change that discards or irreversibly transforms existing data has no down migration that can restore what was lost, because that data is genuinely gone the moment the up migration commits; a 'down' migration for such a change can at best restore the schema's shape, not the data that used to live there. Recovering from a bad lossy migration in practice usually relies on a pre-migration backup or a deliberate roll-forward fix, not a down migration that only pretends to be a true inverse.",
+          "fact": "A clean, lossless down migration is only possible for changes that don't destroy information -- adding a column, creating a table, and similar additive changes revert cleanly."
         },
         {
           "description": "As long as a migration that renames or drops a column runs before the corresponding application code deploy, the sequence is safe.",
-          "clarification": "In a system using rolling deploys, application instances running the OLD code continue running -- and continue issuing queries against the database -- for some window of time after a new deploy begins, not just before it. If the migration changes the schema in a way old code depends on (a column it still reads or writes by its old name), every old-code instance still running during that window breaks the moment the migration commits, regardless of whether the migration technically ran 'before' the new code's deploy finished. The safe pattern spreads a breaking change across multiple migrations and deploys specifically so that, at every intermediate stage, both the old and new code can operate against whatever schema state currently exists -- collapsing the whole change into one step removes that safety margin entirely."
+          "clarification": "In a system using rolling deploys, application instances running the OLD code continue running -- and continue issuing queries against the database -- for some window of time after a new deploy begins, not just before it. If the migration changes the schema in a way old code depends on (a column it still reads or writes by its old name), every old-code instance still running during that window breaks the moment the migration commits, regardless of whether the migration technically ran 'before' the new code's deploy finished. The safe pattern spreads a breaking change across multiple migrations and deploys specifically so that, at every intermediate stage, both the old and new code can operate against whatever schema state currently exists -- collapsing the whole change into one step removes that safety margin entirely.",
+          "fact": "In a system using rolling deploys, application instances running the OLD code continue running -- and continue issuing queries against the database -- for some window of time after a new deploy begins, not just before it."
         }
       ],
       "exercises": [
@@ -302,7 +305,7 @@
             "It prevents more than one developer from ever running a migration against the same shared database at the same time.",
             "It stores a full backup of every table's data before each migration runs, in case a rollback is later needed.",
             "It automatically generates the SQL for new migrations by diffing the current live schema against a target schema definition file.",
-            "It records exactly which migration files have already been applied to this specific database, so running the tool's migrate command again applies only whichever ones are still missing, in the correct order, exactly once."
+            "It records exactly which migration files have already been applied to this specific database."
           ],
           "correctOptionIndex": 3,
           "explanation": "The correct answer is exactly the mechanism described: the tracking table is a record of applied versions, and comparing it against the migration files that exist on disk tells the tool precisely which ones still need to run, in order, without ever reapplying one that's already been applied. The “It stores a full backup of every…” option invents a data-backup function the table doesn't perform -- it tracks which schema changes ran, not table contents. The “It automatically generates the SQL for new…” option describes schema-diffing tools, a different category of tool from the ordered-migration-file approach described in this concept. The “It prevents more than one developer…” option invents a locking/coordination guarantee that a simple tracking table doesn't provide on its own."
@@ -314,7 +317,7 @@
           "options": [
             "Yes -- NOT VALID means the constraint isn't enforced on anything at all until VALIDATE CONSTRAINT finishes running, leaving a window where bad new rows can get in.",
             "Yes, but only via UPDATE statements -- INSERT statements are always checked against the constraint regardless of the NOT VALID flag.",
-            "No -- NOT VALID only skips checking pre-existing rows immediately; Postgres still enforces the constraint on every new INSERT or UPDATE from the moment it's added, so no new violating row can be inserted during the gap.",
+            "No -- NOT VALID only skips checking pre-existing rows immediately; Postgres still enforces the constraint on every new INSERT or UPDATE from the moment it's added.",
             "No, because adding a NOT VALID constraint takes an exclusive lock that blocks all writes to the table until VALIDATE CONSTRAINT completes."
           ],
           "correctOptionIndex": 2,
@@ -385,7 +388,8 @@
       "misconceptions": [
         {
           "description": "ON DELETE CASCADE is the safer, more modern default compared to RESTRICT, because RESTRICT just throws annoying errors that block you from deleting things.",
-          "clarification": "RESTRICT's error is not an inconvenience to be engineered around by default -- it's the mechanism that stops a delete from silently destroying dependent data the person issuing the delete may not have had in view at all. CASCADE is often the more dangerous choice specifically because it removes that stopping point: a delete on one table can fan out, invisibly and instantly, through every table that cascades from it, with no confirmation and no easy undo beyond a full backup restore. The right default for any given relationship should come from asking whether the child data has independent meaning once its parent is gone -- not from a blanket preference for whichever option avoids ever seeing an error."
+          "clarification": "RESTRICT's error is not an inconvenience to be engineered around by default -- it's the mechanism that stops a delete from silently destroying dependent data the person issuing the delete may not have had in view at all. CASCADE is often the more dangerous choice specifically because it removes that stopping point: a delete on one table can fan out, invisibly and instantly, through every table that cascades from it, with no confirmation and no easy undo beyond a full backup restore. The right default for any given relationship should come from asking whether the child data has independent meaning once its parent is gone -- not from a blanket preference for whichever option avoids ever seeing an error.",
+          "fact": "RESTRICT's error is not an inconvenience to be engineered around by default -- it's the mechanism that stops a delete from silently destroying dependent data the person issuing the delete may not have had in view at all."
         },
         {
           "description": "If no ON DELETE clause is specified on a foreign key, Postgres just leaves child rows in place unchanged, silently orphaning them with a foreign key pointing at a row that no longer exists.",
@@ -429,7 +433,7 @@
             "The review is deleted along with the user, since SET NULL is just an alias for CASCADE in this context.",
             "The review's user_id is automatically reassigned to a default 'anonymous' user account created for this purpose.",
             "The DELETE on the user is blocked with a foreign key violation error, since a review still references them.",
-            "The review row remains in the table with its text and rating intact, but its user_id column becomes NULL, severing the link to the now-deleted account."
+            "The review row remains in the table with its text and rating intact."
           ],
           "correctOptionIndex": 3,
           "explanation": "The correct answer describes SET NULL's actual behavior: the child row (the review) is left in place, fully intact except that its foreign key column is set to NULL, cleanly severing the reference to the deleted parent without deleting the child row itself. The “The review is deleted along…” option confuses SET NULL with CASCADE, which is a different, more destructive behavior. The “The DELETE on the user is blocked…” option describes RESTRICT/NO ACTION, not SET NULL -- SET NULL specifically allows the parent delete to proceed, unlike RESTRICT which would block it. The “The review's user_id is automatically reassigned…” option describes SET DEFAULT, a different (and less common) option that sets the column to a predeclared default value rather than NULL -- SET NULL always uses NULL specifically, requiring the column to be nullable."
@@ -473,7 +477,7 @@
           "options": [
             "Postgres automatically converts any plain UNIQUE constraint into a partial index scoped to active rows whenever a deleted_at column is added to the same table.",
             "The plain UNIQUE constraint will reject the very UPDATE that sets deleted_at, making soft deletion impossible to perform on this table at all.",
-            "A user who soft-deletes their account permanently blocks that email address from ever being used again for a new signup, since the plain constraint still counts the soft-deleted row's email as taken.",
+            "A user who soft-deletes their account permanently blocks that email address from ever being used again for a new signup.",
             "No problem -- a plain UNIQUE constraint and a partial unique index behave identically regardless of any soft-deleted rows present."
           ],
           "correctOptionIndex": 2,
