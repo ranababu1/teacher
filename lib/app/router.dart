@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/constants/routes.dart';
+import '../features/ads/presentation/no_ads_zone.dart';
 import '../features/analytics/presentation/screens/analytics_screen.dart';
 import '../features/assessment/presentation/screens/module_test_screen.dart';
 import '../features/challenges/presentation/screens/challenge_lab_screen.dart';
@@ -149,20 +150,24 @@ class AppScreens {
 
   static Widget _settings(GoRouterState s) => const SettingsScreen();
   static Widget _practice(GoRouterState s) => const PracticeScreen();
-  static Widget _practiceSession(GoRouterState s) =>
-      PracticeSessionScreen(conceptId: s.pathParameters['conceptId']!);
+  static Widget _practiceSession(GoRouterState s) => NoAdsZone(
+    child: PracticeSessionScreen(conceptId: s.pathParameters['conceptId']!),
+  );
   static Widget _review(GoRouterState s) => const ReviewScreen();
-  static Widget _reviewSession(GoRouterState s) =>
-      ReviewSessionScreen(conceptId: s.pathParameters['conceptId']!);
+  static Widget _reviewSession(GoRouterState s) => NoAdsZone(
+    child: ReviewSessionScreen(conceptId: s.pathParameters['conceptId']!),
+  );
   static Widget _learningPath(GoRouterState s) =>
       LearningPathDetailScreen(pathId: s.pathParameters['pathId']!);
   static Widget _topic(GoRouterState s) => ModuleDetailScreen(
     pathId: s.pathParameters['pathId']!,
     moduleId: s.pathParameters['moduleId']!,
   );
-  static Widget _topicTest(GoRouterState s) => ModuleTestScreen(
-    pathId: s.pathParameters['pathId']!,
-    moduleId: s.pathParameters['moduleId']!,
+  static Widget _topicTest(GoRouterState s) => NoAdsZone(
+    child: ModuleTestScreen(
+      pathId: s.pathParameters['pathId']!,
+      moduleId: s.pathParameters['moduleId']!,
+    ),
   );
   static Widget _lesson(GoRouterState s) => LessonScreen(
     pathId: s.pathParameters['pathId']!,
@@ -170,15 +175,18 @@ class AppScreens {
     conceptId: s.pathParameters['conceptId']!,
   );
   static Widget _skillCheck(GoRouterState s) =>
-      SkillCheckScreen(pathId: s.pathParameters['pathId']!);
+      NoAdsZone(child: SkillCheckScreen(pathId: s.pathParameters['pathId']!));
   static Widget _interviewPrep(GoRouterState s) => const InterviewPrepScreen();
-  static Widget _interviewSession(GoRouterState s) =>
-      InterviewSessionScreen(pathId: s.pathParameters['pathId']!);
+  static Widget _interviewSession(GoRouterState s) => NoAdsZone(
+    child: InterviewSessionScreen(pathId: s.pathParameters['pathId']!),
+  );
   static Widget _analytics(GoRouterState s) => const AnalyticsScreen();
   static Widget _challengeLab(GoRouterState s) => const ChallengeLabScreen();
-  static Widget _challengeSet(GoRouterState s) => ChallengeSetScreen(
-    pathId: s.pathParameters['pathId']!,
-    kindName: s.pathParameters['kind']!,
+  static Widget _challengeSet(GoRouterState s) => NoAdsZone(
+    child: ChallengeSetScreen(
+      pathId: s.pathParameters['pathId']!,
+      kindName: s.pathParameters['kind']!,
+    ),
   );
   static Widget _projects(GoRouterState s) => const ProjectsScreen();
   static Widget _projectDetail(GoRouterState s) =>
@@ -187,12 +195,16 @@ class AppScreens {
   static Widget _roadmap(GoRouterState s) => const RoadmapScreen();
   static Widget _systemDesign(GoRouterState s) =>
       const SystemDesignListScreen();
-  static Widget _systemDesignExercise(GoRouterState s) =>
-      SystemDesignExerciseScreen(exerciseId: s.pathParameters['exerciseId']!);
+  static Widget _systemDesignExercise(GoRouterState s) => NoAdsZone(
+    child: SystemDesignExerciseScreen(
+      exerciseId: s.pathParameters['exerciseId']!,
+    ),
+  );
   static Widget _codingChallenges(GoRouterState s) =>
       const CodingChallengeListScreen();
-  static Widget _codingChallenge(GoRouterState s) =>
-      CodingChallengeScreen(challengeId: s.pathParameters['challengeId']!);
+  static Widget _codingChallenge(GoRouterState s) => NoAdsZone(
+    child: CodingChallengeScreen(challengeId: s.pathParameters['challengeId']!),
+  );
   static Widget _dashboard(GoRouterState s) => const DashboardScreen();
   static Widget _learn(GoRouterState s) => const LearningPathsScreen();
   static Widget _progress(GoRouterState s) => const ProgressScreen();

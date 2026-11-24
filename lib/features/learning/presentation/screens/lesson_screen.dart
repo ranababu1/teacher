@@ -7,6 +7,7 @@ import '../../../../core/errors/app_exception.dart';
 import '../../../../core/services/data_revision_provider.dart';
 import '../../../../shared/widgets/async_value_view.dart';
 import '../../../../shared/widgets/glass_app_bar.dart';
+import '../../../ads/data/ad_service.dart';
 import '../../../ai_teacher/presentation/widgets/ai_teacher_panel.dart';
 import '../../../curriculum/domain/models/concept.dart';
 import '../../../curriculum/presentation/curriculum_providers.dart';
@@ -218,7 +219,11 @@ class _LessonFlowViewState extends ConsumerState<_LessonFlowView> {
     setState(() => _finishing = true);
     try {
       await _controller.complete();
-      if (mounted) widget.onFinished();
+      if (mounted) {
+        widget.onFinished();
+        // Lesson done: a natural break for an interstitial, if one is due.
+        AdService.instance.showAfterNavigation();
+      }
     } on AppException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../shared/widgets/fade_slide_in.dart';
 import '../../../../shared/widgets/markdown_text.dart';
+import '../../../../shared/widgets/report_ai_reply_button.dart';
 import '../../../settings/domain/settings_models.dart';
 import '../../../settings/presentation/providers/settings_providers.dart';
 import '../../domain/models/conversation_message.dart';
@@ -264,17 +265,19 @@ class _MessageBubble extends StatelessWidget {
                 ],
               ),
             ],
-            if (onContinue != null) ...[
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  key: const ValueKey('ai-continue'),
-                  onPressed: onContinue,
-                  child: const Text('Continue'),
-                ),
-              ),
-            ],
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                const ReportAiReplyButton(),
+                const Spacer(),
+                if (onContinue != null)
+                  TextButton(
+                    key: const ValueKey('ai-continue'),
+                    onPressed: onContinue,
+                    child: const Text('Continue'),
+                  ),
+              ],
+            ),
           ],
         ),
       ),

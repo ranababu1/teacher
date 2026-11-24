@@ -5,9 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/services/crash_reporting_service.dart';
+import '../../../../shared/utils/external_links.dart';
 import '../../../../shared/widgets/async_value_view.dart';
 import '../../../../shared/widgets/glass_app_bar.dart';
 import '../../../../shared/widgets/gradient_card.dart';
+import '../../../ads/presentation/privacy_options_tile.dart';
 import '../../../code_runner/presentation/widgets/code_runner_settings_tile.dart';
 import '../../../flashcards/domain/models/flash_card.dart';
 import '../../../flashcards/presentation/providers/flashcard_providers.dart';
@@ -232,7 +234,7 @@ class SettingsScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 16),
               _SectionCard(
-                title: 'Privacy & Crash Reports',
+                title: 'Privacy, Ads & Crash Reports',
                 children: [
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
@@ -240,8 +242,8 @@ class SettingsScreen extends ConsumerWidget {
                     subtitle: const Text(
                       'If the app crashes, an anonymous stack trace is sent '
                       'to Firebase Crashlytics so bugs can be fixed faster. '
-                      'No analytics, no ads, no accounts — and this can be '
-                      'turned off at any time.',
+                      'You can turn this off at any time. No accounts. Ads '
+                      'keep the app free.',
                     ),
                     value: settings.crashReportsEnabled,
                     onChanged: (value) => ref
@@ -249,10 +251,15 @@ class SettingsScreen extends ConsumerWidget {
                         .setCrashReportsEnabled(value),
                   ),
                   const _PrivacyPolicyTile(),
+                  // Ad consent choices; only appears where the rules
+                  // require it (for example the EEA and UK).
+                  const PrivacyOptionsTile(),
                   // Debug builds only; tree-shaken out of release/profile.
                   if (kDebugMode) const _CrashTestTile(),
                 ],
               ),
+              const SizedBox(height: 16),
+              const _SectionCard(title: 'Help', children: [_HelpSupportTile()]),
               // Developer tooling never ships: hidden (and tree-shaken) in
               // release builds. AI request logging is additionally hard-off
               // in release at the provider level.
@@ -347,7 +354,7 @@ class _PrivacyPolicyTile extends StatelessWidget {
     return ListTile(
       contentPadding: EdgeInsets.zero,
       title: const Text('Privacy policy'),
-      subtitle: const Text('What the app collects (almost nothing) and why.'),
+      subtitle: const Text('What the app collects and why.'),
       trailing: const Icon(Icons.open_in_new, size: 18),
       onTap: () async {
         final messenger = ScaffoldMessenger.of(context);
@@ -367,6 +374,25 @@ class _PrivacyPolicyTile extends StatelessWidget {
           );
         }
       },
+    );
+  }
+}
+
+/// Opens the support page (Google Form based, no account needed).
+class _HelpSupportTile extends StatelessWidget {
+  const _HelpSupportTile();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: const Icon(Icons.help_outline),
+      title: const Text('Help & support'),
+      subtitle: const Text(
+        'Report a problem, ask a question or send feedback.',
+      ),
+      trailing: const Icon(Icons.open_in_new, size: 18),
+      onTap: () => openExternalLink(context, ExternalLinks.support),
     );
   }
 }

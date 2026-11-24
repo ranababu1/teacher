@@ -20,6 +20,7 @@ import '../../../progress/domain/models/module_test_result.dart';
 import '../../../progress/domain/module_unlock.dart';
 import '../../../progress/presentation/providers/progress_providers.dart';
 import '../../../../app/navigation.dart';
+import '../../../../shared/widgets/report_ai_reply_button.dart';
 
 /// A gating test covering an entire module ("topic"), always built from
 /// the module's own curated static assessments (curriculum content, not
@@ -237,9 +238,18 @@ class _ModuleTestScreenState extends ConsumerState<ModuleTestScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Text(
-          'Question ${_currentIndex + 1} of ${_questions.length}',
-          style: theme.textTheme.labelLarge,
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Question ${_currentIndex + 1} of ${_questions.length}',
+                style: theme.textTheme.labelLarge,
+              ),
+            ),
+            // AI practice rounds only; the graded test uses built-in
+            // questions.
+            if (_isPracticeRound) const ReportAiReplyButton(),
+          ],
         ),
         const SizedBox(height: 12),
         GradientCard(

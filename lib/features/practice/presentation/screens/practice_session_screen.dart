@@ -15,6 +15,7 @@ import '../../../curriculum/presentation/curriculum_providers.dart';
 import '../../../settings/domain/settings_models.dart';
 import '../../../settings/presentation/providers/settings_providers.dart';
 import '../../../../app/navigation.dart';
+import '../../../../shared/widgets/report_ai_reply_button.dart';
 
 /// A focused, exercises-only view for repeat practice on a concept a
 /// learner has already been taught — no lesson prose, just "Try It" again,
@@ -108,7 +109,13 @@ class _PracticeSessionScreenState extends ConsumerState<PracticeSessionScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _AiGeneratedLabel(),
+                        Row(
+                          children: [
+                            _AiGeneratedLabel(),
+                            const Spacer(),
+                            const ReportAiReplyButton(),
+                          ],
+                        ),
                         const SizedBox(height: 6),
                         ExercisePlayer(
                           conceptId: concept.id,

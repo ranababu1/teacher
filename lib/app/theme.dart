@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 /// Centralized color, gradient, and typography definitions.
 ///
@@ -93,6 +94,22 @@ class AppTheme {
 
   static const fontFamily = 'Atkinson Hyperlegible';
 
+  /// Status and navigation bar style for edge-to-edge: transparent bars,
+  /// dark icons on the light theme and light icons on the dark theme.
+  static SystemUiOverlayStyle systemOverlayStyle(Brightness brightness) {
+    final isDark = brightness == Brightness.dark;
+    final icons = isDark ? Brightness.light : Brightness.dark;
+    return SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: icons,
+      statusBarBrightness: brightness,
+      systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarDividerColor: Colors.transparent,
+      systemNavigationBarIconBrightness: icons,
+      systemNavigationBarContrastEnforced: false,
+    );
+  }
+
   static ThemeData light() => _buildTheme(Brightness.light);
 
   static ThemeData dark() => _buildTheme(Brightness.dark);
@@ -118,6 +135,9 @@ class AppTheme {
       scaffoldBackgroundColor: Colors.transparent,
       textTheme: textTheme,
       appBarTheme: AppBarTheme(
+        // App bars are transparent, so Flutter can't guess the icon colour
+        // from them and would pick light icons on the light theme. Set it.
+        systemOverlayStyle: AppTheme.systemOverlayStyle(brightness),
         backgroundColor: Colors.transparent,
         foregroundColor: colorScheme.onSurface,
         elevation: 0,

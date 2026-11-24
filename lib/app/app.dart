@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../features/flashcards/presentation/providers/flashcard_providers.dart';
@@ -49,15 +50,20 @@ class TeacherApp extends ConsumerWidget {
       routerConfig: router,
       builder: (context, child) {
         final theme = Theme.of(context);
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          decoration: BoxDecoration(
-            gradient: AppGradients.scaffold(
-              theme.colorScheme,
-              theme.brightness == Brightness.dark,
+        // Default bar style for screens without an app bar (dashboard,
+        // onboarding, flash cards). App bars set the same style.
+        return AnnotatedRegion<SystemUiOverlayStyle>(
+          value: AppTheme.systemOverlayStyle(theme.brightness),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            decoration: BoxDecoration(
+              gradient: AppGradients.scaffold(
+                theme.colorScheme,
+                theme.brightness == Brightness.dark,
+              ),
             ),
+            child: child,
           ),
-          child: child,
         );
       },
     );

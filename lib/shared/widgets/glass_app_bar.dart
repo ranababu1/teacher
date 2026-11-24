@@ -69,6 +69,9 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
             elevation: 0,
             scrolledUnderElevation: 0,
             surfaceTintColor: Colors.transparent,
+            systemOverlayStyle: AppTheme.systemOverlayStyle(
+              colorScheme.brightness,
+            ),
           ),
         ),
       ),

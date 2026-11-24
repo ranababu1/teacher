@@ -12,6 +12,7 @@ import '../../../profile/presentation/providers/profile_providers.dart';
 import '../../domain/models/roadmap.dart';
 import '../../domain/roadmap_progress.dart';
 import '../providers/roadmap_providers.dart';
+import '../../../../shared/widgets/report_ai_reply_button.dart';
 
 IconData roadmapItemIcon(RoadmapItemKind kind) => switch (kind) {
   RoadmapItemKind.topic => Icons.menu_book_outlined,
@@ -572,6 +573,11 @@ class _HeaderCard extends StatelessWidget {
               const SizedBox(height: 8),
               Text(roadmap.summary, style: theme.textTheme.bodyMedium),
             ],
+            if (roadmap.source == RoadmapSource.ai)
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: ReportAiReplyButton(),
+              ),
             if (p != null) ...[
               const SizedBox(height: 12),
               LinearProgressIndicator(

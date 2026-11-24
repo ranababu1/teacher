@@ -12,13 +12,24 @@ plugins {
 
 // Release signing, standard Flutter key.properties style. The file is
 // local-only (see .gitignore); CI materializes it from GitHub Secrets
-// (see .github/workflows/release.yml). When it's absent — plain dev
-// machines — release builds fall back to the debug keystore so they keep
-// building anywhere.
+// (see .github/workflows/release.yml). A release build without it fails
+// right away instead of quietly signing with the debug key, which Play
+// rejects. Debug and profile builds don't need it.
 val keystorePropertiesFile = rootProject.file("key.properties")
 val keystoreProperties = Properties()
 if (keystorePropertiesFile.exists()) {
     keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
+}
+val isReleaseBuild = gradle.startParameter.taskNames.any {
+    it.contains("Release", ignoreCase = true)
+}
+if (isReleaseBuild && !keystorePropertiesFile.exists()) {
+    throw GradleException(
+        "Release signing is not set up: android/key.properties is missing. " +
+            "Create it (storeFile, storePassword, keyAlias, keyPassword) " +
+            "before building a release. Release builds are never signed " +
+            "with the debug key."
+    )
 }
 
 android {
@@ -50,6 +61,10 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        // AdMob app ID for the manifest. Debug and profile builds use
+        // Google's sample app ID (test ads only); release overrides it.
+        manifestPlaceholders["admobAppId"] = "ca-app-pub-3940256099942544~3347511713"
     }
 
     signingConfigs {
@@ -65,13 +80,11 @@ android {
 
     buildTypes {
         release {
-            // Real upload keystore when key.properties is present; the debug
-            // keystore otherwise (local builds, CI smoke checks).
-            signingConfig = if (keystorePropertiesFile.exists()) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
-            }
+            // Always the upload keystore. The check above stops a release
+            // build early when key.properties is missing.
+            signingConfig = signingConfigs.getByName("release")
+            // Teacher's real AdMob app ID (release builds only).
+            manifestPlaceholders["admobAppId"] = "ca-app-pub-1106747567696734~9070367235"
         }
     }
 }
