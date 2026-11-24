@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-11-24 (Answer explanations name options by their text)
+
+### Fixed
+- **1,200 multiple-choice explanations no longer say "Option B" or
+  "Option 2".** The app never shows option letters, and the references
+  would break if options were shuffled. Wrong options are now quoted by
+  their opening words; the right one is "the correct answer".
+- Three options depended on their position ("None of the above", "All of
+  the above", and one that pointed at the right answer) and were reworded.
+
+### Verification
+- `test/content_coverage_test.dart` rejects positional references and
+  checks each shortened quote matches exactly one wrong option.
+- `flutter analyze`, `flutter test`. Option order is not shuffled yet.
+
 ## 2026-11-24 (100 interview questions per course)
 
 ### Changed

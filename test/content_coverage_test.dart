@@ -50,6 +50,55 @@ void main() {
     }
   });
 
+  test('multiple-choice text never refers to an option by position', () {
+    final position = RegExp(
+      r'\b[Oo]ptions? ([A-D]|[1-4])\b|\b(first|last) option\b|of the above\b',
+    );
+    for (final course in courses) {
+      for (final c in conceptsOf(course)) {
+        for (final a in c['assessments'] as List) {
+          if (a['type'] != 'multipleChoice') continue;
+          for (final text in [
+            a['explanation'] as String,
+            ...(a['options'] as List).cast<String>(),
+          ]) {
+            expect(position.hasMatch(text), isFalse, reason: '${a['id']}: $text');
+          }
+        }
+      }
+    }
+  });
+
+  test('a shortened option quote identifies exactly one wrong option', () {
+    String plain(String s) => s
+        .replaceAll('```', ' ')
+        .replaceAll('`', '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    for (final course in courses) {
+      for (final c in conceptsOf(course)) {
+        for (final a in c['assessments'] as List) {
+          if (a['type'] != 'multipleChoice') continue;
+          final options = [for (final o in a['options'] as List) plain(o as String)];
+          for (final m in RegExp(
+            '“([^”]*)…”',
+          ).allMatches(a['explanation'] as String)) {
+            final matches = [
+              for (final (i, o) in options.indexed)
+                if (o.startsWith(plain(m[1]!))) i,
+            ];
+            expect(matches, hasLength(1), reason: '${a['id']}: ${m[0]}');
+            expect(
+              matches.single,
+              isNot(a['correctOptionIndex']),
+              reason: '${a['id']}: ${m[0]}',
+            );
+          }
+        }
+      }
+    }
+  });
+
   test('exercise and assessment ids are unique', () {
     final seen = <String>{};
     for (final course in courses) {
