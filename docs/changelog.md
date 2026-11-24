@@ -3,7 +3,7 @@
 ## 2026-11-24 (content audit)
 
 ### Changed
-- **AI/ML, AWS, LLM Engineering, React, Statistics (descriptive statistics,
+- **AI/ML, AWS, Kubernetes, LLM Engineering, React, Statistics (descriptive statistics,
   probability, information theory, limit theorems), Vector Databases, Node.js, Python, Go, Spring Boot,
   Java, Databases, System Design, DevOps and Docker lessons audited.** Tighter prose with the same structure and quizzes.
 
@@ -63,6 +63,10 @@
 - Vector Databases: two debugging exercises whose buggy code already gave
   the right answer, a tied distance that made a "true top-3" depend on
   dict order, and wrong explanations of SKU matching and RRF.
+- Kubernetes: limits without requests copy into requests; requests still
+  matter after scheduling; `targetPort` defaults to `port`; a rolling
+  update walkthrough; fabricated probe and Helm output; ingress-nginx is
+  retired.
 - Coding challenges: the vector-search solution crashed with the default
   `n_probe=1`; the log analyzer counted consumer errors as skipped lines;
   a context-packer check was false. News feed read/write ratio is ~20:1.
