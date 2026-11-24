@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/routes.dart';
 import '../../../../core/errors/app_exception.dart';
+import '../../../../shared/widgets/report_ai_reply_button.dart';
 import '../../../../shared/widgets/async_value_view.dart';
 import '../../../../shared/widgets/glass_app_bar.dart';
 import '../../../../shared/widgets/gradient_card.dart';
@@ -248,7 +249,16 @@ class _ModuleTestScreenState extends ConsumerState<ModuleTestScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                MarkdownText(data: question.prompt),
+                if (_isPracticeRound)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: MarkdownText(data: question.prompt)),
+                      const ReportAiReplyButton(),
+                    ],
+                  )
+                else
+                  MarkdownText(data: question.prompt),
                 const SizedBox(height: 16),
                 RadioGroup<int>(
                   groupValue: _selectedOptionIndex,

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/routes.dart';
 import '../../../../core/errors/app_exception.dart';
+import '../../../../shared/widgets/report_ai_reply_button.dart';
 import '../../../../shared/widgets/async_value_view.dart';
 import '../../../../shared/widgets/glass_app_bar.dart';
 import '../../../ai_teacher/presentation/providers/api_key_providers.dart';
@@ -192,6 +193,7 @@ class _AiGeneratedLabel extends StatelessWidget {
             color: theme.colorScheme.tertiary,
           ),
         ),
+        const ReportAiReplyButton(size: 16),
       ],
     );
   }
