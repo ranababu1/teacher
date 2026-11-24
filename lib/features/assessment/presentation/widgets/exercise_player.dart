@@ -5,6 +5,7 @@ import '../../../../core/errors/app_exception.dart';
 import '../../../../shared/widgets/code_block.dart';
 import '../../../../shared/widgets/gradient_card.dart';
 import '../../../../shared/widgets/markdown_text.dart';
+import '../../../../shared/widgets/report_ai_reply_button.dart';
 import '../../../ai_teacher/presentation/providers/api_key_providers.dart';
 import '../../../ai_teacher/presentation/providers/grading_providers.dart';
 import '../../../curriculum/domain/models/item_type.dart';
@@ -538,6 +539,10 @@ class _AiGradeBanner extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           MarkdownText(data: result.feedback),
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: ReportAiReplyButton(),
+          ),
         ],
       ),
     );

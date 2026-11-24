@@ -10,6 +10,7 @@ import '../../../../shared/widgets/gradient_card.dart';
 import '../../../../shared/widgets/skeleton_loader.dart';
 import '../../domain/models/study_plan.dart';
 import '../providers/study_plan_providers.dart';
+import '../../../../shared/widgets/report_ai_reply_button.dart';
 
 IconData planStepIcon(PlanStepKind kind) => switch (kind) {
   PlanStepKind.review => Icons.replay_outlined,
@@ -174,9 +175,12 @@ class _CoachCard extends ConsumerWidget {
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton(onPressed: ask, child: const Text('Ask Again')),
+          Row(
+            children: [
+              const ReportAiReplyButton(),
+              const Spacer(),
+              TextButton(onPressed: ask, child: const Text('Ask Again')),
+            ],
           ),
         ],
       );
