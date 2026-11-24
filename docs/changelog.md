@@ -3,7 +3,7 @@
 ## 2026-11-24 (content audit)
 
 ### Changed
-- **AI/ML, React, Node.js, Python, Go, Spring Boot,
+- **AI/ML, AWS, React, Node.js, Python, Go, Spring Boot,
   Java, Databases, System Design, DevOps and Docker lessons audited.** Tighter prose with the same structure and quizzes.
 
 ### Fixed
@@ -45,6 +45,10 @@
   code prints (perceptron, backpropagation, regression coefficients,
   leakage and overfitting demos); a perceptron debugging exercise had no
   real bug; backprop's cost; canary routing used per-process `hash()`.
+- AWS: HTTP API payload 2.0 infers a 200 from a plain dict; CloudFormation
+  replacement and deletion policies; T3 credit defaults and the t3.micro
+  baseline; N+1 across zones; anomaly-detection alarm syntax; Lambda Init
+  billing.
 
 ## 2026-11-24 (release: v0.33.1 - Real AdMob IDs, Help & support)
 
