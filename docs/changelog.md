@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-11-24 (release: v0.33.1 - Real AdMob IDs, Help & support)
+
+### Added
+- **Help & support** row in Settings. Opens the support page.
+
+### Changed
+- **Release builds use Teacher's real AdMob IDs.** The app ID is set once
+  through the `admobAppId` manifest placeholder in
+  `android/app/build.gradle.kts` (Google's test app ID for debug and
+  profile). The interstitial unit is in `lib/features/ads/ads_config.dart`.
+  Debug and profile builds still always use test ads.
+
 ## 2026-11-24 (release: v0.33.0 - Ads, AI reports and status bar)
 
 ### Added

@@ -61,6 +61,10 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        // AdMob app ID for the manifest. Debug and profile builds use
+        // Google's sample app ID (test ads only); release overrides it.
+        manifestPlaceholders["admobAppId"] = "ca-app-pub-3940256099942544~3347511713"
     }
 
     signingConfigs {
@@ -79,6 +83,8 @@ android {
             // Always the upload keystore. The check above stops a release
             // build early when key.properties is missing.
             signingConfig = signingConfigs.getByName("release")
+            // Teacher's real AdMob app ID (release builds only).
+            manifestPlaceholders["admobAppId"] = "ca-app-pub-1106747567696734~9070367235"
         }
     }
 }

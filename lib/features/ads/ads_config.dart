@@ -1,18 +1,19 @@
 import 'package:flutter/foundation.dart';
 
-/// AdMob settings in one place. The AdMob *app* ID lives in
-/// android/app/src/main/AndroidManifest.xml (APPLICATION_ID meta-data).
+/// AdMob settings in one place. The AdMob *app* ID is set once in
+/// android/app/build.gradle.kts (manifestPlaceholders "admobAppId"):
+/// Google's test app ID for debug and profile, Teacher's real one for
+/// release. The manifest reads it from there.
 abstract final class AdsConfig {
   /// Google's official test interstitial unit. Debug and profile builds
   /// always use it, so testing never counts as real traffic.
   static const _testInterstitialUnitId =
       'ca-app-pub-3940256099942544/1033173712';
 
-  // TODO(admob): replace with the real Teacher interstitial unit ID from
-  // AdMob (Apps > Teacher > Ad units). Until then release builds show
-  // Google test ads.
+  /// Teacher's real interstitial unit (AdMob > Apps > Teacher > Ad units).
+  /// Release builds only.
   static const _releaseInterstitialUnitId =
-      'ca-app-pub-3940256099942544/1033173712';
+      'ca-app-pub-1106747567696734/5701967862';
 
   static String get interstitialUnitId =>
       kReleaseMode ? _releaseInterstitialUnitId : _testInterstitialUnitId;

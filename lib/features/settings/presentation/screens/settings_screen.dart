@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/services/crash_reporting_service.dart';
+import '../../../../shared/utils/external_links.dart';
 import '../../../../shared/widgets/async_value_view.dart';
 import '../../../../shared/widgets/glass_app_bar.dart';
 import '../../../../shared/widgets/gradient_card.dart';
@@ -257,6 +258,8 @@ class SettingsScreen extends ConsumerWidget {
                   if (kDebugMode) const _CrashTestTile(),
                 ],
               ),
+              const SizedBox(height: 16),
+              const _SectionCard(title: 'Help', children: [_HelpSupportTile()]),
               // Developer tooling never ships: hidden (and tree-shaken) in
               // release builds. AI request logging is additionally hard-off
               // in release at the provider level.
@@ -371,6 +374,25 @@ class _PrivacyPolicyTile extends StatelessWidget {
           );
         }
       },
+    );
+  }
+}
+
+/// Opens the support page (Google Form based, no account needed).
+class _HelpSupportTile extends StatelessWidget {
+  const _HelpSupportTile();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: const Icon(Icons.help_outline),
+      title: const Text('Help & support'),
+      subtitle: const Text(
+        'Report a problem, ask a question or send feedback.',
+      ),
+      trailing: const Icon(Icons.open_in_new, size: 18),
+      onTap: () => openExternalLink(context, ExternalLinks.support),
     );
   }
 }
