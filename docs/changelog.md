@@ -3,8 +3,8 @@
 ## 2026-11-24 (content audit)
 
 ### Changed
-- **AI/ML, AWS, LLM Engineering, React, Statistics (descriptive statistics and
-  probability), Node.js, Python, Go, Spring Boot,
+- **AI/ML, AWS, LLM Engineering, React, Statistics (descriptive statistics,
+  probability, information theory, limit theorems), Vector Databases, Node.js, Python, Go, Spring Boot,
   Java, Databases, System Design, DevOps and Docker lessons audited.** Tighter prose with the same structure and quizzes.
 
 ### Fixed
@@ -57,6 +57,12 @@
 - Statistics: total-probability and Bayes numbers, debugging exercises
   whose "buggy" output was already correct, Q-Q plot and z-score claims
   for skewed data, and the harmonic-mean condition.
+- Statistics: a KL-divergence value (0.290 bits, not 0.397), the equality
+  condition in Gibbs' inequality, a cross-entropy debugging exercise that
+  did not fail, and the Lyapunov condition stated as an "iff".
+- Vector Databases: two debugging exercises whose buggy code already gave
+  the right answer, a tied distance that made a "true top-3" depend on
+  dict order, and wrong explanations of SKU matching and RRF.
 - Coding challenges: the vector-search solution crashed with the default
   `n_probe=1`; the log analyzer counted consumer errors as skipped lines;
   a context-packer check was false. News feed read/write ratio is ~20:1.
