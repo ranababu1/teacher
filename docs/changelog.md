@@ -4,7 +4,7 @@
 
 ### Changed
 - **React, Python, Go, Spring Boot,
-  Java, Databases, System Design and DevOps lessons audited.** Tighter prose with the same structure and quizzes.
+  Java, Databases, System Design, DevOps and Docker lessons audited.** Tighter prose with the same structure and quizzes.
 
 ### Fixed
 - Go: the broken auth middleware example had a second, unintended compile
@@ -34,6 +34,10 @@
 - DevOps: an error-rate alert whose ratio was always 1 without `sum()`, an
   invalid `histogram_quantile` call, Ansible recap counts, Terraform lock
   behaviour, and a NOT NULL migration that fails on a non-empty table.
+- Docker: `docker logs` works with remote log drivers since 20.10, a
+  passing health check during the start period counts as healthy at once,
+  Compose rejects undeclared named volumes, `docker rm -v` keeps named
+  volumes, and Alpine does ship `wget` and `nc`.
 
 ## 2026-11-24 (release: v0.33.1 - Real AdMob IDs, Help & support)
 
