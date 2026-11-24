@@ -51,6 +51,12 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        // AdMob app id for the manifest meta-data
+        // com.google.android.gms.ads.APPLICATION_ID. Debug and profile
+        // builds use Google's sample app id (test ads only); release
+        // overrides it below. Keep in sync with lib/core/ads/ad_ids.dart.
+        manifestPlaceholders["admobAppId"] = "ca-app-pub-3940256099942544~3347511713"
     }
 
     signingConfigs {
@@ -69,6 +75,8 @@ android {
             // Upload keystore from key.properties. Never the debug key: if
             // the file is missing the release build fails (check below).
             signingConfig = signingConfigs.getByName("release")
+            // Teacher's real AdMob app id (release builds only).
+            manifestPlaceholders["admobAppId"] = "ca-app-pub-1106747567696734~9070367235"
         }
     }
 }

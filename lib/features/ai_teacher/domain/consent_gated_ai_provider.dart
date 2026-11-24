@@ -1,4 +1,5 @@
 import '../../../core/errors/app_exception.dart';
+import '../../../core/services/ai_activity.dart';
 import '../../curriculum/domain/models/assessment.dart';
 import '../../curriculum/domain/models/exercise.dart';
 import 'ai_provider.dart';
@@ -22,12 +23,13 @@ class ConsentGatedAiProvider implements AIProvider {
   final Future<bool> Function() ensureConsent;
   final String providerName;
 
-  Future<T> _gated<T>(Future<T> Function() request) async {
-    if (!await ensureConsent()) {
-      throw AiConsentDeclinedException(providerName);
-    }
-    return request();
-  }
+  Future<T> _gated<T>(Future<T> Function() request) =>
+      AiActivity.track(() async {
+        if (!await ensureConsent()) {
+          throw AiConsentDeclinedException(providerName);
+        }
+        return request();
+      });
 
   @override
   Future<TeacherResponse> teach(TeacherRequest request) =>

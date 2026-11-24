@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/navigation.dart';
+import '../../../../core/ads/ad_service.dart';
 import '../../../../core/constants/routes.dart';
 import '../../../../core/errors/app_exception.dart';
 import '../../../../core/services/data_revision_provider.dart';
@@ -218,7 +219,11 @@ class _LessonFlowViewState extends ConsumerState<_LessonFlowView> {
     setState(() => _finishing = true);
     try {
       await _controller.complete();
-      if (mounted) widget.onFinished();
+      if (mounted) {
+        widget.onFinished();
+        // Finishing a lesson is a "next chapter" moment for ads.
+        AdService.instance.showAtNextChapter();
+      }
     } on AppException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)

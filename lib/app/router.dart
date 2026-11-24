@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/ads/ad_service.dart';
 import '../core/constants/routes.dart';
 import '../features/analytics/presentation/screens/analytics_screen.dart';
 import '../features/assessment/presentation/screens/module_test_screen.dart';
@@ -242,7 +243,8 @@ List<RouteBase> buildAppRoutes({AppScreens screens = const AppScreens()}) {
       routes: [
         GoRoute(
           path: ':conceptId',
-          builder: (context, state) => page(screens.practiceSession, state),
+          builder: (context, state) =>
+              NoAdsZone(child: page(screens.practiceSession, state)),
         ),
       ],
     ),
@@ -252,7 +254,8 @@ List<RouteBase> buildAppRoutes({AppScreens screens = const AppScreens()}) {
       routes: [
         GoRoute(
           path: ':pathId/:kind',
-          builder: (context, state) => page(screens.challengeSet, state),
+          builder: (context, state) =>
+              NoAdsZone(child: page(screens.challengeSet, state)),
         ),
       ],
     ),
@@ -263,7 +266,7 @@ List<RouteBase> buildAppRoutes({AppScreens screens = const AppScreens()}) {
         GoRoute(
           path: ':exerciseId',
           builder: (context, state) =>
-              page(screens.systemDesignExercise, state),
+              NoAdsZone(child: page(screens.systemDesignExercise, state)),
         ),
       ],
     ),
@@ -273,7 +276,8 @@ List<RouteBase> buildAppRoutes({AppScreens screens = const AppScreens()}) {
       routes: [
         GoRoute(
           path: ':challengeId',
-          builder: (context, state) => page(screens.codingChallenge, state),
+          builder: (context, state) =>
+              NoAdsZone(child: page(screens.codingChallenge, state)),
         ),
       ],
     ),
@@ -305,7 +309,8 @@ List<RouteBase> buildAppRoutes({AppScreens screens = const AppScreens()}) {
       routes: [
         GoRoute(
           path: ':pathId',
-          builder: (context, state) => page(screens.interviewSession, state),
+          builder: (context, state) =>
+              NoAdsZone(child: page(screens.interviewSession, state)),
         ),
       ],
     ),
@@ -315,7 +320,8 @@ List<RouteBase> buildAppRoutes({AppScreens screens = const AppScreens()}) {
       routes: [
         GoRoute(
           path: ':conceptId',
-          builder: (context, state) => page(screens.reviewSession, state),
+          builder: (context, state) =>
+              NoAdsZone(child: page(screens.reviewSession, state)),
         ),
       ],
     ),
@@ -326,7 +332,8 @@ List<RouteBase> buildAppRoutes({AppScreens screens = const AppScreens()}) {
         // Static segment before the `:moduleId` wildcard (declaration order).
         GoRoute(
           path: 'skill-check',
-          builder: (context, state) => page(screens.skillCheck, state),
+          builder: (context, state) =>
+              NoAdsZone(child: page(screens.skillCheck, state)),
         ),
         GoRoute(
           path: ':moduleId',
@@ -336,7 +343,8 @@ List<RouteBase> buildAppRoutes({AppScreens screens = const AppScreens()}) {
             // go_router tries siblings in declaration order.
             GoRoute(
               path: 'test',
-              builder: (context, state) => page(screens.topicTest, state),
+              builder: (context, state) =>
+                  NoAdsZone(child: page(screens.topicTest, state)),
             ),
             GoRoute(
               path: ':conceptId',

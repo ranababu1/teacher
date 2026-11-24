@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app/app.dart';
 import 'app/startup.dart';
+import 'core/ads/ad_service.dart';
 import 'core/services/app_logger.dart';
 import 'core/services/crash_reporting_service.dart';
 
@@ -21,6 +24,10 @@ Future<void> main() async {
 
   AppLogger.info('Teacher starting up');
 
+  // Mobile Ads SDK (Android only; a no-op elsewhere). Not awaited, so it
+  // never delays the first frame.
+  unawaited(AdService.initializeSdk());
+
   // Resolve theme mode and onboarding state while the native splash is
   // still showing, so the first frame is final (no theme or screen switch).
   final container = ProviderContainer();
@@ -29,4 +36,10 @@ Future<void> main() async {
   runApp(
     UncontrolledProviderScope(container: container, child: const TeacherApp()),
   );
+
+  // Consent (UMP) and the first ad preload need a running UI, so they
+  // start after the first frame.
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    unawaited(AdService.instance.start());
+  });
 }
