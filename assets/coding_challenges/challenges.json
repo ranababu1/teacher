@@ -60,7 +60,7 @@
             "Malformed lines are counted, not raised",
             "`summarize(read_entries(path, stats))` works without building a list"
           ],
-          "solution": "from dataclasses import dataclass\n\n\n@dataclass\nclass ReadStats:\n    skipped: int = 0\n\n\ndef read_entries(path, stats=None):\n    stats = stats if stats is not None else ReadStats()\n    with open(path, encoding=\"utf-8\") as f:\n        for line in f:\n            if not line.strip():\n                continue\n            try:\n                yield parse_line(line)\n            except ValueError:\n                stats.skipped += 1\n",
+          "solution": "from dataclasses import dataclass\n\n\n@dataclass\nclass ReadStats:\n    skipped: int = 0\n\n\ndef read_entries(path, stats=None):\n    stats = stats if stats is not None else ReadStats()\n    with open(path, encoding=\"utf-8\") as f:\n        for line in f:\n            if not line.strip():\n                continue\n            try:\n                entry = parse_line(line)\n            except ValueError:\n                stats.skipped += 1\n                continue\n            yield entry\n",
           "explanation": "Iterating the file object reads one buffered line at a time, so memory is constant. Because `summarize` only iterates once, it can consume the generator directly. Passing a stats object keeps the API simple for callers."
         }
       ]
@@ -227,7 +227,7 @@
             "A failed transfer changes neither balance"
           ],
           "solution": "public final class Ledger {\n    public void transfer(Account from, Account to, long cents) throws InsufficientFundsException {\n        if (from == to) throw new IllegalArgumentException(\"same account\");\n        Account first = from.id().compareTo(to.id()) < 0 ? from : to;\n        Account second = first == from ? to : from;\n        synchronized (first) {\n            synchronized (second) {\n                from.withdraw(cents);\n                to.deposit(cents);\n            }\n        }\n    }\n}\n",
-          "explanation": "Deadlock needs a cycle of waiting. Acquiring locks in a single global order (by id) makes a cycle impossible. Because `synchronized` is reentrant, the nested `withdraw` and `deposit` calls re-acquire the same monitors safely. If `withdraw` throws, `deposit` never runs."
+          "explanation": "Deadlock needs a cycle of waiting. Acquiring locks in a single global order (by id) makes a cycle impossible. Because `synchronized` is reentrant, the nested `withdraw` and `deposit` calls re-acquire the same monitors safely. If `withdraw` throws, `deposit` never runs. One gap remains: if `deposit` failed after a successful `withdraw` (for example `Math.addExact` overflowing), the money would vanish, so a production ledger would check the target first or compensate."
         },
         {
           "id": "p3",
@@ -334,7 +334,7 @@
             "Ties are ordered by name"
           ],
           "solution": "SELECT c.id, c.name,\n       COALESCE(SUM(oi.quantity * oi.unit_price_cents), 0) AS revenue_cents\nFROM customers c\nLEFT JOIN orders o ON o.customer_id = c.id\nLEFT JOIN order_items oi ON oi.order_id = o.id\nGROUP BY c.id, c.name\nORDER BY revenue_cents DESC, c.name;\n",
-          "explanation": "Both joins must be LEFT joins; an inner join to order_items would silently drop customers without orders. Using the stored unit price keeps historical revenue correct after price changes."
+          "explanation": "Both joins must be LEFT joins; an inner join to order_items would drop customers without orders. Using the stored unit price keeps historical revenue correct after price changes."
         },
         {
           "id": "p2",
@@ -490,7 +490,7 @@
             "With n_probe=1 only one bucket is scored",
             "Items added after build_buckets are still findable"
           ],
-          "solution": "    def add(self, item_id, vector, metadata=None):\n        if len(vector) != self.dim:\n            raise ValueError(f'expected {self.dim} dims, got {len(vector)}')\n        self.delete(item_id)\n        v = _normalise(vector)\n        self.items[item_id] = (v, metadata or {})\n        if getattr(self, 'buckets', None):\n            self.buckets[self._nearest(v)].add(item_id)\n\n    def delete(self, item_id):\n        for bucket in getattr(self, 'buckets', {}).values():\n            bucket.discard(item_id)\n        return self.items.pop(item_id, None) is not None\n\n    def build_buckets(self, centroids):\n        self.centroids = [_normalise(c) for c in centroids]\n        self.buckets = {i: set() for i in range(len(self.centroids))}\n        for item_id, (v, _) in self.items.items():\n            self.buckets[self._nearest(v)].add(item_id)\n\n    def _nearest(self, v, n=1):\n        sims = [\n            (sum(a * b for a, b in zip(c, v)), i)\n            for i, c in enumerate(self.centroids)\n        ]\n        best = [i for _, i in heapq.nlargest(n, sims)]\n        return best[0] if n == 1 else best\n\n    def search_approx(self, query, k=5, n_probe=1):\n        q = _normalise(query)\n        ids = set().union(*(self.buckets[i] for i in self._nearest(q, n_probe)))\n        scored = (\n            (sum(a * b for a, b in zip(q, self.items[i][0])), i) for i in ids\n        )\n        return [(i, s) for s, i in heapq.nlargest(k, scored)]\n",
+          "solution": "    def add(self, item_id, vector, metadata=None):\n        if len(vector) != self.dim:\n            raise ValueError(f'expected {self.dim} dims, got {len(vector)}')\n        self.delete(item_id)\n        v = _normalise(vector)\n        self.items[item_id] = (v, metadata or {})\n        if getattr(self, 'buckets', None):\n            self.buckets[self._nearest(v)[0]].add(item_id)\n\n    def delete(self, item_id):\n        for bucket in getattr(self, 'buckets', {}).values():\n            bucket.discard(item_id)\n        return self.items.pop(item_id, None) is not None\n\n    def build_buckets(self, centroids):\n        self.centroids = [_normalise(c) for c in centroids]\n        self.buckets = {i: set() for i in range(len(self.centroids))}\n        for item_id, (v, _) in self.items.items():\n            self.buckets[self._nearest(v)[0]].add(item_id)\n\n    def _nearest(self, v, n=1):\n        sims = [\n            (sum(a * b for a, b in zip(c, v)), i)\n            for i, c in enumerate(self.centroids)\n        ]\n        return [i for _, i in heapq.nlargest(n, sims)]\n\n    def search_approx(self, query, k=5, n_probe=1):\n        q = _normalise(query)\n        ids = set().union(*(self.buckets[i] for i in self._nearest(q, n_probe)))\n        scored = (\n            (sum(a * b for a, b in zip(q, self.items[i][0])), i) for i in ids\n        )\n        return [(i, s) for s, i in heapq.nlargest(k, scored)]\n",
           "explanation": "An inverted-file (IVF) index trades a little recall for speed: a query scores only a fraction of the data. `add` and `delete` now keep buckets in sync. Production systems pick centroids with k-means and tune n_probe for the recall they need."
         }
       ]
@@ -531,7 +531,7 @@
             "Reserving answer tokens up front prevents truncated answers."
           ],
           "checks": [
-            "The prompt never exceeds window minus the answer reserve",
+            "The system text, question and chosen chunk texts together never exceed window minus the answer reserve",
             "Chunks appear as [id] text lines in the chosen order",
             "A system prompt plus question larger than the window raises ValueError"
           ],
@@ -541,7 +541,7 @@
         {
           "id": "p3",
           "title": "Validate the JSON answer",
-          "task": "The model is asked to reply with JSON like `{\"answer\": \"...\", \"sources\": [\"c1\"]}`. Implement `parse_answer(raw, allowed_ids)` that returns `(answer, sources)` and raises `ValueError` if the text is not valid JSON, `answer` is not a non-empty string, `sources` is not a list of strings, or any source is not in `allowed_ids` (the chunks actually sent). Strip a surrounding Markdown code fence (```json ... ```) before parsing.",
+          "task": "The model is asked to reply with JSON like `{\"answer\": \"...\", \"sources\": [\"c1\"]}`. Implement `parse_answer(raw, allowed_ids)` that returns `(answer, sources)` and raises `ValueError` if the text is not valid JSON, `answer` is not a non-empty string, `sources` is not a list of strings, or any source is not in `allowed_ids` (the chunks sent). Strip a surrounding Markdown code fence (```json ... ```) before parsing.",
           "hints": [
             "json.loads raises json.JSONDecodeError, which is a subclass of ValueError.",
             "Check every source against the set of ids that were in the prompt."
@@ -597,7 +597,7 @@
             "The +1 correction means the p-value is never exactly 0"
           ],
           "solution": "def permutation_p_value(control, variant, n_permutations=2000, seed=0):\n    rng = random.Random(seed)\n    observed = abs(mean_diff(control, variant))\n    pool = list(control) + list(variant)\n    n = len(control)\n    count = 0\n    for _ in range(n_permutations):\n        rng.shuffle(pool)\n        if abs(mean_diff(pool[:n], pool[n:])) >= observed:\n            count += 1\n    return (count + 1) / (n_permutations + 1)\n",
-          "explanation": "If the variant truly made no difference, group labels are arbitrary, so shuffling them generates the null distribution of the difference directly. The p-value is the share of shuffles at least as extreme as what we saw. Adding one to numerator and denominator counts the observed split itself and avoids reporting an impossible p of 0."
+          "explanation": "If the variant truly made no difference, group labels are arbitrary, so shuffling them generates the null distribution of the difference. The p-value is the share of shuffles at least as extreme as what we saw. Adding one to numerator and denominator counts the observed split itself and avoids reporting an impossible p of 0."
         },
         {
           "id": "p3",

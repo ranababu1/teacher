@@ -57,6 +57,9 @@
 - Statistics: total-probability and Bayes numbers, debugging exercises
   whose "buggy" output was already correct, Q-Q plot and z-score claims
   for skewed data, and the harmonic-mean condition.
+- Coding challenges: the vector-search solution crashed with the default
+  `n_probe=1`; the log analyzer counted consumer errors as skipped lines;
+  a context-packer check was false. News feed read/write ratio is ~20:1.
 
 ## 2026-11-24 (release: v0.33.1 - Real AdMob IDs, Help & support)
 
