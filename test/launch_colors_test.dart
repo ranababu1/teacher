@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/painting.dart';
@@ -40,5 +41,38 @@ void main() {
       expect(drawable, contains('@color/launch_background'), reason: dir);
       expect(drawable, isNot(contains('@android:color/white')), reason: dir);
     }
+  });
+
+  test('iOS launch screen uses the same light and dark colours', () {
+    final json = jsonDecode(
+      File('ios/Runner/Assets.xcassets/LaunchBackground.colorset/Contents.json')
+          .readAsStringSync(),
+    ) as Map<String, dynamic>;
+    Color? light;
+    Color? dark;
+    for (final entry in (json['colors'] as List).cast<Map<String, dynamic>>()) {
+      final c = (entry['color'] as Map)['components'] as Map;
+      int ch(String k) => int.parse((c[k] as String).substring(2), radix: 16);
+      final color = Color.fromARGB(255, ch('red'), ch('green'), ch('blue'));
+      final isDark =
+          (entry['appearances'] as List?)?.any(
+            (a) => (a as Map)['value'] == 'dark',
+          ) ??
+          false;
+      if (isDark) {
+        dark = color;
+      } else {
+        light = color;
+      }
+    }
+    expect(light, AppColors.lightSurface);
+    expect(dark, AppColors.darkSurface);
+
+    final storyboard = File('ios/Runner/Base.lproj/LaunchScreen.storyboard')
+        .readAsStringSync();
+    expect(
+      storyboard,
+      contains('<color key="backgroundColor" name="LaunchBackground"/>'),
+    );
   });
 }

@@ -14,6 +14,11 @@
   Arrowlock), `ITSAppUsesNonExemptEncryption` = false (HTTPS only).
   Deployment target stays iOS 15.0. `test/ios_project_test.dart` guards
   these values.
+- iOS launch screen: a plain background in the app surface colour
+  (light `#FAFAFC`, dark `#0E0F13`, from a `LaunchBackground` colour set),
+  matching the Android splash so there is no white flash before the first
+  frame. The unused blank `LaunchImage` was removed.
+  `test/launch_colors_test.dart` now checks the iOS colours too.
 
 ## 2026-11-24 (AI models follow the newest release)
 

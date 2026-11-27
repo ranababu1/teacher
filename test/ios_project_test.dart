@@ -22,9 +22,9 @@ void main() {
 
   test('iOS bundle id equals the Android application id', () {
     final gradle = _read('android/app/build.gradle.kts');
-    final appId = RegExp(
-      r'applicationId\s*=\s*"([^"]+)"',
-    ).firstMatch(gradle)!.group(1)!;
+    final appId = RegExp(r'applicationId\s*=\s*"([^"]+)"')
+        .firstMatch(gradle)!
+        .group(1)!;
     expect(appId, 'dev.imrn.teacher');
 
     final ids = RegExp(r'PRODUCT_BUNDLE_IDENTIFIER = ([^;]+);')
