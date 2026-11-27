@@ -46,4 +46,15 @@ void main() {
         .toSet();
     expect(targets, {'15.0'});
   });
+
+  test('privacy manifest is bundled and declares no tracking', () {
+    final manifest = _read('ios/Runner/PrivacyInfo.xcprivacy');
+    expect(_plistValue(manifest, 'NSPrivacyTracking'), 'false');
+    expect(manifest, contains('NSPrivacyCollectedDataTypeCrashData'));
+    expect(
+      pbxproj,
+      contains('/* PrivacyInfo.xcprivacy in Resources */,'),
+      reason: 'PrivacyInfo.xcprivacy must be in the Runner Resources phase',
+    );
+  });
 }

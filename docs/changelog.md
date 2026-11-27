@@ -19,6 +19,10 @@
   matching the Android splash so there is no white flash before the first
   frame. The unused blank `LaunchImage` was removed.
   `test/launch_colors_test.dart` now checks the iOS colours too.
+- iOS privacy manifest `ios/Runner/PrivacyInfo.xcprivacy`: no tracking;
+  crash data and diagnostics (Crashlytics, when "Share crash reports" is
+  on), not linked to identity; required-reason APIs UserDefaults (CA92.1)
+  and file timestamps (C617.1). SDK manifests are merged by Xcode.
 
 ## 2026-11-24 (AI models follow the newest release)
 
