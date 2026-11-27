@@ -5,7 +5,9 @@
 ### Added
 - CI: `.github/workflows/ios.yml` builds an unsigned iOS release on a
   macOS runner (`flutter build ios --release --no-codesign`) on every push
-  and pull request. Android `ci.yml` and `release.yml` are unchanged.
+  and pull request, then checks the built app's bundle id, name, version,
+  encryption flag and privacy manifest. Android `ci.yml` and `release.yml`
+  are unchanged.
 - `tool/build_ios.sh`: on a Mac, analyzes, tests, archives with Xcode's
   automatic signing, exports `build/teacher-<version>-b<build>.ipa` and
   verifies bundle id, version, privacy manifest, Firebase config and the
