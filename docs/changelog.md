@@ -7,6 +7,14 @@
   macOS runner (`flutter build ios --release --no-codesign`) on every push
   and pull request. Android `ci.yml` and `release.yml` are unchanged.
 
+### Changed
+- iOS identity: bundle id `dev.imrn.teacher` (same as the Android
+  application id; was `com.example.teacher`), app name "Teacher",
+  automatic signing for Apple team `CW68Z23WQ4` (the team that ships
+  Arrowlock), `ITSAppUsesNonExemptEncryption` = false (HTTPS only).
+  Deployment target stays iOS 15.0. `test/ios_project_test.dart` guards
+  these values.
+
 ## 2026-11-24 (AI models follow the newest release)
 
 ### Changed
