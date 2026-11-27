@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-11-28 (App Store screenshot tool)
+
+### Added
+- `tool/screenshots/run.sh`: builds App Store screenshots headless from
+  the real app widgets with seeded demo progress (no device, network or
+  API key). Writes iPhone 6.9" (1320x2868) and iPad 13" (2064x2752)
+  PNGs without alpha: home, courses, lesson, quiz, progress and dark
+  practice. `app_store_screenshots_test.dart` loads the real fonts and
+  icons and draws a clean status bar; `prepare_fonts.py` lets colour
+  emoji render, since flutter_tester has no font fallback. Not part of
+  the regular test suite. Needs python3 with fontTools and Pillow.
+
 ## 2026-11-27 (release: v0.34.1 - iOS groundwork)
 
 ### Changed
