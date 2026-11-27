@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-27 (release: v0.34.1 - iOS groundwork)
+
+### Changed
+- Version 0.34.1 (build 47). Ships the iOS groundwork below and the AI
+  model change of 2026-11-24 (newest model of each provider unless pinned)
+  in the Android APKs. Android behaviour is otherwise unchanged.
+
 ## 2026-11-27 (iOS groundwork)
 
 ### Added
