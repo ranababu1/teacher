@@ -6,7 +6,7 @@ import 'app_logger.dart';
 
 /// Single funnel for everything crash-reporting so the rest of the app
 /// never needs to know whether Crashlytics is available on the current
-/// platform or even initialized (Android-only for now).
+/// platform or even initialized (Android and iOS).
 ///
 /// Privacy: reports contain stack traces, device/OS/app metadata and a
 /// per-install Crashlytics ID (pseudonymous, not anonymous). No name,
@@ -22,14 +22,17 @@ class CrashReportingService {
   static bool get isAvailable => _initialized;
 
   /// Initializes Firebase and routes all uncaught Flutter errors into
-  /// Crashlytics. No-op on anything but Android.
+  /// Crashlytics. No-op on anything but Android and iOS.
   ///
-  /// Firebase reads its configuration from android/app/google-services.json
-  /// (project "teacher-max") via the google-services Gradle plugin, so no
-  /// Dart-side options are needed.
+  /// Firebase reads its configuration from the native config files of
+  /// project "teacher-max", so no Dart-side options are needed:
+  /// android/app/google-services.json (google-services Gradle plugin) and
+  /// ios/Runner/GoogleService-Info.plist (copied into the app by an Xcode
+  /// build phase only when the file exists).
   ///
   /// Never throws: if Firebase fails to start (missing or broken
-  /// google-services config, Play services unavailable, a plugin error),
+  /// config, e.g. an iOS build without GoogleService-Info.plist, Play
+  /// services unavailable, a plugin error),
   /// the failure is logged and the app simply runs without crash
   /// reporting. [initializeFirebase] and [isSupportedPlatform] exist only
   /// so tests can simulate those cases.
@@ -39,7 +42,9 @@ class CrashReportingService {
   }) async {
     final supported =
         isSupportedPlatform ??
-        (!kIsWeb && defaultTargetPlatform == TargetPlatform.android);
+        (!kIsWeb &&
+            (defaultTargetPlatform == TargetPlatform.android ||
+                defaultTargetPlatform == TargetPlatform.iOS));
     if (!supported) return;
 
     try {

@@ -17,7 +17,7 @@ Future<void> main() async {
   // 15). Screens keep content clear of them with SafeArea or an app bar.
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 
-  // Firebase + Crashlytics on Android; a no-op everywhere else. Never
+  // Firebase + Crashlytics on Android and iOS; a no-op elsewhere. Never
   // throws: if Firebase can't start, the app runs without crash reporting.
   await CrashReportingService.initialize();
 

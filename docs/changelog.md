@@ -31,6 +31,11 @@
   (alert and sound) is asked when reminders are turned on, as on Android
   13+. `AppDelegate` sets the notification centre delegate so reminders
   also show while the app is open.
+- Crash reporting now starts on iOS as well as Android. Firebase reads
+  `ios/Runner/GoogleService-Info.plist`, which a new Xcode build phase
+  ("Copy Firebase Config") copies into the app only when the file exists.
+  Without it the build still succeeds (with a warning) and the app runs
+  without Crashlytics, as before.
 
 ## 2026-11-24 (AI models follow the newest release)
 
