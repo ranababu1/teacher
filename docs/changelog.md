@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-27 (iOS groundwork)
+
+### Added
+- CI: `.github/workflows/ios.yml` builds an unsigned iOS release on a
+  macOS runner (`flutter build ios --release --no-codesign`) on every push
+  and pull request. Android `ci.yml` and `release.yml` are unchanged.
+
 ## 2026-11-24 (AI models follow the newest release)
 
 ### Changed
