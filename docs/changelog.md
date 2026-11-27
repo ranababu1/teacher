@@ -24,6 +24,14 @@
   on), not linked to identity; required-reason APIs UserDefaults (CA92.1)
   and file timestamps (C617.1). SDK manifests are merged by Xcode.
 
+### Fixed
+- iOS: flash card notifications initialised without iOS settings, which
+  makes `flutter_local_notifications` throw on iOS. They now use
+  `DarwinInitializationSettings` with no prompt at launch; the permission
+  (alert and sound) is asked when reminders are turned on, as on Android
+  13+. `AppDelegate` sets the notification centre delegate so reminders
+  also show while the app is open.
+
 ## 2026-11-24 (AI models follow the newest release)
 
 ### Changed

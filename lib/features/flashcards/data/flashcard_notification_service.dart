@@ -60,6 +60,13 @@ class FlashcardNotificationService {
     await _plugin.initialize(
       settings: const InitializationSettings(
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        // Don't prompt at launch; requestPermission() asks when the
+        // learner turns flash card reminders on, like Android 13+.
+        iOS: DarwinInitializationSettings(
+          requestAlertPermission: false,
+          requestSoundPermission: false,
+          requestBadgePermission: false,
+        ),
       ),
       onDidReceiveNotificationResponse: _onNotificationTapped,
     );
@@ -79,9 +86,21 @@ class FlashcardNotificationService {
     }
   }
 
-  /// Requests the Android 13+ runtime notification permission. Returns
-  /// `true` on older Android versions where no prompt is needed.
+  /// Requests the notification permission: the Android 13+ runtime
+  /// permission, or alert and sound on iOS. Returns `true` on older
+  /// Android versions where no prompt is needed.
   Future<bool> requestPermission() async {
+    final iosPlugin = _plugin
+        .resolvePlatformSpecificImplementation<
+          IOSFlutterLocalNotificationsPlugin
+        >();
+    if (iosPlugin != null) {
+      final granted = await iosPlugin.requestPermissions(
+        alert: true,
+        sound: true,
+      );
+      return granted ?? false;
+    }
     final androidPlugin = _plugin
         .resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin
@@ -144,6 +163,7 @@ class FlashcardNotificationService {
               importance: Importance.high,
               priority: Priority.high,
             ),
+            iOS: DarwinNotificationDetails(),
           ),
           androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
         );
@@ -175,6 +195,7 @@ class FlashcardNotificationService {
           importance: Importance.high,
           priority: Priority.high,
         ),
+        iOS: DarwinNotificationDetails(),
       ),
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
     );
