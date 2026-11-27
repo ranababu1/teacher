@@ -57,4 +57,18 @@ void main() {
       reason: 'PrivacyInfo.xcprivacy must be in the Runner Resources phase',
     );
   });
+
+  test('app icons are opaque PNGs (App Store rejects alpha)', () {
+    final icons = Directory('ios/Runner/Assets.xcassets/AppIcon.appiconset')
+        .listSync()
+        .whereType<File>()
+        .where((f) => f.path.endsWith('.png'))
+        .toList();
+    expect(icons, isNotEmpty);
+    for (final icon in icons) {
+      final bytes = icon.readAsBytesSync();
+      // IHDR colour type at byte 25: 2 = RGB (no alpha), 6 = RGBA.
+      expect(bytes[25], 2, reason: icon.path);
+    }
+  });
 }

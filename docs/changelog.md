@@ -6,6 +6,13 @@
 - CI: `.github/workflows/ios.yml` builds an unsigned iOS release on a
   macOS runner (`flutter build ios --release --no-codesign`) on every push
   and pull request. Android `ci.yml` and `release.yml` are unchanged.
+- `tool/build_ios.sh`: on a Mac, analyzes, tests, archives with Xcode's
+  automatic signing, exports `build/teacher-<version>-b<build>.ipa` and
+  verifies bundle id, version, privacy manifest, Firebase config and the
+  signing team; uploads Crashlytics dSYMs. Nothing is uploaded to Apple.
+- `docs/release-ios.md`: iOS release guide (Firebase iOS app, Mac setup,
+  build, App Store Connect, TestFlight, listing, device checks).
+- `test/ios_project_test.dart`: app icons are opaque (no alpha).
 
 ### Changed
 - iOS identity: bundle id `dev.imrn.teacher` (same as the Android
